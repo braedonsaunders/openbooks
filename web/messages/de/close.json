@@ -300,8 +300,8 @@
     "description": "Operative Nebenbücher werden vor dem Hauptbuch gesperrt. Die Datenbank weist Buchungen ab, nachdem die Sperre angewendet wurde.",
     "blockedTitle": "Genehmigung ist blockiert",
     "blockedDescription": "{count, plural, one {# Aufgabe mit hartem Gate verbleibt} other {# Aufgaben mit hartem Gate verbleiben}}.",
-    "approvalTitle": "Unabhängige Genehmigung und Sperrung",
-    "approvalDescription": "Der Initiator des Laufs kann die endgültige Genehmigung nicht erteilen. Jede Hauptbuchänderung nach der Genehmigung öffnet die Prüfung erneut.",
+    "approvalTitle": "Freigabe und Sperre",
+    "approvalDescription": "Die Flows der Organisation legen die erforderlichen Entscheidungen fest. Jede Änderung am Hauptbuch nach der Freigabe öffnet die Prüfung erneut.",
     "ownerTitle": "Inhaberbestätigung und Sperrung",
     "ownerDescription": "Prüfen Sie bei einem inhabergeführten Abschluss die Berichte und dokumentieren Sie, warum die Periode bereit ist. Die Bestätigung ist mit genau diesem Hauptbuchstand verknüpft.",
     "attestationLabel": "Warum sind diese Bücher bereit zum Abschluss?",
@@ -335,6 +335,7 @@
       "started": "Abschlusslauf gestartet",
       "data_changed": "Hauptbuchänderung machte frühere Arbeit ungültig",
       "approval_requested": "Abschlussgenehmigung angefordert",
+      "approval_withdrawn": "Abschlussfreigabe zurückgezogen",
       "owner_attested": "Inhaber hat bestätigt, dass die Bücher bereit sind",
       "approval_rejected": "Abschlussgenehmigung abgelehnt",
       "approved": "Abschluss hat endgültige Genehmigung erhalten",
@@ -381,7 +382,7 @@
       },
       "controlledReopen": {
         "name": "Kontrollierte Wiedereröffnung",
-        "description": "Wiedereröffnungen erfordern einen Grund, eine unabhängige Genehmigung und ein Ablaufdatum."
+        "description": "Wiederöffnungen erfordern eine Begründung, die Weiterleitung über die Flows der Organisation und ein Ablaufdatum."
       },
       "sourceReconciliationEvidence": {
         "name": "Abstimmungsnachweis des Quellsystems",
@@ -444,11 +445,11 @@
     },
     "controller-approval": {
       "title": "Controller-Freigabe",
-      "description": "Prüfen Sie Bereitschaft, Ausnahmen, Nachweise und Berichtsausgaben unabhängig."
+      "description": "Prüfen Sie Abschlussbereitschaft, Ausnahmen, Nachweise und Berichtsausgaben."
     },
     "financial-review": {
       "title": "Finanzberichte prüfen",
-      "description": "Prüfen Sie Summen- und Saldenliste, Bilanz sowie Gewinn- und Verlustrechnung vor der Bestätigung auf Vollständigkeit und unerwartete Salden."
+      "description": "Prüfen Sie Saldenliste, Bilanz und Gewinn- und Verlustrechnung auf Vollständigkeit und unerwartete Salden, bevor Sie die Prüfung abschließen."
     },
     "lock-subledgers": {
       "title": "Operative Nebenbücher sperren",
@@ -494,7 +495,7 @@
   "setup": {
     "title": "Perioden & Abschluss",
     "description": "Entwerfen Sie Geschäftskalender, generieren Sie Perioden, steuern Sie Sperrungen und Wiedereröffnungen, versionieren Sie Abschlussblaupausen und konfigurieren Sie Kontrollen, Automatisierung und Berichtspakete.",
-    "simpleMode": "Inhabergeführter Abschluss ist aktiv. Kalender, Perioden, Sperren, Bestätigungen und unveränderliche Veröffentlichung bleiben ohne Enterprise-Workflow-Overhead verfügbar.",
+    "simpleMode": "Kalender, Perioden, Sperren und unveränderliche Veröffentlichungen bleiben verfügbar. Konfigurieren Sie Freigaben in Flows.",
     "enableAdvanced": "Erweiterten Abschluss prüfen",
     "tabs": {
       "calendars": "Kalender",
@@ -782,7 +783,8 @@
       "lock": "Sperrung",
       "review": "Prüfung",
       "segregation": "Funktionstrennung",
-      "exception": "Ausnahme"
+      "exception": "Ausnahme",
+      "evidence": "Nachweise"
     },
     "automationTriggers": {
       "run_started": "Lauf gestartet",

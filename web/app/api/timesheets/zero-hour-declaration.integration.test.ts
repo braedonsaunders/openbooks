@@ -20,12 +20,13 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__zeroHourDeclaration.user}' }
   return next(specifier, context)
 }})
+const { configureTimesheetReviewFixture,decideTimesheetFixture } = await import('../../../testing/timesheet-flows')
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { PUT } = await import('./route')
 const { POST: submitWeek } = await import('./submit/route')
-const { POST: approveWeek } = await import('./approve/route')
+
 const { loadWeek } = await import('./_lib')
 
 const WEEK = '2026-08-02'
@@ -36,21 +37,27 @@ async function fixture() {
   const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Declaration auditor', 'reviewer'))
   await withBypassContext(async () => {
     await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
-    await db.execute(sql`update orgs set settings = settings || '{"features": {"projects": true, "timeTracking": true}, "timesheets": {"requireApproval": true}}'::jsonb where id=${org.orgId}`)
+    await db.execute(sql`update orgs set settings = settings || '{"features": {"projects": true, "timeTracking": true,"hrm":true}}'::jsonb where id=${org.orgId}`)
   })
+  await configureTimesheetReviewFixture(org.orgId,actor,false)
   session.user = { id: actor, orgId: org.orgId, name: 'Auditor', email: 'auditor@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
   const employee = randomUUID()
-  const employment = randomUUID()
   const leaveType = randomUUID()
-  const leaveRequest = randomUUID()
+  let leaveRequest: string
   await withBypassContext(async () => {
     await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom) values (${employee},${org.orgId},'employee','Leave Worker',${org.subsidiaryId},true,'{}'::jsonb)`)
     await db.execute(sql`insert into employee_roles(id,org_id,party_id,is_active) values (${randomUUID()},${org.orgId},${employee},true)`)
     await db.execute(sql`update users set party_id = ${employee} where id = ${actor} and org_id = ${org.orgId}`)
-    await db.execute(sql`insert into worker_employments(id,org_id,worker_party_id,employer_subsidiary_id) values (${employment},${org.orgId},${employee},${org.subsidiaryId})`)
     await db.execute(sql`insert into hrm_leave_types(id,org_id,code,name) values (${leaveType},${org.orgId},'VAC','Vacation')`)
-    await db.execute(sql`insert into hrm_leave_requests(id,org_id,employment_id,leave_type_id,starts_on,ends_on,hours,reason,status,decided_by,decided_at,decision_reason) values (${leaveRequest},${org.orgId},${employment},${leaveType},'2026-08-03','2026-08-07','40.00','Family week','approved',${actor},now(),'Approved: coverage arranged')`)
+
   })
+  const {seedEmployment}=await import('@openbooks/engine/testing/hrm-harness');
+  const {createLeavePolicy,fileLeaveRequest,submitLeaveRequest}=await import('@openbooks/engine/hrm/leave');
+  const {employmentId}=await withBypassContext(()=>seedEmployment(org.orgId,org.subsidiaryId,{workerPartyId:employee,from:'2026-01-01'}));
+  await withOrgContext(org.orgId,()=>createLeavePolicy({orgId:org.orgId,actorId:actor,leaveTypeId:leaveType,accrualRule:{kind:'unlimited'},effectiveFrom:'2026-01-01'}));
+  const leave=await withOrgContext(org.orgId,()=>fileLeaveRequest({orgId:org.orgId,actorId:actor,employmentId,leaveTypeId:leaveType,startsOn:'2026-08-03',endsOn:'2026-08-07',hours:'40.00',reason:'Family week'}));
+  leaveRequest=leave.id;
+  await withOrgContext(org.orgId,()=>submitLeaveRequest({orgId:org.orgId,actorId:actor,requestId:leaveRequest}));
   const put = (rows: unknown[], expectedRevision?: string) => withOrgContext(org.orgId, async () => {
     const revision = expectedRevision ?? (await loadWeek(org.orgId, employee, WEEK)).revision
     return PUT(new Request('http://declaration.local/api/timesheets', {
@@ -169,11 +176,7 @@ test('approving a zero-hour declaration needs no wage row and posts no journals'
     })
     const journalsBefore = await withOrgContext(f.org.orgId, async () => (await db.execute<{ n: string }>(sql`
       select count(*) as n from journal_entries where org_id = ${f.org.orgId}`)).rows[0]!.n)
-    const res = await withOrgContext(f.org.orgId, () => approveWeek(new Request('http://declaration.local/api/timesheets/approve', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ employee: f.employee, week: WEEK }),
-    })))
+    const res = await withOrgContext(f.org.orgId, () => decideTimesheetFixture({orgId:f.org.orgId,...{ employee: f.employee, week: WEEK },decision:'approved'}))
     assert.equal(res.status, 200, await res.text())
     const journalsAfter = await withOrgContext(f.org.orgId, async () => (await db.execute<{ n: string }>(sql`
       select count(*) as n from journal_entries where org_id = ${f.org.orgId}`)).rows[0]!.n)

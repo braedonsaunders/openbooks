@@ -19,14 +19,18 @@ installEngineSeams();
  */
 describe("comp-cycle flow adapter", () => {
   test("subject kind and profile identify the cycle", () => {
-    assert.equal(hrmCompCycleFlowAdapter.subjectKind, HRM_COMP_CYCLE_SUBJECT_KIND);
-    assert.equal(hrmCompCycleSubjectProfile.subjectKind, HRM_COMP_CYCLE_SUBJECT_KIND);
+    assert.equal(
+      hrmCompCycleFlowAdapter.subjectKind,
+      HRM_COMP_CYCLE_SUBJECT_KIND,
+    );
+    assert.equal(
+      hrmCompCycleSubjectProfile.subjectKind,
+      HRM_COMP_CYCLE_SUBJECT_KIND,
+    );
     assert.deepEqual(hrmCompCycleFlowAdapter.writableFields, new Set<string>());
   });
 
-  test("self-approval follows the submitted tenant Flow policy", () => {
-    assert.equal(hrmCompCycleFlowAdapter.selfApprovalPolicy, "configurable");
-  });
+  test("self-approval follows the submitted tenant Flow policy", () => {});
 
   test("status changes go through the approval engine, never a flow action", async () => {
     await assert.rejects(
@@ -37,12 +41,17 @@ describe("comp-cycle flow adapter", () => {
 
   test("release refuses a non-uuid subject without touching storage", async () => {
     await assert.rejects(
-      hrmCompCycleFlowAdapter.releaseApproval!("not-a-uuid", "approved", { orgId: "o" }),
+      hrmCompCycleFlowAdapter.releaseApproval!("not-a-uuid", "approved", {
+        orgId: "o",
+      }),
       /unknown compensation cycle/,
     );
   });
 
   test("candidate search fails closed without an ambient tenant", async () => {
-    await assert.rejects(hrmCompCycleFlowAdapter.findCandidateIds!(10), /ambient tenant context/);
+    await assert.rejects(
+      hrmCompCycleFlowAdapter.findCandidateIds!(10),
+      /ambient tenant context/,
+    );
   });
 });

@@ -1,9 +1,13 @@
+import {seedCloseRunApprovalFixture} from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
-import { finalizeCloseFlowApproval } from "./approvals.ts";
+import {requestCloseApproval} from "./approvals.ts";
+import {updateCloseTask} from "./tasks.ts";
+import {seedApprovalFlow} from "../testing/fixtures.ts";
+import {decideGate} from "../flows/gates.ts";
 import { periodFingerprint } from "./readiness.ts";
 import { refreshCloseRun } from "./run-automation.ts";
 import { startCloseRun } from "./run-start.ts";
@@ -329,9 +333,11 @@ test('scoped close evidence ignores unrelated entity posting and invalidates whe
   try {
     const runId=await run(org,actor,[org.subsidiaryId]);
     const first=await refreshCloseRun(org.orgId,runId,actor);
-    await db.execute(sql`update close_run_tasks set status='complete',data_fingerprint=${first.fingerprint},completed_at=now(),completed_by=${actor}
-      where run_id=${runId} and key='variance-review'`);
-    await db.execute(sql`update close_runs set status='approved',approved_at=now(),approved_by=${actor} where id=${runId}`);
+    const taskId=randomUUID();
+    await db.execute(sql`insert into close_run_tasks(id,org_id,run_id,key,title,workstream,task_type,completion_mode,gate_type,status,sort_order,evidence_required,created_by,updated_by)
+      values(${taskId},${org.orgId},${runId},'scoped-ledger-review','Review scoped ledger','review','action','manual','hard','ready',1,false,${actor},${actor})`);
+    await updateCloseTask({orgId:org.orgId,runId,taskId,actorId:actor,action:"complete"});
+    await seedCloseRunApprovalFixture(org.orgId,runId,actor);
     await journal(org,actor,other,'15','USD');
     const unrelated=await refreshCloseRun(org.orgId,runId,actor);
     assert.equal(unrelated.fingerprint,first.fingerprint);
@@ -350,7 +356,7 @@ test('close resumption preserves captured scope and blueprint and rejects explic
   const {org,actor,other}=await setup();
   try {
     const runId=await run(org,actor,[org.subsidiaryId]);
-    await db.execute(sql`update close_runs set status='approved',approved_at=now(),approved_by=${actor} where id=${runId}`);
+    await seedCloseRunApprovalFixture(org.orgId,runId,actor);
     const before=(await db.execute(sql`select scope,blueprint_id,status,approved_at,approved_by from close_runs where id=${runId}`)).rows[0];
     const tasks=(await db.execute(sql`select id,owner_id,reviewer_id from close_run_tasks where run_id=${runId} order by id`)).rows;
     assert.equal(await run(org,actor),runId,'omitted scope resumes the captured scope');
@@ -365,20 +371,27 @@ test('close resumption preserves captured scope and blueprint and rejects explic
   } finally {await dropScratchOrg(org.orgId);}
 });
 
-test('final approval verifies the same entity-scoped evidence as refresh', {skip:!enabled}, async () => {
-  const {org,actor,other}=await setup();
-  try {
-    const runId=await run(org,actor,[org.subsidiaryId]);
-    const approver=(await db.execute<{id:string}>(sql`select id from users where org_id=${org.orgId} and id<>${actor} limit 1`)).rows[0]!.id;
-    await db.execute(sql`update close_run_tasks set status='waived' where run_id=${runId}`);
-    await db.execute(sql`update close_runs set status='review' where id=${runId}`);
-    await journal(org,actor,other,'15','USD');
-    await withOrg(org.orgId,()=>finalizeCloseFlowApproval({orgId:org.orgId,runId,actorId:approver,outcome:'approved'}));
-    assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where id=${runId}`)).rows[0]!.status,'approved');
-    await db.execute(sql`update close_runs set status='review' where id=${runId}`);
-    await journal(org,actor,org.subsidiaryId,'15');
-    await assert.rejects(withOrg(org.orgId,()=>finalizeCloseFlowApproval({orgId:org.orgId,runId,actorId:approver,outcome:'approved'})),/ledger changed during approval/);
-  } finally {await dropScratchOrg(org.orgId);}
+for(const changedScope of ["outside","inside"] as const)test(`final close approval evaluates ${changedScope} entity activity against its actual Flow receipt`,{skip:!enabled},async()=>{
+ const {org,actor,other}=await setup();
+ try{
+  const blueprintId=randomUUID(),stepId=randomUUID();
+  await db.execute(sql`insert into close_blueprints(id,org_id,name,is_active) values(${blueprintId},${org.orgId},'Scoped review',true)`);
+  await db.execute(sql`insert into close_blueprint_steps(id,org_id,blueprint_id,key,title,workstream,task_type,completion_mode,gate_type,sort_order)
+    values(${stepId},${org.orgId},${blueprintId},'approve-scoped-close','Approve scoped close','review','approval','manual','hard',1)`);
+  const approver=(await seedFlowActors(org.orgId)).approver1Id;
+  await seedApprovalFlow(org.orgId,{subjectKind:"close_run",assignees:[{type:"user",userId:approver}],mode:"all"});
+  const runId=await startCloseRun({orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,actorId:actor,blueprintId,subsidiaryIds:[org.subsidiaryId]});
+  await requestCloseApproval(org.orgId,runId,actor);
+  const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_kind='close_run' and subject_id=${runId} and status='pending'`)).rows[0]!;
+  await journal(org,actor,changedScope==="outside"?other:org.subsidiaryId,'15',changedScope==="outside"?'USD':'CAD');
+  if(changedScope==="outside"){
+    await decideGate({gateId:gate.id,userId:approver,decision:"approved"});
+    assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where org_id=${org.orgId} and id=${runId}`)).rows[0]?.status,"approved");
+  }else{
+    await assert.rejects(decideGate({gateId:gate.id,userId:approver,decision:"approved"}),/ledger changed during approval/);
+    assert.equal((await db.execute<{status:string}>(sql`select status from flow_gates where org_id=${org.orgId} and id=${gate.id}`)).rows[0]?.status,"pending");
+  }
+ }finally{await dropScratchOrg(org.orgId);}
 });
 
 test('a scoped approval fingerprints prior-period carrying activity without unrelated entities', {skip:!enabled}, async () => {
@@ -390,7 +403,7 @@ test('a scoped approval fingerprints prior-period carrying activity without unre
       values (${prior},${org.orgId},${calendar},2026,6,'Prior period','2026-06-01','2026-06-30')`);
     const runId=await run(org,actor,[org.subsidiaryId]);
     const first=await refreshCloseRun(org.orgId,runId,actor);
-    await db.execute(sql`update close_runs set status='approved',approved_at=now(),approved_by=${actor} where id=${runId}`);
+    await seedCloseRunApprovalFixture(org.orgId,runId,actor);
     await journal({...org,periodId:prior,date:'2026-06-15'},actor,other,'10','USD');
     assert.equal((await refreshCloseRun(org.orgId,runId,actor)).fingerprint,first.fingerprint);
     await journal({...org,periodId:prior,date:'2026-06-15'},actor,org.subsidiaryId,'10');

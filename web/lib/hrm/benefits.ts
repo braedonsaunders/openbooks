@@ -801,7 +801,8 @@ function toPortfolioFields(
   editBusinessToday: string | null = null,
 ): Omit<ReturnType<typeof emptyPortfolioFields>, 'portfolioView'> & { portfolioView: PortfolioView } {
   const portfolioView = parsePortfolioView(sp.view)
-  const viewParam = (view: string): string => (view === 'overview' ? basePath : `${basePath}?view=${view}`)
+  const viewParam = (view: string): string =>
+    view === 'overview' ? basePath : `${basePath}?view=${view}`
   const familyCount = (family: string): number => portfolio.programs.filter((p) => p.family === family).length
   const countLabel = (count: number): string | null =>
     count > 0 ? t('portfolio.cards.count', { count }) : null
@@ -981,7 +982,6 @@ function toPortfolioFields(
         effectiveTo: seed.effectiveTo,
         payComponentId: seed.payComponentId,
         deliveryMethod: seed.deliveryMethod,
-        approvalMode: seed.approvalMode,
         valuation: seed.valuation,
         metric: seed.metric ?? '',
         metricScope: seed.metricScope ?? 'company',

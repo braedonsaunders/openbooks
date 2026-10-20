@@ -1,146 +1,67 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-/**
- * Company Settings persists the vendor-bill release policy in org settings
- * JSON (default OFF), validates its shape, and audits the change. The Flows
- * engine and the Setup page both read the same key, so this is the single
- * source of truth — not a parallel gate.
- */
-const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { readCompanySettings, updateCompanySettings } = await import('./company-settings')
+/** Approval configuration belongs to Flows; Company Settings exposes no parallel switches. */
+const { withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import(
+          "@openbooks/engine/testing/fixtures"
+        );
+const { readCompanySettings } = await import('./company-settings')
 
-async function orgSettings(orgId: string) {
+test(
+  'Company Settings exposes no independent approval flags',
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg())
+    try {
+      const result = await withBypassContext(() => readCompanySettings(org.orgId))
+      assert.equal(result.status, 200)
+      assert.equal(
+        Object.hasOwn(result.body.org as object, 'requireVendorBillApproval'),
+        false,
+      )
+      assert.equal(
+        Object.hasOwn(result.body.org as object, 'requireStockCountReview'),
+        false,
+      )
+    } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+  },
+)
+
+const consolidatedRows = [
+  {
+    label: 'company settings timezone',
+    register: async () => {
+      /**
+       * Company Settings owns the org's business time zone: it reads the
+       * effective zone (UTC when unset), validates and canonicalizes writes, and
+       * audits the change. Aliases a runtime accepts but supportedValuesOf omits
+       * (US/Eastern) store canonical and keep working; unknown zones refuse by
+       * name instead of accruing UTC days.
+       */
+      const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
+      const { sql } = await import('drizzle-orm')
+      const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+      const { withSimClock } = await import('@openbooks/engine/testing/platform/clock')
+      const { businessTimeZone, businessToday } = await import('@openbooks/engine/platform/business-date/module')
+      const { readCompanySettings, updateCompanySettings } = await import('./company-settings')
+
+      async function orgSettings(orgId: string) {
   return withBypassContext(async () =>
     (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${orgId}`)).rows[0]!.settings,
   )
 }
 
-test('vendor-bill approval requirement defaults OFF and persists through Company Settings', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-    const me = { orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }
-
-    const before = await withBypassContext(() => readCompanySettings(org.orgId))
-    assert.equal(before.status, 200)
-    assert.equal((before.body.org as Record<string, unknown>).requireVendorBillApproval, false)
-
-    const saved = await withBypassContext(() => updateCompanySettings(me, { requireVendorBillApproval: true }))
-    assert.equal(saved.status, 200)
-    assert.equal(((await orgSettings(org.orgId)).approvals as Record<string, unknown>).requireVendorBillApproval, true)
-    const after = await withBypassContext(() => readCompanySettings(org.orgId))
-    assert.equal((after.body.org as Record<string, unknown>).requireVendorBillApproval, true)
-
-    // Sibling settings keys survive the merge (no clobber).
-    const settings = await orgSettings(org.orgId)
-    assert.ok(settings.controlAccounts, 'control accounts survive the approvals write')
-
-    // Reversible, and the reversal is audited with before/after state.
-    const off = await withBypassContext(() => updateCompanySettings(me, { requireVendorBillApproval: false }))
-    assert.equal(off.status, 200)
-    assert.equal(((await orgSettings(org.orgId)).approvals as Record<string, unknown>).requireVendorBillApproval, false)
-    const audits = await withBypassContext(async () =>
-      (await db.execute<{ changes: Record<string, unknown> }>(sql`
-        select changes from audit_log where org_id = ${org.orgId} and table_name = 'orgs' and action = 'update'`)).rows,
-    )
-    assert.ok(
-      audits.some((row) => JSON.stringify(row.changes.requireVendorBillApproval) === '[false,true]'),
-      `the ON flip is audited with before/after, got ${JSON.stringify(audits.map((row) => row.changes))}`,
-    )
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('vendor-bill approval requirement refuses non-boolean input', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-    for (const bad of ['yes', 1, null, {}, []]) {
-      const res = await withBypassContext(() => updateCompanySettings({ orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }, { requireVendorBillApproval: bad }))
-      assert.equal(res.status, 400, `${JSON.stringify(bad)} must be refused`)
-    }
-    assert.equal(((await orgSettings(org.orgId)).approvals as Record<string, unknown> | undefined)?.requireVendorBillApproval, undefined)
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
-// IN11: the stock-count independent-review switch persists in the same
-// orgs.settings.approvals object (default OFF), validates booleans, and
-// audits flips — the engine gate reads this key, so this stays the single
-// source of truth, not a parallel gate.
-test('stock-count review requirement defaults OFF and persists through Company Settings', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
-    const me = { orgId: org.orgId, id: actor, allowedSubsidiaryIds: null }
-
-    const before = await withBypassContext(() => readCompanySettings(org.orgId))
-    assert.equal(before.status, 200)
-    assert.equal((before.body.org as Record<string, unknown>).requireStockCountReview, false)
-
-    const saved = await withBypassContext(() => updateCompanySettings(me, { requireStockCountReview: true }))
-    assert.equal(saved.status, 200)
-    assert.equal(((await orgSettings(org.orgId)).approvals as Record<string, unknown>).requireStockCountReview, true)
-    const after = await withBypassContext(() => readCompanySettings(org.orgId))
-    assert.equal((after.body.org as Record<string, unknown>).requireStockCountReview, true)
-
-    for (const bad of ['yes', 1, null, {}, []]) {
-      const res = await withBypassContext(() => updateCompanySettings(me, { requireStockCountReview: bad }))
-      assert.equal(res.status, 400, `${JSON.stringify(bad)} must be refused`)
-    }
-
-    const off = await withBypassContext(() => updateCompanySettings(me, { requireStockCountReview: false }))
-    assert.equal(off.status, 200)
-    assert.equal(((await orgSettings(org.orgId)).approvals as Record<string, unknown>).requireStockCountReview, false)
-    const audits = await withBypassContext(async () =>
-      (await db.execute<{ changes: Record<string, unknown> }>(sql`
-        select changes from audit_log where org_id = ${org.orgId} and table_name = 'orgs' and action = 'update'`)).rows,
-    )
-    assert.ok(
-      audits.some((row) => JSON.stringify(row.changes.requireStockCountReview) === '[false,true]'),
-      `the ON flip is audited with before/after, got ${JSON.stringify(audits.map((row) => row.changes))}`,
-    )
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
-
-const consolidatedRows = [
-  { label: "company settings timezone", register: async () => {
-        /**
-         * Company Settings owns the org's business time zone: it reads the
-         * effective zone (UTC when unset), validates and canonicalizes writes, and
-         * audits the change. Aliases a runtime accepts but supportedValuesOf omits
-         * (US/Eastern) store canonical and keep working; unknown zones refuse by
-         * name instead of accruing UTC days.
-         */
-        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
-        const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-        const { withSimClock } = await import('@openbooks/engine/testing/platform/clock')
-        const { businessTimeZone, businessToday } = await import('@openbooks/engine/platform/business-date/module')
-        const { readCompanySettings, updateCompanySettings } = await import('./company-settings')
-
-        async function orgSettings(orgId: string) {
-          return withBypassContext(async () =>
-            (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${orgId}`)).rows[0]!.settings,
-          )
-        }
-
-        async function audits(orgId: string) {
+      async function audits(orgId: string) {
           return withBypassContext(async () =>
             (await db.execute<{ changes: Record<string, unknown> }>(sql`
               select changes from audit_log where org_id = ${orgId} and table_name = 'orgs' and action = 'update'`)).rows,
           )
         }
 
-        test('business time zone defaults to UTC and round-trips through Company Settings', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test('business time zone defaults to UTC and round-trips through Company Settings', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
@@ -177,7 +98,7 @@ const consolidatedRows = [
           }
         })
 
-        test('an alias is canonicalized at save and days in its canonical zone', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test('an alias is canonicalized at save and days in its canonical zone', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
@@ -200,7 +121,7 @@ const consolidatedRows = [
           }
         })
 
-        test('an unknown zone is refused at save by name and stores nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test('an unknown zone is refused at save by name and stores nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
@@ -222,7 +143,7 @@ const consolidatedRows = [
           }
         })
 
-        test('clearing the zone returns the org to the UTC default and audits the removal', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+      test('clearing the zone returns the org to the UTC default and audits the removal', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
@@ -243,11 +164,11 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId))
           }
         })
-  } },
-] as const;
+    },
+  },
+] as const
 
 for (const row of consolidatedRows) await row.register();
-
 
 const featureDefaultsCases = [
   { label: "features data defaults", register: async () => {

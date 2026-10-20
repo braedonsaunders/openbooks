@@ -304,7 +304,7 @@ test("a flow-governed order amends into pending_approval with a new run", { skip
       mode: "any",
     });
     const orderId = await seedDraftDocument(org.orgId, { kind: "purchase_order", createdBy: actors.submitterId });
-    const first = await submitForApproval("purchase_order", orderId);
+    const first = await submitForApproval("purchase_order", orderId, actors.submitterId);
     assert.equal(first.gated, true);
     const gates = (await db.execute<{ id: string }>(sql`
       select id from flow_gates where subject_id = ${orderId} and org_id = ${org.orgId}`)).rows;

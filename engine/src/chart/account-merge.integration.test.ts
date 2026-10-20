@@ -1,3 +1,4 @@
+import {decideGate} from "../flows/gates.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -12,6 +13,7 @@ import {
   dropScratchOrg,
   dropScratchOrgReporting,
   seedApprovalFlow,
+  grantScratchPermissions,
   seedFlowActors,
   seedPostingAccount,
   type ScratchOrg,
@@ -408,6 +410,10 @@ test("a retried merge returns the same record, and a stale preview is refused", 
     if (first.status !== "completed" || again.status !== "completed") return;
     assert.equal(again.mergeId, first.mergeId);
     assert.equal(again.replayed, true);
+    await assert.rejects(
+      requestAccountMerge(s.org.orgId, request(s, { expectedDigest: preview.digest, idempotencyKey: key, reason: "Different request terms under the same key" })),
+      (error: unknown) => error instanceof AccountMergeError && error.code === "account_merge_key_conflict",
+    );
     const entries = await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries where org_id = ${s.org.orgId} and origin = 'account_merge'`)).rows[0]!.n);
     assert.equal(entries, 1, "a retry posts nothing twice");
@@ -513,38 +519,42 @@ test("merges are confined to their organization and to the feature switch", { sk
   }
 });
 
-test("with an Accounting event flow a merge is proposed, approved, then applied against its preview", { skip: !DB }, async () => {
-  const s = await scenario();
-  try {
-    const actors = await seedFlowActors(s.org.orgId);
-    await withBypassContext(() => seedApprovalFlow(s.org.orgId, {
+test(
+  "with an Accounting event flow a merge is proposed, approved, then applied against its preview",
+  { skip: !DB },
+  async () => {
+    const s = await scenario();
+    try {
+      const actors = await seedFlowActors(s.org.orgId);
+      await grantScratchPermissions(s.org.orgId,actors.approver1Id,["gl.manage"]);
+      await withBypassContext(() => seedApprovalFlow(s.org.orgId, {
       subjectKind: "financial_change",
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
     }));
-    const preview = await previewAccountMerge(s.org.orgId, { sourceAccountId: s.source, targetAccountId: s.target, effectiveDate: EFFECTIVE }, null);
-    assert.equal(preview.approvalRequired, true);
-    const proposed = await requestAccountMerge(s.org.orgId, request(s, { expectedDigest: preview.digest }));
-    assert.equal(proposed.status, "pending_approval");
-    if (proposed.status !== "pending_approval") return;
-    assert.equal(await balance(s.org.orgId, s.source), "150.0000", "nothing moves before approval");
-    await assert.rejects(
+      const preview = await previewAccountMerge(s.org.orgId, { sourceAccountId: s.source, targetAccountId: s.target, effectiveDate: EFFECTIVE }, null);
+      const proposed = await requestAccountMerge(s.org.orgId, request(s, { expectedDigest: preview.digest }));
+      assert.equal(proposed.status, "pending_approval");
+      if (proposed.status !== "pending_approval") return;
+      assert.equal(await balance(s.org.orgId, s.source), "150.0000", "nothing moves before approval");
+      await assert.rejects(
       applyApprovedAccountMerge(s.org.orgId, { changeId: proposed.changeId, actorId: s.actorId, allowedSubsidiaryIds: null }),
       /approval|Flows/i,
     );
-    await withBypassContext(() => db.execute(sql`
-      update financial_changes set status = 'approved', approved_by = ${actors.approver1Id}, approved_at = now()
-       where org_id = ${s.org.orgId} and id = ${proposed.changeId}`));
-    const applied = await applyApprovedAccountMerge(s.org.orgId, { changeId: proposed.changeId, actorId: s.actorId, allowedSubsidiaryIds: null });
-    assert.equal(applied.status, "completed");
-    assert.equal(await balance(s.org.orgId, s.source), "0.0000");
-    const change = await withBypassContext(async () => (await db.execute<{ status: string }>(sql`
+      const gates=await withBypassContext(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${s.org.orgId} and subject_kind='financial_change' and subject_id=${proposed.changeId} and status='pending'`));
+      assert.equal(gates.rows.length,1);
+      await decideGate({gateId:gates.rows[0]!.id,userId:actors.approver1Id,decision:"approved"});
+      const applied = await applyApprovedAccountMerge(s.org.orgId, { changeId: proposed.changeId, actorId: s.actorId, allowedSubsidiaryIds: null });
+      assert.equal(applied.status, "completed");
+      assert.equal(await balance(s.org.orgId, s.source), "0.0000");
+      const change = await withBypassContext(async () => (await db.execute<{ status: string }>(sql`
       select status from financial_changes where org_id = ${s.org.orgId} and id = ${proposed.changeId}`)).rows[0]!.status);
-    assert.equal(change, "applied");
-  } finally {
+      assert.equal(change, "applied");
+    } finally {
     await dropScratchOrg(s.org.orgId);
   }
-});
+  },
+);
 
 test("every live foreign key into accounts is classified and guarded against merged-account references", { skip: !DB }, async () => {
   await withBypassContext(async () => {
@@ -574,7 +584,6 @@ test("every live foreign key into accounts is classified and guarded against mer
     assert.deepEqual(unguarded, [], "every account FK column has an unconditional native insert and column-update guard");
   });
 });
-
 
 test("balancing policy successors fence the requested merge date and retained merged-account policies clone unchanged", { skip: !DB }, async () => {
   installEngineSeams();

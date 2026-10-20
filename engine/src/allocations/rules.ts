@@ -181,7 +181,6 @@ export interface DraftVersionInput extends AllocationOrgScope {
   solveMethod?: AllocationSolveMethod;
   runPolicy?: AllocationRunPolicy;
   runOffsetDays?: number;
-  approvalFlowId?: string | null;
   memoTemplate?: string | null;
   lineDescriptionTemplate?: string | null;
   targets?: AllocationTargetInput[];
@@ -823,7 +822,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function resolveDefinition(input: DraftVersionInput | UpdateDraftInput, kind: "create" | "update"): Partial<ResolvedDefinition> {
+function resolveDefinition(
+  input: DraftVersionInput | UpdateDraftInput,
+  kind: "create" | "update",
+): Partial<ResolvedDefinition> {
   const def: Partial<ResolvedDefinition> = {};
   if (input.effectiveFrom !== undefined) def.effectiveFrom = requireIsoDate(input.effectiveFrom, "effectiveFrom");
   else if (kind === "create") throw new AllocationRuleError("INVALID", "effectiveFrom is required for a new version");
@@ -868,20 +870,37 @@ function resolveDefinition(input: DraftVersionInput | UpdateDraftInput, kind: "c
   if (input.solveMethod !== undefined) def.solveMethod = oneOf(input.solveMethod, SOLVE_METHODS, "solveMethod");
   if (input.runPolicy !== undefined) def.runPolicy = oneOf(input.runPolicy, RUN_POLICIES, "runPolicy");
   if (input.runOffsetDays !== undefined) def.runOffsetDays = intIn(input.runOffsetDays, "runOffsetDays", 0);
-  if (input.approvalFlowId !== undefined) {
-    def.approvalFlowId = input.approvalFlowId === null ? null : uuid(input.approvalFlowId, "approvalFlowId");
-  }
   if (input.memoTemplate !== undefined) def.memoTemplate = input.memoTemplate;
   if (input.lineDescriptionTemplate !== undefined) def.lineDescriptionTemplate = input.lineDescriptionTemplate;
   return def;
 }
 
 const COPY_EXCLUSIVE: (keyof DraftVersionInput)[] = [
-  "effectiveFrom", "effectiveTo", "bookScope", "bookIds", "documentKinds", "accountScope",
-  "dimensionFilters", "applyPolicy", "sourceMeasure", "basisKind", "driverId", "driverAsOf",
-  "basisConfig", "targetKind", "dynamicTarget", "impact", "offsetAccountId", "residualPolicy",
-  "residualTargetId", "solveMethod", "runPolicy", "runOffsetDays", "approvalFlowId",
-  "memoTemplate", "lineDescriptionTemplate", "targets",
+  "effectiveFrom",
+  "effectiveTo",
+  "bookScope",
+  "bookIds",
+  "documentKinds",
+  "accountScope",
+  "dimensionFilters",
+  "applyPolicy",
+  "sourceMeasure",
+  "basisKind",
+  "driverId",
+  "driverAsOf",
+  "basisConfig",
+  "targetKind",
+  "dynamicTarget",
+  "impact",
+  "offsetAccountId",
+  "residualPolicy",
+  "residualTargetId",
+  "solveMethod",
+  "runPolicy",
+  "runOffsetDays",
+  "memoTemplate",
+  "lineDescriptionTemplate",
+  "targets",
 ];
 
 function defaultDefinition(): ResolvedDefinition {
@@ -967,7 +986,7 @@ export async function createDraftVersion(
         solveMethod: source.solveMethod,
         runPolicy: source.runPolicy,
         runOffsetDays: source.runOffsetDays,
-        approvalFlowId: source.approvalFlowId ?? null,
+        approvalFlowId: null,
         memoTemplate: source.memoTemplate ?? null,
         lineDescriptionTemplate: source.lineDescriptionTemplate ?? null,
       };
@@ -1076,7 +1095,7 @@ export async function updateDraftVersion(
       solveMethod: before.solveMethod,
       runPolicy: before.runPolicy,
       runOffsetDays: before.runOffsetDays,
-      approvalFlowId: before.approvalFlowId ?? null,
+      approvalFlowId: null,
       memoTemplate: before.memoTemplate ?? null,
       lineDescriptionTemplate: before.lineDescriptionTemplate ?? null,
       ...patch,

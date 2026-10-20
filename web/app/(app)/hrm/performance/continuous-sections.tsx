@@ -50,6 +50,7 @@ export function SessionActionsShell({ detail }: { detail: CalibrationDetail }) {
     <SessionActions
       sessionId={detail.id}
       status={detail.status}
+      approvalPending={detail.approvalPending}
       openLabel={detail.openLabel}
       closeLabel={detail.closeLabel}
       failed={detail.failed}

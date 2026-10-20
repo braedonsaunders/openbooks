@@ -1,13 +1,20 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import {
   RESOURCING_REQUEST_SUBJECT_KIND,
   resRequests,
 } from "@openbooks/schema/src/resourcing.ts";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
-import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
+import type {
+  FlowExecCtx,
+  FlowSubjectAdapter,
+  FlowSubjectContext,
+} from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
-import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
+import {
+  BUILT_IN_ROLE_NAMES,
+  EVENT_SOURCE_OPTIONS,
+} from "./subject-profiles.ts";
 import { tableScope } from "./subject-scope.ts";
 
 const REQUEST_STATUSES = [
@@ -33,7 +40,12 @@ export const resourcingRequestSubjectProfile: FlowSubjectProfile = {
     { key: "firstWeek", label: "First week", type: "text" },
     { key: "lastWeek", label: "Last week", type: "text" },
     { key: "hoursPerWeek", label: "Hours per week", type: "number" },
-    { key: "status", label: "Status", type: "enum", options: [...REQUEST_STATUSES] },
+    {
+      key: "status",
+      label: "Status",
+      type: "enum",
+      options: [...REQUEST_STATUSES],
+    },
     { key: "submittedBy", label: "Submitted by", type: "user" },
     { key: "reason", label: "Reason", type: "text" },
     {
@@ -46,36 +58,43 @@ export const resourcingRequestSubjectProfile: FlowSubjectProfile = {
   roles: [...BUILT_IN_ROLE_NAMES],
 };
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function loadRequest(subjectId: string) {
   if (!UUID_RE.test(subjectId)) return null;
   // The gate supplies the org scope on release; the tenant-bounded fan-out
   // below is the entry point for background candidate selection.
-  const [row] = await db.select({
-    orgId: resRequests.orgId,
-    projectId: resRequests.projectId,
-    employeePartyId: resRequests.employeePartyId,
-    jobTitle: resRequests.jobTitle,
-    firstWeek: resRequests.firstWeek,
-    lastWeek: resRequests.lastWeek,
-    hoursPerWeek: resRequests.hoursPerWeek,
-    status: resRequests.status,
-    createdBy: resRequests.createdBy,
-    reason: resRequests.reason,
-  }).from(resRequests).where(eq(resRequests.id, subjectId));
+  const [row] = await db
+    .select({
+      orgId: resRequests.orgId,
+      projectId: resRequests.projectId,
+      employeePartyId: resRequests.employeePartyId,
+      jobTitle: resRequests.jobTitle,
+      firstWeek: resRequests.firstWeek,
+      lastWeek: resRequests.lastWeek,
+      hoursPerWeek: resRequests.hoursPerWeek,
+      status: resRequests.status,
+      createdBy: resRequests.createdBy,
+      reason: resRequests.reason,
+    })
+    .from(resRequests)
+    .where(eq(resRequests.id, subjectId));
   return row ?? null;
 }
 
 export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
   subjectKind: RESOURCING_REQUEST_SUBJECT_KIND,
   // A request belongs to its project's legal entity.
-  permissions: { read: "resourcing.read", edit: "resourcing.manage", approve: "resourcing.manage" },
+  permissions: {
+    read: "resourcing.read",
+    edit: "resourcing.manage",
+    approve: "resourcing.manage",
+  },
   scope: tableScope("project", "res_requests", "project_id"),
   profile: resourcingRequestSubjectProfile,
   releaseViaHandler: true,
   writableFields: new Set<string>(),
-  selfApprovalPolicy: "configurable",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const request = await loadRequest(subjectId);
@@ -83,6 +102,11 @@ export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
     return {
       values: {
         id: subjectId,
+        approvalFingerprint: (
+          await db.execute<{ fingerprint: string }>(
+            sql`select public.resourcing_request_approval_fingerprint(r) as fingerprint from res_requests r where r.id=${subjectId}`,
+          )
+        ).rows[0]?.fingerprint,
         requestId: subjectId,
         projectId: request.projectId,
         employeePartyId: request.employeePartyId,
@@ -111,7 +135,9 @@ export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
   },
 
   async changeStatus(): Promise<void> {
-    throw new Error("resource request status is released by the approval engine, not a flow action");
+    throw new Error(
+      "resource request status is released by the approval engine, not a flow action",
+    );
   },
 
   async releaseApproval(
@@ -119,30 +145,40 @@ export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
   ): Promise<void> {
     await releaseFlowApproval({
       subjectKind: RESOURCING_REQUEST_SUBJECT_KIND,
       subjectId,
       outcome,
       comment: detail?.comment,
+      approvalRunId: run?.id,
       ctx,
     });
   },
 
   async setField(): Promise<void> {
-    throw new Error("resource requests are frozen on submit; cancel and file a new request");
+    throw new Error(
+      "resource requests are frozen on submit; cancel and file a new request",
+    );
   },
 
   async findCandidateIds(limit: number): Promise<string[]> {
     const orgId = ambientTenantOrgId();
     if (!orgId) {
-      throw new Error(`findCandidateIds for "${RESOURCING_REQUEST_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`);
+      throw new Error(
+        `findCandidateIds for "${RESOURCING_REQUEST_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
+      );
     }
-    const rows = await db.select({ id: resRequests.id }).from(resRequests)
-      .where(and(
-        eq(resRequests.orgId, orgId),
-        inArray(resRequests.status, ["draft", "submitted"]),
-      ))
+    const rows = await db
+      .select({ id: resRequests.id })
+      .from(resRequests)
+      .where(
+        and(
+          eq(resRequests.orgId, orgId),
+          inArray(resRequests.status, ["draft", "submitted"]),
+        ),
+      )
       .orderBy(desc(resRequests.updatedAt))
       .limit(limit);
     return rows.map((row) => row.id);

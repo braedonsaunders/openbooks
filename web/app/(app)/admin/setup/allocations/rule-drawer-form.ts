@@ -44,7 +44,10 @@ export function generalFormFromRule(rule: {
 }
 
 /** PATCH /rules/[id] body — the route coerces types, the drawer sends clean ones. */
-export function generalPayload(form: GeneralForm, expectedRevision: string): Record<string, unknown> {
+export function generalPayload(
+  form: GeneralForm,
+  expectedRevision: string,
+): Record<string, unknown> {
   return {
     name: form.name,
     description: form.description === '' ? null : form.description,
@@ -60,7 +63,13 @@ export interface TierForm {
   targetKey: string
 }
 
-const FILTER_DIMS = ['department', 'location', 'class', 'project', 'subsidiary'] as const
+const FILTER_DIMS = [
+  'department',
+  'location',
+  'class',
+  'project',
+  'subsidiary',
+] as const
 type FilterDim = (typeof FILTER_DIMS)[number]
 
 /** Draft version fields as edited — selects stay text, multi-selects id arrays. */
@@ -108,7 +117,6 @@ export interface DefinitionForm {
   solveMethod: AllocationSolveMethod
   runPolicy: AllocationRunPolicy
   runOffsetDays: string
-  approvalFlowId: string
   memoTemplate: string
   lineDescriptionTemplate: string
 }
@@ -156,7 +164,6 @@ export function blankDefinitionForm(): DefinitionForm {
     solveMethod: 'sequential',
     runPolicy: 'manual',
     runOffsetDays: '0',
-    approvalFlowId: '',
     memoTemplate: '',
     lineDescriptionTemplate: '',
   }
@@ -170,7 +177,10 @@ function tierForms(basisConfig: Record<string, unknown>): TierForm[] {
   const raw = basisConfig['tiers']
   if (!Array.isArray(raw)) return []
   return raw
-    .filter((tier): tier is Record<string, unknown> => typeof tier === 'object' && tier !== null)
+    .filter(
+      (tier): tier is Record<string, unknown> =>
+        typeof tier === 'object' && tier !== null,
+    )
     .map((tier) => ({
       upTo: tier['upTo'] == null ? '' : String(tier['upTo']),
       targetKey: typeof tier['targetKey'] === 'string' ? tier['targetKey'] : '',
@@ -200,7 +210,6 @@ export function definitionFormFromVersion(version: {
   solveMethod: AllocationSolveMethod
   runPolicy: AllocationRunPolicy
   runOffsetDays: number
-  approvalFlowId?: string | null
   memoTemplate?: string | null
   lineDescriptionTemplate?: string | null
 }): DefinitionForm {
@@ -213,9 +222,18 @@ export function definitionFormFromVersion(version: {
     bookIds: ids(version.bookIds),
     documentKinds: ids(version.documentKinds ?? undefined),
     accountScopeKind: version.accountScope.kind,
-    accountIds: version.accountScope.kind === 'accounts' ? ids(version.accountScope.accountIds) : [],
-    accountGroupDimension: version.accountScope.kind === 'account_group' ? version.accountScope.dimension : '',
-    accountGroupKey: version.accountScope.kind === 'account_group' ? version.accountScope.groupKey : '',
+    accountIds:
+      version.accountScope.kind === 'accounts'
+        ? ids(version.accountScope.accountIds)
+        : [],
+    accountGroupDimension:
+      version.accountScope.kind === 'account_group'
+        ? version.accountScope.dimension
+        : '',
+    accountGroupKey:
+      version.accountScope.kind === 'account_group'
+        ? version.accountScope.groupKey
+        : '',
     filterDepartmentIds: ids(filters.departmentIds),
     filterLocationIds: ids(filters.locationIds),
     filterClassIds: ids(filters.classIds),
@@ -228,7 +246,10 @@ export function definitionFormFromVersion(version: {
     filterTimeTypeIds: ids(filters.timeTypeIds),
     payrollExpensesOnly: filters.payrollExpensesOnly === true,
     filterExtraDims: Object.fromEntries(
-      Object.entries(filters.extraDims ?? {}).map(([segment, values]) => [segment, [...values]]),
+      Object.entries(filters.extraDims ?? {}).map(([segment, values]) => [
+        segment,
+        [...values],
+      ]),
     ),
     requireUntagged: [...(filters.requireUntagged ?? [])],
     applyPolicy: version.applyPolicy,
@@ -250,7 +271,6 @@ export function definitionFormFromVersion(version: {
     solveMethod: version.solveMethod,
     runPolicy: version.runPolicy,
     runOffsetDays: String(version.runOffsetDays),
-    approvalFlowId: version.approvalFlowId ?? '',
     memoTemplate: version.memoTemplate ?? '',
     lineDescriptionTemplate: version.lineDescriptionTemplate ?? '',
   }
@@ -267,7 +287,10 @@ function nullIfEmpty(value: string): string | null {
  * untagged flags always send (clearing them is meaningful). Stepped tiers
  * only send for a stepped basis; other bases leave basis_config alone.
  */
-export function definitionPayload(form: DefinitionForm, expectedRevision: string): Record<string, unknown> {
+export function definitionPayload(
+  form: DefinitionForm,
+  expectedRevision: string,
+): Record<string, unknown> {
   const filters: Record<string, unknown> = {}
   const put = (key: string, values: string[]) => {
     if (values.length > 0) filters[key] = values
@@ -294,7 +317,11 @@ export function definitionPayload(form: DefinitionForm, expectedRevision: string
     form.accountScopeKind === 'accounts'
       ? { kind: 'accounts', accountIds: [...form.accountIds] }
       : form.accountScopeKind === 'account_group'
-        ? { kind: 'account_group', dimension: form.accountGroupDimension, groupKey: form.accountGroupKey }
+        ? {
+            kind: 'account_group',
+            dimension: form.accountGroupDimension,
+            groupKey: form.accountGroupKey,
+          }
         : { kind: 'any' }
 
   const body: Record<string, unknown> = {
@@ -312,10 +339,18 @@ export function definitionPayload(form: DefinitionForm, expectedRevision: string
     driverAsOf: form.driverAsOf,
     targetKind: form.targetKind,
     dynamicTarget: {
-      ...(form.dynamicDimension === '' ? {} : { dimension: form.dynamicDimension }),
-      ...(nullIfEmpty(form.dynamicMinWeight) === null ? {} : { minWeight: form.dynamicMinWeight }),
-      ...(form.dynamicInclude.length === 0 ? {} : { include: [...form.dynamicInclude] }),
-      ...(form.dynamicExclude.length === 0 ? {} : { exclude: [...form.dynamicExclude] }),
+      ...(form.dynamicDimension === ''
+        ? {}
+        : { dimension: form.dynamicDimension }),
+      ...(nullIfEmpty(form.dynamicMinWeight) === null
+        ? {}
+        : { minWeight: form.dynamicMinWeight }),
+      ...(form.dynamicInclude.length === 0
+        ? {}
+        : { include: [...form.dynamicInclude] }),
+      ...(form.dynamicExclude.length === 0
+        ? {}
+        : { exclude: [...form.dynamicExclude] }),
       ...(nullIfEmpty(form.dynamicTargetAccountId) === null
         ? {}
         : { targetAccountId: form.dynamicTargetAccountId }),
@@ -327,7 +362,6 @@ export function definitionPayload(form: DefinitionForm, expectedRevision: string
     solveMethod: form.solveMethod,
     runPolicy: form.runPolicy,
     runOffsetDays: Number(form.runOffsetDays),
-    approvalFlowId: nullIfEmpty(form.approvalFlowId),
     memoTemplate: nullIfEmpty(form.memoTemplate),
     lineDescriptionTemplate: nullIfEmpty(form.lineDescriptionTemplate),
     expectedRevision,
@@ -372,7 +406,8 @@ export function targetToLine(target: {
     locationId: target.locationId ?? null,
     classId: target.classId ?? null,
     subsidiaryId: target.subsidiaryId,
-    extraDims: target.extraDims === undefined ? undefined : { ...target.extraDims },
+    extraDims:
+      target.extraDims === undefined ? undefined : { ...target.extraDims },
     projectId: target.projectId ?? null,
     label: target.label ?? null,
   }
@@ -402,12 +437,14 @@ export function mergeLinesToTargets(
   }
   return lines.map((line, index) => {
     const basis = allocationTargetBasisFromLine(line)
-    const byId = line.targetId !== undefined ? keptById.get(line.targetId) : undefined
+    const byId =
+      line.targetId !== undefined ? keptById.get(line.targetId) : undefined
     // Lines without a targetId predate stored ids: keep the previous
     // positional pairing so a save never drops hidden fields it used to
     // retain. A line whose id no longer matches any loaded target merges
     // empty — it must not inherit a stranger's subsidiary/extraDims.
-    const kept = byId ?? (line.targetId === undefined ? (original[index] ?? {}) : {})
+    const kept =
+      byId ?? (line.targetId === undefined ? (original[index] ?? {}) : {})
     return {
       sequence: index,
       targetAccountId: basis.targetAccountId,
@@ -415,7 +452,10 @@ export function mergeLinesToTargets(
       locationId: line.locationId ?? null,
       classId: line.classId ?? null,
       projectId: line.projectId ?? null,
-      subsidiaryId: line.subsidiaryId === undefined ? kept.subsidiaryId ?? null : line.subsidiaryId,
+      subsidiaryId:
+        line.subsidiaryId === undefined
+          ? (kept.subsidiaryId ?? null)
+          : line.subsidiaryId,
       extraDims: line.extraDims ?? kept.extraDims ?? {},
       fixedPercent: basis.fixedPercent,
       weight: basis.weight,
@@ -430,7 +470,20 @@ export function testLinePayload(form: {
   accountId: string
   documentKind: string
   payrollExpense?: boolean
-  dims: Partial<Record<'departmentId' | 'locationId' | 'classId' | 'projectId' | 'subsidiaryId' | 'partyId' | 'itemId' | 'payComponentId' | `extra:${string}`, string>>
+  dims: Partial<
+    Record<
+      | 'departmentId'
+      | 'locationId'
+      | 'classId'
+      | 'projectId'
+      | 'subsidiaryId'
+      | 'partyId'
+      | 'itemId'
+      | 'payComponentId'
+      | `extra:${string}`,
+      string
+    >
+  >
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     accountId: form.accountId,
@@ -439,13 +492,17 @@ export function testLinePayload(form: {
   for (const [key, value] of Object.entries(form.dims)) {
     if (value !== undefined && value !== '') {
       if (key.startsWith('extra:')) {
-        const extraDims = (body['extraDims'] ?? {}) as Record<string, string | null>
+        const extraDims = (body['extraDims'] ?? {}) as Record<
+          string,
+          string | null
+        >
         extraDims[key.slice(6)] = value
         body['extraDims'] = extraDims
       } else body[key] = value
     }
   }
-  if (form.payrollExpense !== undefined) body['payrollExpense'] = form.payrollExpense
+  if (form.payrollExpense !== undefined)
+    body['payrollExpense'] = form.payrollExpense
   return body
 }
 
@@ -456,16 +513,27 @@ export interface ApiError {
 }
 
 /** Normalize a rule-API failure: server message wins, 409/STALE asks for reload. */
-export function apiError(status: number, body: unknown, fallback: string): ApiError {
+export function apiError(
+  status: number,
+  body: unknown,
+  fallback: string,
+): ApiError {
   // The message reads through the shared refusal vocabulary so message,
   // nested error, remedy and code render instead of a bare fallback; the
   // problems array and the stale reload signal stay domain-owned.
-  const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : null
+  const record =
+    typeof body === 'object' && body !== null
+      ? (body as Record<string, unknown>)
+      : null
   const message = refusalMessageFromBody(body, { fallback }) ?? fallback
   const problems = Array.isArray(record?.['problems'])
     ? (record['problems'] as ApiError['problems'])
     : []
-  return { message, stale: status === 409 || record?.['code'] === 'STALE', problems }
+  return {
+    message,
+    stale: status === 409 || record?.['code'] === 'STALE',
+    problems,
+  }
 }
 
 /** Built-in filter dimensions sharing one picker shape (party/item/extra have their own). */

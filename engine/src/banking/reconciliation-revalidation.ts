@@ -1,4 +1,8 @@
-import { sql } from 'drizzle-orm'
+import {
+  lockApprovalSubject,
+  requestNativeCommandApproval,
+} from "../platform/approval-routing.ts";
+import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from '../platform/db.ts'
 import { canonicalJson } from '../platform/canonical-json.ts'
 import { isUuid } from '../platform/uuid.ts'
@@ -28,13 +32,18 @@ export type SignOffRevalidationPreview = {
   originalApprovalAuditId: string; alreadyReviewed: SignOffRevalidationCertificate | null
 }
 
-async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingContext): Promise<{
+async function reviewInTransaction(
+  tx: SqlExecutor,
+  id: string,
+  ctx: BankingContext,
+): Promise<{
   preview: SignOffRevalidationPreview; subject: SignedReviewSubject; subsidiaryId: string | null
   periods: { id: string; label: string; subsidiaryId:string|null }[]
 }> {
   if (!isUuid(id)) throw new ScopeNotFoundError()
   await acquireOrgFeatureGateLock(tx,ctx.orgId)
-  if (!await lockAndCheckOrgFeature(tx,ctx.orgId,'banking')) throw new ScopeNotFoundError()
+  if (!(await lockAndCheckOrgFeature(tx,ctx.orgId,'banking')))
+    throw new ScopeNotFoundError();
   const active = (await tx.execute(sql`select id from users where org_id=${ctx.orgId} and id=${ctx.userId} and is_active for share`)).rows[0]
   if (!active) throw new ScopeNotFoundError()
   const head = (await tx.execute<{account_id:string;subsidiary_id:string|null}>(sql`
@@ -45,8 +54,9 @@ async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingCont
   requireSessionRowInScope(head,ctx.allowedSubsidiaryIds)
   // Existing reconciliation authority still covers review; the narrower
   // duty can certify evidence without conferring other bank mutations.
-  const permission = await actorHasPermission(tx,ctx.orgId,ctx.userId,'banking.review_sign_off')
-    ? 'banking.review_sign_off' : 'banking.reconcile'
+  const permission = (await actorHasPermission(tx,ctx.orgId,ctx.userId,'banking.review_sign_off'))
+    ? "banking.review_sign_off"
+    : "banking.reconcile";
   const actualScope = await lockActorCommandAuthority(tx,ctx.orgId,ctx.userId,head.subsidiary_id,permission)
   requireSessionRowInScope(head,actualScope)
   const bookId = await reconciliationBookId(tx,ctx.orgId)
@@ -62,9 +72,6 @@ async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingCont
   requireSessionRowInScope(row,actualScope)
   if (row.status!=='signed_off' || !row.signed_off_at || !row.signed_off_by || row.evidence_kind!=='statement') {
     throw new BankingError('Review requires an existing statement-backed sign-off. Source-only or unsigned sessions use their ordinary reconciliation workflow.')
-  }
-  if (ctx.userId===row.signed_off_by) {
-    throw new BankingError('Another authorized reviewer must independently review this sign-off.')
   }
   const affected = (await tx.execute<{subsidiaryId:string|null}>(sql`
     select distinct jl.subsidiary_id as "subsidiaryId" from journal_lines jl
@@ -101,7 +108,7 @@ async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingCont
        and al.at=${row.signed_off_at}::timestamptz and al.changes->>'operation'='sign_off'
      order by al.id limit 2
   `)).rows
-  const original = approval[0]
+  const original = approval[0];
   if (approval.length!==1 || !original || original.changes.bookId!==bookId
     || original.changes.throughDate!==row.through_date || original.changes.currency!==row.currency
     || typeof original.changes.statementBalance!=='string'
@@ -127,7 +134,7 @@ async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingCont
       !==canonicalJson(proof.outstandingLegalEntityEffects.filter(effect=>toUnits(effect.amount)!==0n))) {
     throw new BankingError('The uncleared balance changed outside the identified late movements. Review the new ledger sources before recording another neutral-history review.')
   }
-  assertNeutralReviewProof(proof)
+  assertNeutralReviewProof(proof);
   if ([...proof.legalEntityEffects,...proof.outstandingLegalEntityEffects].some(effect=>!entities.includes(effect.subsidiaryId))) {
     throw new BankingError('The affected legal entities changed during review. Reload its current evidence before confirming.')
   }
@@ -161,19 +168,38 @@ export async function previewSignOffRevalidation(id: string, ctx: BankingContext
 /** Append review evidence for unchanged signed balances and neutral late
  * history. The original sign-off and every statement/match/GL row remain
  * unchanged; late ledger lines are not declared bank-cleared by this review. */
-export async function revalidateReconciliationSignOff(id: string, input: {
-  expectedDigest: string; reason: string
-}, ctx: BankingContext): Promise<{certificate:SignOffRevalidationCertificate;replayed:boolean}> {
-  const reason = input.reason.trim()
+export async function revalidateReconciliationSignOff(
+  id: string,
+  input: {
+    expectedDigest: string;
+    reason: string;
+    approvalRunId?: string;
+  },
+  ctx: BankingContext,
+): Promise<
+  | {
+      status: "recorded";
+      certificate:SignOffRevalidationCertificate;
+      replayed: boolean;
+    }
+  | { status: "pending_approval" }
+> {
+  const reason = input.reason.trim();
   if (reason.length<10 || reason.length>500 || !/^[a-f0-9]{64}$/.test(input.expectedDigest)) {
     throw new BankingError('Review the current sign-off evidence and supply a 10–500 character reason.')
   }
-  return withOrgTransaction(ctx.orgId,async () => {
+  return withOrgTransaction(ctx.orgId, async () => {
+    await lockApprovalSubject(ctx.orgId, "bank_reconciliation_review", id);
     const review = await reviewInTransaction(db,id,ctx)
     if (review.preview.proof.digest!==input.expectedDigest) {
       throw new BankingError('The reviewed evidence changed. Reload the neutral-history review before confirming it.')
     }
-    if (review.preview.alreadyReviewed) return {certificate:review.preview.alreadyReviewed,replayed:true}
+    if (review.preview.alreadyReviewed)
+      return {
+        status: "recorded" as const,
+        certificate:review.preview.alreadyReviewed,
+        replayed: true,
+      };
     for (const period of review.periods) {
       const blocked = (await db.execute<{blocked:boolean}>(sql`
         select period_module_blocks_write(${ctx.orgId},${period.id},${review.subject.bookId},
@@ -181,6 +207,17 @@ export async function revalidateReconciliationSignOff(id: string, input: {
       `)).rows[0]?.blocked
       if (blocked!==false) throw new BankingError(`Banking is closed for ${period.label}. Request its controlled reopening before recording the independent review.`)
     }
+    if (
+      await requestNativeCommandApproval({
+        orgId: ctx.orgId,
+        actorId: ctx.userId,
+        subjectKind: "bank_reconciliation_review",
+        subjectId: id,
+        command: { expectedDigest: input.expectedDigest, reason },
+        approvalRunId: input.approvalRunId,
+      })
+    )
+      return { status: "pending_approval" as const };
     const audit = (await db.execute<{id:string;at:string}>(sql`
       insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values(${ctx.orgId},'reconciliations',${id},'update',${JSON.stringify({
@@ -193,8 +230,12 @@ export async function revalidateReconciliationSignOff(id: string, input: {
       })}::jsonb,${ctx.userId}) returning id,at::text as at
     `)).rows[0]
     if (!audit) throw new BankingError('The review certificate was not recorded. Nothing changed.')
-    return {replayed:false,certificate:{auditId:audit.id,reviewedAt:audit.at,reviewedBy:ctx.userId,reason,
+    return {
+      status: "recorded" as const,
+      replayed: false,
+      certificate:{auditId:audit.id,reviewedAt:audit.at,reviewedBy:ctx.userId,reason,
       originalSignedOffAt:review.subject.signedOffAt,reviewedReconciliationId:id,
-      appliesFromThroughDate:review.subject.throughDate,inherited:false,proof:review.preview.proof}}
-  })
+      appliesFromThroughDate:review.subject.throughDate,inherited:false,proof:review.preview.proof},
+    };
+  });
 }

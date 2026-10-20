@@ -1,3 +1,4 @@
+import { routeSubjectSubmission } from "../flows/submission-policy.ts";
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -741,20 +742,30 @@ export async function submitNettingRun(
   type SubmitOutcome = { refusal: string } | { status: "pending_approval" | "approved"; gated: boolean };
   // A failed routing returns its refusal so the cancellation of whatever the
   // dispatch opened commits; the run itself stays proposed.
-  const outcome = await withOrgTransaction(orgId, async (): Promise<SubmitOutcome> => {
-    await requireIntercompanyPermission(db, orgId, actorId, "intercompany.manage");
-    await assertNettingEnabled(db, orgId);
-    const run = await lockRun(db, orgId, runId, allowedSubsidiaryIds);
-    if (run.status !== "proposed") refuse(`only a proposed netting run can be submitted; this one is ${run.status.replace("_", " ")}`, 409);
-    const dispatch = await runRecordFlows({ kind: "on_submit", source: "ui" }, INTERCOMPANY_NETTING_RUN_SUBJECT_KIND, runId, { orgId, userId: actorId });
-    if (dispatch.failed) {
+  const outcome = await withOrgTransaction(
+    orgId,
+    async (): Promise<SubmitOutcome> => {
+      await requireIntercompanyPermission(db, orgId, actorId, "intercompany.manage");
+      await assertNettingEnabled(db, orgId);
+      const run = await lockRun(db, orgId, runId, allowedSubsidiaryIds);
+      if (run.status !== "proposed") refuse(`only a proposed netting run can be submitted; this one is ${run.status.replace("_", " ")}`, 409);
+      const dispatch = (
+        await routeSubjectSubmission({
+          orgId,
+          actorId,
+          subjectKind: INTERCOMPANY_NETTING_RUN_SUBJECT_KIND,
+          subjectId: runId,
+          source: "ui",
+        })
+      ).dispatch;
+      if (dispatch.failed) {
       await cancelDispatchRuns(orgId, dispatch.runs.map((item) => item.runId), { actorId });
       return { refusal: `netting run approval routing failed: ${dispatchFailureReason(dispatch) ?? "the flow could not run"}` };
     }
-    const gated = dispatch.gatesCreated > 0;
-    const status = gated ? "pending_approval" : "approved";
-    const gatingRun = dispatch.runs.find((item) => item.gatesCreated > 0)?.runId ?? null;
-    const updated = (await db.execute<{ id: string }>(sql`
+      const gated = dispatch.gatesCreated > 0;
+      const status = gated ? "pending_approval" : "approved";
+      const gatingRun = dispatch.runs.find((item) => item.gatesCreated > 0)?.runId ?? null;
+      const updated = (await db.execute<{ id: string }>(sql`
       update intercompany_netting_runs
          set status = ${status}, submitted_by = ${actorId}, submitted_at = now(),
              flow_run_id = ${gatingRun},
@@ -762,8 +773,8 @@ export async function submitNettingRun(
              updated_at = now()
        where org_id = ${orgId} and id = ${runId} and status = 'proposed'
       returning id`)).rows;
-    requireOneRow(updated, "the netting run changed while it was being submitted");
-    await auditIntercompany(db, {
+      requireOneRow(updated, "the netting run changed while it was being submitted");
+      await auditIntercompany(db, {
       orgId,
       table: "intercompany_netting_runs",
       rowId: runId,
@@ -776,8 +787,9 @@ export async function submitNettingRun(
         approval: gated ? "flow" : "not_required",
       },
     });
-    return { status, gated };
-  });
+      return { status, gated };
+    },
+  );
   if ("refusal" in outcome) refuse(outcome.refusal);
   return outcome;
 }

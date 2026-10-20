@@ -1,3 +1,4 @@
+import { configureTimesheetReviewFixture,decideTimesheetFixture } from '../../../testing/timesheet-flows'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
@@ -8,7 +9,7 @@ import { resolveAuthzByUserId, type Authz } from '../../../lib/authz-core'
 import { withAuthzContext } from '../../../lib/authz-context'
 import { loadWeek } from './_lib'
 import { POST as submit } from './submit/route'
-import { POST as approve } from './approve/route'
+
 import { POST as withdraw } from './withdraw/route'
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -24,7 +25,7 @@ async function fixture() {
     assert.equal((await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve"]'::jsonb
       where org_id=${org.orgId} and key='additional-time-reviewer' returning id`)).rows.length, 1)
     assert.equal((await db.execute(sql`update orgs set settings=settings ||
-      '{"features":{"projects":false,"timeTracking":true},"timesheets":{"requireApproval":true}}'::jsonb
+      '{"features":{"projects":false,"timeTracking":true}}'::jsonb
       where id=${org.orgId} returning id`)).rows.length, 1)
     await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
       values(${employee},${org.orgId},'employee','Additional time worker',${org.subsidiaryId},true,'{}'::jsonb)`)
@@ -43,6 +44,7 @@ async function fixture() {
         ${actor},${actor},${status==='approved'?actor:null},${status==='approved'?new Date():null})`)
     }
   })
+  await configureTimesheetReviewFixture(org.orgId,actor,false)
   const auth = async () => withOrgContext(org.orgId, async () => {
     const resolved = await resolveAuthzByUserId(org.orgId, actor)
     assert.ok(resolved, 'the native route has an active resolved actor')
@@ -59,9 +61,7 @@ async function fixture() {
     ))))
   }
   const approveSelected = async () => withOrgContext(org.orgId, async () =>
-    withAuthzContext(await auth(), () => approve(new Request('http://time.local/api/timesheets/approve', {
-      method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({employee,week:WEEK}),
-    }))))
+    withAuthzContext(await auth(), () => decideTimesheetFixture({orgId:org.orgId,...{employee,week:WEEK},decision:'approved'})))
   const withdrawSelected = async () => withOrgContext(org.orgId, async () =>
     withAuthzContext(await auth(), () => withdraw(new Request('http://time.local/api/timesheets/withdraw', {
       method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({employee,week:WEEK}),

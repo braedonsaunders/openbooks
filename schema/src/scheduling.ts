@@ -10,7 +10,7 @@ export const SCHEDULE_BOARD_VIEWS = {
   resources: ["grid", "targets", "timeline", "calendar"],
 } as const;
 export const SCHEDULE_BOARD_RANGE_DAYS = [1, 3, 7, 14, 21, 28, 35, 42] as const;
-export const SCHEDULE_PUBLISH_POLICIES = ["live", "staged", "governed"] as const;
+export const SCHEDULE_PUBLISH_POLICIES = ["live", "staged"] as const;
 export const SCHEDULE_CODE_CATEGORIES = ["work", "unavailable"] as const;
 export const SCHEDULE_TARGET_KINDS = ["customer", "project", "location", "code"] as const;
 export const SCHEDULE_ENTRY_STATUSES = ["draft", "published", "cancelled"] as const;
@@ -54,8 +54,6 @@ export const scheduleBoards = pgTable("schedule_boards", {
   dayEnds: time("day_ends").notNull().default("15:30"),
   dayBreakMinutes: smallint("day_break_minutes").notNull().default(30),
   publishPolicy: text("publish_policy", { enum: SCHEDULE_PUBLISH_POLICIES }).notNull().default("live"),
-  /** First booking date governed by independent publication; set exactly when the policy is governed. */
-  governedFrom: date("governed_from"),
   prefillTimesheets: boolean("prefill_timesheets").notNull().default(false),
   prefillCrewTime: boolean("prefill_crew_time").notNull().default(false),
   prefillFieldTickets: boolean("prefill_field_tickets").notNull().default(false),

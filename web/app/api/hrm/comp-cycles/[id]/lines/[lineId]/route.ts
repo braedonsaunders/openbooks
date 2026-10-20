@@ -1,19 +1,18 @@
-import { defineRoute } from "@/lib/api/route";
-import { NextResponse } from "next/server";
-import { z } from "zod";
-import { canonicalDecimal } from "@/lib/exact-decimal";
+import { defineRoute } from '@/lib/api/route'
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
+import { canonicalDecimal } from '@/lib/exact-decimal'
 import {
   approveLine,
   proposeLine,
-  rejectLine,
   reopenLine,
-} from "@openbooks/engine/hrm/compensation/cycles";
-import { guardPermission } from "../../../../../../../lib/authz";
-import { isUuid } from "../../../../../../../lib/list-params";
-import { compensationErrorResponse } from "../../../../compensation/_lib";
-import { meritCycleGate } from "../../../_gate";
+} from '@openbooks/engine/hrm/compensation/cycles'
+import { guardPermission } from '../../../../../../../lib/authz'
+import { isUuid } from '../../../../../../../lib/list-params'
+import { compensationErrorResponse } from '../../../../compensation/_lib'
+import { meritCycleGate } from '../../../_gate'
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs'
 
 /**
  * The proposal body. The percent and the rate are the two ways a
@@ -23,14 +22,14 @@ export const runtime = "nodejs";
  * to a generic "expected number".
  */
 const PCT_MESSAGE =
-  "proposedPct must be a non-negative percent supplied as a decimal string";
+  'proposedPct must be a non-negative percent supplied as a decimal string'
 const RATE_MESSAGE =
-  "proposedRate must be a positive amount with at most 4 decimals";
+  'proposedRate must be a positive amount with at most 4 decimals'
 
 function exactProposedPct(value: string): string | null {
-  const exact = canonicalDecimal(value, 6);
-  if (exact === null || exact.startsWith("-")) return null;
-  return exact;
+  const exact = canonicalDecimal(value, 6)
+  if (exact === null || exact.startsWith('-')) return null
+  return exact
 }
 
 const cycleLineBody = z.object({
@@ -46,7 +45,7 @@ const cycleLineBody = z.object({
     .regex(/^\d+(\.\d{1,4})?$/, RATE_MESSAGE)
     .nullish(),
   reason: z.string().nullish(),
-});
+})
 
 /**
  * One cycle line: PATCH?action= proposes (the manager's own reports or
@@ -57,27 +56,24 @@ const cycleLineBody = z.object({
  * proposal or reason. The client checks res.ok before parsing.
  */
 export const PATCH = defineRoute({
-  public: "session",
+  public: 'session',
   params: z.object({ id: z.string().min(1), lineId: z.string().min(1) }),
   body: cycleLineBody,
   handler: async ({ request: req, params: routeParams, body: body }) => {
-    const { id, lineId } = routeParams;
+    const { id, lineId } = routeParams
     if (!isUuid(id) || !isUuid(lineId))
-      return NextResponse.json(
-        { error: "invalid cycle line" },
-        { status: 400 },
-      );
-    const action = new URL(req.url).searchParams.get("action");
+      return NextResponse.json({ error: 'invalid cycle line' }, { status: 400 })
+    const action = new URL(req.url).searchParams.get('action')
 
-    if (action === "propose") {
+    if (action === 'propose') {
       // Proposing is the manager's structural scope (or comp.manage in the
       // service) — the route needs only the read grant; the service fences.
-      const gate = await guardPermission("hrm.compensation.read");
-      if (gate instanceof NextResponse) return gate;
-      const featureGate = await meritCycleGate(gate.user.orgId);
-      if (featureGate) return featureGate;
-      const proposedPct = body.proposedPct ?? null;
-      const proposedRate = body.proposedRate ?? null;
+      const gate = await guardPermission('hrm.compensation.read')
+      if (gate instanceof NextResponse) return gate
+      const featureGate = await meritCycleGate(gate.user.orgId)
+      if (featureGate) return featureGate
+      const proposedPct = body.proposedPct ?? null
+      const proposedRate = body.proposedRate ?? null
       try {
         const line = await proposeLine({
           orgId: gate.user.orgId,
@@ -86,41 +82,42 @@ export const PATCH = defineRoute({
           proposedPct,
           proposedRate,
           reason: body.reason ?? null,
-        });
-        return NextResponse.json({ line });
+        })
+        return NextResponse.json({ line })
       } catch (e) {
-        return compensationErrorResponse(e);
+        return compensationErrorResponse(e)
       }
     }
-    const gate = await guardPermission("hrm.compensation.approve");
-    if (gate instanceof NextResponse) return gate;
-    const featureGate = await meritCycleGate(gate.user.orgId);
-    if (featureGate) return featureGate;
-    const reason = body.reason?.trim() ? body.reason : null;
+    const gate = await guardPermission(
+      action === 'approve'
+        ? 'hrm.compensation.manage'
+        : 'hrm.compensation.approve',
+    )
+    if (gate instanceof NextResponse) return gate
+    const featureGate = await meritCycleGate(gate.user.orgId)
+    if (featureGate) return featureGate
+    const reason = body.reason?.trim() ? body.reason : null
     try {
-      const q = { orgId: gate.user.orgId, actorId: gate.user.id, lineId };
-      if (action === "approve") {
-        const line = await approveLine({ ...q, reason });
-        return NextResponse.json({ line });
+      const q = { orgId: gate.user.orgId, actorId: gate.user.id, lineId }
+      if (action === 'approve') {
+        const line = await approveLine({ ...q, reason })
+        return NextResponse.json({ line })
       }
-      if (action === "reject" || action === "reopen") {
+      if (action === 'reopen') {
         if (!reason)
           return NextResponse.json(
-            { error: "reason required" },
+            { error: 'reason required' },
             { status: 400 },
-          );
-        const line =
-          action === "reject"
-            ? await rejectLine({ ...q, reason })
-            : await reopenLine({ ...q, reason });
-        return NextResponse.json({ line });
+          )
+        const line = await reopenLine({ ...q, reason })
+        return NextResponse.json({ line })
       }
       return NextResponse.json(
-        { error: "unknown action (propose, approve, reject, reopen)" },
+        { error: 'unknown action (propose, approve, reopen)' },
         { status: 400 },
-      );
+      )
     } catch (e) {
-      return compensationErrorResponse(e);
+      return compensationErrorResponse(e)
     }
   },
-});
+})

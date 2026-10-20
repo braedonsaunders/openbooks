@@ -1,4 +1,5 @@
-import { z } from "zod";
+import { submitCustomerChangeOrder } from "@openbooks/engine/projects/construction-billing"
+import { z } from 'zod'
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
@@ -12,12 +13,13 @@ import {
   createPayApplication,
   generatePayApplicationInvoice,
   projectRetainageHeldSql,
+  projectDefaultIncomeAccount,
   releaseRetainage,
   requireIsoDate,
   revisedScheduleValue,
   submitPayApplication,
   voidPayApplication,
-} from "@openbooks/engine/projects/construction-billing";
+} from "@openbooks/engine/projects/construction-billing"
 import { projectBillingHasBegun } from "@openbooks/engine/projects/header-controls";
 import {
   ScopeNotFoundError,
@@ -44,7 +46,7 @@ import { notFound } from "@/lib/api/responses";
 const projectId = uuidString("projectId must be a valid UUID");
 // Child row ids resolve through actionProjectScope, where a malformed id and
 // an unknown one answer the same not-found record.
-const rowId = z.string();
+const rowId = z.string()
 const payApplicationId = uuidString("payApplicationId must be a valid UUID");
 const optionalAccountId = z
   .union([uuidString("Income account must be a valid identifier"), z.null()])
@@ -172,7 +174,7 @@ const postBodySchema0 = z.union([
   ]),
 ]);
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs'
 
 /**
  * Construction progress billing API for one project. GET ?projectId returns the
@@ -180,23 +182,22 @@ export const runtime = "nodejs";
  * GL-backed retainage held, and committed cost. POST is action-dispatched.
  */
 export const GET = defineRoute({
-  permission: "ar.read",
-  feature: "projects",
+  permission: 'ar.read',
+  feature: 'projects',
   handler: async ({ request: req, authz }) => {
-    const url = new URL(req.url);
+    const url = new URL(req.url)
     const projectId = url.searchParams.get("projectId");
     if (!projectId)
       return NextResponse.json(
         { error: "projectId required" },
         { status: 400 },
       );
-    const orgId = authz.user.orgId;
+    const orgId = authz.user.orgId
     // A project outside the caller's subsidiary scope is a missing project.
     const scope = await projectScope(orgId, projectId);
-    if (!scope)
-      return notFound("record");
+    if (!scope) return notFound('record')
     const denied = guardSubsidiaryScope(authz, scope.subsidiaryId);
-    if (denied) return denied;
+    if (denied) return denied
     if (!(await supportsApplicationsForPayment(orgId, projectId))) {
       return NextResponse.json(
         {
@@ -262,21 +263,19 @@ export const GET = defineRoute({
         const cos = await db.execute(sql`
         select co.id, co.number, co.description, co.status, co.amount, co.approved_on as "approvedOn",
                co.target_sov_line_id as "targetSovLineId", sl.description as "targetSovLineDescription",
-               co.income_account_id as "incomeAccountId",
-               co.created_by <> ${authz.user.id} as "independentApprovalAllowed"
+               co.income_account_id as "incomeAccountId"
           from change_orders co
           left join sov_lines sl on sl.id = co.target_sov_line_id and sl.org_id = co.org_id
          where co.org_id = ${orgId} and co.project_id = ${projectId} order by co.number
-      `);
+      `)
         const apps = await db.execute(sql`
         select pa.id, pa.application_number as "applicationNumber", pa.period_end as "periodEnd", pa.kind,
                pa.status, pa.retainage_percent as "retainagePercent", pa.invoice_document_id as "invoiceDocumentId",
-               d.document_number as "invoiceNumber", d.total as "invoiceTotal", d.status as "invoiceStatus",
-               coalesce(pa.submitted_by, pa.created_by) <> ${authz.user.id} as "independentApprovalAllowed"
+               d.document_number as "invoiceNumber", d.total as "invoiceTotal", d.status as "invoiceStatus"
           from pay_applications pa
           left join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
          where pa.org_id = ${orgId} and pa.project_id = ${projectId} order by pa.application_number
-      `);
+      `)
         const held = retainageAccountId
           ? await db.execute<{ held: string }>(
               projectRetainageHeldSql(orgId, projectId, retainageAccountId),
@@ -296,14 +295,14 @@ export const GET = defineRoute({
           committedCost: committed.committed.cost,
           retainageConfigured: Boolean(retainageAccountId),
         });
-      });
+      })
     } catch (error) {
       if (error instanceof ScopeNotFoundError)
         return notFound("record");
       throw error;
     }
   },
-});
+})
 
 async function pinIncomeAccount(
   exec: SqlExecutor,
@@ -327,72 +326,6 @@ async function pinIncomeAccount(
       allowedSubsidiaryIds,
     )
   ).id;
-}
-
-/**
- * The org's project-revenue control account: the
- * project/type default income account for owner-change-order schedule
- * lines — the same default project billing falls back to
- * (web/lib/billing.ts `defaultIncomeId`). Validated like a pinned account;
- * null when unconfigured or retired, in which case the approval leaves the
- * line without an account exactly like a hand-added SOV line.
- */
-async function projectDefaultIncomeAccount(
-  exec: SqlExecutor,
-  orgId: string,
-): Promise<string | null> {
-  const row = (
-    await exec.execute(sql`
-    select a.id
-      from orgs o
-      join accounts a
-        on a.id = nullif(o.settings->'controlAccounts'->>'projectRevenue', '')::uuid
-       and a.org_id = o.id
-     where o.id = ${orgId} and a.is_active and not a.is_summary`)
-  ).rows[0] as { id: string } | undefined;
-  return row?.id ?? null;
-}
-
-/**
- * The income account an approval carries onto its created SOV line: the
- * CO's pinned account, or the org default when the CO predates the column
- * or was saved without one. A stored account retired since creation cannot
- * be credited, and stranding the approval is worse than substituting the
- * current default — so a pin failure falls through to the default (which
- * itself validates, else null). Anything unexpected still throws.
- */
-async function resolveCarriedIncomeAccount(
-  tx: SqlExecutor,
-  orgId: string,
-  stored: string | null,
-  projectSubsidiaryId: string | null,
-  allowedSubsidiaryIds: ReadonlySet<string> | null,
-): Promise<string | null> {
-  if (stored) {
-    try {
-      return await pinIncomeAccount(
-        tx,
-        orgId,
-        stored,
-        projectSubsidiaryId,
-        allowedSubsidiaryIds,
-      );
-    } catch (error) {
-      if (
-        !(error instanceof ConstructionBillingError) ||
-        error.message !== "Income account not found"
-      ) {
-        throw error;
-      }
-    }
-  }
-  return pinIncomeAccount(
-    tx,
-    orgId,
-    await projectDefaultIncomeAccount(tx, orgId),
-    projectSubsidiaryId,
-    allowedSubsidiaryIds,
-  );
 }
 
 /** The project a request targets, with the subsidiary that scopes it. */
@@ -494,7 +427,7 @@ async function actionProjectScope(
 }
 
 export const POST = defineRoute({
-  public: "session",
+  public: 'session',
   body: postBodySchema0,
   invalidBodyStatus: 422,
   handler: async ({ authz, body: routeBody }) => {
@@ -519,15 +452,13 @@ export const POST = defineRoute({
       incomeAccountId?: unknown;
       approvedOn?: unknown;
     };
-    const action = body.action as string;
+    const action = body.action as string
     const permission =
-      action === "approveChangeOrder" ||
-      action === "approvePayApp" ||
-      action === "voidPayApp"
-        ? "ar.approve"
+      action === 'voidPayApp'
+        ? 'ar.approve'
         : action === "billPayApp" || action === "releaseRetainage"
           ? "ar.post"
-          : "ar.create";
+          : "ar.create"
     if (!can(authz, permission)) {
       return NextResponse.json(
         { error: `missing permission: ${permission}` },
@@ -535,10 +466,10 @@ export const POST = defineRoute({
       );
     }
 
-    const orgId = authz.user.orgId;
+    const orgId = authz.user.orgId
     const feature = await guardProjectsFeature(orgId);
-    if (feature) return feature;
-    const userId = authz.user.id;
+    if (feature) return feature
+    const userId = authz.user.id
     const projectActions = new Set([
       "addSov",
       "updateSov",
@@ -556,7 +487,7 @@ export const POST = defineRoute({
     // The entry scope resolution, rechecked under the project lock inside every
     // write transaction below (the child→project link never moves, so this id
     // stays the right row to lock even if the entry read races a rehome).
-    let scope: ProjectScope | null = null;
+    let scope: ProjectScope | null = null
     if (projectActions.has(action)) {
       const resolved = await actionProjectScope(orgId, action, body);
       if (!resolved)
@@ -965,176 +896,19 @@ export const POST = defineRoute({
           });
           return NextResponse.json({ id }, { status: 201 });
         }
-        case "approveChangeOrder": {
-          // Approving a change order also lands its value as a new SOV line so the
-          // contract sum and future draws reflect it. An omitted approval date is
-          // the business day; a supplied one must be a real calendar day.
+        case 'approveChangeOrder': {
           const approvedOn =
             body.approvedOn == null || body.approvedOn === ""
               ? await businessToday(orgId)
               : requireIsoDate(body.approvedOn, "Approval date");
-          await db.transaction(async (tx) => {
-            // Fenced recheck inside the write transaction: approval lands a
-            // new SOV line (and flips a draft blocker to approved), so a
-            // Projects disable racing this commit must refuse one side or the
-            // other — like addSov and addChangeOrder above.
-            await acquireFeatureGateLock(orgId, tx);
-            if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
-              throw new ConstructionBillingError(
-                "Projects feature is disabled",
-              );
-            }
-            // Lock the project before its change order: approval moves contract
-            // value and lands SOV lines, so a rehome racing this commit must
-            // refuse before anything posts to B's project.
-            const lockedProject = await lockEntryProject(tx);
-            const co = await tx.execute<{
-              project_id: string;
-              number: string;
-              description: string | null;
-              amount: string;
-              target_sov_line_id: string | null;
-              income_account_id: string | null;
-              created_by: string | null;
-            }>(sql`
-            select project_id, number, description, amount, target_sov_line_id, income_account_id, created_by from change_orders
-             where id = ${body.id} and org_id = ${orgId} and status = 'draft' for update
-          `);
-            const row = co.rows[0];
-            if (!row)
-              throw new ConstructionBillingError(
-                "Change order not found or no longer draft",
-              );
-            if (row.created_by === userId)
-              throw new ConstructionBillingError(
-                "The preparer cannot approve the same change order",
-              );
-            // Contract value is the fixed-price ceiling behind Financials total
-            // price, revenue recognition's total transaction price, and the
-            // cockpit's earned view, so approval moves it by the change order's
-            // signed amount in this same transaction.
-            const project = await tx.execute<{
-              contract_value: string | null;
-            }>(sql`
-            select contract_value from projects where id = ${row.project_id} and org_id = ${orgId} for update
-          `);
-            const effectRaw = canonicalDecimal(String(row.amount), 4);
-            if (effectRaw === null) {
-              throw new ConstructionBillingError(
-                moneyRefusal("Change-order amount", String(row.amount)),
-              );
-            }
-            let effect: string;
-            try {
-              effect = normalizeMoney(effectRaw);
-            } catch {
-              throw new ConstructionBillingError(
-                "Change-order amount is out of range for the ledger",
-              );
-            }
-            const contractValueBefore = project.rows[0]?.contract_value ?? null;
-            const contractValueAfter = add(contractValueBefore ?? "0", effect);
-            if (cmp(contractValueAfter, "0") < 0) {
-              throw new ConstructionBillingError(
-                "Approving this change order would drive the contract value below zero",
-              );
-            }
-            await tx.execute(sql`
-            update projects set contract_value = ${contractValueAfter}, updated_at = now(), updated_by = ${userId}
-             where id = ${row.project_id} and org_id = ${orgId}
-          `);
-            await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'projects', ${row.project_id}, 'contract_value_adjustment',
-                    ${JSON.stringify({ changeOrderId: body.id, before: { contractValue: contractValueBefore }, after: { contractValue: contractValueAfter } })}::jsonb,
-                    ${userId})`);
-            const activeApplication = await tx.execute(sql`
-            select 1 from pay_applications where org_id = ${orgId} and project_id = ${row.project_id}
-             and status in ('draft', 'submitted', 'approved') limit 1
-          `);
-            if (activeApplication.rows.length)
-              throw new ConstructionBillingError(
-                "Complete or void the current application before approving a change order",
-              );
-            await tx.execute(sql`
-            update change_orders set status = 'approved', approved_on = ${approvedOn},
-                   approved_by = ${userId},
-                   updated_at = now(), updated_by = ${userId}
-             where id = ${body.id} and org_id = ${orgId}
-          `);
-            let sovLineId: string;
-            if (row.target_sov_line_id) {
-              const target = await tx.execute<{
-                id: string;
-                scheduled_value: string;
-              }>(sql`
-              select id, scheduled_value
-                from sov_lines
-               where id = ${row.target_sov_line_id} and org_id = ${orgId} and project_id = ${row.project_id}
-               for update
-            `);
-              if (!target.rows[0])
-                throw new ConstructionBillingError(
-                  "The target schedule line no longer exists",
-                );
-              const billed = await tx.execute<{ amount: string }>(sql`
-              select coalesce(sum(pal.this_period_completed + pal.materials_stored - pal.previous_materials_stored), 0) as amount
-                from pay_application_lines pal
-                join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
-               where pal.org_id = ${orgId} and pal.sov_line_id = ${row.target_sov_line_id}
-                 and pa.status in ('invoiced', 'posted')
-            `);
-              const revisedValue = revisedScheduleValue(
-                String(target.rows[0].scheduled_value),
-                String(row.amount),
-                String(billed.rows[0]?.amount ?? "0"),
-              );
-              await tx.execute(sql`
-              update sov_lines set scheduled_value = ${revisedValue}, change_order_id = ${body.id}, updated_at = now(), updated_by = ${userId}
-               where id = ${row.target_sov_line_id} and org_id = ${orgId}
-            `);
-              sovLineId = row.target_sov_line_id;
-              await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${orgId}, 'sov_lines', ${sovLineId}, 'change_order_adjustment',
-                      ${JSON.stringify({ changeOrderId: body.id, before: { scheduledValue: target.rows[0].scheduled_value }, after: { scheduledValue: revisedValue } })}::jsonb,
-                      ${userId})`);
-            } else {
-              if (cmp(effect, "0") <= 0)
-                throw new ConstructionBillingError(
-                  "An unallocated change order must be additive",
-                );
-              // Carry the pinned account (or the org default for COs saved
-              // without one) so the line bills without a manual edit.
-              const carriedIncomeAccountId = await resolveCarriedIncomeAccount(
-                tx,
-                orgId,
-                row.income_account_id ?? null,
-                lockedProject.subsidiaryId,
-                authz.allowedSubsidiaryIds,
-              );
-              const sov = await tx.execute<{ id: string }>(sql`
-              insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, change_order_id, income_account_id,
-                                     sort_order, created_by, updated_by)
-              values (${orgId}, ${row.project_id}, ${"CO-" + row.number}, ${row.description ?? "Change order " + row.number},
-                      ${effect}, ${body.id}, ${carriedIncomeAccountId},
-                      (select coalesce(max(sort_order), 0) + 1 from sov_lines where org_id = ${orgId} and project_id = ${row.project_id}),
-                      ${userId}, ${userId})
-              returning id
-            `);
-              sovLineId = sov.rows[0]!.id;
-              await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${orgId}, 'sov_lines', ${sovLineId}, 'insert',
-                      jsonb_build_object('source', 'approved_change_order', 'changeOrderId', ${body.id}::text,
-                        'after', jsonb_build_object('projectId', ${row.project_id}::text, 'scheduledValue', ${String(row.amount)}::text,
-                          'incomeAccountId', ${carriedIncomeAccountId}::text)),
-                      ${userId})`);
-            }
-            await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'change_orders', ${body.id}, 'approve',
-                    jsonb_build_object('before', jsonb_build_object('status', 'draft'), 'after',
-                      jsonb_build_object('status', 'approved', 'approvedOn', ${approvedOn}::text, 'sovLineId', ${sovLineId}::text)),
-                    ${userId})`);
-          });
-          return NextResponse.json({ ok: true });
+          return NextResponse.json(
+            await submitCustomerChangeOrder({
+              orgId,
+              actorId: userId,
+              id: String(body.id),
+              approvedOn,
+            }),
+          )
         }
         case "voidChangeOrder": {
           await db.transaction(async (tx) => {
@@ -1315,4 +1089,4 @@ export const POST = defineRoute({
       throw e;
     }
   },
-});
+})

@@ -32,6 +32,7 @@ const CREW_BATCH_STATUSES = [
 export const crewBatchSubjectProfile: FlowSubjectProfile = {
   subjectKind: CREW_TIME_BATCH_SUBJECT_KIND,
   label: "Crew time batch",
+  pinsSubmissionPolicy: true,
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
   statuses: [...CREW_BATCH_STATUSES],
@@ -57,6 +58,7 @@ export const crewBatchSubjectProfile: FlowSubjectProfile = {
 
 type BatchRow = {
   org_id: string;
+  fingerprint: string;
   foreman_name: string | null;
   foreman_party_id: string;
   project_id: string;
@@ -71,8 +73,8 @@ type BatchRow = {
 
 async function loadBatchSummary(subjectId: string): Promise<BatchRow | null> {
   if (!isUuid(subjectId)) return null;
-  const result = (await db.execute<BatchRow>(sql`
-    select b.org_id,
+  const result = await db.execute<BatchRow>(sql`
+    select b.org_id,public.crew_time_batch_approval_fingerprint(b) as fingerprint,
            foreman.display_name as foreman_name,
            b.foreman_party_id::text as foreman_party_id,
            b.project_id::text as project_id,
@@ -90,28 +92,33 @@ async function loadBatchSummary(subjectId: string): Promise<BatchRow | null> {
         on project.id = b.project_id and project.org_id = b.org_id
       left join crew_time_batch_lines l on l.batch_id = b.id
      where b.id = ${subjectId}
-     group by b.org_id, foreman.display_name, b.foreman_party_id, b.project_id,
+     group by b.id,b.org_id, foreman.display_name, b.foreman_party_id, b.project_id,
               project.name, b.worked_on, b.status, b.updated_by, b.created_by
-  `));
+  `);
   return result.rows[0] ?? null;
 }
 
-export const crewBatchFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
-  subjectKind: CREW_TIME_BATCH_SUBJECT_KIND,
-  // Batches read through time.read and enter through time.crew.enter; they
-  // belong to their project's legal entity, the same rule the crew list
-  // applies.
-  permissions: { read: "time.read", edit: "time.crew.enter", approve: "time.manage" },
-  scope: tableScope("project", "crew_time_batches", "project_id"),
-  profile: crewBatchSubjectProfile,
-  // releaseApproval below delegates to the registered handler: this kind
-  // needs a handler registered at web boot (see handlerReleasedSubjectKinds).
-  releaseViaHandler: true,
+export const crewBatchFlowAdapter: FlowSubjectAdapter =
+  defineTableSubjectAdapter({
+    subjectKind: CREW_TIME_BATCH_SUBJECT_KIND,
+    // Batches read through time.read and enter through time.crew.enter; they
+    // belong to their project's legal entity, the same rule the crew list
+    // applies.
+    permissions: {
+      read: "time.read",
+      edit: "time.crew.enter",
+      approve: "time.approve",
+    },
+    scope: tableScope("project", "crew_time_batches", "project_id"),
+    profile: crewBatchSubjectProfile,
+    // releaseApproval below delegates to the registered handler: this kind
+    // needs a handler registered at web boot (see handlerReleasedSubjectKinds).
+    releaseViaHandler: true,
 
-  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-    const batch = await loadBatchSummary(subjectId);
-    if (!batch) return null;
-    const lines = (await db.execute<Record<string, unknown>>(sql`
+    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+      const batch = await loadBatchSummary(subjectId);
+      if (!batch) return null;
+      const lines = await db.execute<Record<string, unknown>>(sql`
       select l.employee_party_id as "employeeId", worker.display_name as "employeeName",
              l.hours::text as "hours", l.time_type_id as "timeTypeId",
              l.project_task_id as "projectTaskId", l.cost_code_ref as "costCodeRef",
@@ -122,75 +129,85 @@ export const crewBatchFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapte
           on worker.id = l.employee_party_id
        where l.batch_id = ${subjectId}
        order by worker.display_name, l.id
-    `));
-    return {
-      values: {
-        id: subjectId,
-        foremanId: batch.foreman_party_id,
-        foremanName: batch.foreman_name,
-        projectId: batch.project_id,
-        projectName: batch.project_name,
-        workedOn: batch.worked_on,
-        status: batch.status,
-        totalHours: batch.total_hours,
-        lineCount: batch.line_count,
-        workerCount: batch.worker_count,
-        submittedBy: batch.submitted_by,
-      },
-      rows: { crewLines: lines.rows },
-      submitterUserId: batch.submitted_by,
-    };
-  },
+    `);
+      return {
+        values: {
+          id: subjectId,
+          approvalFingerprint: batch.fingerprint,
+          foremanId: batch.foreman_party_id,
+          foremanName: batch.foreman_name,
+          projectId: batch.project_id,
+          projectName: batch.project_name,
+          workedOn: batch.worked_on,
+          status: batch.status,
+          totalHours: batch.total_hours,
+          lineCount: batch.line_count,
+          workerCount: batch.worker_count,
+          submittedBy: batch.submitted_by,
+        },
+        rows: { crewLines: lines.rows },
+        submitterUserId: batch.submitted_by,
+        makerUserId: batch.submitted_by,
+        makerUserIds: (
+          await db.execute<{ id: string }>(
+            sql`select distinct u.id from users u join crew_time_batch_lines l on l.org_id=u.org_id and l.employee_party_id=u.party_id where l.org_id=${batch.org_id} and l.batch_id=${subjectId}`,
+          )
+        ).rows.map((row) => row.id),
+      };
+    },
 
-  label(subjectId: string, values: Record<string, unknown>): string {
-    const who = values.foremanName ? String(values.foremanName) : "Crew batch";
-    return `${who} — ${String(values.workedOn ?? subjectId)}`;
-  },
+    label(subjectId: string, values: Record<string, unknown>): string {
+      const who = values.foremanName
+        ? String(values.foremanName)
+        : "Crew batch";
+      return `${who} — ${String(values.workedOn ?? subjectId)}`;
+    },
 
-  deepLink(subjectId: string): string {
-    return `/time/crew?batch=${subjectId}`;
-  },
+    deepLink(subjectId: string): string {
+      return `/time/crew?batch=${subjectId}`;
+    },
 
-  async getStatus(subjectId: string): Promise<string | null> {
-    return (await loadBatchSummary(subjectId))?.status ?? null;
-  },
+    async getStatus(subjectId: string): Promise<string | null> {
+      return (await loadBatchSummary(subjectId))?.status ?? null;
+    },
 
-  async changeStatus(): Promise<void> {
-    throw new Error(
-      "crew batch status is released by the approval engine, not a flow action",
-    );
-  },
-
-  async releaseApproval(subjectId, outcome, ctx, detail): Promise<void> {
-    await releaseFlowApproval({
-      subjectKind: CREW_TIME_BATCH_SUBJECT_KIND,
-      subjectId,
-      outcome,
-      comment: detail?.comment,
-      ctx,
-    });
-  },
-
-  async setField(): Promise<void> {
-    throw new Error("crew hours are not writable by flows; edit the batch");
-  },
-
-  async findCandidateIds(limit: number): Promise<string[]> {
-    // Same tenant-boundary rule as the timesheet adapter: the explicit
-    // org predicate, never ambient RLS alone.
-    const orgId = ambientTenantOrgId();
-    if (!orgId) {
+    async changeStatus(): Promise<void> {
       throw new Error(
-        `findCandidateIds for "${CREW_TIME_BATCH_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
+        "crew batch status is released by the approval engine, not a flow action",
       );
-    }
-    const result = (await db.execute<{ id: string }>(sql`
+    },
+
+    async releaseApproval(subjectId, outcome, ctx, detail, run): Promise<void> {
+      await releaseFlowApproval({
+        subjectKind: CREW_TIME_BATCH_SUBJECT_KIND,
+        subjectId,
+        outcome,
+        comment: detail?.comment,
+        approvalRunId: run?.id,
+        ctx,
+      });
+    },
+
+    async setField(): Promise<void> {
+      throw new Error("crew hours are not writable by flows; edit the batch");
+    },
+
+    async findCandidateIds(limit: number): Promise<string[]> {
+      // Same tenant-boundary rule as the timesheet adapter: the explicit
+      // org predicate, never ambient RLS alone.
+      const orgId = ambientTenantOrgId();
+      if (!orgId) {
+        throw new Error(
+          `findCandidateIds for "${CREW_TIME_BATCH_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
+        );
+      }
+      const result = await db.execute<{ id: string }>(sql`
       select id::text as id from crew_time_batches
        where org_id = ${orgId}
          and status = 'submitted'
        order by worked_on desc
        limit ${limit}
-    `));
-    return result.rows.map((row) => row.id);
-  },
-});
+    `);
+      return result.rows.map((row) => row.id);
+    },
+  });

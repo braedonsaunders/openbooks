@@ -78,8 +78,8 @@ async function listSubcontracts(request: Request) {
     const status = statusValue === "all"
       ? undefined
       : ["draft", "pending_approval", "active", "substantially_complete", "closed", "void"].includes(statusValue)
-        ? statusValue as "draft" | "pending_approval" | "active" | "substantially_complete" | "closed" | "void"
-        : null;
+          ? (statusValue as "draft" | "pending_approval" | "active" | "substantially_complete" | "closed" | "void")
+          : null;
     const page = Number(url.searchParams.get("page") ?? "1");
     const perPage = Number(url.searchParams.get("perPage") ?? "25");
     const q = url.searchParams.get("q") ?? undefined;
@@ -111,7 +111,7 @@ async function listSubcontracts(request: Request) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
   return await withScopeSnapshot(orgId, async () => {
-  const contract = (await db.execute<Record<string, unknown> & { projectSubsidiaryId: string | null }>(sql`
+  const contract = await db.execute<Record<string, unknown> & { projectSubsidiaryId: string | null }>(sql`
     select s.id, s.number, s.title, s.description, s.status, s.currency, p.subsidiary_id as "projectSubsidiaryId",
            s.project_id as "projectId", p.name as "projectName", s.vendor_id as "vendorId", v.display_name as "vendorName",
            s.updated_at as "updatedAt",
@@ -125,14 +125,14 @@ async function listSubcontracts(request: Request) {
         from subcontract_change_orders where org_id = s.org_id and subcontract_id = s.id) ch on true
      where s.org_id = ${orgId} and s.id = ${id}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
-  `));
-  if (!contract.rows[0]) return notFound("record");
-  // A subcontract on a project outside the caller's scope is a missing one.
-  const { projectSubsidiaryId, ...subcontract } = contract.rows[0];
-  const denied = guardSubsidiaryScope(authz, projectSubsidiaryId);
-  if (denied) return denied;
-  await lockProjectForScope(db, orgId, String(contract.rows[0].projectId), authz.allowedSubsidiaryIds, "share");
-  const sov = await db.execute(sql`
+  `)
+          if (!contract.rows[0]) return notFound("record");
+          // A subcontract on a project outside the caller's scope is a missing one.
+          const { projectSubsidiaryId, ...subcontract } = contract.rows[0];
+          const denied = guardSubsidiaryScope(authz, projectSubsidiaryId);
+          if (denied) return denied
+          await lockProjectForScope(db, orgId, String(contract.rows[0].projectId), authz.allowedSubsidiaryIds, "share");
+          const sov = await db.execute(sql`
       select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
              l.retainage_percent as "retainagePercent", l.expense_account_id as "expenseAccountId",
              l.change_order_id as "changeOrderId", l.sort_order as "sortOrder",
@@ -146,21 +146,20 @@ async function listSubcontracts(request: Request) {
         ) earned on true
        where l.org_id = ${orgId} and l.subcontract_id = ${id} order by l.sort_order, l.item_no
     `);
-  const changes = await db.execute(sql`
+          const changes = await db.execute(sql`
       select id, number, description, status, amount, target_sov_line_id as "targetSovLineId",
-             approved_on as "approvedOn", created_by <> ${authz.user.id} as "independentApprovalAllowed"
+             approved_on as "approvedOn"
         from subcontract_change_orders where org_id = ${orgId} and subcontract_id = ${id} order by created_at desc
-    `);
-  const applications = await db.execute(sql`
+    `)
+          const applications = await db.execute(sql`
       select a.id, a.application_number as "applicationNumber", a.period_end as "periodEnd",
              a.vendor_invoice_number as "vendorInvoiceNumber", a.status, a.revision,
              a.gross_this_period as "grossThisPeriod", a.retainage_this_period as "retainageThisPeriod", a.net_due as "netDue",
-             a.vendor_bill_document_id as "vendorBillDocumentId", d.document_number as "vendorBillNumber", d.status as "vendorBillStatus",
-             coalesce(a.submitted_by, a.created_by) <> ${authz.user.id} as "independentApprovalAllowed"
+             a.vendor_bill_document_id as "vendorBillDocumentId", d.document_number as "vendorBillNumber", d.status as "vendorBillStatus"
         from vendor_pay_applications a left join documents d on d.id = a.vendor_bill_document_id and d.org_id = a.org_id
        where a.org_id = ${orgId} and a.subcontract_id = ${id} order by a.application_number desc
-    `);
-  const lines = await db.execute(sql`
+    `)
+          const lines = await db.execute(sql`
       select l.pay_application_id as "payApplicationId", l.sov_line_id as "sovLineId", sov.item_no as "itemNo", sov.description,
              sov.scheduled_value as "scheduledValue", l.previous_earned as "previousEarned",
              l.previous_materials_stored as "previousMaterialsStored", l.work_completed_this_period as "workCompletedThisPeriod",
@@ -169,7 +168,7 @@ async function listSubcontracts(request: Request) {
         join subcontract_sov_lines sov on sov.id = l.sov_line_id and sov.org_id = l.org_id
        where l.org_id = ${orgId} and a.subcontract_id = ${id} order by a.application_number desc, sov.sort_order
     `);
-  const controls = await db.execute(sql`
+          const controls = await db.execute(sql`
       select c.id, c.control_type as "controlType", c.status, c.pay_application_id as "payApplicationId",
              c.vendor_bill_document_id as "vendorBillDocumentId", c.joint_payee_party_id as "jointPayeePartyId",
              p.display_name as "jointPayeeName", c.amount_limit as "amountLimit", c.reason,
@@ -177,13 +176,13 @@ async function listSubcontracts(request: Request) {
         from subcontract_payment_controls c left join parties p on p.id = c.joint_payee_party_id and p.org_id = c.org_id
        where c.org_id = ${orgId} and c.subcontract_id = ${id} order by c.created_at desc
     `);
-  const releases = await db.execute(sql`
+          const releases = await db.execute(sql`
       select r.id, r.period_end as "periodEnd", r.amount, r.vendor_bill_document_id as "vendorBillDocumentId",
              d.document_number as "vendorBillNumber", d.status as "vendorBillStatus", r.memo
         from vendor_retainage_releases r join documents d on d.id = r.vendor_bill_document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.subcontract_id = ${id} order by r.period_end desc
     `);
-  return NextResponse.json({
+          return NextResponse.json({
     subcontract,
     sovLines: sov.rows,
     changeOrders: changes.rows,
@@ -192,8 +191,8 @@ async function listSubcontracts(request: Request) {
     paymentControls: controls.rows,
     retainageReleases: releases.rows,
   });
-  });
-    } catch (error) {
+        })
+      } catch (error) {
       // A REPEATABLE READ reader can observe the old project header, then
       // lose the lock race to a committed rehome. PostgreSQL marks that
       // snapshot stale (40001); retry once so the caller sees the new scope.
@@ -201,15 +200,14 @@ async function listSubcontracts(request: Request) {
       const code = failure.code ?? failure.cause?.code;
       if (code !== "40001" || attempt > 0) throw error;
     }
-  }
-  throw new Error("Subcontract detail snapshot could not be refreshed");
+    }
+    throw new Error("Subcontract detail snapshot could not be refreshed");
   } catch (error) {
     if (error instanceof ScopeNotFoundError) return notFound("record");
     throw error;
   }
 }
 
-const approvalActions = new Set(["approveSubcontract", "approveChangeOrder", "approvePayApplication"]);
 const postingActions = new Set(["createVendorBill", "releaseRetainage"]);
 const paymentActions = new Set(["addPaymentControl", "releasePaymentControl"]);
 
@@ -301,17 +299,16 @@ async function dispatchSubcontractAction(request: Request) {
   const parsedBody = await parseJsonBody(request, subcontractRequestBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as unknown as Record<string, unknown>;
-  const action = String(body.action);
-  const permission = approvalActions.has(action) ? "ap.approve"
-    : postingActions.has(action) ? "ap.post"
+  const action = String(body.action)
+  const permission = postingActions.has(action) ? "ap.post"
       : paymentActions.has(action) ? "ap.pay"
-        : "ap.create";
+        : "ap.create"
   const authz = await guardPermission(permission);
   if (authz instanceof NextResponse) return authz;
   const feature = await guardSubcontractsFeature(authz.user.orgId);
-  if (feature) return feature;
-  const orgId = authz.user.orgId;
-  const userId = authz.user.id;
+  if (feature) return feature
+  const orgId = authz.user.orgId
+  const userId = authz.user.id
   // Lifecycle transitions are validated before any lookup so malformed input
   // never reaches the database.
   if (action === "transitionSubcontract") {
@@ -540,11 +537,12 @@ export const POST = defineRoute({
     } catch {
       // The discriminated body schema returns the malformed-body response in the handler.
     }
-    const permission = action === undefined ? 'ap.create'
-      : approvalActions.has(action) ? 'ap.approve'
-        : postingActions.has(action) ? 'ap.post'
-          : paymentActions.has(action) ? 'ap.pay'
-            : 'ap.create'
+    const permission =
+      action === undefined
+        ? 'ap.create'
+        : postingActions.has(action) ? "ap.post"
+      : paymentActions.has(action) ? "ap.pay"
+        : "ap.create"
     return guardPermission(permission)
   },
   feature: { none: 'The handler enforces the Projects parent and subcontract capability gates after action authorization.' },

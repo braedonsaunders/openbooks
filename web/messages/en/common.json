@@ -319,7 +319,7 @@
   "approvalFlow": {
     "pendingWith": "Pending with {names}",
     "awaitingAnother": "Awaiting another approver",
-    "rejectTitle": "Reject this document?",
+    "rejectTitle": "Reject this submission?",
     "rejectReasonLabel": "Rejection reason",
     "signTitle": "Sign this approval",
     "signLabel": "Type your name as your approval attestation",
@@ -330,7 +330,7 @@
     "retried": "Approval re-driven — the new gate is on the worklist",
     "retryFailed": "Retry failed",
     "submitRun": "Submit for approval",
-    "submitted": "Sent to the approval flow — the new gate is on the worklist",
+    "submitted": "Submission processed.",
     "submitFailed": "Submit failed",
     "withdrawTitle": "Withdraw this submission?",
     "withdrawReasonLabel": "Withdrawal reason",
@@ -350,7 +350,9 @@
     "badges": {
       "delegated": "Delegated",
       "escalated": "Escalated"
-    }
+    },
+    "commandWithdrawn": "Submission withdrawn. The record can be edited and submitted again.",
+    "decisionRecorded": "Decision recorded."
   },
   "customFields": {
     "noOptions": "No options defined",

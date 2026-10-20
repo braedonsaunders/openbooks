@@ -17,6 +17,7 @@ import type { FlowExecCtx } from "./types.ts";
  */
 export interface FlowApprovalReleaseArgs {
   subjectKind: string;
+  command?: Record<string, unknown>;
   subjectId: string;
   outcome: "approved" | "rejected";
   comment?: string | null;
@@ -36,8 +37,7 @@ type HookRuntime = typeof globalThis & {
 };
 
 const runtime = globalThis as HookRuntime;
-const handlers =
-  (runtime.__openbooksFlowApprovalReleaseHandlers ??= new Map());
+const handlers = (runtime.__openbooksFlowApprovalReleaseHandlers ??= new Map());
 
 export function registerFlowApprovalReleaseHandler(
   subjectKind: string,
@@ -64,7 +64,6 @@ export async function releaseFlowApproval(
   await handler(args);
 }
 
-
 /** Resume a subject's own submission command after its same flow run has
  * completed routing. This is distinct from a human gate decision. */
 export interface FlowSubmissionResumeArgs {
@@ -74,20 +73,45 @@ export interface FlowSubmissionResumeArgs {
   mode: "gated" | "automatic";
   ctx: FlowExecCtx;
 }
-export type FlowSubmissionResumeHandler = (args: FlowSubmissionResumeArgs) => Promise<{ status: string }>;
+export type FlowSubmissionResumeHandler = (
+  args: FlowSubmissionResumeArgs,
+) => Promise<{ status: string }>;
 const submissionRuntime = globalThis as typeof globalThis & {
-  __openbooksFlowSubmissionResumeHandlers?: Map<string, FlowSubmissionResumeHandler>;
+  __openbooksFlowSubmissionResumeHandlers?: Map<
+    string,
+    FlowSubmissionResumeHandler
+  >;
 };
-const submissionHandlers = submissionRuntime.__openbooksFlowSubmissionResumeHandlers ??= new Map();
+const submissionHandlers =
+  (submissionRuntime.__openbooksFlowSubmissionResumeHandlers ??= new Map());
 
-export function registerFlowSubmissionResumeHandler(subjectKind: string, handler: FlowSubmissionResumeHandler): void {
+export function registerFlowSubmissionResumeHandler(
+  subjectKind: string,
+  handler: FlowSubmissionResumeHandler,
+): void {
   submissionHandlers.set(subjectKind, handler);
 }
 export function hasFlowSubmissionResumeHandler(subjectKind: string): boolean {
   return submissionHandlers.has(subjectKind);
 }
-export async function resumeFlowSubmission(args: FlowSubmissionResumeArgs): Promise<{ status: string }> {
+export async function resumeFlowSubmission(
+  args: FlowSubmissionResumeArgs,
+): Promise<{ status: string }> {
   const handler = submissionHandlers.get(args.subjectKind);
-  if (!handler) throw new Error(`Submission resume handler for "${args.subjectKind}" is not registered; install the owning native subject's engine seam before retrying`);
+  if (!handler)
+    throw new Error(
+      `Submission resume handler for "${args.subjectKind}" is not registered; install the owning native subject's engine seam before retrying`,
+    );
   return handler(args);
+}
+
+/** Native commands with a pending projection restore it when their submission is recalled. */
+type CommandWithdrawal = {orgId:string;actorId:string;subjectKind:string;subjectId:string;reason:string};
+const withdrawalRuntime=globalThis as typeof globalThis & {__openbooksFlowCommandWithdrawalHandlers?:Map<string,(input:CommandWithdrawal)=>Promise<void>>};
+const withdrawalHandlers=(withdrawalRuntime.__openbooksFlowCommandWithdrawalHandlers??=new Map());
+export function registerFlowCommandWithdrawalHandler(kind:string,handler:(input:CommandWithdrawal)=>Promise<void>):void{
+  withdrawalHandlers.set(kind,handler);
+}
+export async function withdrawFlowCommandSubject(input:CommandWithdrawal):Promise<void>{
+  await withdrawalHandlers.get(input.subjectKind)?.(input);
 }

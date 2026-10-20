@@ -8,10 +8,16 @@ const text = (max: number) => z.string().trim().min(1).max(max)
 const reason = text(2000)
 const whole = (label: string, minimum: number, maximum: number) => {
   const message = `${label} must be a whole number from ${minimum} to ${maximum}; enter a value within that range.`
-  return z.number({ error: message }).int(message).min(minimum, message).max(maximum, message)
+  return z
+    .number({ error: message })
+    .int(message)
+    .min(minimum, message)
+    .max(maximum, message)
 }
 const revision = whole('Record revision', 1, Number.MAX_SAFE_INTEGER)
-const date = z.string().refine(isIsoCalendarDate, 'Choose a real calendar date.')
+const date = z
+  .string()
+  .refine(isIsoCalendarDate, 'Choose a real calendar date.')
 export const courseParams = z.strictObject({ courseId: id })
 export const sessionParams = z.strictObject({ sessionId: id })
 export const participantParams = z.strictObject({ participantId: id })
@@ -29,7 +35,7 @@ export const courseBody = z.strictObject({
   reason,
 })
 export const courseAction = z.strictObject({
-  action: z.enum(['approve', 'retire', 'cancel']),
+  action: z.enum(['submit', 'retire', 'cancel']),
   expectedRevision: revision,
   reason,
 })
@@ -53,7 +59,9 @@ export const responseBody = z.strictObject({
   expectedRevision: revision,
   reason,
 })
-export const selfResponseBody = responseBody.extend({ action: z.enum(['accept', 'decline']) })
+export const selfResponseBody = responseBody.extend({
+  action: z.enum(['accept', 'decline']),
+})
 export const completionBody = z.strictObject({
   expectedRevision: revision,
   attendanceSeconds: whole('Attendance seconds', 0, 2678400),
@@ -75,5 +83,8 @@ export function trainingCreateKey(request: Request) {
   const key = request.headers.get('Idempotency-Key')?.trim()
   return id.safeParse(key).success
     ? key!
-    : unprocessable('Supply a UUID Idempotency-Key; reopen the creation form to start a new request.', { status: 400 })
+    : unprocessable(
+        'Supply a UUID Idempotency-Key; reopen the creation form to start a new request.',
+        { status: 400 },
+      )
 }

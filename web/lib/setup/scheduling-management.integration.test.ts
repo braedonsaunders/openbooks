@@ -107,13 +107,13 @@ test('board types come from the registry: governed publication needs a managed r
     const foreignView = await create({ code: 'ROSTER', name: 'Roster', boardType: 'shift_roster', views: ['gantt'], defaultView: 'gantt' })
     assert.equal(foreignView.status, 400)
 
-    const roster = await create({ code: 'ROSTER', name: 'Roster', boardType: 'shift_roster', publishPolicy: 'governed', governedFrom: '2026-11-01' })
+    const roster = await create({ code: 'ROSTER', name: 'Roster', boardType: 'shift_roster', publishPolicy: 'staged' })
     assert.equal(roster.status, 200, JSON.stringify(roster.body))
     const plain = await create({ code: 'PLAIN', name: 'Plain people board' })
     assert.equal(plain.status, 200, JSON.stringify(plain.body))
     const boards = await listBoards({ orgId: org.orgId, actorId })
     const saved = boards.find(board => board.id === String(roster.body.id))!
-    assert.deepEqual([saved.boardType, saved.publishPolicy, saved.governedFrom], ['shift_roster', 'governed', '2026-11-01'])
+    assert.deepEqual([saved.boardType, saved.publishPolicy], ['shift_roster', 'staged'])
     assert.equal(boards.find(board => board.id === String(plain.body.id))!.boardType, 'people', 'a board created without a type takes its row kind\'s standard type')
 
     const { updateSetupRecord } = await import('./write')

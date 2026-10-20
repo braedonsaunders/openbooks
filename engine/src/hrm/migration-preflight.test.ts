@@ -15,13 +15,9 @@ const NS = "legacy-extract";
 const SUB_A = "sub-active-001";
 const SUB_B = "sub-active-002";
 
-// Flows approval fixture: the gate the mapping claims, decided by an
-// authenticated approver distinct from the applier, over exactly the
-// fixture's mapping set (digest computed with the real function, never
-// hand-pinned). Free text alone never authorizes — every ready-via-mapping
-// test below carries this snapshot plus { appliedBy: APPLIER }.
-const GATE_ID = "11111111-1111-4111-8111-111111111111";
-const APPROVER = "approver-1";
+// Exact mapping-set receipt fixture; collectors and executors re-resolve this
+// proof from native storage before classification. Free text grants no authority.
+const SUBMISSION_ID = "11111111-1111-4111-8111-111111111111";
 const APPLIER = "applier-9";
 
 function approvedResolution(
@@ -30,7 +26,6 @@ function approvedResolution(
     hiredOn?: string | null;
     terminatedOn?: string | null;
   } = {},
-  decidedBy: string = APPROVER,
 ): ResolutionEvidence {
   const entry = {
     partyId: "party-001",
@@ -43,14 +38,12 @@ function approvedResolution(
     employerSubsidiaryId: entry.employerSubsidiaryId,
     hiredOn: entry.hiredOn,
     terminatedOn: entry.terminatedOn,
-    approvedBy: "op-7",
-    approvedAt: "2026-09-10T12:00:00Z",
+
     rationale: "transfer letter filed",
-    approvalGateId: GATE_ID,
+    approvalSubmissionId: SUBMISSION_ID,
     approval: {
-      gateId: GATE_ID,
+      submissionId: SUBMISSION_ID,
       status: "approved",
-      decidedBy,
       subjectKind: HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND,
       subjectDigest: hashOperatorMappingSet([entry]),
     },
@@ -116,23 +109,38 @@ function runOne(row: SourcePersonRow): ReturnType<typeof onlyRow> {
   return onlyRow(preflightEmploymentMigration([row], { appliedBy: APPLIER }));
 }
 
-test("same operator can apply a mapping only when its verified gate permits self-approval", () => {
-  const resolution = approvedResolution({ employerSubsidiaryId: SUB_A }, APPLIER);
-  const row = baseRow({ resolution });
-  assert.ok(runOne(row).issues.some((issue) => issue.code === "self_approved_mapping"));
-  const allowed = { ...resolution, approval: { ...resolution.approval!, requireIndependentActor: false } };
-  assert.equal(runOne({ ...row, resolution: allowed }).classification, "ready");
-  const required = { ...allowed, approval: { ...allowed.approval, requireIndependentActor: true } };
-  assert.ok(runOne({ ...row, resolution: required }).issues.some((issue) => issue.code === "self_approved_mapping"));
+test("an authenticated operator may apply the exact mapping set released by its native Flow receipt", () => {
+  const resolution = approvedResolution({ employerSubsidiaryId: SUB_A });
+  assert.equal(runOne(baseRow({ resolution })).classification, "ready");
+  for (const status of ["pending_approval", "rejected", "withdrawn"]) {
+    const result = runOne(
+      baseRow({
+        resolution: {
+          ...resolution,
+          approval: { ...resolution.approval!, status },
+        },
+      }),
+    );
+    assert.ok(
+      result.issues.some((issue) => issue.code === "mapping_not_approved"),
+    );
+  }
 });
 
-test("solo mapping approval still refuses unknown actors, unauthenticated decisions and changed mappings", () => {
-  const resolution = approvedResolution({ employerSubsidiaryId: SUB_A }, APPLIER);
-  const allowed = { ...resolution, approval: { ...resolution.approval!, requireIndependentActor: false } };
-  const row = baseRow({ resolution: allowed });
+test("mapping application refuses missing actors, unverified receipts and changed mapping facts", () => {
+  const resolution = approvedResolution({ employerSubsidiaryId: SUB_A });
+  const row = baseRow({ resolution });
   assert.ok(onlyRow(preflightEmploymentMigration([row])).issues.some((issue) => issue.code === "unknown_mapping_applier"));
-  assert.ok(runOne({ ...row, resolution: { ...allowed, approval: { ...allowed.approval, decidedBy: null } } }).issues.some((issue) => issue.code === "anonymous_mapping_approval"));
-  const changed = runOne({ ...row, resolution: { ...allowed, hiredOn: "2022-03-14" } });
+  assert.ok(
+    runOne({
+      ...row,
+      resolution: { ...resolution, approval: null },
+    }).issues.some((issue) => issue.code === "unverified_mapping_approval"),
+  );
+  const changed = runOne({
+    ...row,
+    resolution: { ...resolution, hiredOn: "2022-03-14" },
+  });
   assert.notEqual(changed.classification, "ready");
   assert.ok(changed.issues.some((issue) => issue.code === "approval_subject_mismatch"));
 });
@@ -377,8 +385,7 @@ test("conflicting mappings refuse as ambiguous", () => {
           employerSubsidiaryId: SUB_B,
           hiredOn: null,
           terminatedOn: null,
-          approvedBy: "op-7",
-          approvedAt: "2026-09-10T12:00:00Z",
+
           rationale: "claims transfer",
         },
       }),
@@ -573,9 +580,8 @@ test("incomplete operator mapping contributes nothing and needs review", () => {
           employerSubsidiaryId: SUB_A,
           hiredOn: null,
           terminatedOn: null,
-          approvedBy: "",
-          approvedAt: "2026-09-10T12:00:00Z",
-          rationale: "transfer letter filed",
+
+          rationale: "",
         },
       }),
     ]),
@@ -831,30 +837,22 @@ test("whitespace-only binding provenance is a binding conflict, never migrated",
   assert.ok(row.issues.some((issue) => issue.code === "binding_conflict"));
 });
 
-test("whitespace-only operator approver or rationale is incomplete mapping evidence", () => {
-  const variants = [
-    { approvedBy: "   ", rationale: "transfer letter filed" },
-    { approvedBy: "op-7", rationale: "\t " },
-  ];
-  for (const [approvedBy, rationale] of variants.map((variant) => [variant.approvedBy, variant.rationale] as const)) {
-    const row = onlyRow(
-      preflightEmploymentMigration([
-        baseRow({
-          resolution: {
-            kind: "operator-employer-date-mapping",
-            employerSubsidiaryId: null,
-            hiredOn: null,
-            terminatedOn: null,
-            approvedBy,
-            approvedAt: "2026-09-10T12:00:00Z",
-            rationale,
-          },
-        }),
-      ]),
-    );
-    assert.ok(row.issues.some((issue) => issue.code === "incomplete_resolution_evidence"));
-    assert.equal(row.classification, "requires_review");
-  }
+test("whitespace-only rationale is incomplete mapping evidence", () => {
+  const row = onlyRow(
+    preflightEmploymentMigration([
+      baseRow({
+        resolution: {
+          kind: "operator-employer-date-mapping",
+          employerSubsidiaryId: null,
+          hiredOn: null,
+          terminatedOn: null,
+          rationale: " \t ",
+        },
+      }),
+    ]),
+  );
+  assert.ok(row.issues.some((issue) => issue.code === "incomplete_resolution_evidence"));
+  assert.equal(row.classification, "requires_review");
 });
 
 test("whitespace-only hire-date provenance needs review instead of anchoring history", () => {
@@ -907,8 +905,7 @@ test("contradictory mapped dates are refused without a role", () => {
           employerSubsidiaryId: null,
           hiredOn: "2022-01-01",
           terminatedOn: "2021-12-31",
-          approvedBy: "op-7",
-          approvedAt: "2026-09-10T12:00:00Z",
+
           rationale: "conflicting records",
         },
       }),

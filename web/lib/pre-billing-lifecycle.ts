@@ -1,9 +1,13 @@
+import { routeSubjectSubmission } from '@openbooks/engine/flows/submission-policy'
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { runRecordFlows, PREBILL_SUBJECT_KIND } from '@openbooks/engine/flows'
 import { cmp } from '@openbooks/engine/money/money'
-import { lockProjectForScope, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+import {
+  lockProjectForScope,
+  ScopeNotFoundError,
+} from '@openbooks/engine/organization/scope'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import {
   PreBillingError,
@@ -32,8 +36,14 @@ type LockedPrebillHeader = {
  * caller's subsidiary scope under the project lock: the worksheet lock alone
  * does not stop a concurrent A→B rehome from moving the change onto B.
  */
-export async function lockPrebillForLifecycle(tx: Tx, orgId: string, id: string, scope: SubsidiaryScope): Promise<LockedPrebillHeader> {
-  const header = (await tx.execute<LockedPrebillHeader>(sql`
+export async function lockPrebillForLifecycle(
+  tx: Tx,
+  orgId: string,
+  id: string,
+  scope: SubsidiaryScope,
+): Promise<LockedPrebillHeader> {
+  const header = (
+    await tx.execute<LockedPrebillHeader>(sql`
     select worksheet.status, worksheet.submitted_by, worksheet.created_by, worksheet.project_id,
            worksheet.period_end::text as period_end, worksheet.custom
       from prebills worksheet
@@ -41,12 +51,14 @@ export async function lockPrebillForLifecycle(tx: Tx, orgId: string, id: string,
      where worksheet.org_id = ${orgId} and worksheet.id = ${id}
        ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
      for update of worksheet
-  `)).rows[0]
+  `)
+  ).rows[0]
   if (!header) throw new PreBillingError('Prebill not found', 404)
   try {
     await lockProjectForScope(tx, orgId, header.project_id, scope)
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) throw new PreBillingError('Prebill not found', 404)
+    if (error instanceof ScopeNotFoundError)
+      throw new PreBillingError('Prebill not found', 404)
     throw error
   }
   return header
@@ -65,7 +77,12 @@ async function assertPrebillApprovable(
   header: LockedPrebillHeader,
   scope: SubsidiaryScope,
 ): Promise<void> {
-  const current = (await tx.execute<{ bill_lines: number; proposed_total: string; unsupported_adjustments: number }>(sql`
+  const current = (
+    await tx.execute<{
+      bill_lines: number
+      proposed_total: string
+      unsupported_adjustments: number
+    }>(sql`
     select count(*) filter (where disposition = 'bill')::int as bill_lines,
            coalesce(sum(proposed_bill_amount) filter (where disposition = 'bill'), 0)::text as proposed_total,
            count(*) filter (
@@ -76,27 +93,57 @@ async function assertPrebillApprovable(
            )::int as unsupported_adjustments
       from prebill_lines
      where org_id = ${orgId} and prebill_id = ${id}
-  `)).rows[0]!
-  if (current.bill_lines === 0) throw new PreBillingError('A prebill must contain at least one billable line')
+  `)
+  ).rows[0]!
+  if (current.bill_lines === 0)
+    throw new PreBillingError(
+      'A prebill must contain at least one billable line',
+    )
   if (current.unsupported_adjustments > 0) {
-    throw new PreBillingError('Every write-up and write-down requires a reason and evidence')
+    throw new PreBillingError(
+      'Every write-up and write-down requires a reason and evidence',
+    )
   }
-  if (header.custom?.policy?.totalPriceMethod === 'not_to_exceed'
-      || (await currentPolicyIsNte(tx, orgId, header.project_id, header.period_end))) {
-    const policy = await loadProjectPolicy(tx, orgId, header.project_id, true, scope)
-    const capacity = await remainingContractCapacity(tx, orgId, policy, header.period_end, id)
+  if (
+    header.custom?.policy?.totalPriceMethod === 'not_to_exceed' ||
+    (await currentPolicyIsNte(tx, orgId, header.project_id, header.period_end))
+  ) {
+    const policy = await loadProjectPolicy(
+      tx,
+      orgId,
+      header.project_id,
+      true,
+      scope,
+    )
+    const capacity = await remainingContractCapacity(
+      tx,
+      orgId,
+      policy,
+      header.period_end,
+      id,
+    )
     if (capacity != null && cmp(current.proposed_total, capacity) > 0) {
-      throw new PreBillingError(`Prebill exceeds the remaining not-to-exceed capacity of ${capacity}`)
+      throw new PreBillingError(
+        `Prebill exceeds the remaining not-to-exceed capacity of ${capacity}`,
+      )
     }
   }
 }
 
-async function openApprovalGateCount(tx: Tx, orgId: string, id: string): Promise<number> {
-  return (await tx.execute<{ n: number }>(sql`
+async function openApprovalGateCount(
+  tx: Tx,
+  orgId: string,
+  id: string,
+): Promise<number> {
+  return (
+    (
+      await tx.execute<{ n: number }>(sql`
     select count(*)::int as n from flow_gates
      where org_id = ${orgId} and subject_kind = ${PREBILL_SUBJECT_KIND}
        and subject_id = ${id} and status in ('pending', 'escalated')
-  `)).rows[0]?.n ?? 0
+  `)
+    ).rows[0]?.n ?? 0
+  )
 }
 
 /** Clear any earlier customer decision so a new review starts clean. */
@@ -111,44 +158,73 @@ const CLEAR_CUSTOMER_DECISION = sql`
  * resolve; when none does, the worksheet approves immediately. There is no
  * default approver and no approval path outside Flows.
  */
-async function submitPrebill(orgId: string, actorId: string, id: string, scope: SubsidiaryScope) {
-  const outcome = await withOrgTransaction(orgId, async () => db.transaction(async (tx) => {
-    await assertPreBillingEnabledTx(tx, orgId)
-    const header = await lockPrebillForLifecycle(tx, orgId, id, scope)
-    if (header.status !== 'draft') throw new PreBillingError(`Cannot submit a ${header.status} prebill`)
-    await assertPrebillApprovable(tx, orgId, id, header, scope)
-    await tx.execute(sql`
+async function submitPrebill(
+  orgId: string,
+  actorId: string,
+  id: string,
+  scope: SubsidiaryScope,
+) {
+  const outcome = await withOrgTransaction(orgId, async () =>
+    db.transaction(async (tx) => {
+      await assertPreBillingEnabledTx(tx, orgId)
+      const header = await lockPrebillForLifecycle(tx, orgId, id, scope)
+      if (header.status !== 'draft')
+        throw new PreBillingError(`Cannot submit a ${header.status} prebill`)
+      await assertPrebillApprovable(tx, orgId, id, header, scope)
+      await tx.execute(sql`
       update prebills
          set status = 'review', submitted_at = now(), submitted_by = ${actorId},
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${id}
     `)
-    await appendEvent(tx, orgId, id, actorId, 'submitted')
-    await audit(tx, orgId, 'prebills', id, actorId, { before: { status: 'draft' }, after: { status: 'review' } })
+      await appendEvent(tx, orgId, id, actorId, 'submitted')
+      await audit(tx, orgId, 'prebills', id, actorId, {
+        before: { status: 'draft' },
+        after: { status: 'review' },
+      })
 
-    const routed = await runRecordFlows(
-      { kind: 'on_submit', source: 'ui' },
-      PREBILL_SUBJECT_KIND,
-      id,
-      { orgId, userId: actorId, allowedSubsidiaryIds: scope },
-    )
-    if (routed.failed) {
-      // Keep the failed run (retryable once its flow is fixed) and the
-      // worksheet in draft: a submission whose approval routing failed must
-      // never be treated as "no approval required".
-      await tx.execute(sql`
+      const routed = (
+        await routeSubjectSubmission({
+          orgId,
+          actorId,
+          subjectKind: PREBILL_SUBJECT_KIND,
+          subjectId: id,
+          source: 'ui',
+        })
+      ).dispatch
+      if (routed.failed) {
+        // Keep the failed run (retryable once its flow is fixed) and the
+        // worksheet in draft: a submission whose approval routing failed must
+        // never be treated as "no approval required".
+        await tx.execute(sql`
         update prebills set status = 'draft', updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${id}
       `)
-      await appendEvent(tx, orgId, id, actorId, 'submit_failed', { reason: routed.error })
-      return { status: 'draft' as PrebillStatus, flowError: routed.error ?? 'The approval workflow could not run' }
-    }
-    if (routed.gatesCreated > 0) return { status: 'review' as PrebillStatus, flowError: null }
-    await approvePrebillInTx(tx, orgId, actorId, id, 'submit_without_approval_flow', scope)
-    return { status: 'approved' as PrebillStatus, flowError: null }
-  }))
+        await appendEvent(tx, orgId, id, actorId, 'submit_failed', {
+          reason: routed.error,
+        })
+        return {
+          status: 'draft' as PrebillStatus,
+          flowError: routed.error ?? 'The approval workflow could not run',
+        }
+      }
+      if (routed.gatesCreated > 0)
+        return { status: 'review' as PrebillStatus, flowError: null }
+      await approvePrebillInTx(
+        tx,
+        orgId,
+        actorId,
+        id,
+        'submit_without_approval_flow',
+        scope,
+      )
+      return { status: 'approved' as PrebillStatus, flowError: null }
+    }),
+  )
   if (outcome.flowError) {
-    throw new PreBillingError(`${outcome.flowError} — fix or disable the approval flow in Flows, then submit again`)
+    throw new PreBillingError(
+      `${outcome.flowError} — fix or disable the approval flow in Flows, then submit again`,
+    )
   }
   return { id, status: outcome.status }
 }
@@ -163,7 +239,8 @@ async function approvePrebillInTx(
 ) {
   const header = await lockPrebillForLifecycle(tx, orgId, id, scope)
   if (header.status === 'approved') return
-  if (header.status !== 'review') throw new PreBillingError(`Cannot approve a ${header.status} prebill`)
+  if (header.status !== 'review')
+    throw new PreBillingError(`Cannot approve a ${header.status} prebill`)
   await assertPrebillApprovable(tx, orgId, id, header, scope)
   const updated = await tx.execute(sql`
     update prebills
@@ -171,9 +248,17 @@ async function approvePrebillInTx(
            updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${id} and status = 'review'
   `)
-  if ((updated.rowCount ?? 0) !== 1) throw new PreBillingError('The prebill changed while approving; reload and try again', 409)
+  if ((updated.rowCount ?? 0) !== 1)
+    throw new PreBillingError(
+      'The prebill changed while approving; reload and try again',
+      409,
+    )
   await appendEvent(tx, orgId, id, actorId, 'approved', { source })
-  await audit(tx, orgId, 'prebills', id, actorId, { before: { status: 'review' }, after: { status: 'approved' }, source })
+  await audit(tx, orgId, 'prebills', id, actorId, {
+    before: { status: 'review' },
+    after: { status: 'approved' },
+    source,
+  })
 }
 
 /**
@@ -199,14 +284,22 @@ export async function releasePrebillApproval(
       return
     }
     const header = await lockPrebillForLifecycle(tx, orgId, id, null)
-    if (header.status !== 'review') throw new PreBillingError(`Cannot return a ${header.status} prebill`)
+    if (header.status !== 'review')
+      throw new PreBillingError(`Cannot return a ${header.status} prebill`)
     const reason = comment?.trim() || 'Returned in approval flow'
     await tx.execute(sql`
       update prebills set status = 'draft', updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${id}
     `)
-    await appendEvent(tx, orgId, id, actorId, 'returned', { source: 'flows', reason })
-    await audit(tx, orgId, 'prebills', id, actorId, { before: { status: 'review' }, after: { status: 'draft' }, reason })
+    await appendEvent(tx, orgId, id, actorId, 'returned', {
+      source: 'flows',
+      reason,
+    })
+    await audit(tx, orgId, 'prebills', id, actorId, {
+      before: { status: 'review' },
+      after: { status: 'draft' },
+      reason,
+    })
   })
 }
 
@@ -224,8 +317,13 @@ export async function transitionPrebill(
   return db.transaction(async (tx) => {
     await assertPreBillingEnabledTx(tx, orgId)
     const header = await lockPrebillForLifecycle(tx, orgId, id, scope)
-    if (header.status === 'review' && (await openApprovalGateCount(tx, orgId, id)) > 0) {
-      throw new PreBillingError('This prebill is awaiting approval in Inbox — reject it there to return it to draft')
+    if (
+      header.status === 'review' &&
+      (await openApprovalGateCount(tx, orgId, id)) > 0
+    ) {
+      throw new PreBillingError(
+        'This prebill is awaiting approval in Inbox — reject it there to return it to draft',
+      )
     }
     if (action === 'reopen') {
       // Reopening discards approval and any customer decision: the edited
@@ -239,11 +337,22 @@ export async function transitionPrebill(
                updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${id}
       `)
-      await appendEvent(tx, orgId, id, actorId, 'reopened', { reason: cleanReason, from: header.status })
-      await audit(tx, orgId, 'prebills', id, actorId, { before: { status: header.status }, after: { status: 'draft' }, reason: cleanReason })
+      await appendEvent(tx, orgId, id, actorId, 'reopened', {
+        reason: cleanReason,
+        from: header.status,
+      })
+      await audit(tx, orgId, 'prebills', id, actorId, {
+        before: { status: header.status },
+        after: { status: 'draft' },
+        reason: cleanReason,
+      })
       return { id, status: 'draft' as PrebillStatus }
     }
-    if (!['draft', 'review', 'approved', 'customer_review'].includes(header.status)) {
+    if (
+      !['draft', 'review', 'approved', 'customer_review'].includes(
+        header.status,
+      )
+    ) {
       throw new PreBillingError(`Cannot void a ${header.status} prebill`)
     }
     await tx.execute(sql`
@@ -253,7 +362,11 @@ export async function transitionPrebill(
        where org_id = ${orgId} and id = ${id}
     `)
     await appendEvent(tx, orgId, id, actorId, 'voided', { reason: cleanReason })
-    await audit(tx, orgId, 'prebills', id, actorId, { before: { status: header.status }, after: { status: 'void' }, reason: cleanReason })
+    await audit(tx, orgId, 'prebills', id, actorId, {
+      before: { status: header.status },
+      after: { status: 'void' },
+      reason: cleanReason,
+    })
     return { id, status: 'void' as PrebillStatus }
   })
 }

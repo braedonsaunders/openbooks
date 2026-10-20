@@ -1486,7 +1486,7 @@
         "discard": "Session abandonnée",
         "confirm_opening": "Ouverture confirmée",
         "session_adjustment": "Session ajustée",
-        "revalidate_sign_off": "Examen indépendant de la validation"
+        "revalidate_sign_off": "Examen de la validation"
       },
       "signOffStatement": "Solde du relevé {balance} · jusqu'au {date} · {matched} lignes de journal marquées · {excluded} lignes de relevé exclues",
       "signOffSource": "Données source · solde {balance} · jusqu'au {date} · {matched} lignes de journal rapprochées",
@@ -1502,12 +1502,12 @@
   },
   "revalidation": {
     "action": "Examiner l’historique neutre du compte",
-    "title": "Examiner cette validation indépendamment",
+    "title": "Examiner cette validation",
     "reason": "Motif de l’examen (10 à 500 caractères)",
     "confirm": "Enregistrer l’examen",
     "preview": "Le solde signé au {date} reste {balance}. Examinez {entries} écritures tardives ({lines} lignes du compte) avec les preuves conservées. Le relevé, les rapprochements, la signature et les marques de compensation restent inchangés.",
     "failed": "L’examen de cette validation n’a pas pu aboutir. Rechargez les pièces et réessayez.",
-    "recorded": "Examen indépendant de la validation enregistré",
+    "recorded": "Examen de la validation enregistré",
     "reasonRequired": "Saisissez un motif de 10 à 500 caractères.",
     "reviewedBadge": "Historique neutre examiné",
     "reviewedBasis": "Preuve examinée au {date}",

@@ -1,54 +1,44 @@
-import { z } from "zod";
-import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from "@/lib/api/error-response";
-import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/database";
+import { uuidString } from '@openbooks/engine/platform/identifiers'
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
+import { apiErrorResponse } from '@/lib/api/error-response'
+import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/platform/database'
 import {
   PspAutomationError,
   approveDisputeReview,
-  rejectDisputeReview,
-} from "@openbooks/engine/payments/refund-automation";
-import { can } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { isUuid } from "../../../../lib/list-params";
-import { notFound } from "@/lib/api/responses";
+} from '@openbooks/engine/payments/refund-automation'
+import { can } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
+import { isUuid } from '../../../../lib/list-params'
+import { notFound } from '@/lib/api/responses'
 
-const reviewBody = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("approve"), disputeId: z.string() }),
-  z.strictObject({
-    action: z.literal("reject"),
-    disputeId: z.string(),
-    reason: z.string().trim().min(1).max(500),
-  }),
-]);
+const reviewBody = z.strictObject({
+  action: z.literal('submit'),
+  disputeId: uuidString(),
+})
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs'
 
-/**
- * Operator review of parked provider refunds and disputes. Approving resumes
- * the automatic posting path (the approval is the policy gate); rejecting
- * moves nothing and waits for the provider's next event. Both mutate posted
- * or soon-posted money, so they carry banking.reconcile like settlement
- * posting — a reader with banking.read sees the queue but cannot resolve it.
- */
+/** Submit the exact parked provider event to tenant Flows before native posting. */
 export const POST = defineRoute({
-  public: "session",
+  public: 'session',
   body: reviewBody,
   handler: async ({ authz, body }) => {
     if (!authz)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) {
-      return notFound("record");
+      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    if (!(await isFeatureEnabled(authz.user.orgId, 'banking'))) {
+      return notFound('record')
     }
-    if (!can(authz, "banking.reconcile")) {
+    if (!can(authz, 'banking.reconcile')) {
       return NextResponse.json(
-        { error: "missing permission: banking.reconcile" },
+        { error: 'missing permission: banking.reconcile' },
         { status: 403 },
-      );
+      )
     }
-    if (!isUuid(body.disputeId)) return notFound("record");
-    const orgId = authz.user.orgId;
+    if (!isUuid(body.disputeId)) return notFound('record')
+    const orgId = authz.user.orgId
     // Dispute rows are never deleted — only transitioned — so an existence
     // read stays true through the engine call below. A queued review from
     // another tenant reads as 404, never as a foreign refusal.
@@ -56,31 +46,23 @@ export const POST = defineRoute({
       select id from payment_disputes
        where org_id = ${orgId} and id = ${body.disputeId}
        limit 1
-    `);
-    if (!existing.rows[0]) return notFound("record");
+    `)
+    if (!existing.rows[0]) return notFound('record')
     try {
-      if (body.action === "approve") {
-        const outcome = await approveDisputeReview(
-          orgId,
-          body.disputeId,
-          authz.user.id,
-          authz.allowedSubsidiaryIds,
-        );
-        return NextResponse.json(outcome);
-      }
-      await rejectDisputeReview(
+      const outcome = await approveDisputeReview(
         orgId,
         body.disputeId,
         authz.user.id,
-        body.reason,
         authz.allowedSubsidiaryIds,
-      );
-      return NextResponse.json({ ok: true });
+      )
+      return NextResponse.json(outcome, {
+        status: outcome.status === 'pending_review' ? 202 : 200,
+      })
     } catch (e) {
       if (e instanceof PspAutomationError) {
-        return apiErrorResponse(e, { safeStatus: 422 });
+        return apiErrorResponse(e, { safeStatus: 422 })
       }
-      return apiErrorResponse(e);
+      return apiErrorResponse(e)
     }
   },
-});
+})

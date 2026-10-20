@@ -1,4 +1,6 @@
-"use client";
+'use client'
+
+import { ApprovalActions } from '@/components/approval-actions'
 
 import { RecordTabs } from "@/components/module-home/record-tabs";
 
@@ -86,8 +88,7 @@ type ChangeOrder = {
   number: string;
   description: string | null;
   status: string;
-  amount: string;
-  independentApprovalAllowed: boolean;
+  amount: string
 };
 type PayApplication = {
   id: string;
@@ -98,8 +99,7 @@ type PayApplication = {
   vendorBillStatus: string | null;
   grossThisPeriod: string;
   retainageThisPeriod: string;
-  netDue: string;
-  independentApprovalAllowed: boolean;
+  netDue: string
   vendorBillDocumentId: string | null;
   vendorBillNumber: string | null;
 };
@@ -201,14 +201,14 @@ export function SubcontractsWorkspace({
   const createOpen = rawRecord === 'new' && permissions.create
   const requestedTab = params.get('tab')
   const tab = (['overview', 'sov', 'changes', 'applications', 'retainage', 'controls'] as string[]).includes(requestedTab ?? '')
-    ? requestedTab as Tab
+    ? (requestedTab as Tab)
     : 'overview'
   const closeParams = new URLSearchParams(search)
   closeParams.delete('subcontract')
   closeParams.delete('tab')
   const closeQuery = closeParams.toString()
   const closeHref = closeQuery ? `/subcontracts?${closeQuery}` : '/subcontracts'
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false)
   const [loadedDetail, setLoadedDetail] = useState<{ id: string; detail: Detail } | null>(null)
   const [detailFailure, setDetailFailure] = useState<{ id: string; message: string } | null>(null)
   const [retry, setRetry] = useState(0)
@@ -222,19 +222,20 @@ export function SubcontractsWorkspace({
   }, [selectedId, setDirtyDetail])
 
   const loadDetail = useCallback(
-    (id: string, signal?: AbortSignal) => fetch(`/api/subcontracts?id=${encodeURIComponent(id)}`, {
+    (id: string, signal?: AbortSignal) =>
+      fetch(`/api/subcontracts?id=${encodeURIComponent(id)}`, {
         cache: 'no-store',
         ...(signal ? { signal } : {}),
       }).then(async (response) => {
         if (!response.ok) throw new Error(await readApiErrorMessage(response, t('errors.detailFailed')))
-        const loaded = await response.json() as Detail
+        const loaded = (await response.json()) as Detail
         setLoadedDetail({ id, detail: loaded })
         setDetailFailure(null)
         setDirtyDetail(null)
         return loaded
       }),
     [t, setLoadedDetail, setDetailFailure, setDirtyDetail],
-  );
+  )
 
   useEffect(() => {
     if (!selectedId || !isUuid(selectedId)) return
@@ -287,7 +288,8 @@ export function SubcontractsWorkspace({
 
   return (
     <>
-      {createOpen ? <CreateSubcontractDrawer
+      {createOpen ? (
+        <CreateSubcontractDrawer
         open
         closeHref={closeHref}
         projects={projects}
@@ -308,9 +310,11 @@ export function SubcontractsWorkspace({
           }
           return false
         }}
-      /> : null}
+      />
+      ) : null}
 
-      {selectedId ? <AsyncUrlDrawer
+      {selectedId ? (
+        <AsyncUrlDrawer
         open
         openKey={selectedId}
         closeHref={closeHref}
@@ -333,18 +337,18 @@ export function SubcontractsWorkspace({
           setRetry((current) => current + 1)
         }}
       >
-        {detail ? (
-          <div className="space-y-5 p-1">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <StatusBadge status={detail.subcontract.status} />
-              <LifecycleActions
+          {detail ? (
+            <div className="space-y-5 p-1">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <StatusBadge status={detail.subcontract.status} />
+                <LifecycleActions
                 detail={detail}
                 permissions={permissions}
                 busy={busy}
                 act={act}
               />
-            </div>
-            <RecordTabs
+              </div>
+              <RecordTabs
               label={t("register.drawerTitle")}
               tabs={(
                 [
@@ -364,7 +368,8 @@ export function SubcontractsWorkspace({
               }}
               className="border-b border-slate-200 dark:border-slate-800"
             />
-            <div hidden={tab !== 'overview'}><Overview
+              <div hidden={tab !== 'overview'}>
+                <Overview
                 key={`${detail.subcontract.id}:${detail.subcontract.updatedAt}`}
                 detail={detail}
                 money={money}
@@ -372,51 +377,61 @@ export function SubcontractsWorkspace({
                 busy={busy}
                 act={act}
                 onDirtyChange={reportDetailDirty}
-              /></div>
-            <div hidden={tab !== 'sov'}><SovSection
+              />
+              </div>
+              <div hidden={tab !== 'sov'}>
+                <SovSection
                 detail={detail}
                 accounts={expenseAccounts}
                 canCreate={permissions.create}
                 busy={busy}
                 act={act}
                 money={money}
-              /></div>
-            <div hidden={tab !== 'changes'}><ChangesSection
+              />
+              </div>
+              <div hidden={tab !== 'changes'}>
+                <ChangesSection
                 detail={detail}
                 permissions={permissions}
                 busy={busy}
                 act={act}
                 money={money}
-              /></div>
-            <div hidden={tab !== 'applications'}><ApplicationsSection
+              />
+              </div>
+              <div hidden={tab !== 'applications'}>
+                <ApplicationsSection
                 detail={detail}
                 permissions={permissions}
                 busy={busy}
                 act={act}
                 money={money}
-              /></div>
-            <div hidden={tab !== 'retainage'}><RetainageSection
+              />
+              </div>
+              <div hidden={tab !== 'retainage'}>
+                <RetainageSection
                 detail={detail}
                 canPost={permissions.post}
                 busy={busy}
                 act={act}
                 money={money}
-              /></div>
-            <div hidden={tab !== 'controls'}><ControlsSection
+              />
+              </div>
+              <div hidden={tab !== 'controls'}>
+                <ControlsSection
                 detail={detail}
                 parties={parties}
                 canPay={permissions.pay}
                 busy={busy}
                 act={act}
                 money={money}
-              /></div>
-          </div>
-        ) : (
-          null
-        )}
-      </AsyncUrlDrawer> : null}
+              />
+              </div>
+            </div>
+          ) : null}
+        </AsyncUrlDrawer>
+      ) : null}
     </>
-  );
+  )
 }
 
 const STATUS_NAME_KEY: Record<string, string> = {
@@ -664,7 +679,7 @@ function LifecycleActions({
 }) {
   const t = useTranslations("subcontracts");
   const tCommon = useTranslations("common");
-  const s = detail.subcontract;
+  const s = detail.subcontract
   return (
     <div className="flex flex-wrap gap-2">
       {s.status === "draft" && permissions.create ? (
@@ -681,19 +696,18 @@ function LifecycleActions({
           {tCommon("actions.submit")}
         </Button>
       ) : null}
-      {s.status === "pending_approval" && permissions.approve ? (
-        <Button
-          size="sm"
-          disabled={busy}
-          onClick={() =>
-            act(
-              { action: "approveSubcontract", id: s.id },
-              t("toasts.approved"),
-            )
-          }
-        >
-          {tCommon("actions.approve")}
-        </Button>
+      {s.status === 'pending_approval' ? (
+        <ApprovalActions
+          subjectKind="subcontract"
+          subjectId={s.id}
+          {...(permissions.create
+            ? {
+                submitApprovalHref: '/api/subcontracts',
+                submitApprovalBody: { action: "approveSubcontract", id: s.id },
+              }
+            : {})}
+          submissionStatuses={['pending_approval']}
+        />
       ) : null}
       {s.status === "active" && permissions.create ? (
         <Button
@@ -750,7 +764,7 @@ function LifecycleActions({
         </Button>
       ) : null}
     </div>
-  );
+  )
 }
 
 function SovSection({
@@ -945,7 +959,7 @@ function ChangesSection({
 
   const tCommonEmpty = useTranslations("common")("feedback.noResults");
   const tCommon = useTranslations("common");
-  const today = useBusinessToday();
+  const today = useBusinessToday()
   const allowed =
     ["active", "substantially_complete"].includes(detail.subcontract.status) &&
     permissions.create;
@@ -995,15 +1009,17 @@ function ChangesSection({
             cell: (co) => <>{money(co.amount, detail.subcontract.currency)}</>,
           },
           {
-            key: "column-4",
-            header: tCommon("labels.actions"),
-            align: "right",
-            className: "space-x-2 text-right",
+            key: 'column-4',
+            header: tCommon('labels.actions'),
+            align: 'right',
+            className: 'space-x-2 text-right',
             cell: (co) => (
               <>
-                {co.status === "draft" &&
-                permissions.approve &&
-                co.independentApprovalAllowed ? (
+                <ApprovalActions
+                  subjectKind="subcontract_change_order"
+                  subjectId={co.id}
+                />
+                {co.status === "draft" && permissions.create ? (
                   <Button
                     size="sm"
                     disabled={busy}
@@ -1014,11 +1030,11 @@ function ChangesSection({
                           id: co.id,
                           approvedOn: today,
                         },
-                        t("toasts.changeApproved"),
+                        t('toasts.submitted'),
                       )
                     }
                   >
-                    {tCommon("actions.approve")}
+                    {tCommon('actions.submit')}
                   </Button>
                 ) : null}
                 {co.status === "draft" && permissions.create ? (
@@ -1112,7 +1128,7 @@ function ChangesSection({
         </Card>
       ) : null}
     </div>
-  );
+  )
 }
 
 function ApplicationsSection({
@@ -1251,26 +1267,28 @@ function ApplicationsSection({
             ),
           },
           {
-            key: "column-6",
-            header: tCommon("labels.actions"),
-            align: "right",
-            className: "space-x-2 text-right",
+            key: 'column-6',
+            header: tCommon('labels.actions'),
+            align: 'right',
+            className: 'space-x-2 text-right',
             cell: (app) => (
               <>
-                {app.status === "submitted" &&
-                permissions.approve &&
-                app.independentApprovalAllowed ? (
+                <ApprovalActions
+                  subjectKind="vendor_pay_application"
+                  subjectId={app.id}
+                />
+                {app.status === 'submitted' && permissions.create ? (
                   <Button
                     size="sm"
                     disabled={busy}
                     onClick={() =>
                       act(
                         { action: "approvePayApplication", id: app.id },
-                        t("toasts.appApproved"),
+                        t('toasts.submitted'),
                       )
                     }
                   >
-                    {tCommon("actions.approve")}
+                    {tCommon('actions.submit')}
                   </Button>
                 ) : null}
                 {app.status === "approved" && permissions.post ? (
@@ -1316,7 +1334,7 @@ function ApplicationsSection({
         ]}
       />
     </div>
-  );
+  )
 }
 
 function PayApplicationEditor({

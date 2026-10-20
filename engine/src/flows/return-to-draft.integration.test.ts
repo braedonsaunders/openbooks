@@ -190,7 +190,7 @@ test("a flow-governed bill keeps its completed run as history and resubmits into
     });
     const billId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
 
-    const first = await submitForApproval("vendor_bill", billId);
+    const first = await submitForApproval("vendor_bill", billId, actors.submitterId);
     assert.equal(first.gated, true);
     const firstRunId = first.runId!;
     const gates = (await db.execute<{ id: string }>(sql`

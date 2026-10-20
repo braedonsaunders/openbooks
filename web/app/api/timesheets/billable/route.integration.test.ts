@@ -21,12 +21,14 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__timesheetBillable.user}' }
   return next(specifier, context)
 }})
+const {configureTimesheetReviewFixture,decideTimesheetFixture}=await import('../../../../testing/timesheet-flows');
+
 const { sql } = await import('drizzle-orm')
 const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { POST: setBillable } = await import('./route')
 const { POST: submitWeek } = await import('../submit/route')
-const { POST: approveWeek } = await import('../approve/route')
+
 const { PUT } = await import('../route')
 const { loadWeek } = await import('../_lib')
 
@@ -42,7 +44,6 @@ async function fixture() {
   await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve","projects.read"]'::jsonb where org_id=${org.orgId} and key='time_supervisor'`)
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
     features: { projects: true, timeTracking: true },
-    timesheets: { requireApproval: true },
     laborCosting: { allowUnratedTime: true },
   })}::jsonb where id=${org.orgId}`)
   // The week belongs to a person party pinned past the employment guard; the
@@ -56,6 +57,7 @@ async function fixture() {
     insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
     values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-BILLABLE', 'Billable job', ${org.customerId}, 'active', true, '{}'::jsonb)
   `)
+  await configureTimesheetReviewFixture(org.orgId,supervisor,false)
   const as = (userId: string, name: string) => {
     session.user = { id: userId, orgId: org.orgId, name, email: `${name.replace(/\s/g, '.')}@example.test`, roles: [], isSuperAdmin: false,
       envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: userId }
@@ -77,9 +79,7 @@ async function fixture() {
   const billable = (isBillable: boolean) => withOrgContext(org.orgId, () => setBillable(new Request('http://time.local/api/timesheets/billable', {
     method: 'POST', body: JSON.stringify({ employee: mate, week: WEEK, line, isBillable }),
   })))
-  const approve = () => withOrgContext(org.orgId, () => approveWeek(new Request('http://time.local/api/timesheets/approve', {
-    method: 'POST', body: JSON.stringify({ employee: mate, week: WEEK }),
-  })))
+  const approve = () => withOrgContext(org.orgId, () => decideTimesheetFixture({orgId:org.orgId,...{ employee: mate, week: WEEK },decision:'approved'}))
   const entries = async () => (await db.execute<{ status: string; is_billable: boolean; billing_status: string }>(sql`
     select status, is_billable, billing_status from time_entries where org_id=${org.orgId} and employee_party_id=${mate}`)).rows
   const close = async () => { session.user = null; await dropScratchOrg(org.orgId) }

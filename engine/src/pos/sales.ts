@@ -455,7 +455,12 @@ export async function planTenders(
 }
 
 /** Submit and post a register document inside the caller's transaction, exactly as the document actions do. */
-async function submitAndPost(orgId: string, actorId: string, documentId: string, kindLabel: string): Promise<string> {
+async function submitAndPost(
+  orgId: string,
+  actorId: string,
+  documentId: string,
+  kindLabel: string,
+): Promise<string> {
   const locked = (await db.execute<{ status: string; kind: string }>(sql`
     select status, kind from documents where org_id = ${orgId} and id = ${documentId} for update`)).rows[0];
   if (!locked) throw new Error("register document disappeared before posting");
@@ -464,7 +469,7 @@ async function submitAndPost(orgId: string, actorId: string, documentId: string,
     throw posRefusal(`The ${kindLabel} is ${locked.status}.`, "idempotency_conflict", 409, "Open the receipt in Cash Sales to review it.");
   }
   const submission = await submitAndReleaseIfUngated(locked.kind, documentId, actorId, { source: "ui" });
-  if (submission.flowError || submission.gated || submission.approvalRequired) {
+  if (submission.flowError || submission.gated) {
     throw posRefusal(
       `This ${kindLabel} needs approval under the organization's approval flow${submission.flowError ? `: ${submission.flowError}` : ""}.`,
       "approval_required",
@@ -996,7 +1001,9 @@ export async function findPosReceiptByNumber(
     select id, subsidiary_id from documents
      where org_id = ${orgId} and kind = 'cash_sale' and document_number = ${number}
      order by created_at desc limit 5`)).rows;
-  return rows.find((row) => subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id))?.id ?? null;
+  return (
+    rows.find((row) => subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id))?.id ?? null
+  );
 }
 
 /** Recent receipts rung in a session, newest first. */

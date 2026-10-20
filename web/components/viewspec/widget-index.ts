@@ -119,7 +119,6 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'audit-docs-link': 'platform',
   'audit-event-drawer': 'platform',
   'audit-rows-table': 'platform',
-  'automation-approval-settings': 'setup',
   'automation-builder': 'setup',
   'automation-last-run-cell': 'setup',
   'automation-name-cell': 'setup',

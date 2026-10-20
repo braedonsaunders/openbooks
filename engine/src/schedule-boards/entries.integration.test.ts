@@ -1,3 +1,6 @@
+import { installEngineSeams } from '../composition/install.ts';
+import { publishScheduleBoard } from './publications.ts';
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -5,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import { applyBoardChanges, publishBoard, type BoardChange } from "./entries.ts";
+import { applyBoardChanges, type BoardChange } from "./entries.ts";
 import { ScheduleError } from "./errors.ts";
 import { scheduledWork } from "./prefill.ts";
 import { loadBoardWindow } from "./window.ts";
@@ -99,7 +102,7 @@ test("a live board publishes as it books, and a person is never booked twice acr
 test("changing a published booking cancels it and records a successor; undoing restores the original target", enabled, async () => fixture(async (f) => {
   const booked = day(f, f.ana, "2026-10-14", { kind: "project", id: f.projectId });
   await applyBoardChanges({ ...actor(f), boardId: f.live, changes: [booked] });
-  const moved = await applyBoardChanges({ ...actor(f), boardId: f.live, changes: [{ op: "update", id: booked.id, expectedRevision: 1, fields: { target: { kind: "code", id: f.codeId } } }] });
+  const moved = await applyBoardChanges({ ...actor(f), boardId: f.live, changes: [{ op: "update", id: booked.id, expectedRevision: await entryRevision(f.org.orgId,booked.id), fields: { target: { kind: "code", id: f.codeId } } }] });
   const result = moved.results[0]!;
   assert.ok(result.ok && result.entry);
   assert.equal(result.replacedId, booked.id);
@@ -125,7 +128,7 @@ test("a staged board publishes all changes together, or none when one is blocked
 
   // Ana gets booked elsewhere before the staged board publishes.
   await applyBoardChanges({ ...actor(f), boardId: f.live, changes: [day(f, f.ana, "2026-10-15", { kind: "code", id: f.codeId })] });
-  await assert.rejects(publishBoard({ ...actor(f), boardId: f.staged, from: "2026-10-11", through: "2026-10-17" }), (error: unknown) => {
+  await assert.rejects(publishScheduleBoard({ ...actor(f), boardId: f.staged, from: "2026-10-11", through: "2026-10-17" }), (error: unknown) => {
     assert.ok(error instanceof ScheduleError);
     assert.equal(error.code, "schedule_publish_blocked");
     assert.match(error.message, /Ana Field/);
@@ -134,9 +137,9 @@ test("a staged board publishes all changes together, or none when one is blocked
   assert.equal(await statusOf(f.org.orgId, b.id), "draft");
 
   await applyBoardChanges({ ...actor(f), boardId: f.staged, changes: [{ op: "cancel", id: a.id, expectedRevision: 1 }] });
-  assert.deepEqual(await publishBoard({ ...actor(f), boardId: f.staged, from: "2026-10-11", through: "2026-10-17" }), {
-    published: 1, notices: [], boardName: "Board PLANT", distributionRefusals: [],
-  });
+  const publication=await publishScheduleBoard({...actor(f),boardId:f.staged,from:'2026-10-11',through:'2026-10-17'});
+  assert.equal(publication.published,1);assert.equal(publication.pending,false);assert.ok(publication.publicationId);
+  assert.deepEqual(publication.notices,[]);assert.deepEqual(publication.distributionRefusals,[]);
   assert.equal(await statusOf(f.org.orgId, b.id), "published");
 }));
 
@@ -324,9 +327,9 @@ for (const kind of ['equipment','location'] as const) test(`${kind} reservations
   const clash = resources.create('2026-10-23');
   const next = resources.create('2026-10-24');
   await applyBoardChanges({ ...actor(f),boardId:resources.second,changes:[clash,next] });
-  await assert.rejects(publishBoard({ ...actor(f),boardId:resources.second,from:'2026-10-23',through:'2026-10-24' }), (error:unknown) => error instanceof ScheduleError && error.code === 'schedule_publish_blocked');
+  await assert.rejects(publishScheduleBoard({ ...actor(f),boardId:resources.second,from:'2026-10-23',through:'2026-10-24' }), (error:unknown) => error instanceof ScheduleError && error.code === 'schedule_publish_blocked');
   assert.equal(await statusOf(f.org.orgId,next.id),'draft');
-  const updated = await applyBoardChanges({ ...actor(f),boardId:resources.first,changes:[{ op:'update',id:booked.id,expectedRevision:1,fields:{ detail:'East area' } }] });
+  const updated = await applyBoardChanges({ ...actor(f),boardId:resources.first,changes:[{ op:'update',id:booked.id,expectedRevision:await entryRevision(f.org.orgId,booked.id),fields:{ detail:'East area' } }] });
   assert.ok(updated.results[0]?.ok && updated.results[0].entry?.supersedesId === booked.id);
   assert.equal(await statusOf(f.org.orgId,booked.id),'cancelled');
   const window = await loadBoardWindow({ ...actor(f),boardId:resources.second,from:'2026-10-23',through:'2026-10-24' });
@@ -384,3 +387,7 @@ test('source-date colors and native booking colors share code fallback and order
  assert.equal(window.sourceRecords?.[0]?.color,'#ff00ff');assert.equal(window.entries[0]?.target?.color,'#ff00ff');assert.equal(window.entries[0]?.workedMinutes,480);assert.equal(window.sourceRecords?.[0]?.label,'TRAIN/ N');
  assert.deepEqual((await withBypassContext(()=>db.execute(sql`select * from schedule_source_records where org_id=${f.org.orgId}`))).rows,before.rows);
 }));
+
+async function entryRevision(orgId:string,id:string){
+ return (await db.execute<{revision:number}>(sql`select revision from schedule_entries where org_id=${orgId} and id=${id}`)).rows[0]!.revision;
+}

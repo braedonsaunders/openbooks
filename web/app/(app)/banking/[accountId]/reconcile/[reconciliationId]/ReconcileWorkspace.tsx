@@ -9,6 +9,10 @@ import { useId, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import {
+  ApprovalActions,
+  refreshApprovalState,
+} from '@/components/approval-actions'
 import { Ban, CheckCheck, Link2, Pencil, RotateCcw, Trash2, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -111,6 +115,7 @@ interface Staleness {
   reversed: StaleReversedEntry[]
 }
 interface ReconciliationActionResult {
+  status?: 'signed_off' | 'pending_approval'
   error?: string
   matched?: number
   highConfidence?: number
@@ -289,7 +294,8 @@ function ReconcileWorkspaceForId({
     [glRows, selectedGl],
   )
 
-  async function call(method: string, url: string, body?: unknown, onError?: (message: string) => void): Promise<ReconciliationActionResult | null> {
+  async function call(method: string, url: string, body?: unknown, onError?: (message: string) => void,
+  ): Promise<ReconciliationActionResult | null> {
     setBusy(true)
     try {
       const res = await fetch(url, {
@@ -309,7 +315,7 @@ function ReconcileWorkspaceForId({
       setSignOffError(null)
       setBlockers(null)
       setOpeningError(null)
-      return await res.json().catch(() => null) as ReconciliationActionResult | null
+      return (await res.json().catch(() => null)) as ReconciliationActionResult | null
     } catch {
       const message = tBanking('errors.requestFailed')
       if (onError) onError(message); else toast.error(message)
@@ -324,7 +330,7 @@ function ReconcileWorkspaceForId({
     // never toast or wedge — the refusal already shows without the list.
     try {
       const res = await fetch(`/api/banking/reconciliations/${reconciliation.id}/blockers`)
-      const data = await res.json().catch(() => null) as { lines?: SignOffBlocker[]; total?: number } | null
+      const data = (await res.json().catch(() => null)) as { lines?: SignOffBlocker[]; total?: number } | null
       if (res.ok && Array.isArray(data?.lines)) {
         setBlockers({ lines: data.lines, total: typeof data.total === 'number' ? data.total : data.lines.length })
       }
@@ -428,7 +434,11 @@ function ReconcileWorkspaceForId({
       await loadBlockers()
       return
     }
-    toast.success(t('signedOffToast', { count: data.journalLinesReconciled ?? 0 }))
+    if (data.status === 'pending_approval')
+      toast.info(tCommon('approvalFlow.submitted'))
+    else if (typeof data.journalLinesReconciled === 'number')
+      toast.success(t('signedOffToast', { count: data.journalLinesReconciled }))
+    refreshApprovalState()
     router.refresh()
   }
 
@@ -506,7 +516,7 @@ function ReconcileWorkspaceForId({
     const data = await call('DELETE', `/api/banking/reconciliations/${reconciliation.id}`)
     if (!data) return
     toast.success(t('discardedToast'))
-    router.push((accountPath))
+    router.push(accountPath)
     router.refresh()
   }
 
@@ -565,6 +575,10 @@ function ReconcileWorkspaceForId({
             >
               {t('clearSelected')}
             </Button>
+            <ApprovalActions
+              subjectKind="bank_reconciliation_sign_off"
+              subjectId={reconciliation.id}
+            />
             <Button disabled={busy || !zero} onClick={signOff} title={zero ? undefined : t('signOffDisabledTitle')}>
               <CheckCheck size={15} /> {t('signOff')}
             </Button>
@@ -573,11 +587,7 @@ function ReconcileWorkspaceForId({
       )}
 
       {/* -------- opening position: first reconciliation, balance-less statement -------- */}
-      {/* A balance-less first statement states no opening of its own, so the
-          operator confirms the book balance carried in as the statement
-          opening, with a reason. The confirmed opening foots the cleared
-          balance and later sessions chain from the sign-off; a confirmation
-          the ledger moved away from reads stale and confirms again. */}
+      {/* -------- opening position: first reconciliation, balance-less statement -------- */}
       {!signedOff && canReconcile && opening?.isFirst && !opening.statementOpening ? (
         opening.confirmation && opening.carryApplies ? (
           <Alert variant="success">
@@ -590,13 +600,20 @@ function ReconcileWorkspaceForId({
           <section className="space-y-3 rounded-md border border-slate-200 p-3 dark:border-slate-800" aria-label={t('openingTitle')}>
             <div className="space-y-1">
               <h2 className={paneTitle}>{t('openingTitle')}</h2>
-              <p className="text-sm text-slate-600 dark:text-slate-300">{t('openingDescription')}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                {t('openingDescription')}
+              </p>
               <p className="text-sm tabular-nums">
-                {t('openingBookBalance', { date: opening.coverageStart ?? reconciliation.throughDate })}:{' '}
-                <span className="font-medium">{money(opening.bookBalance)}</span>
+                {t('openingBookBalance', { date: opening.coverageStart ?? reconciliation.throughDate })}
+                :{' '}
+                <span className="font-medium">
+                  {money(opening.bookBalance)}
+                </span>
               </p>
               {opening.confirmation && !opening.carryApplies ? (
-                <p className="text-sm text-amber-700 dark:text-amber-300">{t('openingStaleNote')}</p>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  {t('openingStaleNote')}
+                </p>
               ) : null}
               {openingError ? (
                 <div
@@ -609,7 +626,9 @@ function ReconcileWorkspaceForId({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor={openingAmountId}>{t('openingAmountLabel')}</Label>
+                <Label htmlFor={openingAmountId}>
+                  {t('openingAmountLabel')}
+                </Label>
                 <Input
                   id={openingAmountId}
                   disabled={busy}
@@ -620,7 +639,9 @@ function ReconcileWorkspaceForId({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor={openingReasonId}>{t('openingReasonLabel')}</Label>
+                <Label htmlFor={openingReasonId}>
+                  {t('openingReasonLabel')}
+                </Label>
                 <Input
                   id={openingReasonId}
                   disabled={busy}
@@ -643,7 +664,9 @@ function ReconcileWorkspaceForId({
       {stale ? (
         <Alert variant={stale.reviewed ? "info" : "warning"}>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={stale.reviewed ? "success" : "warning"}>{stale.badge}</Badge>
+            <Badge variant={stale.reviewed ? "success" : "warning"}>
+              {stale.badge}
+            </Badge>
             <span className="font-medium tabular-nums">{stale.effect}</span>
           </div>
           {stale.late.length > 0 ? (
@@ -654,7 +677,9 @@ function ReconcileWorkspaceForId({
                   <TableRow>
                     <TableHead>{tBanking('labels.entry')}</TableHead>
                     <TableHead>{tCommon('labels.date')}</TableHead>
-                    <TableHead className="text-right">{tCommon('labels.amount')}</TableHead>
+                    <TableHead className="text-right">
+                      {tCommon('labels.amount')}
+                    </TableHead>
                     <TableHead>{tStale('postedBy')}</TableHead>
                     <TableHead>{tStale('postedAt')}</TableHead>
                   </TableRow>
@@ -662,9 +687,13 @@ function ReconcileWorkspaceForId({
                 <TableBody>
                   {stale.late.map((entry) => (
                     <TableRow key={entry.entryNumber}>
-                      <TableCell className="font-medium">{entry.entryNumber}</TableCell>
+                      <TableCell className="font-medium">
+                        {entry.entryNumber}
+                      </TableCell>
                       <TableCell>{entry.postingDate}</TableCell>
-                      <TableCell className="text-right tabular-nums">{money(entry.amount)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {money(entry.amount)}
+                      </TableCell>
                       <TableCell>{entry.postedBy ?? '—'}</TableCell>
                       <TableCell>{entry.postedAt ?? '—'}</TableCell>
                     </TableRow>
@@ -679,14 +708,23 @@ function ReconcileWorkspaceForId({
               <ul className="list-disc pl-5">
                 {stale.reversed.map((entry) => (
                   <li key={entry.entryNumber}>
-                    {entry.entryNumber} · {entry.postingDate} · {money(entry.amount)}
+                    {entry.entryNumber} · {entry.postingDate} ·{' '}
+                    {money(entry.amount)}
                     {entry.reversal ? ` · ${entry.reversal}` : null}
                   </li>
                 ))}
               </ul>
             </div>
           ) : null}
-          {stale.reviewed && stale.reviewedHref ? <p className="mt-2"><Link href={stale.reviewedHref} className="underline">{stale.reviewedText}</Link></p> : <p className="mt-2">{tStale('remedy')}</p>}
+          {stale.reviewed && stale.reviewedHref ? (
+            <p className="mt-2">
+              <Link href={stale.reviewedHref} className="underline">
+                {stale.reviewedText}
+              </Link>
+            </p>
+          ) : (
+            <p className="mt-2">{tStale('remedy')}</p>
+          )}
           {canReviewSignOff && signedOff && !stale.reviewed && stale.reversed.length===0 ? (
             <NeutralHistoryReview key={reconciliation.id} reconciliationId={reconciliation.id} disabled={busy} />
           ) : null}
@@ -716,11 +754,14 @@ function ReconcileWorkspaceForId({
                 {blockers.lines.map((line) => (
                   <li key={line.id}>
                     <a className="underline" href={`#stmt-line-${line.id}`}>
-                      {blockerPostedOn(line)} · {money(line.amount)} · {line.description ?? '—'}
+                      {blockerPostedOn(line)} · {money(line.amount)} ·{' '}
+                      {line.description ?? '—'}
                     </a>
                     {line.possibleDuplicateOf ? (
                       <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
-                        <Badge variant="warning">{tMatch('possibleDuplicateBadge')}</Badge>
+                        <Badge variant="warning">
+                          {tMatch('possibleDuplicateBadge')}
+                        </Badge>
                         <span className="text-xs text-slate-600 dark:text-slate-400">
                           {tMatch('possibleDuplicateOf', {
                             date: line.possibleDuplicateOfPostedOn ?? '',
@@ -733,7 +774,9 @@ function ReconcileWorkspaceForId({
                 ))}
               </ul>
               {blockers.total > blockers.lines.length ? (
-                <p>{t('moreBlockingLines', { shown: blockers.lines.length, total: blockers.total })}</p>
+                <p>
+                  {t('moreBlockingLines', { shown: blockers.lines.length, total: blockers.total })}
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -741,54 +784,67 @@ function ReconcileWorkspaceForId({
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-2">
-        {/* -------- left: unmatched statement lines -------- */}
-        {/* Outstanding evidence renders for signed-off sessions too,
-            read-only: a signed-off difference of zero must still show the
-            book entries with no bank line, or state there are none. */}
-          <section className="min-w-0 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className={cn(paneTitle, 'mr-auto')}>
-                {t('bankLinesTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{t('bankLinesCount', { count: stmtTotal })}</span>
-              </h2>
-              <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{t('outstandingTotal', { total: money(stmtOutstandingTotal) })}</span>
-              <SearchInput placeholder={t('searchBankLines')} paramKey="stmtQ" pageParamKey="stmtPage" />
-            </div>
-            <Table>
-              <TableHeader>
+        {/* -------- opening position: first reconciliation, balance-less statement -------- */}
+        {/* -------- opening position: first reconciliation, balance-less statement -------- */}
+        <section className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className={cn(paneTitle, 'mr-auto')}>
+              {t('bankLinesTitle')}{' '}
+              <span className="font-normal text-slate-500 dark:text-slate-400">
+                {t('bankLinesCount', { count: stmtTotal })}
+              </span>
+            </h2>
+            <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+              {t('outstandingTotal', { total: money(stmtOutstandingTotal) })}
+            </span>
+            <SearchInput placeholder={t('searchBankLines')} paramKey="stmtQ" pageParamKey="stmtPage" />
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {!readOnly ? <TableHead className="w-8" /> : null}
+                <SortTh basePath={basePath} currentParams={currentParams} column="date" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">
+                  {tCommon('labels.date')}
+                </SortTh>
+                <SortTh basePath={basePath} currentParams={currentParams} column="description" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">
+                  {tCommon('labels.description')}
+                </SortTh>
+                <SortTh basePath={basePath} currentParams={currentParams} column="amount" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage" align="right">
+                  {tCommon('labels.amount')}
+                </SortTh>
+                {!readOnly ? (
+                  <TableHead>
+                    <span className="sr-only">{tMatch('exclude')}</span>
+                  </TableHead>
+                ) : null}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {stmtRows.length === 0 ? (
                 <TableRow>
-                  {!readOnly ? <TableHead className="w-8" /> : null}
-                  <SortTh basePath={basePath} currentParams={currentParams} column="date" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{tCommon('labels.date')}</SortTh>
-                  <SortTh basePath={basePath} currentParams={currentParams} column="description" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage">{tCommon('labels.description')}</SortTh>
-                  <SortTh basePath={basePath} currentParams={currentParams} column="amount" sort={stmtParams.sort} dir={stmtParams.dir} sortParamKey="stmtSort" dirParamKey="stmtDir" pageParamKey="stmtPage" align="right">{tCommon('labels.amount')}</SortTh>
-                  {!readOnly ? <TableHead><span className="sr-only">{tMatch('exclude')}</span></TableHead> : null}
+                  <TableCell colSpan={readOnly ? 3 : 5} className="text-center text-slate-500 dark:text-slate-400">
+                    {stmtParams.q ? t('noBankLinesSearch') : t('allBankLinesMatched')}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stmtRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={readOnly ? 3 : 5} className="text-center text-slate-500 dark:text-slate-400">
-                      {stmtParams.q ? t('noBankLinesSearch') : t('allBankLinesMatched')}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  stmtRows.map((l) => {
-                    const selected = selectedStmts.has(l.id)
-                    const toggleStmt = () => setSelectedStmts((current) => {
+              ) : (
+                stmtRows.map((l) => {
+                  const selected = selectedStmts.has(l.id)
+                  const toggleStmt = () => setSelectedStmts((current) => {
                       const next = new Set(current)
                       if (next.has(l.id)) next.delete(l.id); else next.add(l.id)
                       return next
                     })
-                    return (
-                      <InteractiveTableRow
+                  return (
+                    <InteractiveTableRow
                         key={l.id}
                         id={`stmt-line-${l.id}`}
                         aria-label={t('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })}
                         className={cn(!readOnly && 'cursor-pointer', selected && selectedRow, 'scroll-mt-24')}
                         onClick={readOnly ? undefined : toggleStmt}
                       >
-                        {!readOnly ? (
-                          <TableCell className="w-8">
-                            <input
+                      {!readOnly ? (
+                        <TableCell className="w-8">
+                          <input
                               type="checkbox"
                               aria-label={t('selectBankLineAria', { date: l.posted_on, amount: money(l.amount) })}
                               checked={selected}
@@ -796,102 +852,121 @@ function ReconcileWorkspaceForId({
                               onClick={(e) => e.stopPropagation()}
                               className="accent-teal-700"
                             />
-                          </TableCell>
-                        ) : null}
-                        <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
-                        <TableCell className="max-w-[16rem]">
-                          <div className="truncate">
-                            {l.description ?? '—'}
-                            {l.counterparty_ref ? (
-                              <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">{l.counterparty_ref}</span>
-                            ) : null}
-                          </div>
-                          {l.possible_duplicate_of ? (
-                            <div className="mt-1 flex flex-wrap items-center gap-1">
-                              <Badge variant="warning">{tMatch('possibleDuplicateBadge')}</Badge>
-                              <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                                {tMatch('possibleDuplicateOf', {
+                        </TableCell>
+                      ) : null}
+                      <TableCell className="whitespace-nowrap">
+                        {l.posted_on}
+                      </TableCell>
+                      <TableCell className="max-w-[16rem]">
+                        <div className="truncate">
+                          {l.description ?? '—'}
+                          {l.counterparty_ref ? (
+                            <span className="ml-1.5 text-xs text-slate-400 dark:text-slate-500">
+                              {l.counterparty_ref}
+                            </span>
+                          ) : null}
+                        </div>
+                        {l.possible_duplicate_of ? (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <Badge variant="warning">
+                              {tMatch('possibleDuplicateBadge')}
+                            </Badge>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {tMatch('possibleDuplicateOf', {
                                   date: l.dup_posted_on ?? '',
                                   amount: money((l.dup_amount ?? '0') as MoneyValue),
                                 })}
-                              </span>
-                            </div>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
-                        {!readOnly ? (
-                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                            {l.possible_duplicate_of ? (
-                              <div className="flex justify-end gap-1">
-                                <Button variant="outline" size="sm" disabled={busy} onClick={() => excludeDuplicate(l)}>
-                                  {t('excludeDuplicate')}
-                                </Button>
-                                <Button variant="ghost" size="sm" disabled={busy} title={t('clearDuplicate')} onClick={() => clearDuplicate(l.id)}>
-                                  <RotateCcw size={14} />
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button variant="ghost" size="sm" disabled={busy} title={tMatch('exclude')} onClick={() => excludeStatementLine(l.id)}>
-                                <Ban size={14} />
-                              </Button>
-                            )}
-                          </TableCell>
+                            </span>
+                          </div>
                         ) : null}
-                      </InteractiveTableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
-            <Pagination basePath={basePath} currentParams={currentParams} total={stmtTotal} page={stmtParams.page} perPage={stmtParams.perPage} pageParamKey="stmtPage" />
-          </section>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {money(l.amount)}
+                      </TableCell>
+                      {!readOnly ? (
+                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                          {l.possible_duplicate_of ? (
+                            <div className="flex justify-end gap-1">
+                              <Button variant="outline" size="sm" disabled={busy} onClick={() => excludeDuplicate(l)}>
+                                {t('excludeDuplicate')}
+                              </Button>
+                              <Button variant="ghost" size="sm" disabled={busy} title={t('clearDuplicate')} onClick={() => clearDuplicate(l.id)}>
+                                <RotateCcw size={14} />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button variant="ghost" size="sm" disabled={busy} title={tMatch('exclude')} onClick={() => excludeStatementLine(l.id)}>
+                              <Ban size={14} />
+                            </Button>
+                          )}
+                        </TableCell>
+                      ) : null}
+                    </InteractiveTableRow>
+                  )
+                })
+              )}
+            </TableBody>
+          </Table>
+          <Pagination basePath={basePath} currentParams={currentParams} total={stmtTotal} page={stmtParams.page} perPage={stmtParams.perPage} pageParamKey="stmtPage" />
+        </section>
 
-          {/* -------- right: unreconciled GL lines -------- */}
-          <section className="min-w-0 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className={cn(paneTitle, 'mr-auto')}>
-                {t('ledgerLinesTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{t('ledgerLinesCount', { count: glTotal })}</span>
-              </h2>
-              <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{t('outstandingTotal', { total: money(glOutstandingTotal) })}</span>
-              <SearchInput placeholder={t('searchGlLines')} paramKey="glQ" pageParamKey="glPage" />
-            </div>
-            <Table>
-              <TableHeader>
+        {/* -------- opening position: first reconciliation, balance-less statement -------- */}
+        <section className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className={cn(paneTitle, 'mr-auto')}>
+              {t('ledgerLinesTitle')}{' '}
+              <span className="font-normal text-slate-500 dark:text-slate-400">
+                {t('ledgerLinesCount', { count: glTotal })}
+              </span>
+            </h2>
+            <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+              {t('outstandingTotal', { total: money(glOutstandingTotal) })}
+            </span>
+            <SearchInput placeholder={t('searchGlLines')} paramKey="glQ" pageParamKey="glPage" />
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {!readOnly ? <TableHead className="w-8" /> : null}
+                <SortTh basePath={basePath} currentParams={currentParams} column="date" sort={glParams.sort} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">
+                  {tCommon('labels.date')}
+                </SortTh>
+                <SortTh basePath={basePath} currentParams={currentParams} column="entry" sort={glParams.sort} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">
+                  {tBanking('labels.entry')}
+                </SortTh>
+                <TableHead>{tCommon('labels.memo')}</TableHead>
+                <SortTh basePath={basePath} currentParams={currentParams} column="amount" sort={glParams.sort} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage" align="right">
+                  {tCommon('labels.amount')}
+                </SortTh>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {glRows.length === 0 ? (
                 <TableRow>
-                  {!readOnly ? <TableHead className="w-8" /> : null}
-                  <SortTh basePath={basePath} currentParams={currentParams} column="date" sort={glParams.sort} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">{tCommon('labels.date')}</SortTh>
-                  <SortTh basePath={basePath} currentParams={currentParams} column="entry" sort={glParams.sort} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage">{tBanking('labels.entry')}</SortTh>
-                  <TableHead>{tCommon('labels.memo')}</TableHead>
-                  <SortTh basePath={basePath} currentParams={currentParams} column="amount" sort={glParams.sort} dir={glParams.dir} sortParamKey="glSort" dirParamKey="glDir" pageParamKey="glPage" align="right">{tCommon('labels.amount')}</SortTh>
+                  <TableCell colSpan={readOnly ? 4 : 5} className="text-center text-slate-500 dark:text-slate-400">
+                    {glParams.q ? t('noGlLinesSearch') : t('allGlLinesReconciled')}
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {glRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={readOnly ? 4 : 5} className="text-center text-slate-500 dark:text-slate-400">
-                      {glParams.q ? t('noGlLinesSearch') : t('allGlLinesReconciled')}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  glRows.map((l) => {
-                    const selected = selectedGl.has(l.id)
-                    const toggle = () =>
+              ) : (
+                glRows.map((l) => {
+                  const selected = selectedGl.has(l.id)
+                  const toggle = () =>
                       setSelectedGl((prev) => {
                         const next = new Set(prev)
                         if (next.has(l.id)) next.delete(l.id)
                         else next.add(l.id)
                         return next
                       })
-                    return (
-                      <InteractiveTableRow
+                  return (
+                    <InteractiveTableRow
                         key={l.id}
                         aria-label={t('selectGlLineAria', { entry: l.entry_number, amount: money(l.amount) })}
                         className={cn(!readOnly && 'cursor-pointer', selected && selectedRow)}
                         onClick={readOnly ? undefined : toggle}
                       >
-                        {!readOnly ? (
-                          <TableCell className="w-8">
-                            <input
+                      {!readOnly ? (
+                        <TableCell className="w-8">
+                          <input
                               type="checkbox"
                               aria-label={t('selectGlLineAria', { entry: l.entry_number, amount: money(l.amount) })}
                               checked={selected}
@@ -899,42 +974,59 @@ function ReconcileWorkspaceForId({
                               onClick={(e) => e.stopPropagation()}
                               className="accent-teal-700"
                             />
-                          </TableCell>
-                        ) : null}
-                        <TableCell className="whitespace-nowrap">{l.posting_date}</TableCell>
-                        <TableCell className="font-mono text-[13px]">{l.entry_number}</TableCell>
-                        <TableCell className="max-w-[14rem] truncate">
-                          {l.memo ?? l.party ?? '—'}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
-                      </InteractiveTableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
-            <Pagination basePath={basePath} currentParams={currentParams} total={glTotal} page={glParams.page} perPage={glParams.perPage} pageParamKey="glPage" />
-          </section>
-        </div>
+                      ) : null}
+                      <TableCell className="whitespace-nowrap">
+                        {l.posting_date}
+                      </TableCell>
+                      <TableCell className="font-mono text-[13px]">
+                        {l.entry_number}
+                      </TableCell>
+                      <TableCell className="max-w-[14rem] truncate">
+                        {l.memo ?? l.party ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {money(l.amount)}
+                      </TableCell>
+                    </InteractiveTableRow>
+                  )
+                })
+              )}
+            </TableBody>
+          </Table>
+          <Pagination basePath={basePath} currentParams={currentParams} total={glTotal} page={glParams.page} perPage={glParams.perPage} pageParamKey="glPage" />
+        </section>
+      </div>
 
-      {/* -------- matched this session -------- */}
+      {/* -------- opening position: first reconciliation, balance-less statement -------- */}
       <section className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className={cn(paneTitle, 'mr-auto')}>
-            {t('matchedTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{t('matchedCount', { count: matchedTotal })}</span>
+            {t('matchedTitle')}{' '}
+            <span className="font-normal text-slate-500 dark:text-slate-400">
+              {t('matchedCount', { count: matchedTotal })}
+            </span>
           </h2>
           <SearchInput placeholder={t('searchMatches')} paramKey="mQ" pageParamKey="mPage" />
         </div>
         <Table>
           <TableHeader>
             <TableRow>
-              <SortTh basePath={basePath} currentParams={currentParams} column="date" sort={mParams.sort} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">{t('columns.bankDate')}</SortTh>
+              <SortTh basePath={basePath} currentParams={currentParams} column="date" sort={mParams.sort} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">
+                {t('columns.bankDate')}
+              </SortTh>
               <TableHead>{t('columns.bankDescription')}</TableHead>
-              <TableHead className="text-right">{t('columns.bankAmount')}</TableHead>
+              <TableHead className="text-right">
+                {t('columns.bankAmount')}
+              </TableHead>
               <TableHead>{tBanking('labels.entry')}</TableHead>
               <TableHead>{t('columns.glMemo')}</TableHead>
-              <TableHead className="text-right">{t('columns.glAmount')}</TableHead>
-              <SortTh basePath={basePath} currentParams={currentParams} column="by" sort={mParams.sort} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">{t('columns.matchedBy')}</SortTh>
+              <TableHead className="text-right">
+                {t('columns.glAmount')}
+              </TableHead>
+              <SortTh basePath={basePath} currentParams={currentParams} column="by" sort={mParams.sort} dir={mParams.dir} sortParamKey="mSort" dirParamKey="mDir" pageParamKey="mPage">
+                {t('columns.matchedBy')}
+              </SortTh>
               {!readOnly ? <TableHead /> : null}
             </TableRow>
           </TableHeader>
@@ -948,12 +1040,24 @@ function ReconcileWorkspaceForId({
             ) : (
               matchedRows.map((m) => (
                 <TableRow key={m.id}>
-                  <TableCell className="whitespace-nowrap">{m.stmt_date}</TableCell>
-                  <TableCell className="max-w-[14rem] truncate">{m.stmt_description ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(m.stmt_amount)}</TableCell>
-                  <TableCell className="font-mono text-[13px]">{m.entry_number}</TableCell>
-                  <TableCell className="max-w-[14rem] truncate">{m.gl_memo ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(m.gl_amount)}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    {m.stmt_date}
+                  </TableCell>
+                  <TableCell className="max-w-[14rem] truncate">
+                    {m.stmt_description ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {money(m.stmt_amount)}
+                  </TableCell>
+                  <TableCell className="font-mono text-[13px]">
+                    {m.entry_number}
+                  </TableCell>
+                  <TableCell className="max-w-[14rem] truncate">
+                    {m.gl_memo ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {money(m.gl_amount)}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={m.matched_by === 'auto' ? 'default' : 'secondary'}>
                       {MATCHED_BY_KEYS.includes(m.matched_by) ? tBanking(`matchedBy.${m.matched_by}`) : m.matched_by}
@@ -975,27 +1079,40 @@ function ReconcileWorkspaceForId({
         <Pagination basePath={basePath} currentParams={currentParams} total={matchedTotal} page={mParams.page} perPage={mParams.perPage} pageParamKey="mPage" />
       </section>
 
-      {/* -------- GL-only clearing groups (no bank counterpart) -------- */}
+      {/* -------- opening position: first reconciliation, balance-less statement -------- */}
       {glClearings.length > 0 ? (
         <section className="space-y-2">
           <h2 className={cn(paneTitle, 'mr-auto')}>
-            {t('clearingsTitle')} <span className="font-normal text-slate-500 dark:text-slate-400">{t('clearingsCount', { count: glClearings.length })}</span>
+            {t('clearingsTitle')}{' '}
+            <span className="font-normal text-slate-500 dark:text-slate-400">
+              {t('clearingsCount', { count: glClearings.length })}
+            </span>
           </h2>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>{tBanking('labels.entry')}</TableHead>
-                <TableHead className="text-right">{tCommon('labels.lines')}</TableHead>
-                <TableHead className="text-right">{tCommon('labels.amount')}</TableHead>
+                <TableHead className="text-right">
+                  {tCommon('labels.lines')}
+                </TableHead>
+                <TableHead className="text-right">
+                  {tCommon('labels.amount')}
+                </TableHead>
                 {!readOnly ? <TableHead /> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
               {glClearings.map((g) => (
                 <TableRow key={g.group_id}>
-                  <TableCell className="font-mono text-[13px]">{g.entries ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{g.lines}</TableCell>
-                  <TableCell className="text-right tabular-nums">{money(g.total)}</TableCell>
+                  <TableCell className="font-mono text-[13px]">
+                    {g.entries ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {g.lines}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {money(g.total)}
+                  </TableCell>
                   {!readOnly ? (
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" disabled={busy} onClick={() => unmatchClearing(g.group_id)}>
@@ -1030,11 +1147,15 @@ function ReconcileWorkspaceForId({
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor={adjustThroughDateId}>{tBanking('labels.reconcileThrough')}</Label>
+            <Label htmlFor={adjustThroughDateId}>
+              {tBanking('labels.reconcileThrough')}
+            </Label>
             <DateField id={adjustThroughDateId} disabled={busy} value={throughDate} onChange={(value) => setThroughDate(value)} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor={adjustStatementBalanceId}>{tBanking('labels.statementBalance')}</Label>
+            <Label htmlFor={adjustStatementBalanceId}>
+              {tBanking('labels.statementBalance')}
+            </Label>
             <Input
               id={adjustStatementBalanceId}
               disabled={busy}

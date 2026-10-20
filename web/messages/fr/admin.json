@@ -1116,14 +1116,8 @@
     },
     "approvals": {
       "title": "Approbations",
-      "description": "Contrôlez quand les factures fournisseurs sont libérées après soumission.",
-      "requireVendorBillApproval": "Exiger une approbation avant de libérer les factures fournisseurs",
-      "requireVendorBillApprovalHint": "Si activé, une facture fournisseur n’est libérée que via un flux d’approbation. Une facture sans flux correspondant reste soumise, et le soumetteur est invité à configurer un flux ou à désactiver cette option.",
-      "requireStockCountReview": "Exiger un autre utilisateur pour comptabiliser les inventaires",
-      "requireStockCountReviewHint": "Si activé, l’utilisateur qui a compté ou soumis un inventaire ne peut pas le comptabiliser — un autre utilisateur autorisé doit le faire. Si désactivé, tout utilisateur autorisé peut comptabiliser son propre inventaire.",
-      "noFlowTitle": "Aucun flux d’approbation pour les factures fournisseurs",
-      "noFlowWarningAuto": "Aucun flux d’approbation n’est configuré pour les factures fournisseurs. <flows>Configurez-en un dans Flux</flows> — d’ici là, les factures soumises sont libérées automatiquement sans approbateur.",
-      "noFlowWarningRequired": "Aucun flux d’approbation n’est configuré pour les factures fournisseurs. <flows>Configurez-en un dans Flux</flows> — d’ici là, chaque soumission de facture fournisseur est refusée."
+      "description": "Les flux déterminent si une soumission exige une approbation, qui doit l’approuver et combien de décisions sont nécessaires. Sans étape d’approbation applicable, la soumission se poursuit sans approbateur.",
+      "manageFlows": "Gérer les flux d’approbation"
     },
     "documentKinds": {
       "vendorBill": "Facture fournisseur",
@@ -1924,7 +1918,10 @@
       "keyRemoved": "Clé du fournisseur documentaire supprimée.",
       "model": "Modèle de facture",
       "provider": "Lecteur de documents",
-      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "Modèle d’IA ({provider})"},
+      "providers": {
+        "azure_document_intelligence": "Azure Document Intelligence",
+        "llm_vision": "Modèle d’IA ({provider})"
+      },
       "azureHint": "Lit les factures et les reçus avec votre ressource et votre clé Azure Document Intelligence.",
       "llmHint": "Lit les factures et les reçus avec le fournisseur d’IA, la clé et les modèles configurés ci-dessous ({provider}). Chaque champ porte la confiance du modèle ; les champs sous le seuil restent vides pour vérification.",
       "llmNoVision": "{provider} ne lit pas d’images. Choisissez ci-dessous un fournisseur doté de modèles de vision, ou utilisez Azure Document Intelligence.",
@@ -2860,14 +2857,14 @@
       }
     },
     "usFilingLineage": {
-          "stateAccount": "Compte de déclaration de l’État",
-          "employer": "Employeur légal original",
-          "federalAccount": "EIN fédéral original",
-          "federalHelp": "Les EIN retirés restent disponibles pour qualifier les sources historiques.",
-          "datesHelp": "Dates inclusives de l’inscription originale. La fin doit suivre la dernière paie comptabilisée.",
-          "sourceReference": "Référence de la preuve d’inscription originale",
-          "sourceHelp": "Identifiez la lettre d’inscription ou le document conservé établissant cet EIN et la période.",
-          "reason": "Motif du changement"
+      "stateAccount": "Compte de déclaration de l’État",
+      "employer": "Employeur légal original",
+      "federalAccount": "EIN fédéral original",
+      "federalHelp": "Les EIN retirés restent disponibles pour qualifier les sources historiques.",
+      "datesHelp": "Dates inclusives de l’inscription originale. La fin doit suivre la dernière paie comptabilisée.",
+      "sourceReference": "Référence de la preuve d’inscription originale",
+      "sourceHelp": "Identifiez la lettre d’inscription ou le document conservé établissant cet EIN et la période.",
+      "reason": "Motif du changement"
     },
     "entities": {
       "schedule-patterns": {
@@ -3360,9 +3357,9 @@
         "singular": "règle de répartition"
       },
       "payroll-us-filing-account-employer-lineage": {
-              "title": "Historique des EIN de l’employeur",
-              "singularTitle": "Affiliation à l’EIN de l’employeur",
-              "description": "Titularité originale du compte d’État, avec dates inclusives et preuves conservées."
+        "title": "Historique des EIN de l’employeur",
+        "singularTitle": "Affiliation à l’EIN de l’employeur",
+        "description": "Titularité originale du compte d’État, avec dates inclusives et preuves conservées."
       },
       "payroll-filing-accounts": {
         "title": "Comptes de déclaration",
@@ -3932,8 +3929,14 @@
         "title": "Politiques de renouvellement des abonnements",
         "description": "Conditions de renouvellement datées, responsable et rappels avant l’expiration."
       },
-      "project-loss-policies": {"title": "Politiques des projets déficitaires", "description": "Si les projets prévoyant une perte sont signalés à la clôture et si la clôture attend leur évaluation de perte."},
-      "expense-fx-policies": {"title": "Politiques de change des frais", "description": "Indique si une ligne de frais en devise peut être convertie à un taux de change explicite motivé plutôt qu’au taux daté."},
+      "project-loss-policies": {
+        "title": "Politiques des projets déficitaires",
+        "description": "Si les projets prévoyant une perte sont signalés à la clôture et si la clôture attend leur évaluation de perte."
+      },
+      "expense-fx-policies": {
+        "title": "Politiques de change des frais",
+        "description": "Indique si une ligne de frais en devise peut être convertie à un taux de change explicite motivé plutôt qu’au taux daté."
+      },
       "service-dispatch-policies": {
         "title": "Politique de répartition des services",
         "singularTitle": "Version de la politique de répartition",
@@ -5788,7 +5791,11 @@
         "fiscal_year": "Par exercice",
         "never": "Jamais"
       },
-      "projectLossPolicy": {"off": "Désactivée", "warn": "Avertir à la clôture", "require": "Exiger l'évaluation avant la clôture"}
+      "projectLossPolicy": {
+        "off": "Désactivée",
+        "warn": "Avertir à la clôture",
+        "require": "Exiger l'évaluation avant la clôture"
+      }
     },
     "laborCosting": {
       "navTitle": "Coût de la main-d'œuvre",
@@ -7410,7 +7417,7 @@
       "chooseApprovedVersion": "Version approuvée de la politique",
       "chooseVersionHint": "Choisissez une version approuvée avant d’affecter des salariés. Chaque affectation conserve cette version et ses dates d’effet.",
       "review": "Vérification et décision",
-      "reviewHint": "Les conditions soumises doivent être approuvées par une personne liée indépendante. Les conditions approuvées sont conservées ; les modifications nécessitent une nouvelle version ou une affectation successive.",
+      "reviewHint": "Les Flows du locataire définissent les étapes d’approbation. Sans étape, les soumissions valides sont libérées immédiatement. Les conditions approuvées sont conservées ; toute modification utilise une nouvelle version ou une affectation suivante.",
       "noActions": "Aucune transition n’est disponible pour vos autorisations et l’état actuel de cet enregistrement.",
       "actions": {
         "submit": "Soumettre pour approbation",
@@ -7490,7 +7497,7 @@
       "reason": "Motif",
       "reasonHint": "Indiquez le motif de ce changement de règles, de session ou de résultat.",
       "review": "Examen et actions",
-      "reviewHint": "Les actions utilisent la version actuelle. L’approbateur doit être différent de l’auteur.",
+      "reviewHint": "Les actions utilisent la révision actuelle de l’enregistrement. Les Flows du locataire définissent les étapes d’approbation et les personnes autorisées à décider.",
       "history": "Historique",
       "result": "Présence et évaluation",
       "resultHint": "Consignez la présence et l’évaluation réelles. La vérification reste distincte ; l’annulation conserve le résultat.",
@@ -8096,10 +8103,7 @@
         "connectAction": "Connecter",
         "connectPlaceholder": "Choisir une étape…",
         "connectEmpty": "Il n’y a pas encore d’autre étape — ajoutez d’abord un nœud."
-      },
-      "ungatedOutcomeLabel": "Si aucune étape d’approbation ne s’applique",
-      "ungatedApply": "Appliquer immédiatement",
-      "ungatedRequireApproval": "Exiger une étape d’approbation"
+      }
     },
     "node": {
       "trigger": "Déclencheur",
@@ -9482,7 +9486,7 @@
     "changeSetDefaultName": "Modifications du bac à sable",
     "captureChanges": "Capturer les modifications",
     "captureFailed": "La capture n’a pas abouti. Consultez la liste des ensembles de modifications avant de réessayer.",
-    "captureTitle": "Capturer les changements de configuration pour une révision et une approbation indépendantes"
+    "captureTitle": "Capturer les modifications de configuration à soumettre via Flows"
   },
   "sandboxes": {
     "changeSets": {
@@ -9512,7 +9516,7 @@
       "capturedFrom": "Capturé depuis {name}",
       "retained": "Jeu de modifications de configuration conservé",
       "listTitle": "Jeux de modifications",
-      "listDescription": "Examinez les modifications de configuration capturées, enregistrez un examen et une approbation indépendants, puis appliquez les modifications approuvées en production.",
+      "listDescription": "Examiner les modifications de configuration capturées, les soumettre via les Flows du locataire, puis appliquer en production les modifications libérées.",
       "listBack": "Environnements",
       "requestFailed": "La demande n'a pas abouti. Actualisez pour vérifier le statut enregistré avant de réessayer.",
       "working": "Traitement en cours…",
@@ -9549,8 +9553,7 @@
       "reasons": {
         "incomplete": "Cette capture est incomplète. Capturez un nouveau jeu de modifications depuis l'environnement.",
         "noSnapshot": "Cette ancienne capture n'a pas d'instantané de production. Capturez et examinez un nouveau jeu de modifications avant de l'appliquer.",
-        "empty": "Aucune modification de configuration n'a été capturée.",
-        "segregation": "Le créateur, le vérificateur, l'approbateur et l'applicateur doivent être quatre utilisateurs différents. Un autre utilisateur autorisé doit effectuer l'étape suivante."
+        "empty": "Aucune modification de configuration n'a été capturée."
       }
     }
   }

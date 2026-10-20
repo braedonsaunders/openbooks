@@ -30,7 +30,12 @@ async function setup(): Promise<Harness> {
   return h;
 }
 
-async function purchaseCommitment(h: Harness, projectId: string, date: string, amount: string): Promise<void> {
+async function purchaseCommitment(
+  h: Harness,
+  projectId: string,
+  date: string,
+  amount: string,
+): Promise<void> {
   const documentId = randomUUID();
   await db.execute(sql`
     insert into documents
@@ -41,13 +46,13 @@ async function purchaseCommitment(h: Harness, projectId: string, date: string, a
     insert into document_lines (org_id,document_id,line_number,item_id,project_id,quantity,unit_price,amount)
     values (${h.org.orgId},${documentId},1,${h.org.items.service},${projectId},1,${amount},${amount})`);
   const release = await submitAndReleaseIfUngated("purchase_order",documentId,h.actorId);
-  assert.equal(release.autoApproved,true);
-  assert.equal(release.gated,false);
-  assert.equal(release.flowError,null);
-  assert.equal(release.approvalRequired,false);
+  assert.equal(release.autoApproved, true);
+  assert.equal(release.gated, false);
+  assert.equal(release.flowError, null);
+  assert.equal(release.gated, false);
   const stored = (await db.execute<{ status:string }>(sql`select status from documents
     where org_id=${h.org.orgId} and id=${documentId}`)).rows;
-  assert.equal(stored.length,1);
+  assert.equal(stored.length, 1);
   assert.equal(stored[0]!.status,"approved","commitments enter the measure only after native release");
 }
 
@@ -57,34 +62,52 @@ function projectSnapshot(preview: IncentivePreview): ProjectMarginSnapshot {
   return preview.measured as ProjectMarginSnapshot;
 }
 
-async function seedMargin(h: Harness, asOf = "2026-07-20", terms:Partial<CreateBenefitProgramQuery> = {}) {
-    const component = await seedComponent(h.org.orgId, { kind: "earning", code: "MARGIN" });
-    const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Project Manager" });
-    const projectId = await seedProject(h.org.orgId, "Margin source project");
-    await db.execute(sql`update projects set starts_on='2026-01-01',manager_id=${worker.workerPartyId},
+async function seedMargin(
+  h: Harness,
+  asOf = "2026-07-20",
+  terms:Partial<CreateBenefitProgramQuery> = {},
+) {
+  const component = await seedComponent(h.org.orgId, { kind: "earning", code: "MARGIN" });
+  const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Project Manager" });
+  const projectId = await seedProject(h.org.orgId, "Margin source project");
+  await db.execute(sql`update projects set starts_on='2026-01-01',manager_id=${worker.workerPartyId},
       subsidiary_id=${h.org.subsidiaryId} where org_id=${h.org.orgId} and id=${projectId}`);
-    const program = await seedPayrollBenefitProgram({ orgId:h.org.orgId,actorId:h.actorId,
-      subsidiaryId:h.org.subsidiaryId,componentId:component,currency:"USD" }, {
-      code:"PROJECT_MARGIN",name:"Project margin",family:"incentive",approvalMode:"none",
-      metric:"project_margin",metricScope:"company",valuation:"percent",allocation:"responsibility",
-      percentRate:"5",lossPercentRate:"10",frequency:"monthly",periodBasis:"calendar",
-      includeOpenCommitments:true,sourceAccountIds:[h.org.accounts.revenue,h.org.accounts.cogs],...terms,
-    }, { activate:false });
-    await addProgramMembership({ orgId:h.org.orgId,actorId:h.actorId,programId:program.id,
+  const program = await seedPayrollBenefitProgram(
+    { orgId:h.org.orgId,actorId:h.actorId,
+      subsidiaryId:h.org.subsidiaryId,componentId:component,currency:"USD" },
+    {
+      code: "PROJECT_MARGIN",
+      name: "Project margin",
+      family: "incentive",
+      metric: "project_margin",
+      metricScope: "company",
+      valuation: "percent",
+      allocation: "responsibility",
+      percentRate: "5",
+      lossPercentRate: "10",
+      frequency: "monthly",
+      periodBasis: "calendar",
+      includeOpenCommitments: true,
+      sourceAccountIds:[h.org.accounts.revenue,h.org.accounts.cogs],
+      ...terms,
+    },
+    { activate: false },
+  );
+  await addProgramMembership({ orgId:h.org.orgId,actorId:h.actorId,programId:program.id,
       employmentId:worker.employmentId,effectiveFrom:"2026-01-01" });
-    // Native activation freezes the source policy before previewing.
-    const { activateBenefitProgram } = await import("./programs.ts");
-    await activateBenefitProgram({ orgId:h.org.orgId,actorId:h.actorId,programId:program.id });
-    const posting = (date: string, account: string, amount: string, balancing: string) =>
+  // Native activation freezes the source policy before previewing.
+  const { activateBenefitProgram } = await import("./programs.ts");
+  await activateBenefitProgram({ orgId:h.org.orgId,actorId:h.actorId,programId:program.id });
+  const posting = (date: string, account: string, amount: string, balancing: string) =>
       seedBenefitIncentivePosting(h, [
         { account,amount,project:projectId },{ account:h.org.accounts.bank,amount:balancing },
       ], { date,currency:"USD" });
-    await posting("2026-07-10",h.org.accounts.revenue,"-10000","10000");
-    await posting("2026-07-10",h.org.accounts.cogs,"2000","-2000");
-    await purchaseCommitment(h,projectId,"2026-07-12","1000");
-    const query = { orgId:h.org.orgId,actorId:h.actorId,programId:program.id,
+  await posting("2026-07-10",h.org.accounts.revenue,"-10000","10000");
+  await posting("2026-07-10",h.org.accounts.cogs,"2000","-2000");
+  await purchaseCommitment(h,projectId,"2026-07-12","1000");
+  const query = { orgId:h.org.orgId,actorId:h.actorId,programId:program.id,
       periodFrom:"2026-07-01",periodTo:"2026-07-31",asOf };
-    return { query, posting, program, projectId, worker };
+  return { query, posting, program, projectId, worker };
 }
 
 test("project-margin preview retains its cutoff when later revenue, costs and commitments arrive", { skip: !DB }, () =>
@@ -173,7 +196,6 @@ for (const legacy of [false, true]) {
       assert.deepEqual(await readHistory(),before,"changed facts cannot rewrite retained awards");
     }));
 }
-
 
 test("global-project margin excludes another legal entity's cost, commitments and later revenue", { skip: !DB }, () =>
   withHarness(setup, async h => {

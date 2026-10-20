@@ -56,8 +56,6 @@ type Initial = {
     billingsUsePreTaxSubtotal: boolean
     customerCreditsReduceBillings: boolean
   }
-  requireVendorBillApproval: boolean
-  requireStockCountReview: boolean
   controlAccounts: Partial<Record<ControlAccountRole, string>>
   /** Journal/deposit lines on a receivable or payable account with no
    *  customer or vendor: post with a warning, or refuse at posting. */
@@ -113,7 +111,6 @@ export function SettingsForm({
   cashSalesEnabled = false,
   customers = [],
   paymentTerms = [],
-  vendorBillFlowConfigured,
 }: {
   initial: Initial
   accounts: AccountOption[]
@@ -145,7 +142,6 @@ export function SettingsForm({
   /** Whether an enabled vendor-bill approval flow exists. The loader always
    *  resolves this; when false the Approvals card warns that bills release
    *  with no approver (or that submits will be refused once required). */
-  vendorBillFlowConfigured: boolean
 }) {
   const t = useTranslations('admin.settings')
   const tCommon = useTranslations('common')
@@ -198,7 +194,9 @@ export function SettingsForm({
 
   /** A save refusal that names one control-account role is restated with the
    *  field's own label and its accepted types in the operator's language. */
-  const controlAccountRefusal = (data: Record<string, unknown>): string | null => {
+  const controlAccountRefusal = (
+    data: Record<string, unknown>,
+  ): string | null => {
     const role = data.role
     if (data.code !== 'control-account-invalid' || typeof role !== 'string') return null
     if (!controlAccountRoles.some((known) => known === role)) return null
@@ -206,7 +204,7 @@ export function SettingsForm({
     if (data.reason === 'type') {
       const allowed = Array.isArray(data.allowedTypes)
         ? data.allowedTypes.filter((type): type is string => typeof type === 'string')
-        : controlAccountPolicy[role as ControlAccountRole] ?? []
+        : (controlAccountPolicy[role as ControlAccountRole] ?? [])
       const actual = typeof data.accountType === 'string'
         ? tAccounts(`types.${accountTypeMessageKey(data.accountType)}`)
         : ''
@@ -286,8 +284,8 @@ export function SettingsForm({
       if (data.code === 'invalid-tax-id' && typeof data.scheme === 'string') setInvalidTaxId(data.scheme)
       toast.error(
         controlAccountRefusal(data)
-          ?? legalIdentityRefusal(data)
-          ?? await readApiErrorMessage(res, tCommon('feedback.saveFailed')),
+          ?? legalIdentityRefusal(data) ??
+          (await readApiErrorMessage(res, tCommon('feedback.saveFailed'))),
       )
       return
     }
@@ -322,7 +320,9 @@ export function SettingsForm({
         ) : null}
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="name" help={t('organization.displayNameHint')}>{t('organization.displayName')}</FieldLabel>
+            <FieldLabel htmlFor="name" help={t('organization.displayNameHint')}>
+              {t('organization.displayName')}
+            </FieldLabel>
             <Input
               id="name"
               value={form.name}
@@ -339,7 +339,9 @@ export function SettingsForm({
             ) : null}
           </div>
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="legalName" help={t('organization.legalNameHint')}>{t('organization.legalName')}</FieldLabel>
+            <FieldLabel htmlFor="legalName" help={t('organization.legalNameHint')}>
+              {t('organization.legalName')}
+            </FieldLabel>
             <Input
               id="legalName"
               value={form.legalName}
@@ -348,7 +350,9 @@ export function SettingsForm({
             />
           </div>
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="country" help={t('organization.countryHint')}>{t('organization.country')}</FieldLabel>
+            <FieldLabel htmlFor="country" help={t('organization.countryHint')}>
+              {t('organization.country')}
+            </FieldLabel>
             <SearchSelect
               ariaLabel={t('organization.country')}
               value={form.country}
@@ -358,7 +362,9 @@ export function SettingsForm({
             />
           </div>
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="defaultLocale" help={t('organization.defaultLanguageHint')}>{t('organization.defaultLanguage')}</FieldLabel>
+            <FieldLabel htmlFor="defaultLocale" help={t('organization.defaultLanguageHint')}>
+              {t('organization.defaultLanguage')}
+            </FieldLabel>
             <Select
               id="defaultLocale"
               value={form.defaultLocale}
@@ -376,7 +382,9 @@ export function SettingsForm({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="reportPdfStyle" help={t('organization.reportPdfStyleHint')}>{t('organization.reportPdfStyle')}</FieldLabel>
+            <FieldLabel htmlFor="reportPdfStyle" help={t('organization.reportPdfStyleHint')}>
+              {t('organization.reportPdfStyle')}
+            </FieldLabel>
             <Select
               id="reportPdfStyle"
               value={form.reportPdfStyle}
@@ -384,12 +392,18 @@ export function SettingsForm({
                 setForm((f) => ({ ...f, reportPdfStyle: e.target.value === 'formal' ? 'formal' : 'modern' }))
               }
             >
-              <option value="modern">{t('organization.reportPdfStyleModern')}</option>
-              <option value="formal">{t('organization.reportPdfStyleFormal')}</option>
+              <option value="modern">
+                {t('organization.reportPdfStyleModern')}
+              </option>
+              <option value="formal">
+                {t('organization.reportPdfStyleFormal')}
+              </option>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="baseCurrency" help={t('organization.baseCurrencyHint')}>{t('organization.baseCurrency')}</FieldLabel>
+            <FieldLabel htmlFor="baseCurrency" help={t('organization.baseCurrencyHint')}>
+              {t('organization.baseCurrency')}
+            </FieldLabel>
             <Select
               id="baseCurrency"
               value={form.baseCurrency}
@@ -403,7 +417,9 @@ export function SettingsForm({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="timeZone" help={t('organization.timeZoneHint')}>{t('organization.timeZone')}</FieldLabel>
+            <FieldLabel htmlFor="timeZone" help={t('organization.timeZoneHint')}>
+              {t('organization.timeZone')}
+            </FieldLabel>
             <SearchSelect
               id="timeZone"
               value={form.timeZone}
@@ -440,7 +456,9 @@ export function SettingsForm({
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <FieldLabel htmlFor="fiscalStart" help={t('fiscal.description')}>{t('fiscal.startsIn')}</FieldLabel>
+              <FieldLabel htmlFor="fiscalStart" help={t('fiscal.description')}>
+                {t('fiscal.startsIn')}
+              </FieldLabel>
               <Select
                 id="fiscalStart"
                 value={String(form.fiscalYearStartMonth)}
@@ -456,13 +474,17 @@ export function SettingsForm({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <FieldLabel help={t('fiscal.description')}>{t('fiscal.runs')}</FieldLabel>
+              <FieldLabel help={t('fiscal.description')}>
+                {t('fiscal.runs')}
+              </FieldLabel>
               <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
                 {fiscalRangeLabel(form.fiscalYearStartMonth)}
               </div>
             </div>
             <div className="space-y-1.5">
-              <FieldLabel htmlFor="taxFramework" help={t('fiscal.taxFrameworkHint')}>{t('fiscal.taxFramework')}</FieldLabel>
+              <FieldLabel htmlFor="taxFramework" help={t('fiscal.taxFrameworkHint')}>
+                {t('fiscal.taxFramework')}
+              </FieldLabel>
               <Select
                 id="taxFramework"
                 value={form.taxFramework ?? 'asc740'}
@@ -473,14 +495,20 @@ export function SettingsForm({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <FieldLabel htmlFor="reportingFramework" help={t('fiscal.reportingFrameworkHint')}>{t('fiscal.reportingFramework')}</FieldLabel>
+              <FieldLabel htmlFor="reportingFramework" help={t('fiscal.reportingFrameworkHint')}>
+                {t('fiscal.reportingFramework')}
+              </FieldLabel>
               <Select
                 id="reportingFramework"
                 value={form.reportingFramework}
                 onChange={(e) => setForm((f) => ({ ...f, reportingFramework: e.target.value as 'us_gaap' | 'ifrs' }))}
               >
-                <option value="us_gaap">{t('fiscal.reportingFrameworkUsGaap')}</option>
-                <option value="ifrs">{t('fiscal.reportingFrameworkIfrs')}</option>
+                <option value="us_gaap">
+                  {t('fiscal.reportingFrameworkUsGaap')}
+                </option>
+                <option value="ifrs">
+                  {t('fiscal.reportingFrameworkIfrs')}
+                </option>
               </Select>
             </div>
           </div>
@@ -496,59 +524,74 @@ export function SettingsForm({
         </CardContent>
       </Card>
 
-      {revenueRecognition ? <Card>
-        <CardHeader>
-          <CardTitle>{t('revenue.title')}</CardTitle>
-          <CardDescription>
-            {t('revenue.description')}{' '}
-            <Link href="/docs/revenue-recognition" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
-              {t('revenue.learnMore')}
-            </Link>
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <FieldLabel htmlFor="fairValueRangePolicy" help={t('revenue.fairValueRangePolicy.hint')}>{t('revenue.fairValueRangePolicy.label')}</FieldLabel>
-            <Select
+      {revenueRecognition ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('revenue.title')}</CardTitle>
+            <CardDescription>
+              {t('revenue.description')}{' '}
+              <Link href="/docs/revenue-recognition" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                {t('revenue.learnMore')}
+              </Link>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <FieldLabel htmlFor="fairValueRangePolicy" help={t('revenue.fairValueRangePolicy.hint')}>
+                {t('revenue.fairValueRangePolicy.label')}
+              </FieldLabel>
+              <Select
               id="fairValueRangePolicy"
               value={form.fairValueRangePolicy}
               onChange={(e) =>
                 setForm((f) => ({ ...f, fairValueRangePolicy: e.target.value === 'off' ? 'off' : 'warn' }))
               }
             >
-              <option value="warn">{t('revenue.fairValueRangePolicy.warn')}</option>
-              <option value="off">{t('revenue.fairValueRangePolicy.off')}</option>
-            </Select>
-          </div>
-          {revenueContracts ? (
-            <div className="space-y-1.5">
-              <FieldLabel htmlFor="contractCreation" help={t('revenue.contractCreation.hint')}>{t('revenue.contractCreation.label')}</FieldLabel>
-              <Select
+                <option value="warn">
+                  {t('revenue.fairValueRangePolicy.warn')}
+                </option>
+                <option value="off">
+                  {t('revenue.fairValueRangePolicy.off')}
+                </option>
+              </Select>
+            </div>
+            {revenueContracts ? (
+              <div className="space-y-1.5">
+                <FieldLabel htmlFor="contractCreation" help={t('revenue.contractCreation.hint')}>
+                  {t('revenue.contractCreation.label')}
+                </FieldLabel>
+                <Select
                 id="contractCreation"
                 value={form.contractCreation}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, contractCreation: e.target.value === 'booking' ? 'booking' : 'first_billing' }))
                 }
               >
-                <option value="first_billing">{t('revenue.contractCreation.firstBilling')}</option>
-                <option value="booking">{t('revenue.contractCreation.booking')}</option>
-              </Select>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card> : null}
+                  <option value="first_billing">
+                    {t('revenue.contractCreation.firstBilling')}
+                  </option>
+                  <option value="booking">
+                    {t('revenue.contractCreation.booking')}
+                  </option>
+                </Select>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
-      {saasMetricsEnabled ? <Card>
-        <CardHeader>
-          <CardTitle>{t('saasMetrics.title')}</CardTitle>
-          <CardDescription>{t('saasMetrics.description')}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <FieldLabel htmlFor="evergreenBookingMonths" help={t('saasMetrics.evergreenBookingMonths.hint')}>
-              {t('saasMetrics.evergreenBookingMonths.label')}
-            </FieldLabel>
-            <Input
+      {saasMetricsEnabled ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('saasMetrics.title')}</CardTitle>
+            <CardDescription>{t('saasMetrics.description')}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <FieldLabel htmlFor="evergreenBookingMonths" help={t('saasMetrics.evergreenBookingMonths.hint')}>
+                {t('saasMetrics.evergreenBookingMonths.label')}
+              </FieldLabel>
+              <Input
               id="evergreenBookingMonths"
               type="number"
               min={1}
@@ -559,9 +602,9 @@ export function SettingsForm({
                 saasMetrics: { ...f.saasMetrics, evergreenBookingMonths: e.target.value },
               }))}
             />
-          </div>
-          <label className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
-            <input
+            </div>
+            <label className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
+              <input
               type="checkbox"
               checked={form.saasMetrics.billingsUsePreTaxSubtotal}
               onChange={(e) => setForm((f) => ({
@@ -570,10 +613,10 @@ export function SettingsForm({
               }))}
               className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
-            <span>{t('saasMetrics.billingsUsePreTaxSubtotal.label')}</span>
-          </label>
-          <label className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
-            <input
+              <span>{t('saasMetrics.billingsUsePreTaxSubtotal.label')}</span>
+            </label>
+            <label className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
+              <input
               type="checkbox"
               checked={form.saasMetrics.customerCreditsReduceBillings}
               onChange={(e) => setForm((f) => ({
@@ -582,65 +625,33 @@ export function SettingsForm({
               }))}
               className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
-            <span>{t('saasMetrics.customerCreditsReduceBillings.label')}</span>
-          </label>
-        </CardContent>
-        <CardContent className="pt-0">
-          <SaasMetricsNormalization />
-        </CardContent>
-      </Card> : null}
+              <span>
+                {t('saasMetrics.customerCreditsReduceBillings.label')}
+              </span>
+            </label>
+          </CardContent>
+          <CardContent className="pt-0">
+            <SaasMetricsNormalization />
+          </CardContent>
+        </Card>
+      ) : null}
 
-      {/* Approvals — vendor-bill release policy */}
       <Card>
         <CardHeader>
           <CardTitle>{t('approvals.title')}</CardTitle>
           <CardDescription>{t('approvals.description')}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start gap-3">
-            <input
-              id="requireVendorBillApproval"
-              type="checkbox"
-              checked={form.requireVendorBillApproval}
-              onChange={(e) => setForm((f) => ({ ...f, requireVendorBillApproval: e.target.checked }))}
-              className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-            />
-            <div className="space-y-1">
-              <FieldLabel htmlFor="requireVendorBillApproval">{t('approvals.requireVendorBillApproval')}</FieldLabel>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{t('approvals.requireVendorBillApprovalHint')}</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <input
-              id="requireStockCountReview"
-              type="checkbox"
-              checked={form.requireStockCountReview}
-              onChange={(e) => setForm((f) => ({ ...f, requireStockCountReview: e.target.checked }))}
-              className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-            />
-            <div className="space-y-1">
-              <FieldLabel htmlFor="requireStockCountReview">{t('approvals.requireStockCountReview')}</FieldLabel>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{t('approvals.requireStockCountReviewHint')}</p>
-            </div>
-          </div>
-          {!vendorBillFlowConfigured ? (
-            <Alert variant="warning">
-              <AlertTitle>{t('approvals.noFlowTitle')}</AlertTitle>
-              <AlertDescription>
-                {t.rich(form.requireVendorBillApproval ? 'approvals.noFlowWarningRequired' : 'approvals.noFlowWarningAuto', {
-                  flows: (chunks) => (
-                    <Link href="/admin/flows?quickApproval=vendor_bill" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
-                      {chunks}
-                    </Link>
-                  ),
-                })}
-              </AlertDescription>
-            </Alert>
-          ) : null}
+        <CardContent>
+          <Link
+            href="/admin/flows"
+            className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            {t('approvals.manageFlows')}
+          </Link>
         </CardContent>
       </Card>
 
-      {/* Billing defaults: core configuration, always visible. */}
+      {/* Fiscal year — the headline setting */}
       <Card>
         <CardHeader>
           <CardTitle>{t('billing.title')}</CardTitle>
@@ -648,7 +659,9 @@ export function SettingsForm({
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="billing-default-terms" help={t('billing.fields.defaultPaymentTerms.hint')}>{t('billing.fields.defaultPaymentTerms.label')}</FieldLabel>
+            <FieldLabel htmlFor="billing-default-terms" help={t('billing.fields.defaultPaymentTerms.hint')}>
+              {t('billing.fields.defaultPaymentTerms.label')}
+            </FieldLabel>
             <SearchSelect
               id="billing-default-terms"
               value={form.billing.defaultPaymentTermsId}
@@ -665,15 +678,18 @@ export function SettingsForm({
         </CardContent>
       </Card>
 
-      {cashSalesEnabled ? <Card>
-        <CardHeader>
-          <CardTitle>{t('cashSales.title')}</CardTitle>
-          <CardDescription>{t('cashSales.description')}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <FieldLabel htmlFor="cash-walk-in" help={t('cashSales.fields.walkInCustomer.hint')}>{t('cashSales.fields.walkInCustomer.label')}</FieldLabel>
-            <SearchSelect
+      {cashSalesEnabled ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('cashSales.title')}</CardTitle>
+            <CardDescription>{t('cashSales.description')}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <FieldLabel htmlFor="cash-walk-in" help={t('cashSales.fields.walkInCustomer.hint')}>
+                {t('cashSales.fields.walkInCustomer.label')}
+              </FieldLabel>
+              <SearchSelect
               id="cash-walk-in"
               value={form.cashSales.walkInCustomerId}
               onChange={(v) => setForm((f) => ({ ...f, cashSales: { ...EMPTY_CASH_SALES, ...f.cashSales, walkInCustomerId: v ?? '' } }))}
@@ -685,13 +701,15 @@ export function SettingsForm({
               emptyLabel={tCommon('labels.notSet')}
               ariaLabel={t('cashSales.fields.walkInCustomer.label')}
             />
-          </div>
-          {(['defaultCashAccountId', 'defaultCardAccountId', 'defaultBankAccountId'] as const).map((key) => {
-            const label = t(`cashSales.fields.${key}.label`)
-            return (
-              <div key={key} className="space-y-1.5">
-                <FieldLabel htmlFor={`cash-${key}`} help={t(`cashSales.fields.${key}.hint`)}>{label}</FieldLabel>
-                <SearchSelect
+            </div>
+            {(['defaultCashAccountId', 'defaultCardAccountId', 'defaultBankAccountId'] as const).map((key) => {
+              const label = t(`cashSales.fields.${key}.label`)
+              return (
+                <div key={key} className="space-y-1.5">
+                  <FieldLabel htmlFor={`cash-${key}`} help={t(`cashSales.fields.${key}.hint`)}>
+                    {label}
+                  </FieldLabel>
+                  <SearchSelect
                   id={`cash-${key}`}
                   value={form.cashSales[key]}
                   onChange={(v) => setForm((f) => ({ ...f, cashSales: { ...EMPTY_CASH_SALES, ...f.cashSales, [key]: v ?? '' } }))}
@@ -703,20 +721,21 @@ export function SettingsForm({
                   emptyLabel={tCommon('labels.notSet')}
                   ariaLabel={label}
                 />
-              </div>
-            )
-          })}
-          {/* Till-drop destinations: the bank accounts a cashier's "Deposit
-              cash to bank" may move till cash into. None checked disables
-              drops — the drawer then names this screen as the remedy. */}
-          <div className="space-y-1.5 sm:col-span-2">
-            <FieldLabel help={t('cashSales.fields.depositAccountIds.hint')}>{t('cashSales.fields.depositAccountIds.label')}</FieldLabel>
-            <div className="grid gap-1.5 sm:grid-cols-2">
-              {/* Same fence as the till settlement pickers above and the
-                  deposit endpoint: bank and asset-clearing only. */}
-              {accounts.filter((a) => a.type === 'asset_bank' || a.type === 'asset_current_other').map((account) => (
-                <label key={account.id} className="flex items-center gap-2.5 text-sm text-slate-700 dark:text-slate-300">
-                  <input
+                </div>
+              )
+            })}
+            {/* Fiscal year — the headline setting */}
+            <div className="space-y-1.5 sm:col-span-2">
+              <FieldLabel help={t('cashSales.fields.depositAccountIds.hint')}>
+                {t('cashSales.fields.depositAccountIds.label')}
+              </FieldLabel>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {/* Fiscal year — the headline setting */}
+                {accounts
+      .filter((a) => a.type === 'asset_bank' || a.type === 'asset_current_other')
+      .map((account) => (
+                    <label key={account.id} className="flex items-center gap-2.5 text-sm text-slate-700 dark:text-slate-300">
+                      <input
                     type="checkbox"
                     checked={(form.cashSales.depositAccountIds ?? []).includes(account.id)}
                     onChange={(e) => setForm((f) => {
@@ -728,13 +747,14 @@ export function SettingsForm({
                     })}
                     className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                   />
-                  <span>{account.label}</span>
-                </label>
-              ))}
+                      <span>{account.label}</span>
+                    </label>
+                  ))}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card> : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Control accounts */}
       <Card id="control-accounts">
@@ -745,7 +765,9 @@ export function SettingsForm({
         {multiSubsidiary ? (
           <CardContent className="pt-0">
             <Alert>
-              <AlertDescription>{t('controlAccounts.defaultsNote')}</AlertDescription>
+              <AlertDescription>
+                {t('controlAccounts.defaultsNote')}
+              </AlertDescription>
             </Alert>
           </CardContent>
         ) : null}
@@ -762,7 +784,9 @@ export function SettingsForm({
             })
             return (
               <div key={role} className="space-y-1.5">
-                <FieldLabel htmlFor={`ctrl-${role}`} help={t(`controlAccounts.fields.${role}.hint`)}>{label}</FieldLabel>
+                <FieldLabel htmlFor={`ctrl-${role}`} help={t(`controlAccounts.fields.${role}.hint`)}>
+                  {label}
+                </FieldLabel>
                 <SearchSelect
                   id={`ctrl-${role}`}
                   value={form.controlAccounts[role] ?? ''}
@@ -799,8 +823,12 @@ export function SettingsForm({
                 setForm((f) => ({ ...f, partylessControlPolicy: e.target.value === 'refuse' ? 'refuse' : 'warn' }))
               }
             >
-              <option value="warn">{t('controlAccounts.partylessPolicy.warn')}</option>
-              <option value="refuse">{t('controlAccounts.partylessPolicy.refuse')}</option>
+              <option value="warn">
+                {t('controlAccounts.partylessPolicy.warn')}
+              </option>
+              <option value="refuse">
+                {t('controlAccounts.partylessPolicy.refuse')}
+              </option>
             </Select>
           </div>
         </CardContent>

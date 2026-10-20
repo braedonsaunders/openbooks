@@ -1,3 +1,4 @@
+import { configureTimesheetReviewFixture,decideTimesheetFixture } from '../../../../testing/timesheet-flows'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
@@ -11,7 +12,7 @@ import { createFieldTicket, loadFieldTicket, saveCrewGrid, submitFieldTicket } f
 import { loadWeek, loadPickers } from '../_lib'
 import { POST } from './route'
 import { POST as submit } from '../submit/route'
-import { POST as approve } from '../approve/route'
+
 import { PUT as save } from '../route'
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -24,7 +25,7 @@ async function fixture() {
     await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve","projects.read","gl.post"]'::jsonb
       where org_id=${org.orgId} and key='time-classifier'`)
     await db.execute(sql`update orgs set settings=settings || ${JSON.stringify({
-      features:{ projects:true,fieldTickets:true,timeTracking:true }, timesheets:{requireApproval:true},
+      features:{ projects:true,fieldTickets:true,timeTracking:true },
       laborCosting:{mode:'post',hoursPerDay:'8',annualHours:'2080',components:[]},
       controlAccounts:{ar:org.accounts.ar,ap:org.accounts.ap,bank:org.accounts.bank,laborWip:org.accounts.cogs,laborClearing:org.accounts.clearing},
     })}::jsonb where id=${org.orgId}`)
@@ -58,6 +59,7 @@ async function fixture() {
       is_billable,costing_basis,custom,created_by,updated_by,approved_by,approved_at)
       values(${prior},${org.orgId},${employee},'2026-07-13','8',${regular},${project},'approved',false,'actual','{}'::jsonb,${actor},${actor},${actor},now())`)
   })
+  await configureTimesheetReviewFixture(org.orgId,actor,false)
   const authority = () => inOrg(async () => {
     const result = await resolveAuthzByUserId(org.orgId,actor); assert.ok(result); return result
   })
@@ -111,9 +113,7 @@ test('native classification retains ticket evidence and stable time identity; se
       method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({employee:f.employee,week:WEEK,selections:selected,reason:'Approve the independently reviewed time classification'}),
     }))))
     assert.equal(submitted.status,200,await submitted.clone().text())
-    const approved=await f.inOrg(async()=>withAuthzContext(await f.authority(),()=>approve(new Request('http://time.local/api/timesheets/approve',{
-      method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({employee:f.employee,week:WEEK}),
-    }))))
+    const approved=await f.inOrg(async()=>withAuthzContext(await f.authority(),()=>decideTimesheetFixture({orgId:f.org.orgId,...{employee:f.employee,week:WEEK},decision:'approved'})))
     assert.equal(approved.status,200,await approved.clone().text())
     const approvedRow=JSON.parse((await f.snapshots()).time.find(row=>row.id===f.entry)!.raw)
     assert.equal(approvedRow.cost_rate,45)

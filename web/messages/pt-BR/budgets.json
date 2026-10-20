@@ -21,7 +21,10 @@
     "total": "Total do orçamento",
     "updated": "Atualizado"
   },
-  "kind": { "budget": "Orçamento", "forecast": "Previsão" },
+  "kind": {
+    "budget": "Orçamento",
+    "forecast": "Previsão"
+  },
   "status": {
     "draft": "Rascunho",
     "pending_approval": "Aprovação pendente",
@@ -97,7 +100,8 @@
     "reject": "Rejeitar",
     "openReport": "Orçado x Realizado",
     "exportCsv": "Exportar CSV",
-    "exportXlsx": "Exportar Excel"
+    "exportXlsx": "Exportar Excel",
+    "withdraw": "Retirar envio"
   },
   "confirm": {
     "archive": "Arquivar este orçamento?",
@@ -137,7 +141,8 @@
     "revisionConflict": "Este orçamento foi alterado em outro lugar. Recarregue para continuar.",
     "selfApprovalForbidden": "Você não pode aprovar um orçamento que você enviou. Peça a outro aprovador que decida.",
     "created": "Rascunho de orçamento criado.",
-    "savedWithLineFailure": "O rascunho do orçamento foi criado, mas não foi possível salvar as linhas ({reason}). Ele está aberto; revise as linhas antes de tentar novamente."
+    "savedWithLineFailure": "O rascunho do orçamento foi criado, mas não foi possível salvar as linhas ({reason}). Ele está aberto; revise as linhas antes de tentar novamente.",
+    "withdrawn": "Envio retirado"
   },
   "import": {
     "button": "Importar",

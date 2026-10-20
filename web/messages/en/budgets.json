@@ -21,7 +21,10 @@
     "total": "Budget total",
     "updated": "Updated"
   },
-  "kind": { "budget": "Budget", "forecast": "Forecast" },
+  "kind": {
+    "budget": "Budget",
+    "forecast": "Forecast"
+  },
   "status": {
     "draft": "Draft",
     "pending_approval": "Pending approval",
@@ -97,7 +100,8 @@
     "reject": "Reject",
     "openReport": "Budget vs Actual",
     "exportCsv": "Export CSV",
-    "exportXlsx": "Export Excel"
+    "exportXlsx": "Export Excel",
+    "withdraw": "Withdraw submission"
   },
   "confirm": {
     "archive": "Archive this budget?",
@@ -137,7 +141,8 @@
     "revisionConflict": "This budget changed elsewhere. Reload to continue.",
     "selfApprovalForbidden": "You cannot approve a budget you submitted. Ask another approver to decide.",
     "created": "Budget draft created.",
-    "savedWithLineFailure": "The budget draft was created, but saving its lines failed ({reason}). It is open now; review its lines before retrying."
+    "savedWithLineFailure": "The budget draft was created, but saving its lines failed ({reason}). It is open now; review its lines before retrying.",
+    "withdrawn": "Submission withdrawn"
   },
   "import": {
     "button": "Import",

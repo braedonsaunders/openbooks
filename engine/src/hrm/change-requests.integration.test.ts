@@ -548,7 +548,8 @@ test("identity separation: the submitter cannot decide their own submission", { 
     });
     await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: "hire" });
     const gate = await gateOf(draft.id);
-    // Assignment changes cannot let a maker approve their own record.
+    await grantPermissions(h.org.orgId,h.submitterId,["hrm.employment.approve"]);
+    // Assignment changes cannot let an otherwise authorized maker evade the tenant policy.
     assert.equal((await db.execute(sql`update flow_gates set assignee_user_id=${h.submitterId}
       where org_id=${h.org.orgId} and id=${gate.id} returning id`)).rows.length, 1);
     await assert.rejects(
@@ -576,7 +577,7 @@ test("identity separation: an approver with no linked person is refused with the
       decideGate({ gateId: gate.id, decision: "approved", userId: unlinkedId }),
       (e: unknown) => {
         assert.ok(e instanceof ReleaseError, `expected ReleaseError, got ${String(e)}`);
-        assert.match(e.message, /no linked person/);
+        assert.match(e.message, /no resolved person identity/);
         assert.match(e.message, /Admin → Users → Link person/);
         return true;
       },
@@ -624,10 +625,10 @@ test("submit without a configured flow applies directly with automatic evidence"
     assert.equal(await requestStatus(draft.id), "applied");
     assert.equal(applied.appliedEmploymentRevision, 2);
     assert.ok(applied.appliedEmploymentChangeId);
-    const snapshot = applied.decisionSnapshot as { mode: string; gates: unknown[]; policy: { flowConfigured: boolean } };
+    const snapshot = applied.decisionSnapshot as { mode: string; gates: unknown[]; policy: { kind: string } };
     assert.equal(snapshot.mode, "automatic");
     assert.deepEqual(snapshot.gates, []);
-    assert.equal(snapshot.policy.flowConfigured, false);
+    assert.equal(snapshot.policy.kind, "ungated");
     const runs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from flow_runs
        where subject_id = ${draft.id} and status <> 'cancelled'
@@ -965,7 +966,7 @@ test("concurrent two-session apply: exactly one wins", { skip: !DB }, async () =
 
 async function seedDirectEmploymentPolicy(orgId: string): Promise<string> {
   const id = randomUUID();
-  const graph = { schemaVersion: 1, ungatedOutcome: 'apply', nodes: [{ id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } }], edges: [] };
+  const graph = { schemaVersion: 1, nodes: [{ id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } }], edges: [] };
   await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph) values (${id}, ${orgId}, 'Save employee edits', 'hrm_employment_change_request', true, ${JSON.stringify(graph)}::jsonb)`);
   return id;
 }
@@ -979,7 +980,7 @@ test('explicit direct policy applies through the canonical writer with pinned ex
     const result = await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Start employment' });
     assert.equal(result.status, 'applied');
     assert.equal(await requestStatus(draft.id), 'applied');
-    const stored = (await db.execute<{ snapshot: { mode: string; gates: unknown[]; policy: { flowId: string; graph: { ungatedOutcome: string } } }; revision: number; status: string }>(sql`
+    const stored = (await db.execute<{ snapshot: { mode: string; gates: unknown[]; policy: { kind: string; flowIds: string[] } }; revision: number; status: string }>(sql`
       select r.decision_snapshot as snapshot, e.revision as revision, v.status
       from hrm_employment_change_requests r join worker_employments e on e.id = r.employment_id
       join worker_employment_versions v on v.employment_id = e.id and v.superseded_by is null
@@ -989,8 +990,8 @@ test('explicit direct policy applies through the canonical writer with pinned ex
     assert.equal(stored.revision, 2);
     assert.equal(stored.snapshot.mode, 'automatic');
     assert.deepEqual(stored.snapshot.gates, []);
-    assert.equal(stored.snapshot.policy.flowId, flowId);
-    assert.equal(stored.snapshot.policy.graph.ungatedOutcome, 'apply');
+    assert.equal(stored.snapshot.policy.kind, "ungated");
+    assert.deepEqual(stored.snapshot.policy.flowIds, [flowId]);
     assert.equal((await changeRows(employmentId)).length, 1);
     assert.equal((await db.execute(sql`select id from flow_gates where subject_id = ${draft.id}`)).rows.length, 0);
     await assert.rejects(submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Retry' }), /draft/);
@@ -1030,7 +1031,7 @@ test('four sequential approval layers keep the employee unchanged until the fina
     const nodes = [ { id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
       ...Array.from({ length: 4 }, (_, index) => ({ id: `approval-${index}`, position: { x: 220 * (index + 1), y: 0 }, data: { kind: 'gate', gate: { title: `Approval level ${index + 1}`, assignees: [{ type: 'user', userId: h.approver1Id }], mode: 'any' } } })) ];
     const edges = Array.from({ length: 4 }, (_, index) => ({ id: `edge-${index}`, source: index === 0 ? 'submit' : `approval-${index - 1}`, target: `approval-${index}`, sourceHandle: index === 0 ? 'next' : 'approve' }));
-    await db.execute(sql`insert into flows (org_id, name, subject_kind, enabled, graph) values (${h.org.orgId}, 'Four approval levels', 'hrm_employment_change_request', true, ${JSON.stringify({ schemaVersion: 1, ungatedOutcome: 'apply', nodes, edges })}::jsonb)`);
+    await db.execute(sql`insert into flows (org_id, name, subject_kind, enabled, graph) values (${h.org.orgId}, 'Four approval levels', 'hrm_employment_change_request', true, ${JSON.stringify({ schemaVersion: 1, nodes, edges })}::jsonb)`);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, employeeRole: true });
     const draft = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.submitterId, employmentId, payload: { kind: 'hire', status: 'active', effectiveFrom: '2026-09-01' } });
     await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Hire' });

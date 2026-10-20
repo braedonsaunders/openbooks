@@ -17,6 +17,7 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__timesheetSelfScope.user}' }
   return next(specifier, context)
 }})
+const { configureTimesheetReviewFixture } = await import('../../../testing/timesheet-flows')
 const { sql } = await import('drizzle-orm')
 const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
@@ -31,13 +32,16 @@ async function fixture() {
   const org = await createScratchOrg()
   const worker = await createScratchUser(org.orgId, 'Field technician', 'field_technician')
   const supervisor = await createScratchUser(org.orgId, 'Time supervisor', 'time_supervisor')
+  const reviewer = await createScratchUser(org.orgId, 'Time reviewer', 'time_reviewer')
   const clocker = await createScratchUser(org.orgId, 'Clock only', 'clock_only')
   await db.execute(sql`update app_roles set permissions='["time.clock"]'::jsonb where org_id=${org.orgId} and key='clock_only'`)
   await db.execute(sql`update app_roles set permissions='["time.self","time.clock"]'::jsonb where org_id=${org.orgId} and key='field_technician'`)
-  await db.execute(sql`update app_roles set permissions='["time.read","time.manage","projects.read"]'::jsonb where org_id=${org.orgId} and key='time_supervisor'`)
+  await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve","projects.read"]'::jsonb where org_id=${org.orgId} and key='time_supervisor'`)
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
-    features: { projects: true, timeTracking: true }, timesheets: { requireApproval: true },
+    features: { projects: true, timeTracking: true },
   })}::jsonb where id=${org.orgId}`)
+  await db.execute(sql`update app_roles set permissions='["time.read","time.approve"]'::jsonb where org_id=${org.orgId} and key='time_reviewer'`)
+  await configureTimesheetReviewFixture(org.orgId, reviewer)
   const own = randomUUID(), coworker = randomUUID(), project = randomUUID()
   for (const [id, name] of [[own, 'Own employee'], [coworker, 'Coworker']] as const) {
     await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)

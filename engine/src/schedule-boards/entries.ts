@@ -9,11 +9,9 @@ import {scheduleBoardLifecycle} from './distribution-hooks.ts';
  * is never rewritten — changing it cancels it and records a successor that
  * names it, so the history of who was sent where is preserved.
  *
- * Governed bookings (a governed board's bookings from its governed-from
- * date) publish only through an approver independent of the people who
- * prepared the change and of the people it schedules. Once published they
- * change only through a draft revision — a replacement or a removal — that
- * an independent approver publishes, or through an approved shift request.
+ * Every manual publication retains its submitted revisions and tenant Flow
+ * policy. Published facts change through a replacement or removal revision;
+ * configured native shift requests retain their own Flow decisions.
  *
  * Pattern-generated bookings keep their assignment, date and slot. Editing
  * one marks it as a manual override that regeneration keeps; removing a
@@ -277,23 +275,17 @@ export async function cancelPendingRevisions(actor: ScheduleActor, rowId: string
 }
 
 /**
- * Remove a published booking. A governed booking records a removal revision
- * for an independent approver to publish; any other booking is cancelled now.
- * Returns the removal revision's id when one was recorded.
+ * Record a removal revision for the native publication command.
+ * The published predecessor remains effective until its tenant policy releases it.
  */
 export async function removePublished(actor: ScheduleActor, board: ScheduleBoard, row: StoredEntry, reason: string): Promise<string | null> {
   await cancelPendingRevisions(actor, row.id, reason);
-  if (row.governed) {
-    const booking = await exactStoredBooking(actor.orgId, row);
-    const removalId = crypto.randomUUID();
-    await insertEntry({ actor, board, id: removalId, booking, status: "draft", supersedesId: row.id, reason,
-      requestHash: hash({ removes: row.id, revision: row.revision }), employmentId: row.employmentId,
-      requiredQualificationTypeIds: row.requiredQualificationTypeIds, origin: { removesPredecessor: true } });
-    return removalId;
-  }
-  await setStatus(actor, row, "cancelled", reason);
-  await recordPatternOmission(actor, row, reason);
-  return null;
+  const booking = await exactStoredBooking(actor.orgId, row);
+  const removalId = crypto.randomUUID();
+  await insertEntry({actor,board,id:removalId,booking,status:"draft",supersedesId:row.id,reason,
+    requestHash:hash({removes:row.id,revision:row.revision}),employmentId:row.employmentId,
+    requiredQualificationTypeIds:row.requiredQualificationTypeIds,origin:{removesPredecessor:true}});
+  return removalId;
 }
 
 /**
@@ -381,7 +373,7 @@ async function createOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
   }
   await insertEntry({
     actor, board, id, booking,
-    status: board.publishPolicy === "live" ? "published" : "draft",
+    status: "draft",
     supersedesId: null,
     reason: reason ?? `Booked on ${board.name}`,
     requestHash,
@@ -409,7 +401,6 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
   };
   const booking = await normalize(board, actor.orgId, allowed, merged);
   const requestHash = hash(definition(board, booking));
-  const notesOnly = Object.keys(patch).every((key) => key === "notes");
   const samePerson = booking.subject.kind === "person" && booking.subject.id === row.workerPartyId;
   const employmentId = samePerson ? row.employmentId : null;
   const pattern = row.patternAssignmentId && samePerson
@@ -437,16 +428,6 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
     return { id: row.id, op: "update", ok: true, entry: await readEntry(actor.orgId, row.id), replacedId: null };
   }
 
-  // Notes are informational on ungoverned bookings; a governed booking's
-  // notes are part of its approved history and change through a revision.
-  if (notesOnly && !row.governed) {
-    const updated = (await db.execute(sql`update schedule_entries set notes = ${booking.notes}, reason = ${reason ?? "Notes changed"},
-      revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and id = ${row.id} and revision = ${row.revision} returning id`)).rows;
-    if (updated.length !== 1) throw new ScheduleError("Someone changed this booking since the board was loaded.", { status: 409, code: "schedule_stale", remedy: "Reload the board." });
-    return { id: row.id, op: "update", ok: true, entry: await readEntry(actor.orgId, row.id), replacedId: null };
-  }
-
   const pending = (await db.execute(sql`select id from schedule_entries where org_id = ${actor.orgId} and supersedes_id = ${row.id} and status = 'draft'`)).rows[0];
   if (pending) {
     throw new ScheduleError("This booking already has an unpublished change.", { status: 409, code: "schedule_pending_change", remedy: "Edit the pending change shown on the board, or discard it first." });
@@ -455,13 +436,7 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
   const changeReason = reason ?? `Changed on ${board.name}`;
   const successor = { actor, board, id: successorId, booking, supersedesId: row.id, reason: changeReason, requestHash,
     employmentId, requiredQualificationTypeIds: samePerson ? row.requiredQualificationTypeIds : [], origin: { pattern } };
-  if (board.publishPolicy === "live" && !row.governed) {
-    await setStatus(actor, row, "cancelled", changeReason);
-    await insertEntry({ ...successor, status: "published" });
-    if (!pattern) await recordPatternOmission(actor, row, changeReason);
-  } else {
-    await insertEntry({ ...successor, status: "draft" });
-  }
+  await insertEntry({...successor,status:"draft"});
   return { id: row.id, op: "update", ok: true, entry: await readEntry(actor.orgId, successorId), replacedId: row.id };
 }
 
@@ -501,11 +476,23 @@ export async function applyBoardChanges(actor: ScheduleActor & { boardId: string
     for (const change of actor.changes) {
       const before = change.op !== "create" && isUuid(change.id) ? await readEntry(actor.orgId, change.id).catch((error: unknown) => { if (error instanceof ScopeNotFoundError) return null; throw error; }) : null;
       try {
-        results.push(await withTransactionSavepoint(db, () => {
-          if (change.op === "create") return createOne(actor, board, allowed, change, reason);
-          if (change.op === "update") return updateOne(actor, board, allowed, change, reason);
-          if (change.op === "cancel") return cancelOne(actor, board, change, reason);
-          throw new ScheduleError("The change type is not recognized.", { code: "schedule_invalid" });
+        results.push(await withTransactionSavepoint(db, async () => {
+          const result=change.op === "create" ? await createOne(actor,board,allowed,change,reason)
+            : change.op === "update" ? await updateOne(actor,board,allowed,change,reason)
+            : change.op === "cancel" ? await cancelOne(actor,board,change,reason)
+            : null;
+          if(!result)throw new ScheduleError("The change type is not recognized.",{code:"schedule_invalid"});
+          if(board.publishPolicy === "live" && result.ok && result.entry?.status === "draft" && !result.entry.removesPredecessor){
+            const accepted=results.flatMap(row=>row.ok && row.entry ? [row.entry.id] : []);
+            const collision=(await db.execute(sql`select x.id from schedule_entries d join schedule_entries x on x.org_id=d.org_id
+              and (x.worker_party_id=d.worker_party_id or x.equipment_unit_id=d.equipment_unit_id or x.resource_location_id=d.resource_location_id)
+              and tstzrange(x.starts_at,x.ends_at,'[)') && tstzrange(d.starts_at,d.ends_at,'[)')
+              and x.id<>d.id and x.id is distinct from d.supersedes_id
+              and (x.status='published' or x.status='draft' and x.id=any(${`{${accepted.join(',')}}`}::uuid[]))
+              where d.org_id=${actor.orgId} and d.id=${result.entry.id} limit 1`)).rows[0];
+            if(collision)throw new ScheduleError("This person or resource is already booked at that time.",{status:409,code:"schedule_double_booked",remedy:"Choose a free time or change the existing booking."});
+          }
+          return result;
         }));
         const result = results.at(-1)!;
         if(result.ok) {
@@ -532,6 +519,22 @@ export async function applyBoardChanges(actor: ScheduleActor & { boardId: string
         throw refusal;
       }
     }
+    if(board.publishPolicy === "live") {
+      const drafts=results.flatMap(result=>result.ok && result.entry?.status === "draft" ? [result.entry] : []);
+      if(drafts.length) {
+        const {publishScheduleBoard}=await import("./publications.ts");
+        const dates=drafts.flatMap(entry=>[entry.startsOn,entry.endsOn]).sort();
+        const publication=await publishScheduleBoard({...actor,boardId:board.id,from:dates[0]!,through:dates.at(-1)!,entryIds:drafts.map(entry=>entry.id),reason});
+        notices.push(...publication.notices);
+        for(let index=0;index<results.length;index++) {
+          const result=results[index]!;
+          if(result.ok && result.entry?.status === "draft") {
+            results[index]={...result,entry:!publication.pending && result.entry.removesPredecessor ? null : await readEntry(actor.orgId,result.entry.id)};
+          }
+        }
+        return {results,notices,boardName:board.name,distributionRefusals:publication.distributionRefusals};
+      }
+    }
     const dates=[...changedDates].sort(),distributionRefusals:{message:string;remedy:string}[]=[];
     for(let index=0;index<dates.length;) {
       const from=dates[index]!,through=new Date(`${from}T00:00:00Z`);through.setUTCDate(through.getUTCDate()+41);
@@ -542,6 +545,14 @@ export async function applyBoardChanges(actor: ScheduleActor & { boardId: string
     return { results, notices, boardName: board.name, distributionRefusals };
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
+
+export interface PublishFailure {
+  readonly entryId: string;
+  readonly personName: string;
+  readonly date: string;
+  readonly error: string;
+}
+
 
 export interface PublishFailure {
   readonly entryId: string;
@@ -634,27 +645,4 @@ export async function publishDrafts(actor: ScheduleActor, board: ScheduleBoard, 
   const refusal = await scheduleBoardLifecycle({ actor, boardId: board.id, from: window.from, through: window.through, subjectIds: drafts.map((d) => d.subjectId),
     event: "after_post", occurrence: drafts.map((d) => `${d.id}:${d.revision + 1}`).sort().join(",") });
   return { published: drafts.length, notices, distributionRefusals: refusal ? [refusal] : [] };
-}
-
-/**
- * Publish a staged board's drafts in a window, all or nothing. Governed
- * boards publish through their publication (see publications.ts), which
- * routes through any configured approval Flow.
- */
-export async function publishBoard(actor: ScheduleActor & { boardId: string; from: string; through: string; reason?: string | null }): Promise<{ published: number; notices: ScheduleNotice[]; boardName: string; distributionRefusals: {message:string;remedy:string}[] }> {
-  const from = requireDate(actor.from, "Publish from");
-  const through = requireDate(actor.through, "Publish through");
-  const reason = optionalText(actor.reason, "Reason", 2000);
-  return withOrgTransaction(actor.orgId, async () => {
-    const board = await getBoard(actor, actor.boardId);
-    if (board.rowKind === "tasks") throw new ScheduleError("This board schedules project tasks.", { code: "schedule_wrong_board" });
-    if (board.publishPolicy === "live") throw new ScheduleError("This board publishes each booking as it is made.", { code: "schedule_live_board" });
-    if (board.publishPolicy === "governed") throw new ScheduleError("This board publishes through its governed publication.", { code: "schedule_governed_board", remedy: "Publish the board from Scheduling, which records the publication for any configured approval." });
-    await boardAuthority(actor, board, "publish");
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-publish:${actor.orgId}:${board.id}`}, 0))`);
-    const drafts = await lockPublishableDrafts(actor, board, { from, through });
-    if (drafts.length === 0) throw new ScheduleError("There are no unpublished changes in these dates.", { code: "schedule_nothing_to_publish" });
-    const result = await publishDrafts(actor, board, drafts, reason ?? `Published ${board.name}`, { from, through });
-    return { ...result, boardName: board.name };
-  }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }

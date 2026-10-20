@@ -87,6 +87,7 @@ export function toWorklistScope(ctx: InboxListContext): WorklistScope {
  * batch) each keep only their own subject kind.
  */
 export function actorPendingGates(ctx: InboxListContext): Promise<WorklistGate[]> {
+  if(ctx.approvalWorklistOwnsGates)return Promise.resolve([]);
   return memoizeForRead(ctx, "pending-gates", () => {
     const scope = toWorklistScope(ctx);
     return worklistGates(ctx.orgId, ctx.actorId, scope.roles, scope.allowedSubsidiaryIds);

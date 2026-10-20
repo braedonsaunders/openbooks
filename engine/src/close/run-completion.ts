@@ -1,9 +1,11 @@
+import {lockActorCommandAuthority} from "../organization/actor-command-authority.ts";
+import {lockAndCheckOrgFeature} from "../organization/org-feature-lock.ts";
 import { CloseError, CLOSE_MODULES } from "../periods/period-policy.ts";
 import { advancedCloseEnabled } from "./features.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
 import { upsertLock, periodScopeAdvisoryLock, tightenNarrowerLocks } from "../periods/period-locks.ts";
 export async function closeApprovedRun(
@@ -11,7 +13,10 @@ export async function closeApprovedRun(
   runId: string,
   actorId: string,
 ): Promise<void> {
-  const refusal = await db.transaction(async (tx) => {
+  const refusal = await withOrgTransaction(orgId, async () => {
+    const tx=db;
+    if(!await lockAndCheckOrgFeature(db,orgId,"continuousClose"))throw new CloseError("Enable Continuous Close in Company Settings → Features before locking a close run.");
+    if(await lockActorCommandAuthority(db,orgId,actorId,null,"close.run")!==null)throw new CloseError("Close run commands require access to the whole organization.");
     const target = (await tx.execute<{ period_id: string; book_id: string }>(sql`
       select period_id, book_id from close_runs where id = ${runId} and org_id = ${orgId}`));
     if (!target.rows[0]) throw new CloseError("close run not found");
@@ -29,14 +34,27 @@ export async function closeApprovedRun(
         period_id: string;
         book_id: string;
         status: string;
+        approved_by:string|null;
         scope: { subsidiaryIds?: string[] };
       }>(sql`
-      select period_id, book_id, status, scope from close_runs
+      select period_id, book_id, status, approved_by, scope from close_runs
        where id = ${runId} and org_id = ${orgId} for update`));
     const row = run.rows[0];
     if (!row) throw new CloseError("close run not found");
     if (row.status !== "approved")
       return "the close run changed after approval; review its updated readiness and obtain approval again before locking";
+    const currentDecision=(await tx.execute<{valid:boolean}>(sql`select public.flow_subject_decision_authorized(
+      ${orgId},'close_run',${runId},${row.approved_by},public.close_run_approval_fingerprint(${orgId},${runId}),'approved') as valid`)).rows[0]?.valid;
+    if(!currentDecision){
+      await tx.execute(sql`update close_runs set status='in_progress',current_stage='review',approved_at=null,approved_by=null,
+        updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${runId}`);
+      const changed=await tx.execute(sql`update close_run_tasks set status='invalidated',completed_at=null,completed_by=null,
+        reviewed_at=null,reviewed_by=null,updated_at=now(),updated_by=${actorId}
+        where org_id=${orgId} and run_id=${runId} and task_type='approval' and status in('complete','submitted','waived') returning id`);
+      await tx.execute(sql`insert into close_events(org_id,run_id,event_type,actor_id,payload)
+        values(${orgId},${runId},'run.data_changed',${actorId},${JSON.stringify({reason:"approval_evidence_changed",before:{status:row.status,approvedBy:row.approved_by},after:{status:"in_progress"},invalidated:changed.rows.length})}::jsonb)`);
+      return "The close approval evidence changed. Review the current evidence and submit the run through Flows before locking.";
+    }
     const blockers = (await tx.execute<{ count: string }>(sql`
       select count(*) as count from close_exceptions
        where run_id = ${runId} and org_id = ${orgId} and status = 'open' and severity in ('error','critical')`));
@@ -95,10 +113,12 @@ export async function closeApprovedRun(
       update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
              updated_at = now(), updated_by = ${actorId}
        where run_id = ${runId} and org_id = ${orgId} and key in ('lock-subledgers','lock-gl')`);
-    await tx.execute(sql`
+    const closed = await tx.execute(sql`
       update close_runs set status = 'closed', current_stage = 'publish', closed_at = now(),
              closed_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
-       where id = ${runId} and org_id = ${orgId}`);
+       where id = ${runId} and org_id = ${orgId} and status='approved' returning id`);
+    if (closed.rows.length !== 1)
+      throw new CloseError("The approved close run was not locked; reload its current state.");
     await tx.execute(sql`
       insert into close_events (org_id, run_id, event_type, actor_id, payload)
       values (${orgId}, ${runId}, 'run.closed', ${actorId}, ${JSON.stringify({ modules: CLOSE_MODULES })}::jsonb)`);
@@ -123,7 +143,10 @@ export async function publishCloseRun(
   if (!(await advancedCloseEnabled(orgId))) {
     throw new CloseError("enable Advanced close controls to publish a close package");
   }
-  await db.transaction(async (tx) => {
+  await withOrgTransaction(orgId, async () => {
+    const tx=db;
+    if(await lockActorCommandAuthority(db,orgId,actorId,null,"close.run")!==null)throw new CloseError("Close run commands require access to the whole organization.");
+
     const run = (await tx.execute<{
       status: string;
       data_fingerprint: string | null;
@@ -173,10 +196,12 @@ export async function publishCloseRun(
       update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
              data_fingerprint = ${run.rows[0].data_fingerprint}, updated_at = now(), updated_by = ${actorId}
        where run_id = ${runId} and org_id = ${orgId} and key = 'publish-package'`);
-    await tx.execute(sql`
+    const published = await tx.execute(sql`
       update close_runs set status = 'published', current_stage = 'publish', published_at = now(),
              published_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
-       where id = ${runId} and org_id = ${orgId}`);
+       where id = ${runId} and org_id = ${orgId} and status='closed' returning id`);
+    if (published.rows.length !== 1)
+      throw new CloseError("The closed run was not published; reload its current state.");
     await tx.execute(sql`
       insert into close_signoffs (org_id, run_id, signoff_type, decision, comment, data_fingerprint, signed_by)
       values (${orgId}, ${runId}, 'publish', 'approved', ${comment ?? null}, ${run.rows[0].data_fingerprint}, ${actorId})`);

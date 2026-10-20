@@ -10,8 +10,6 @@ import { PAYMENT_RUN_SYSTEM_ACTOR_ID } from "./run-cancellation.ts";
  *  rows name their own actor without minting a second identity. */
 export const PSP_AUTOMATION_SYSTEM_ACTOR_ID = PAYMENT_RUN_SYSTEM_ACTOR_ID;
 
-export type PspAutomationPolicy = "automatic" | "review";
-
 export interface RefundSourceEvidence {
   basis: "incremental" | "cumulative";
   amount: string | null;
@@ -78,7 +76,6 @@ export type AutomationContext = {
     document_number: string;
     open_balance: string;
   };
-  policy: PspAutomationPolicy;
   disputeAccounts: {
     disputedFundsAccountId: string | null;
     chargebackLossAccountId: string | null;
@@ -91,72 +88,85 @@ export async function loadAutomationContext(
   orgId: string,
   attemptId: string,
 ): Promise<AutomationContext> {
-  const attempt = (await db.execute<{
-    id: string;
-    status: string;
-    provider: string;
-    external_ref: string;
-    payment_document_id: string | null;
-    link_id: string;
-    amount: string;
-  }>(sql`
+  const attempt = (
+    await db.execute<{
+      id: string;
+      status: string;
+      provider: string;
+      external_ref: string;
+      payment_document_id: string | null;
+      link_id: string;
+      amount: string;
+    }>(sql`
     select id, status, provider, external_ref, payment_document_id, link_id,
            (coalesce(amount, (select amount from payment_links where id = payment_attempts.link_id and org_id = ${orgId}))
              + coalesce(surcharge_amount, 0))::text as amount
       from payment_attempts
      where id = ${attemptId} and org_id = ${orgId}
      for update
-  `)).rows[0];
-  if (!attempt) throw new PspAutomationError("payment attempt is not in this organization");
-  const link = (await db.execute<{
-    id: string;
-    document_id: string;
-    party_id: string;
-    subsidiary_id: string;
-    bank_account_id: string;
-    currency: string;
-    created_by: string | null;
-  }>(sql`
+  `)
+  ).rows[0];
+  if (!attempt)
+    throw new PspAutomationError("payment attempt is not in this organization");
+  const link = (
+    await db.execute<{
+      id: string;
+      document_id: string;
+      party_id: string;
+      subsidiary_id: string;
+      bank_account_id: string;
+      currency: string;
+      created_by: string | null;
+    }>(sql`
     select l.id, l.document_id, l.party_id, l.subsidiary_id, l.bank_account_id,
            l.currency, l.created_by
       from payment_links l
      where l.id = ${attempt.link_id} and l.org_id = ${orgId}
-  `)).rows[0];
-  if (!link) throw new PspAutomationError("payment link is not in this organization");
+  `)
+  ).rows[0];
+  if (!link)
+    throw new PspAutomationError("payment link is not in this organization");
   const receipt = attempt.payment_document_id
-    ? ((await db.execute<{
-      id: string;
-      status: string;
-      document_number: string;
-      total: string;
-      currency: string;
-      custom: Record<string, unknown> | null;
-    }>(sql`
+    ? ((
+        await db.execute<{
+          id: string;
+          status: string;
+          document_number: string;
+          total: string;
+          currency: string;
+          custom: Record<string, unknown> | null;
+        }>(sql`
         select id, status, document_number, total::text, currency, custom
           from documents
          where id = ${attempt.payment_document_id} and org_id = ${orgId}
-      `)).rows[0] ?? null)
+      `)
+      ).rows[0] ?? null)
     : null;
-  const invoice = (await db.execute<{ id: string; document_number: string; open_balance: string }>(sql`
+  const invoice = (
+    await db.execute<{
+      id: string;
+      document_number: string;
+      open_balance: string;
+    }>(sql`
     select id, document_number, open_balance::text
       from documents
      where id = ${link.document_id} and org_id = ${orgId}
-  `)).rows[0];
-  if (!invoice) throw new PspAutomationError("invoice is not in this organization");
-  const config = (await db.execute<{
-    refund_policy: string | null;
-    default_disputed_funds_account_id: string | null;
-    default_chargeback_loss_account_id: string | null;
-    default_dispute_fee_account_id: string | null;
-  }>(sql`
-    select refund_policy, default_disputed_funds_account_id,
+  `)
+  ).rows[0];
+  if (!invoice)
+    throw new PspAutomationError("invoice is not in this organization");
+  const config = (
+    await db.execute<{
+      default_disputed_funds_account_id: string | null;
+      default_chargeback_loss_account_id: string | null;
+      default_dispute_fee_account_id: string | null;
+    }>(sql`
+    select default_disputed_funds_account_id,
            default_chargeback_loss_account_id, default_dispute_fee_account_id
       from psp_provider_configs
      where org_id = ${orgId} and provider = ${attempt.provider}
-  `)).rows[0];
-  // New configs default to automatic (migration 0497); a missing row means a
-  // provider configured before automation existed — same behaviour.
-  const policy: PspAutomationPolicy = config?.refund_policy === "review" ? "review" : "automatic";
+  `)
+  ).rows[0];
   return {
     attempt: {
       id: attempt.id,
@@ -169,19 +179,19 @@ export async function loadAutomationContext(
     link,
     receipt: receipt
       ? {
-        id: receipt.id,
-        status: receipt.status,
-        document_number: receipt.document_number,
-        total: receipt.total,
-        currency: receipt.currency,
-        custom: receipt.custom ?? {},
-      }
+          id: receipt.id,
+          status: receipt.status,
+          document_number: receipt.document_number,
+          total: receipt.total,
+          currency: receipt.currency,
+          custom: receipt.custom ?? {},
+        }
       : null,
     invoice,
-    policy,
     disputeAccounts: {
       disputedFundsAccountId: config?.default_disputed_funds_account_id ?? null,
-      chargebackLossAccountId: config?.default_chargeback_loss_account_id ?? null,
+      chargebackLossAccountId:
+        config?.default_chargeback_loss_account_id ?? null,
       disputeFeeAccountId: config?.default_dispute_fee_account_id ?? null,
     },
     bankAccountId: link.bank_account_id,

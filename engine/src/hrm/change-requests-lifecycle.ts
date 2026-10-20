@@ -1,9 +1,6 @@
 import { sql } from "drizzle-orm";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
-import {
-  db,
-  withOrgTransaction,
-} from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import {
   PAYLOAD_SCHEMA_VERSION,
   HrmChangeRequestError,
@@ -28,7 +25,7 @@ import {
 } from "./change-requests-core.ts";
 import { applyApprovedRequest } from "./change-requests-apply.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
-import { lockFlowSubjectDecision } from "../flows/decision-lock.ts";
+import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { requireCompletedSubmissionRouting } from "../flows/submission-routing-proof.ts";
 import type { FlowSubmissionResumeArgs } from "../flows/approval-release-hook.ts";
 
@@ -50,7 +47,9 @@ export interface CreateChangeRequestQuery {
  * revision 1). The storage trigger computes the digest; the stored row is
  * read back so the caller holds the digest the approval will bind.
  */
-export async function createChangeRequestDraft(query: CreateChangeRequestQuery): Promise<ChangeRequestDTO> {
+export async function createChangeRequestDraft(
+  query: CreateChangeRequestQuery,
+): Promise<ChangeRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const employmentId = requireId(query.employmentId, "employmentId");
@@ -58,12 +57,19 @@ export async function createChangeRequestDraft(query: CreateChangeRequestQuery):
   return withOrgTransaction(orgId, async () => {
     // Authority first: denial (including unknown/other-org employment)
     // reports uniformly through the kind-aware authorization gate.
-    const subject = await requireAuthoringAccess(db, orgId, actorId, employmentId, payload);
+    const subject = await requireAuthoringAccess(
+      db,
+      orgId,
+      actorId,
+      employmentId,
+      payload,
+    );
     await assertKindPreconditions(db, orgId, employmentId, payload);
     // payload_digest is NOT NULL without a default, but the guard trigger
     // overwrites it on insert with the canonical sha256 — the 64-zero
     // placeholder never survives the trigger and is never read back.
-    const inserted = (await db.execute<RequestRow>(sql`
+    const inserted = (
+      await db.execute<RequestRow>(sql`
       insert into hrm_employment_change_requests
         (org_id, employment_id, expected_employment_revision, payload,
          payload_digest, payload_schema_version, action, reason_code, created_by, updated_by)
@@ -73,7 +79,8 @@ export async function createChangeRequestDraft(query: CreateChangeRequestQuery):
               ${query.action ?? null}::text, ${query.reasonCode ?? null}::text,
               ${actorId}, ${actorId})
       returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!inserted) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -106,12 +113,22 @@ export async function updateChangeRequestPayload(
   const requestId = requireId(query.requestId, "requestId");
   const payload = validateChangePayload(query.payload);
   return withOrgTransaction(orgId, async () => {
-    await lockFlowSubjectDecision(orgId, HRM_CHANGE_REQUEST_SUBJECT_KIND, requestId);
+    await lockApprovalSubject(
+      orgId,
+      HRM_CHANGE_REQUEST_SUBJECT_KIND,
+      requestId,
+    );
     const current = await loadRequestForUpdate(db, orgId, requestId);
     const storedPayload = validateChangePayload(current.payload);
     // The draft's existing kind owns the authoring boundary until it is
     // submitted; a caller cannot cross that boundary by replacing the kind.
-    await requireAuthoringAccess(db, orgId, actorId, current.employment_id, storedPayload);
+    await requireAuthoringAccess(
+      db,
+      orgId,
+      actorId,
+      current.employment_id,
+      storedPayload,
+    );
     if (current.status !== "draft") {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -138,7 +155,8 @@ export async function updateChangeRequestPayload(
     // request_revision moves by exactly one with a draft edit; the digest is
     // recomputed by the guard trigger from the new payload.
     const updated = await db
-      .execute<RequestRow>(sql`
+      .execute<RequestRow>(
+        sql`
         update hrm_employment_change_requests
            set payload = ${JSON.stringify(payload)}::jsonb,
                payload_schema_version = ${PAYLOAD_SCHEMA_VERSION},
@@ -146,7 +164,8 @@ export async function updateChangeRequestPayload(
                updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${requestId}
         returning ${REQUEST_COLUMNS}
-      `)
+      `,
+      )
       .then((result) => result.rows[0])
       .catch((error: unknown): RequestRow => mapGuardRefusal(error));
     if (!updated) {
@@ -184,20 +203,32 @@ export interface SubmitChangeRequestQuery {
  * application retains the proposal, exact revision, policy graph and
  * execution evidence; automatic application never invents a human approver.
  */
-export async function submitChangeRequest(query: SubmitChangeRequestQuery): Promise<ChangeRequestDTO> {
+export async function submitChangeRequest(
+  query: SubmitChangeRequestQuery,
+): Promise<ChangeRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const requestId = requireId(query.requestId, "requestId");
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
-    await lockFlowSubjectDecision(orgId, HRM_CHANGE_REQUEST_SUBJECT_KIND, requestId);
+    await lockApprovalSubject(
+      orgId,
+      HRM_CHANGE_REQUEST_SUBJECT_KIND,
+      requestId,
+    );
     // The row lock serializes a double-click or replayed submit against the
     // status check and the run stamp below.
     const current = await loadRequestForUpdate(db, orgId, requestId);
     // Stored payload validates before the gate so the kind-aware gate
     // routes on a known kind; stored rows are always service-written.
     const storedPayload = validateChangePayload(current.payload);
-    await requireAuthoringAccess(db, orgId, actorId, current.employment_id, storedPayload);
+    await requireAuthoringAccess(
+      db,
+      orgId,
+      actorId,
+      current.employment_id,
+      storedPayload,
+    );
     if (current.status !== "draft") {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -207,51 +238,21 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
     const payload = storedPayload;
     await assertKindPreconditions(db, orgId, current.employment_id, payload);
 
-    // Lazy: engine/src/flows/run.ts → registry → this service's adapter.
-    const { runRecordFlows } = await import("../flows/run.ts");
-    const flowResult = await runRecordFlows(
-      { kind: "on_submit", source: "api" },
-      HRM_CHANGE_REQUEST_SUBJECT_KIND,
-      requestId,
-      { orgId, userId: actorId },
-    );
+    const { routeSubjectSubmission } =
+      await import("../flows/submission-policy.ts");
+    const {
+      policy,
+      dispatch: flowResult,
+      submissionId,
+    } = await routeSubjectSubmission({
+      orgId,
+      actorId,
+      subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
+      subjectId: requestId,
+      source: "api",
+    });
     const gatedRun = flowResult.runs.find((run) => run.gatesCreated > 0);
-    const automaticRun = flowResult.runs.find((run) => run.ungatedOutcome === 'apply' && run.status === 'completed' && run.gatesCreated === 0);
-    const governingRun = gatedRun ?? automaticRun;
-    if (flowResult.failed || !governingRun) {
-      const strayRunIds = flowResult.runs.map((run) => run.runId);
-      if (strayRunIds.length > 0) {
-        await db.execute(sql`
-          update flow_gates set status = 'cancelled', updated_at = now()
-           where run_id in (
-             select jsonb_array_elements_text(${JSON.stringify(strayRunIds)}::jsonb)::uuid
-           ) and org_id = ${orgId} and status in ('pending', 'escalated')
-        `);
-        await db.execute(sql`
-          update flow_runs set status = 'cancelled', finished_at = now()
-           where id in (
-             select jsonb_array_elements_text(${JSON.stringify(strayRunIds)}::jsonb)::uuid
-           ) and org_id = ${orgId} and status in ('running', 'waiting')
-        `);
-      }
-      if (flowResult.failed) {
-        throw new HrmChangeRequestError(
-          "FLOW_ERROR",
-          `Employee update workflow${flowResult.runs.filter(run => run.status === 'failed').map(run => ` “${run.flowName}”`).join(',')} failed. Review its configuration in Admin → Flows, then save again.`,
-        );
-      }
-      // No run claimed this submission. Approval is an optional Flow: with
-      // no enabled flow for employment change requests, the submitter's
-      // own save applies directly through the governed admission (audited,
-      // actor recorded) instead of refusing. A configured-but-silent flow
-      // still owns the submission — configure it to gate or to permit
-      // automatic application before saving.
-      if (await employmentChangeFlowsEnabled(orgId)) {
-        throw new HrmChangeRequestError(
-          "NO_FLOW",
-          "no enabled approval flow produced an approval gate for employment change requests or explicitly permitted automatic application — configure a flow with approval steps or the apply-without-approval outcome before saving",
-        );
-      }
+    if (policy.kind === "ungated")
       return applyDirectRequest({
         orgId,
         actorId,
@@ -260,96 +261,164 @@ export async function submitChangeRequest(query: SubmitChangeRequestQuery): Prom
         reason,
         action: query.action ?? null,
         reasonCode: query.reasonCode ?? null,
+        submissionId,
+        policy,
       });
-    }
-
-    // Submission stamps land atomically with the run anchor; the 0185 guard
-    // verifies the run is in this org, of the governed kind, and opened for
-    // this request id. action/reason_code ride the same statement so the
-    // classification and the submission commit together or not at all.
-    const submitted = (await db.execute<RequestRow>(sql`
+    if (!gatedRun)
+      throw new HrmChangeRequestError(
+        "FLOW_ERROR",
+        "The submission has no pending native gate; review its Flow history.",
+      );
+    const submitted = (
+      await db.execute<RequestRow>(sql`
       update hrm_employment_change_requests
          set status = 'pending_approval',
              reason = ${reason},
              action = coalesce(${query.action ?? null}::text, action),
              reason_code = coalesce(${query.reasonCode ?? null}::text, reason_code),
              submitted_by = ${actorId}, submitted_at = now(),
-             flow_run_id = ${governingRun.runId},
+             flow_run_id = ${gatedRun.runId},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'draft'
       returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!submitted) {
       throw new HrmChangeRequestError(
         "BAD_STATE",
         "the request changed while submission was being recorded — reload it and submit again",
       );
     }
-    if (!gatedRun && automaticRun) {
-      const run = (await db.execute<{ context: Record<string, unknown>; status: string }>(sql`
-        select context, status from flow_runs where org_id = ${orgId} and id = ${automaticRun.runId}
-          and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and subject_id = ${requestId}
-      `)).rows[0];
-      const policy = run?.context.submissionPolicy as { ungatedOutcome?: unknown } | undefined;
-      if (run?.status !== 'completed' || policy?.ungatedOutcome !== 'apply') throw new HrmChangeRequestError('REFUSED', 'The automatic change policy has no completed execution evidence. Review the workflow before saving again.');
-      return applyAutomaticRequest(orgId, actorId, submitted, payload, {
-        policy: run.context.submissionPolicy,
-        routingRunId: automaticRun.runId,
-        evaluatedRuns: flowResult.runs.map((item) => ({ runId: item.runId, flowId: item.flowId, status: item.status })),
-      });
-    }
     return toDTO(submitted);
   });
 }
 
 /** Apply the frozen proposal through the same writer used by human decisions. */
-async function applyAutomaticRequest(orgId: string, actorId: string, submitted: RequestRow,
-  payload: ChangeRequestPayload, evidence: Record<string, unknown>): Promise<ChangeRequestDTO> {
-  const snapshot = { ...buildDecisionSnapshot({ request: submitted, outcome: 'approved', gates: [] }),
-    ...evidence, mode: 'automatic' };
-  const approved = (await db.execute<RequestRow>(sql`
+async function applyAutomaticRequest(
+  orgId: string,
+  actorId: string,
+  submitted: RequestRow,
+  payload: ChangeRequestPayload,
+  evidence: Record<string, unknown>,
+): Promise<ChangeRequestDTO> {
+  const snapshot = {
+    ...buildDecisionSnapshot({
+      request: submitted,
+      outcome: "approved",
+      gates: [],
+    }),
+    ...evidence,
+    mode: "automatic",
+  };
+  const approved = (
+    await db.execute<RequestRow>(sql`
     update hrm_employment_change_requests set status='approved', decision_snapshot=${JSON.stringify(snapshot)}::jsonb,
       updated_by=${actorId}, updated_at=now()
     where org_id=${orgId} and id=${submitted.id} and status='pending_approval'
       and request_revision=${submitted.request_revision} and payload_digest=${submitted.payload_digest}
       and flow_run_id=${submitted.flow_run_id}
     returning ${REQUEST_COLUMNS}
-  `)).rows[0];
-  if (!approved) throw new HrmChangeRequestError('BAD_STATE', 'The employment proposal changed; reload its current state before retrying.');
-  await applyApprovedRequest(db, { orgId, actorId, request: approved, payload });
+  `)
+  ).rows[0];
+  if (!approved)
+    throw new HrmChangeRequestError(
+      "BAD_STATE",
+      "The employment proposal changed; reload its current state before retrying.",
+    );
+  await applyApprovedRequest(db, {
+    orgId,
+    actorId,
+    request: approved,
+    payload,
+  });
   const applied = await loadRequestForUpdate(db, orgId, submitted.id);
-  if (applied.status !== 'applied') throw new HrmChangeRequestError('REFUSED', 'The employment change was not applied; review its workflow before retrying.');
+  if (applied.status !== "applied")
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "The employment change was not applied; review its workflow before retrying.",
+    );
   return toDTO(applied);
 }
 
 /** Complete only the original submitted proposal after native automatic routing. */
-export async function completeHrmChangeRequestSubmission(args: FlowSubmissionResumeArgs): Promise<{ status: string }> {
-  const orgId = requireOrgId(args.ctx.orgId), actorId = requireActorId(args.ctx.userId ?? '');
-  const requestId = requireId(args.subjectId, 'requestId');
-  if (args.mode !== 'automatic' || args.subjectKind !== HRM_CHANGE_REQUEST_SUBJECT_KIND) {
-    throw new HrmChangeRequestError('REFUSED', 'Choose the native automatic employment submission.');
+export async function completeHrmChangeRequestSubmission(
+  args: FlowSubmissionResumeArgs,
+): Promise<{ status: string }> {
+  const orgId = requireOrgId(args.ctx.orgId),
+    actorId = requireActorId(args.ctx.userId ?? "");
+  const requestId = requireId(args.subjectId, "requestId");
+  if (
+    args.mode !== "automatic" ||
+    args.subjectKind !== HRM_CHANGE_REQUEST_SUBJECT_KIND
+  ) {
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "Choose the native automatic employment submission.",
+    );
   }
   return withOrgTransaction(orgId, async () => {
-    await lockFlowSubjectDecision(orgId, HRM_CHANGE_REQUEST_SUBJECT_KIND, requestId);
-    const routing = await requireCompletedSubmissionRouting({ orgId, actorId, subjectKind: args.subjectKind,
-      subjectId: requestId, runId: args.runId });
+    await lockApprovalSubject(
+      orgId,
+      HRM_CHANGE_REQUEST_SUBJECT_KIND,
+      requestId,
+    );
+    const routing = await requireCompletedSubmissionRouting({
+      orgId,
+      actorId,
+      subjectKind: args.subjectKind,
+      subjectId: requestId,
+      runId: args.runId,
+    });
     const request = await loadRequestForUpdate(db, orgId, requestId);
     const payload = validateChangePayload(request.payload);
-    await requireAuthoringAccess(db, orgId, actorId, request.employment_id, payload);
+    await requireAuthoringAccess(
+      db,
+      orgId,
+      actorId,
+      request.employment_id,
+      payload,
+    );
     const context = routing.context;
-    if (request.flow_run_id !== args.runId || !request.submitted_by || routing.createdBy !== request.submitted_by
-      || context.requestId !== request.id || context.employmentId !== request.employment_id
-      || context.expectedEmploymentRevision !== request.expected_employment_revision
-      || context.payloadDigest !== request.payload_digest || !context.payload || canonicalJson(context.payload) !== canonicalJson(payload)) {
-      throw new HrmChangeRequestError('REFUSED', 'The employment proposal differs from its original submission; review its current request and workflow.');
+    if (
+      request.flow_run_id !== args.runId ||
+      !request.submitted_by ||
+      routing.createdBy !== request.submitted_by ||
+      context.requestId !== request.id ||
+      context.employmentId !== request.employment_id ||
+      context.expectedEmploymentRevision !==
+        request.expected_employment_revision ||
+      context.payloadDigest !== request.payload_digest ||
+      !context.payload ||
+      canonicalJson(context.payload) !== canonicalJson(payload)
+    ) {
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "The employment proposal differs from its original submission; review its current request and workflow.",
+      );
     }
-    if (request.status === 'applied' && request.decision_snapshot?.mode === 'automatic'
-      && request.decision_snapshot.routingRunId === args.runId) return { status: 'applied' };
-    if (request.status !== 'pending_approval') throw new HrmChangeRequestError('BAD_STATE', 'Only the original pending employment submission can resume.');
+    if (
+      request.status === "applied" &&
+      request.decision_snapshot?.mode === "automatic" &&
+      request.decision_snapshot.routingRunId === args.runId
+    )
+      return { status: "applied" };
+    if (request.status !== "pending_approval")
+      throw new HrmChangeRequestError(
+        "BAD_STATE",
+        "Only the original pending employment submission can resume.",
+      );
     await assertKindPreconditions(db, orgId, request.employment_id, payload);
-    const applied = await applyAutomaticRequest(orgId, actorId, request, payload, {
-      policy: context.submissionPolicy, routingRunId: args.runId, routing: context.submissionRouting,
-    });
+    const applied = await applyAutomaticRequest(
+      orgId,
+      actorId,
+      request,
+      payload,
+      {
+        policy: context.submissionPolicy,
+        routingRunId: args.runId,
+        routing: context.submissionRouting,
+      },
+    );
     return { status: applied.status };
   });
 }
@@ -359,11 +428,15 @@ export async function completeHrmChangeRequestSubmission(args: FlowSubmissionRes
  * submission applies directly on save; surfaces describe the path the
  * organization actually takes from this one answer.
  */
-export async function employmentChangeFlowsEnabled(orgId: string): Promise<boolean> {
-  const row = (await db.execute<{ n: number }>(sql`
+export async function employmentChangeFlowsEnabled(
+  orgId: string,
+): Promise<boolean> {
+  const row = (
+    await db.execute<{ n: number }>(sql`
     select count(*)::int as n from flows
      where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and enabled
-  `)).rows[0];
+  `)
+  ).rows[0];
   return (row?.n ?? 0) > 0;
 }
 
@@ -386,14 +459,18 @@ async function applyDirectRequest(args: {
   reason: string;
   action: string | null;
   reasonCode: string | null;
+  submissionId: string;
+  policy: import("../platform/flow-submission-policy.ts").FlowSubmissionPolicy;
 }): Promise<ChangeRequestDTO> {
   const { orgId, actorId, request, payload, reason, action, reasonCode } = args;
   const snapshot = {
     ...buildDecisionSnapshot({ request, outcome: "approved", gates: [] }),
     mode: "automatic",
-    policy: { ungatedOutcome: "apply", flowConfigured: false },
+    policy: args.policy,
+    submissionId: args.submissionId,
   };
-  const approved = (await db.execute<RequestRow>(sql`
+  const approved = (
+    await db.execute<RequestRow>(sql`
     update hrm_employment_change_requests
        set status = 'approved',
            reason = ${reason},
@@ -404,14 +481,20 @@ async function applyDirectRequest(args: {
            updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and id = ${request.id} and status = 'draft'
     returning ${REQUEST_COLUMNS}
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!approved) {
     throw new HrmChangeRequestError(
       "BAD_STATE",
       "the request changed while direct application was being recorded — reload it and try again",
     );
   }
-  await applyApprovedRequest(db, { orgId, actorId, request: approved, payload });
+  await applyApprovedRequest(db, {
+    orgId,
+    actorId,
+    request: approved,
+    payload,
+  });
   const applied = await loadRequestForUpdate(db, orgId, request.id);
   if (applied.status !== "applied") {
     throw new HrmChangeRequestError(
@@ -445,7 +528,11 @@ export async function withdrawChangeRequest(
   const requestId = requireId(query.requestId, "requestId");
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
-    await lockFlowSubjectDecision(orgId, HRM_CHANGE_REQUEST_SUBJECT_KIND, requestId);
+    await lockApprovalSubject(
+      orgId,
+      HRM_CHANGE_REQUEST_SUBJECT_KIND,
+      requestId,
+    );
     const current = await loadRequestForUpdate(db, orgId, requestId);
     // Stored payload validates before the gate so the kind-aware gate
     // routes on a known kind; stored rows are always service-written.
@@ -474,13 +561,15 @@ export async function withdrawChangeRequest(
            and status in ('running', 'waiting')
       `);
     }
-    const withdrawn = (await db.execute<RequestRow>(sql`
+    const withdrawn = (
+      await db.execute<RequestRow>(sql`
       update hrm_employment_change_requests
          set status = 'withdrawn', updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId}
          and status in ('draft', 'pending_approval')
       returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!withdrawn) {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -492,15 +581,18 @@ export async function withdrawChangeRequest(
     // submission stamps; this is the record of who took them out of play.
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'hrm_employment_change_requests', ${requestId}, 'update', ${JSON.stringify({
-        event: "withdrawn",
-        actor: { kind: "user", userId: actorId },
-        before: { status: current.status },
-        after: { status: "withdrawn" },
-        reason,
-        employmentId: current.employment_id,
-        cancelledFlowRunId: current.status === "pending_approval" ? current.flow_run_id : null,
-      })}::jsonb, ${actorId})
+      values (${orgId}, 'hrm_employment_change_requests', ${requestId}, 'update', ${JSON.stringify(
+        {
+          event: "withdrawn",
+          actor: { kind: "user", userId: actorId },
+          before: { status: current.status },
+          after: { status: "withdrawn" },
+          reason,
+          employmentId: current.employment_id,
+          cancelledFlowRunId:
+            current.status === "pending_approval" ? current.flow_run_id : null,
+        },
+      )}::jsonb, ${actorId})
     `);
     return toDTO(withdrawn);
   });

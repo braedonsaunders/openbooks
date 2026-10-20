@@ -1,10 +1,7 @@
 import { sql } from "drizzle-orm";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
-import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
-import {
-  db,
-  withOrgTransaction,
-} from "../platform/db.ts";
+import { completedGateDecisionPolicy } from "../flows/approval-decision-policy.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import {
   checkApprovalIdentitySeparation,
   loadActorPerson,
@@ -65,43 +62,64 @@ export async function releaseHrmChangeRequest(
       );
     }
     // Permission/scope half over the trusted subject loaded in-transaction.
-    const subject = await requireHrmEmploymentApprove(db, orgId, actorId, current.employment_id);
+    const subject = await requireHrmEmploymentApprove(
+      db,
+      orgId,
+      actorId,
+      current.employment_id,
+    );
     // Identity half over trusted-DB-loaded parties. An approver with no
     // linked person cannot be separated from anyone, so the refusal names
     // the remedy: link the person in Admin → Users → Link person.
     const approver = await loadActorPerson(db, orgId, actorId);
-    if (!approver.partyId) {
+    const approval = await completedGateDecisionPolicy(db, {
+      orgId,
+      subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
+      subjectId: requestId,
+      actorId,
+      outcome: query.outcome,
+      approvalRunId: query.approvalRunId,
+    });
+    if (!approval)
       throw new HrmChangeRequestError(
         "REFUSED",
-        "employment approval refused: the approver has no linked person — link the approver to a person in Admin → Users → Link person before they decide",
+        "Complete the configured native Flow gates before deciding this change.",
       );
-    }
     const submitter = await loadApprovalPerson(db, orgId, current.submitted_by);
     checkApprovalIdentitySeparation({
       approver,
       submitter,
       subjectWorkerPartyId: subject.workerPartyId,
-      requireIndependentActor: !await completedGateAllowsSelfApproval(db, {
-        orgId, subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND, subjectId: requestId,
-        actorId, outcome: query.outcome, approvalRunId: query.approvalRunId,
-      }),
+      requireIndependentActor: !approval.allowsSelfApproval,
     });
 
     const gates = await decidedGatesOfRequest(db, orgId, requestId);
-    const policies = (await db.execute<{ policy: unknown }>(sql`select context->'submissionPolicy' as policy from flow_runs where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and subject_id = ${requestId} order by started_at, id`)).rows.map(row => row.policy).filter(Boolean);
-    const snapshot = { ...buildDecisionSnapshot({
-      request: current,
-      outcome: query.outcome,
-      gates,
-    }), mode: 'approval', policies };
-    const flipped = (await db.execute<RequestRow>(sql`
+    const policies = (
+      await db.execute<{ policy: unknown }>(
+        sql`select context->'submissionPolicy' as policy from flow_runs where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and subject_id = ${requestId} order by started_at, id`,
+      )
+    ).rows
+      .map((row) => row.policy)
+      .filter(Boolean);
+    const snapshot = {
+      ...buildDecisionSnapshot({
+        request: current,
+        outcome: query.outcome,
+        gates,
+      }),
+      mode: "approval",
+      policies,
+    };
+    const flipped = (
+      await db.execute<RequestRow>(sql`
       update hrm_employment_change_requests
          set status = ${query.outcome},
              decision_snapshot = ${JSON.stringify(snapshot)}::jsonb,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'pending_approval'
       returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!flipped) {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -117,10 +135,12 @@ export async function releaseHrmChangeRequest(
       request: flipped,
       payload: validateChangePayload(flipped.payload),
     });
-    const applied = (await db.execute<RequestRow>(sql`
+    const applied = (
+      await db.execute<RequestRow>(sql`
       select ${REQUEST_COLUMNS} from hrm_employment_change_requests
        where org_id = ${orgId} and id = ${requestId}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!applied) {
       throw new HrmChangeRequestError(
         "REFUSED",

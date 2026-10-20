@@ -106,17 +106,17 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
       results.forEach((result, index) => {
         if (!result.ok) return
         const change = changes[index]
-        if (change?.op === 'cancel') removed.add(change.id)
+        if (change?.op === 'cancel' && !result.entry) removed.add(change.id)
         // A staged change keeps the published original on view, marked as replaced.
-        if (change?.op === 'update' && (current.board.publishPolicy === 'live' || !result.replacedId)) removed.add(change.id)
-        if (result.replacedId && current.board.publishPolicy === 'live') removed.add(result.replacedId)
+        if (change?.op === 'update' && (result.entry?.status === 'published' || !result.replacedId)) removed.add(change.id)
+        if (result.replacedId && result.entry?.status === 'published') removed.add(result.replacedId)
         if (result.entry) {
           removed.add(result.entry.id)
           added.push(result.entry)
         }
       })
       const replaced = new Set(current.replaced)
-      for (const result of results) if (result.ok && result.replacedId && current.board.publishPolicy === 'staged') replaced.add(result.replacedId)
+      for (const result of results) if (result.ok && result.replacedId && result.entry?.status === 'draft') replaced.add(result.replacedId)
       return {
         ...current,
         entries: [...current.entries.filter((entry) => !removed.has(entry.id)), ...added],

@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 
-// The approvals worklist must show everything awaiting the caller — Flows
-// gates (payment runs among them) and gateless document-status approvals — and
-// get_vitals must count that same set. Previously listApprovalWorklist only
-// saw Flows gates, so an approver saw [] while documents sat pending.
+// The worklist and vitals share the tenant Flow gate population.
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { assertDedicatedFixtureDatabase, createScratchOrg, dropScratchOrg, seedApprovalFlow, seedDraftDocument, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
@@ -50,12 +47,10 @@ async function seed(orgId: string, bankId: string, actors: { submitterId: string
     });
   }
   const gatedId = await seedDraftDocument(orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-  await submitForApproval("vendor_bill", gatedId);
+  await submitForApproval("vendor_bill", gatedId, actors.submitterId);
   const gateless = async (): Promise<string> => {
     const id = await seedDraftDocument(orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await db.execute(sql`update documents set status='pending_approval', submitted_by=${actors.submitterId},
-      submitted_at=now(), updated_by=${actors.submitterId}, updated_at=now()
-      where id=${id} and org_id=${orgId}`);
+    await submitForApproval("vendor_bill",id,actors.submitterId);
     return id;
   };
   const gatelessId = await gateless();
@@ -102,9 +97,9 @@ test("worklist unifies gates, gateless documents, and payment runs; vitals count
     const items = await withOrgContext(org.orgId, () => listApprovalWorklist(approver));
     const kinds = new Map(items.map((item) => [item.id, item.kind]));
     const gates = items.filter((item) => item.kind === "flow_gate");
-    assert.equal(gates.length, 2, "the vendor bill's gate and the payment run's gate");
+    assert.equal(gates.length, 4, "the vendor bill's gate and the payment run's gate");
     assert.ok(gates.some((gate) => gate.subjectId === ids.runId), "the payment run is listed through its gate");
-    assert.equal(kinds.get(ids.gatelessId), "document", "gateless document listed once");
+    assert.ok(gates.some(item=>item.subjectId===ids.gatelessId),"every submitted document is represented by its own native gate");
     assert.ok(!kinds.has(ids.gatedId), "gated document not duplicated as a document row");
     const vitals = await withOrgContext(org.orgId, () => orgVitals(approver));
     assert.deepEqual(vitals.approvals, { available: true, pending: items.length }, "vitals counts the unified set");
@@ -135,9 +130,9 @@ test("worklist unifies gates, gateless documents, and payment runs; vitals count
     const adminItems = await withOrgContext(org.orgId, () => listApprovalWorklist(admin));
     assert.equal(adminItems.filter((item) => item.kind === "flow_gate").length, 0, "no gate assigned to admin");
     assert.equal(
-      adminItems.filter((item) => item.kind === "document").length,
-      items.filter((item) => item.kind === "document").length,
-      "admin still sees every gateless approval",
+      adminItems.length,
+      0,
+      "an unassigned administrator receives no alternate approval path",
     );
     assert.equal(await withOrgContext(org.orgId, () => approvalWorklistCountForAuthz(admin.authz)), adminItems.length);
   } finally {
@@ -196,26 +191,28 @@ test("decide paths resolve each subject kind with separation of duties", { skip:
     const approver = ctxFor(org.orgId, actors.approver1Id, ["approver"], ["flows.approve", "ap.approve"]);
     const submitter = ctxFor(org.orgId, actors.submitterId, ["accountant"], ["flows.approve", "ap.approve"]);
 
-    const decided = await decideApproval(approver, {
-      documentId: ids.gatelessId, decision: "approved", idempotencyKey: randomUUID(),
-    });
+    const submittedGates=await withOrgContext(org.orgId,()=>listApprovalWorklist(approver));
+    const native=submittedGates.find(item=>item.subjectId===ids.gatelessId)!;
+    const decided = await withOrgContext(org.orgId,()=>decideApproval(approver, {
+      gateId: native.id, decision: "approved", idempotencyKey: randomUUID(),
+    }));
     assert.equal(decided.replayed, false);
     assert.equal(await withOrgContext(org.orgId, () => docStatus(ids.gatelessId)), "approved");
 
     await assert.rejects(
-      decideApproval(submitter, { documentId: ids.sodId, decision: "approved", idempotencyKey: randomUUID() }),
+      withOrgContext(org.orgId,()=>decideApproval(submitter,{gateId:submittedGates.find(item=>item.subjectId===ids.sodId)!.id,decision:"approved",idempotencyKey:randomUUID()})),
       // The refusal names the MAKER as well as the submitter — authorship
       // never rebinds, so a third-party submit cannot launder the author's
       // own approval. Matching the shared clause rather than one role keeps
       // this green when the message names both.
-      /cannot approve their own document/,
+      /not found|not_found/,
       "submitter cannot self-approve a pending document",
     );
 
     // A routed document refuses the direct path.
     await assert.rejects(
-      decideApproval(approver, { documentId: ids.gatedId, decision: "approved", idempotencyKey: randomUUID() }),
-      /routed/,
+      withOrgContext(org.orgId,()=>decideApproval(approver,{gateId:randomUUID(),decision:"approved",idempotencyKey:randomUUID()})),
+      /not found|not_found/,
       "gated documents decide through their gate",
     );
 

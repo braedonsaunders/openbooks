@@ -228,7 +228,6 @@ test("unused coverage withdrawal preserves approved evidence and permits a newly
     assert.match((await eventsOf(first.id)).at(-1)!.reason, /Incorrect contribution basis/);
     await assert.rejects(withdrawUnusedEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: first.id,
       reason: "Repeated withdrawal" }), /Only active or ended unused coverage/);
-    await db.execute(sql`update hrm_benefit_plans set approval_mode='flows' where org_id=${h.org.orgId} and id=${planId}`);
     await seedApprovalFlow(h.org.orgId, { subjectKind: 'hrm_benefit_enrollment', assignees: [{ type: 'user', userId: h.adminId }], mode: 'any', preventSelfApproval: false });
     const replacement = await electEnrollment({ orgId: h.org.orgId, actorId: h.adminId, employmentId, planId,
       effectiveFrom: "2026-03-01", lifeEventReason: "Corrected contribution basis", contributionTerms: terms });
@@ -279,7 +278,6 @@ test("unused coverage withdrawal refuses an outstanding successor proposal", { s
     const { planId } = await seedPlan(h.org.orgId);
     const first = await electEnrollment({ orgId: h.org.orgId, actorId: h.adminId, employmentId, planId,
       effectiveFrom: "2026-03-01", lifeEventReason: "Contribution election", contributionTerms: await seededContributionTerms(h.org.orgId, planId) });
-    await db.execute(sql`update hrm_benefit_plans set approval_mode='flows' where org_id=${h.org.orgId} and id=${planId}`);
     await seedApprovalFlow(h.org.orgId, { subjectKind: 'hrm_benefit_enrollment', assignees: [{ type: 'user', userId: h.adminId }], mode: 'any', preventSelfApproval: false });
     await changeEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: first.id,
       changeDate: "2026-04-01", reason: "Contribution change" });
@@ -295,7 +293,6 @@ test("native Flows authorize a successor without interrupting prior coverage", {
     const {planId}=await seedPlan(h.org.orgId);
     const windowId=await seedWindow(h.org.orgId);
     const first=await electEnrollment({orgId:h.org.orgId,actorId:h.adminId,employmentId,planId,windowId,effectiveFrom:'2026-03-01',contributionTerms:await seededContributionTerms(h.org.orgId,planId)});
-    await db.execute(sql`update hrm_benefit_plans set approval_mode='flows' where org_id=${h.org.orgId} and id=${planId}`);
     await seedApprovalFlow(h.org.orgId,{subjectKind:'hrm_benefit_enrollment',assignees:[{type:'user',userId:h.adminId}],mode:'any',preventSelfApproval:false});
     const next=await changeEnrollment({orgId:h.org.orgId,actorId:h.adminId,enrollmentId:first.id,changeDate:'2026-04-01',reason:'Contribution election changed',contributionTerms:(await seededContributionTerms(h.org.orgId,planId)).map(t=>({...t,electedRate:'300'}))});
     assert.equal(next.status,'pending_approval');
@@ -306,7 +303,7 @@ test("native Flows authorize a successor without interrupting prior coverage", {
       await tx.execute(sql`update flow_gates set status='approved',decided_by=${h.adminId},decided_at=now() where org_id=${h.org.orgId} and id=${gate.id}`);
       await tx.execute(sql`update hrm_benefit_enrollments set status='ended',effective_to='2026-03-31' where org_id=${h.org.orgId} and id=${first.id}`);
       await tx.execute(sql`update hrm_benefit_enrollments set status='active',updated_by=${h.adminId},decision_snapshot=jsonb_build_object('outcome','approved','mode','human','runId',flow_run_id) where org_id=${h.org.orgId} and id=${next.id}`);
-    }),/approval stages remain incomplete|assigned native Flow decision/i);
+    }),/current enrollment Flow gate.*assigned decision/i);
     await decideGate({gateId:gate.id,decision:'approved',userId:h.adminId});
     assert.deepEqual((await enrollmentsOf(h.org.orgId,employmentId)).map(e=>[e.status,e.effective_to]),[['ended','2026-03-31'],['active',null]]);
     await assertStorageRefusal(db.execute(sql`update hrm_benefit_enrollments set class_key='other' where org_id=${h.org.orgId} and id=${next.id}`),/submitted benefit evidence is immutable/i);
@@ -496,7 +493,7 @@ test("change ends and opens anew; end and cancel hold their boundaries", { skip:
       (e: unknown) => e instanceof BenefitsError && /only a not-yet-active enrolment is cancelled/.test(e.message),
     );
     // Cancel a pending instead.
-    const pendingPlan = await seedPlan(h.org.orgId, { approval_mode: "flows" });
+    const pendingPlan = await seedPlan(h.org.orgId);
     await seedApprovalFlow(h.org.orgId,{subjectKind:"hrm_benefit_enrollment",assignees:[{type:"user",userId:h.adminId}],mode:"any",preventSelfApproval:false});
     const pending = await electEnrollment({
       orgId: h.org.orgId,
@@ -533,7 +530,7 @@ test("windows open with overlap refusal; close cancels pendings with events", { 
     );
     // Pending election cancelled with its own event on close.
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Benefits Worker" });
-    const { planId } = await seedPlan(h.org.orgId, { approval_mode: "flows" });
+    const { planId } = await seedPlan(h.org.orgId);
     await seedApprovalFlow(h.org.orgId,{subjectKind:"hrm_benefit_enrollment",assignees:[{type:"user",userId:h.adminId}],mode:"any",preventSelfApproval:false});
     const pending = await electEnrollment({
       orgId: h.org.orgId,

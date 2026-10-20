@@ -38,6 +38,13 @@ const SENSITIVE_TYPES: ReadonlySet<string> = new Set([
  * without a named column), plus the table.column pairs below.
  */
 const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
+  // Native clone projections rebase frozen Flow routing identities and redact authored graph evidence.
+  "budget_scenarios.submission_policy",
+  "close_reopen_requests.submission_policy",
+  "crm_sales_quotas.submission_policy",
+  "financial_changes.submission_policy",
+  "hrm_offers.submission_policy",
+  "stock_counts.submission_policy",
   // Financial clone projections redact authored prose and rebase retained evidence.
   "account_translation_policies.reason",
   "documents.document_fx_rate_evidence",
@@ -98,8 +105,13 @@ const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
   "flow_runs.occurrence_key", // cleared on every copy (OM-13-CLONE global dedup)
 ]);
 
-function isCoveredByConstruction(table: string, column: string, udtName: string): boolean {
-  if (column === "custom" && (udtName === "json" || udtName === "jsonb")) return true;
+function isCoveredByConstruction(
+  table: string,
+  column: string,
+  udtName: string,
+): boolean {
+  if (column === "custom" && (udtName === "json" || udtName === "jsonb"))
+    return true;
   return CONSTRUCTION_COVERED.has(`${table}.${column}`);
 }
 
@@ -250,17 +262,17 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "pay_run_holiday_allocations.currency",
   "pay_run_holiday_allocations.status",
   // Exact statutory amounts and their declared numeric bounds contain no prose or personal identifiers.
-  'payroll_period_openings.amounts',
-  'payroll_period_openings.annual_bounds',
-  'payroll_period_openings.contract_hash',
-  'payroll_period_openings.country',
-  'payroll_period_openings.currency',
+  "payroll_period_openings.amounts",
+  "payroll_period_openings.annual_bounds",
+  "payroll_period_openings.contract_hash",
+  "payroll_period_openings.country",
+  "payroll_period_openings.currency",
   // Prior-earnings jurisdiction codes and one-way source/content digests identify no person.
-  'payroll_prior_earnings.country',
-  'payroll_prior_earnings.currency',
-  'payroll_prior_earnings.source_hash',
-  'payroll_prior_earnings.content_hash',
-  'payroll_employee_employer_assignments.assignment_kind',
+  "payroll_prior_earnings.country",
+  "payroll_prior_earnings.currency",
+  "payroll_prior_earnings.source_hash",
+  "payroll_prior_earnings.content_hash",
+  "payroll_employee_employer_assignments.assignment_kind",
   // Training configuration codes, lifecycle states, IANA zones and content digests identify no person.
   "hrm_training_courses.code",
   "hrm_training_courses.status",
@@ -1193,6 +1205,10 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "flow_locks.subject_kind",
   "flow_run_effects.detail",
   "flow_run_effects.effect_key",
+  "flow_submissions.context",
+  "flow_submissions.graphs",
+  "flow_submissions.policy",
+  "flow_submissions.subject_kind",
   "flow_runs.context",
   "flow_runs.error",
   "flow_runs.status",
@@ -1516,6 +1532,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "hrm_offers.employment_kind",
   "hrm_offers.job_title",
   "hrm_offers.signature_status",
+  "hrm_offers.approval_status",
   "hrm_offers.signed_evidence",
   "hrm_offers.signing_token_hash",
   "hrm_offers.status",
@@ -3011,7 +3028,9 @@ const LEGAL_TRANSFORMS: ReadonlySet<MaskTransform> = new Set<MaskTransform>([
   "reseal_secret",
 ]);
 
-async function clonedSensitiveColumns(): Promise<{ table: string; column: string; udtName: string }[]> {
+async function clonedSensitiveColumns(): Promise<
+  { table: string; column: string; udtName: string }[]
+> {
   const cat = await loadCatalog();
   // Original payer, levy and reporting attestations retain confidential source
   // snapshots and Cabinet provenance; rebasing cannot grant destination authority.
@@ -3022,21 +3041,33 @@ async function clonedSensitiveColumns(): Promise<{ table: string; column: string
     "payroll_ca_opening_reporting_authorities",
     "payroll_ca_opening_reporting_allocations",
   ]) {
-    assert.ok(cat.tenantTables.some(table => table.name === tableName), `${tableName} must remain tenant-owned for native teardown`);
-    assert.ok(!cat.tables.some(table => table.name === tableName), `${tableName} must never copy private source authority`);
-    assert.ok(!cat.rebaseSet.has(tableName), `${tableName} must never acquire destination source identity`);
+    assert.ok(
+      cat.tenantTables.some((table) => table.name === tableName),
+      `${tableName} must remain tenant-owned for native teardown`,
+    );
+    assert.ok(
+      !cat.tables.some((table) => table.name === tableName),
+      `${tableName} must never copy private source authority`,
+    );
+    assert.ok(
+      !cat.rebaseSet.has(tableName),
+      `${tableName} must never acquire destination source identity`,
+    );
   }
   const out: { table: string; column: string; udtName: string }[] = [];
   for (const t of cat.tables) {
     for (const c of t.columns) {
-      if (SENSITIVE_TYPES.has(c.udtName)) out.push({ table: t.name, column: c.name, udtName: c.udtName });
+      if (SENSITIVE_TYPES.has(c.udtName))
+        out.push({ table: t.name, column: c.name, udtName: c.udtName });
     }
   }
   return out;
 }
 
 test("every sensitive column of every cloned table is masked or allow-listed, and the allow-list names only live unmasked columns", async () => {
-  const masked = new Set(DEFAULT_POLICIES.map((p) => `${p.tableName}.${p.columnName}`));
+  const masked = new Set(
+    DEFAULT_POLICIES.map((p) => `${p.tableName}.${p.columnName}`),
+  );
   const live = new Map<string, string>();
   const offenders: string[] = [];
   for (const col of await clonedSensitiveColumns()) {
@@ -3064,16 +3095,32 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
     (column) => column.name === "cell_color_rules",
   );
   assert.ok(ruleColumn);
-  const projection = {...boards,columns:[ruleColumn]};
-  const options = {productionOrgId:'65fa9dc7-228f-4e19-8bf1-17d52efeb78d',sandboxOrgId:'47df30a3-4fd1-4570-bb67-09641053ee3b',
-    seed:'42b3d7dd-9674-4f3c-8d6a-8ba5d2308130',tier:'full' as const,masked:true};
-  const generated = generateCopySql(projection,options,new Set(['schedule_boards']),new Set(),new Map(),null);
+  const projection = { ...boards, columns: [ruleColumn] };
+  const options = {
+    productionOrgId: "65fa9dc7-228f-4e19-8bf1-17d52efeb78d",
+    sandboxOrgId: "47df30a3-4fd1-4570-bb67-09641053ee3b",
+    seed: "42b3d7dd-9674-4f3c-8d6a-8ba5d2308130",
+    tier: "full" as const,
+    masked: true,
+  };
+  const generated = generateCopySql(
+    projection,
+    options,
+    new Set(["schedule_boards"]),
+    new Set(),
+    new Map(),
+    null,
+  );
   assert.ok(generated);
-  const expression = generated.split(') select ')[1]?.split(' from "schedule_boards"')[0];
-  assert.equal(expression,"'[]'::jsonb");
-  const ruleReadback = await db.execute<{rules:unknown}>(sql`select ${sql.raw(expression!)} rules
+  const expression = generated
+    .split(") select ")[1]
+    ?.split(' from "schedule_boards"')[0];
+  assert.equal(expression, "'[]'::jsonb");
+  const ruleReadback = await db.execute<{
+    rules: unknown;
+  }>(sql`select ${sql.raw(expression!)} rules
     from (values ('[{"field":"bookingLabel","match":"contains","value":"Production Person","color":"#123456"}]'::jsonb)) source(cell_color_rules)`);
-  assert.deepEqual(ruleReadback.rows[0]?.rules,[]);
+  assert.deepEqual(ruleReadback.rows[0]?.rules, []);
   const stale: string[] = [];
   for (const key of ALLOW_LISTED_NON_PERSONAL) {
     const udtName = live.get(key);
@@ -3083,132 +3130,312 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
     }
     const [table, column] = key.split(".") as [string, string];
     if (masked.has(key) || isCoveredByConstruction(table, column, udtName)) {
-      stale.push(`${key} (now masked or construction-covered — remove it so the list only shrinks)`);
+      stale.push(
+        `${key} (now masked or construction-covered — remove it so the list only shrinks)`,
+      );
     }
   }
-  assert.deepEqual(stale, [], `allow-list entries that must be removed: ${stale.join(", ")}`);
+  assert.deepEqual(
+    stale,
+    [],
+    `allow-list entries that must be removed: ${stale.join(", ")}`,
+  );
 });
 
 test("financial clone projections redact source prose and preserve rebased fair-value measurements", async () => {
   const catalog = await loadCatalog();
   const seed = "42b3d7dd-9674-4f3c-8d6a-8ba5d2308130";
   const fairValueId = "65fa9dc7-228f-4e19-8bf1-17d52efeb78d";
-  const options = {productionOrgId:fairValueId,sandboxOrgId:"47df30a3-4fd1-4570-bb67-09641053ee3b",
-    seed,tier:"full" as const,masked:true};
-  const masking = new Map<string,Map<string,MaskTransform>>();
+  const options = {
+    productionOrgId: fairValueId,
+    sandboxOrgId: "47df30a3-4fd1-4570-bb67-09641053ee3b",
+    seed,
+    tier: "full" as const,
+    masked: true,
+  };
+  const masking = new Map<string, Map<string, MaskTransform>>();
   for (const policy of DEFAULT_POLICIES) {
-    if (!masking.has(policy.tableName)) masking.set(policy.tableName,new Map());
-    masking.get(policy.tableName)!.set(policy.columnName,policy.transform);
+    if (!masking.has(policy.tableName))
+      masking.set(policy.tableName, new Map());
+    masking.get(policy.tableName)!.set(policy.columnName, policy.transform);
   }
-  async function project(tableName: string, columnName: string, value: unknown, masked = true) {
-    const table = catalog.tables.find(table => table.name === tableName);
+  async function project(
+    tableName: string,
+    columnName: string,
+    value: unknown,
+    masked = true,
+  ) {
+    const table = catalog.tables.find((table) => table.name === tableName);
     assert.ok(table);
-    const column = table.columns.find(column => column.name === columnName);
+    const column = table.columns.find((column) => column.name === columnName);
     assert.ok(column);
-    const generated = generateCopySql({...table,columns:[column]}, {...options,masked},new Set([tableName]),new Set(),masking,null);
+    const generated = generateCopySql(
+      { ...table, columns: [column] },
+      { ...options, masked },
+      new Set([tableName]),
+      new Set(),
+      masking,
+      null,
+    );
     assert.ok(generated);
-    const expression = generated.split(") select ")[1]?.split(` from "${tableName}"`)[0];
+    const expression = generated
+      .split(") select ")[1]
+      ?.split(` from "${tableName}"`)[0];
     assert.ok(expression);
-    const supplied = column.udtName === "jsonb" ? sql`${JSON.stringify(value)}::jsonb` : sql`${value}::text`;
-    return (await db.execute<{value:unknown}>(sql`select ${sql.raw(expression)} as value
-      from (values (${supplied})) source(${sql.identifier(columnName)})`)).rows[0]!.value;
+    const supplied =
+      column.udtName === "jsonb"
+        ? sql`${JSON.stringify(value)}::jsonb`
+        : sql`${value}::text`;
+    return (
+      await db.execute<{
+        value: unknown;
+      }>(sql`select ${sql.raw(expression)} as value
+      from (values (${supplied})) source(${sql.identifier(columnName)})`)
+    ).rows[0]!.value;
   }
-  const rebased = (await db.execute<{id:string}>(sql`select ob_rebase(${fairValueId}::uuid,${seed}::uuid)::text as id`)).rows[0]!.id;
-  const basis = {fairValuePriceId:fairValueId,quantity:"2.00000000",allocated:"25.0000",reason:"Customer Jane approval"};
-  assert.deepEqual(await project("performance_obligations","allocation_basis",basis),
-    {...basis,fairValuePriceId:rebased,reason:"REDACTED"});
-  assert.deepEqual(await project("performance_obligations","allocation_basis",basis,false),
-    {...basis,fairValuePriceId:rebased});
-  assert.equal(await project("performance_obligations","hold_reason","Customer Jane approval"),"REDACTED");
-  assert.equal(await project("fx_rate_types","name","Jane's corporate treasury"),"REDACTED");
-  assert.equal(await project("account_translation_policies","reason","Jane's corporate treasury"),"REDACTED");
+  const rebased = (
+    await db.execute<{ id: string }>(
+      sql`select ob_rebase(${fairValueId}::uuid,${seed}::uuid)::text as id`,
+    )
+  ).rows[0]!.id;
+  const basis = {
+    fairValuePriceId: fairValueId,
+    quantity: "2.00000000",
+    allocated: "25.0000",
+    reason: "Customer Jane approval",
+  };
+  assert.deepEqual(
+    await project("performance_obligations", "allocation_basis", basis),
+    { ...basis, fairValuePriceId: rebased, reason: "REDACTED" },
+  );
+  assert.deepEqual(
+    await project("performance_obligations", "allocation_basis", basis, false),
+    { ...basis, fairValuePriceId: rebased },
+  );
+  assert.equal(
+    await project(
+      "performance_obligations",
+      "hold_reason",
+      "Customer Jane approval",
+    ),
+    "REDACTED",
+  );
+  assert.equal(
+    await project("fx_rate_types", "name", "Jane's corporate treasury"),
+    "REDACTED",
+  );
+  assert.equal(
+    await project(
+      "account_translation_policies",
+      "reason",
+      "Jane's corporate treasury",
+    ),
+    "REDACTED",
+  );
   const leaveReason = "Approved banked leave destination for Worker Example";
-  assert.equal(await project("hrm_leave_payroll_entitlement_mappings", "reason", leaveReason), "REDACTED");
-  assert.equal(await project("hrm_leave_payroll_entitlement_mappings", "reason", leaveReason, false), leaveReason);
+  assert.equal(
+    await project(
+      "hrm_leave_payroll_entitlement_mappings",
+      "reason",
+      leaveReason,
+    ),
+    "REDACTED",
+  );
+  assert.equal(
+    await project(
+      "hrm_leave_payroll_entitlement_mappings",
+      "reason",
+      leaveReason,
+      false,
+    ),
+    leaveReason,
+  );
 });
 
 test("warehouse evidence masking removes arbitrary prose and preserves native dated movement values", async () => {
   const seed = "42b3d7dd-9674-4f3c-8d6a-8ba5d2308130";
   const id = "65fa9dc7-228f-4e19-8bf1-17d52efeb78d";
-  const result = (await db.execute<{request: Record<string, unknown>; movements: Record<string, unknown>[]; rebased: string}>(sql`
+  const result = (
+    await db.execute<{
+      request: Record<string, unknown>;
+      movements: Record<string, unknown>[];
+      rebased: string;
+    }>(sql`
     select public.warehouse_execution_mask_json(
-      ${JSON.stringify({toBinId:id,date:"2026-01-02",reason:"Employee Jane Smith moved this carton",recipient:"Jane Smith"})}::jsonb,
+      ${JSON.stringify({ toBinId: id, date: "2026-01-02", reason: "Employee Jane Smith moved this carton", recipient: "Jane Smith" })}::jsonb,
       ${seed}::uuid,'request') as request,
       public.warehouse_execution_mask_json(
-        ${JSON.stringify([{shipmentLineId:id,fromMovementId:id,toMovementId:id,entryId:null,value:"12.3400",recipient:"Jane Smith"}])}::jsonb,
+        ${JSON.stringify([{ shipmentLineId: id, fromMovementId: id, toMovementId: id, entryId: null, value: "12.3400", recipient: "Jane Smith" }])}::jsonb,
         ${seed}::uuid,'movements') as movements,
-      public.ob_rebase(${id}::uuid,${seed}::uuid)::text as rebased`)).rows[0]!;
-  assert.deepEqual(result.request,{toBinId:result.rebased,date:"2026-01-02",reason:"REDACTED"});
-  assert.deepEqual(result.movements,[{shipmentLineId:result.rebased,fromMovementId:result.rebased,
-    toMovementId:result.rebased,entryId:null,value:"12.3400"}]);
-  await assert.rejects(db.execute(sql`select public.warehouse_execution_mask_json(
+      public.ob_rebase(${id}::uuid,${seed}::uuid)::text as rebased`)
+  ).rows[0]!;
+  assert.deepEqual(result.request, {
+    toBinId: result.rebased,
+    date: "2026-01-02",
+    reason: "REDACTED",
+  });
+  assert.deepEqual(result.movements, [
+    {
+      shipmentLineId: result.rebased,
+      fromMovementId: result.rebased,
+      toMovementId: result.rebased,
+      entryId: null,
+      value: "12.3400",
+    },
+  ]);
+  await assert.rejects(
+    db.execute(sql`select public.warehouse_execution_mask_json(
     '[{"value":"Employee Jane Smith"}]'::jsonb,${seed}::uuid,'movements')`),
-    (error: unknown) => errorChainMatches(error, /exact numeric evidence/));
+    (error: unknown) => errorChainMatches(error, /exact numeric evidence/),
+  );
 });
 
 test("every masking policy names a real schema column with a legal transform", async () => {
   const schemaCols = new Set(
-    (await db.execute<{ table_name: string; column_name: string }>(sql`
+    (
+      await db.execute<{ table_name: string; column_name: string }>(sql`
       select c.table_name, c.column_name
         from information_schema.columns c
         join information_schema.tables t
           on t.table_name = c.table_name and t.table_schema = c.table_schema
-       where c.table_schema = 'public' and t.table_type = 'BASE TABLE'`)).rows.map(
-      (r) => `${r.table_name}.${r.column_name}`,
-    ),
+       where c.table_schema = 'public' and t.table_type = 'BASE TABLE'`)
+    ).rows.map((r) => `${r.table_name}.${r.column_name}`),
   );
   const bad: string[] = [];
   for (const p of DEFAULT_POLICIES) {
     if (!schemaCols.has(`${p.tableName}.${p.columnName}`)) {
-      bad.push(`${p.tableName}.${p.columnName} (no such column — the policy silently does nothing)`);
+      bad.push(
+        `${p.tableName}.${p.columnName} (no such column — the policy silently does nothing)`,
+      );
     }
-    if (!LEGAL_TRANSFORMS.has(p.transform)) bad.push(`${p.tableName}.${p.columnName} (unknown transform ${p.transform})`);
+    if (!LEGAL_TRANSFORMS.has(p.transform))
+      bad.push(
+        `${p.tableName}.${p.columnName} (unknown transform ${p.transform})`,
+      );
   }
-  assert.deepEqual(bad, [], `masking policies that never fire: ${bad.join(", ")}`);
+  assert.deepEqual(
+    bad,
+    [],
+    `masking policies that never fire: ${bad.join(", ")}`,
+  );
   const sourceKey = "employee-review:987654321";
-  const policies = new Map(DEFAULT_POLICIES.filter((p) => p.tableName === "hrm_comp_cycles").map((p) => [p.columnName, p.transform]));
-  const evidenceColumn = { tableName: "hrm_comp_cycles", udtName: "jsonb", isNullable: true };
-  const masked = (await db.execute<{ source_key: string | null; source_evidence: unknown }>(sql`
+  const policies = new Map(
+    DEFAULT_POLICIES.filter((p) => p.tableName === "hrm_comp_cycles").map(
+      (p) => [p.columnName, p.transform],
+    ),
+  );
+  const evidenceColumn = {
+    tableName: "hrm_comp_cycles",
+    udtName: "jsonb",
+    isNullable: true,
+  };
+  const masked = (
+    await db.execute<{
+      source_key: string | null;
+      source_evidence: unknown;
+    }>(sql`
     select ${sql.raw(maskExpr("source_key", policies.get("source_key")!))} as source_key,
            ${sql.raw(maskExpr("source_evidence", policies.get("source_evidence")!, "id", evidenceColumn))} as source_evidence
       from (values (${sourceKey}::text, '{"employee":{"name":"Production Employee","governmentId":"987654321"}}'::jsonb),
                    (null::text, null::jsonb)) as source(source_key, source_evidence)
-     order by source_key nulls last`)).rows;
+     order by source_key nulls last`)
+  ).rows;
   assert.match(masked[0]!.source_key!, /^[a-f0-9]{32}$/);
   assert.notEqual(masked[0]!.source_key, sourceKey);
   assert.deepEqual(masked[0]!.source_evidence, { redacted: true });
   assert.deepEqual(masked[1], { source_key: null, source_evidence: null });
 });
 
-
 test("full and masked native clone projections clear schedule automatic policy regardless of source operator/contact evidence", async () => {
-  const boards = (await loadCatalog()).tables.find(table => table.name === "schedule_boards");
+  const boards = (await loadCatalog()).tables.find(
+    (table) => table.name === "schedule_boards",
+  );
   assert.ok(boards);
-  const options = { productionOrgId: '65fa9dc7-228f-4e19-8bf1-17d52efeb78d', sandboxOrgId: '47df30a3-4fd1-4570-bb67-09641053ee3b', seed: '42b3d7dd-9674-4f3c-8d6a-8ba5d2308130', tier: 'full' as const };
-  const policyColumn = boards.columns.find(column => column.name === "automatic_delivery_policy");
+  const options = {
+    productionOrgId: "65fa9dc7-228f-4e19-8bf1-17d52efeb78d",
+    sandboxOrgId: "47df30a3-4fd1-4570-bb67-09641053ee3b",
+    seed: "42b3d7dd-9674-4f3c-8d6a-8ba5d2308130",
+    tier: "full" as const,
+  };
+  const policyColumn = boards.columns.find(
+    (column) => column.name === "automatic_delivery_policy",
+  );
   assert.ok(policyColumn);
   for (const masked of [false, true]) {
-    const copied: string = generateCopySql({ ...boards, columns: [policyColumn] }, { ...options, masked }, new Set(['schedule_boards']), new Set(), new Map(), null)!;
-    const policyExpression: string | undefined = copied.split(') select ')[1]?.split(' from "schedule_boards"')[0];
+    const copied: string = generateCopySql(
+      { ...boards, columns: [policyColumn] },
+      { ...options, masked },
+      new Set(["schedule_boards"]),
+      new Set(),
+      new Map(),
+      null,
+    )!;
+    const policyExpression: string | undefined = copied
+      .split(") select ")[1]
+      ?.split(' from "schedule_boards"')[0];
     assert.equal(policyExpression, "null::jsonb");
-    const result = await db.execute<{policy: unknown}>(sql`select ${sql.raw(policyExpression!)} policy from (values ('{"operatorId":"65fa9dc7-228f-4e19-8bf1-17d52efeb78d","additionalPartyIds":["private-contact"]}'::jsonb)) source(automatic_delivery_policy)`);
+    const result = await db.execute<{ policy: unknown }>(
+      sql`select ${sql.raw(policyExpression!)} policy from (values ('{"operatorId":"65fa9dc7-228f-4e19-8bf1-17d52efeb78d","additionalPartyIds":["private-contact"]}'::jsonb)) source(automatic_delivery_policy)`,
+    );
     assert.equal(result.rows[0]?.policy, null);
   }
 });
 
-test('native production evidence refuses whole-column masking while embedded disposition prose and identity are safely reconstructed', async () => {
+test("native production evidence refuses whole-column masking while embedded disposition prose and identity are safely reconstructed", async () => {
   const catalog = await loadCatalog();
-  const options = { productionOrgId: '65fa9dc7-228f-4e19-8bf1-17d52efeb78d', sandboxOrgId: '47df30a3-4fd1-4570-bb67-09641053ee3b', seed: '42b3d7dd-9674-4f3c-8d6a-8ba5d2308130', tier: 'full' as const, masked: true };
-  for (const [tableName, columnName] of [['operating_profile_scopes','profile_ids'], ['operating_profile_versions','definition'], ['inventory_inspections','disposition_result'], ['mfg_mrp_runs','parameters'], ['mfg_subcontract_shipments','request_snapshot']] as const) {
-    const table = catalog.tables.find(table => table.name === tableName); assert.ok(table);
-    const column = table.columns.find(column => column.name === columnName); assert.ok(column);
-    const policies = new Map<string,Map<string,MaskTransform>>([[tableName,new Map([[columnName,'null_out']])]]);
-    assert.throws(() => generateCopySql({ ...table, columns: [column] }, options, new Set(['operating_profiles',tableName]), new Set(), policies, null), /cannot use a whole-column masking transform/);
+  const options = {
+    productionOrgId: "65fa9dc7-228f-4e19-8bf1-17d52efeb78d",
+    sandboxOrgId: "47df30a3-4fd1-4570-bb67-09641053ee3b",
+    seed: "42b3d7dd-9674-4f3c-8d6a-8ba5d2308130",
+    tier: "full" as const,
+    masked: true,
+  };
+  for (const [tableName, columnName] of [
+    ["operating_profile_scopes", "profile_ids"],
+    ["operating_profile_versions", "definition"],
+    ["inventory_inspections", "disposition_result"],
+    ["mfg_mrp_runs", "parameters"],
+    ["mfg_subcontract_shipments", "request_snapshot"],
+  ] as const) {
+    const table = catalog.tables.find((table) => table.name === tableName);
+    assert.ok(table);
+    const column = table.columns.find((column) => column.name === columnName);
+    assert.ok(column);
+    const policies = new Map<string, Map<string, MaskTransform>>([
+      [tableName, new Map([[columnName, "null_out"]])],
+    ]);
+    assert.throws(
+      () =>
+        generateCopySql(
+          { ...table, columns: [column] },
+          options,
+          new Set(["operating_profiles", tableName]),
+          new Set(),
+          policies,
+          null,
+        ),
+      /cannot use a whole-column masking transform/,
+    );
   }
-  const requestId = 'a0aac416-e9c5-425a-a029-94249704fd6b';
-  const embedded = JSON.stringify({ action: 'rework', reason: 'Private engineering discussion', reworkRoutingId: requestId });
-  const result = (await db.execute<{ evidence: { requestKey:string; intent:string } }>(sql`select production_clone_safe_evidence(${JSON.stringify({requestKey:requestId,intent:embedded})}::jsonb,${options.seed}::uuid,'',${options.sandboxOrgId}::uuid,true) as evidence`)).rows[0]!.evidence;
-  const intent = JSON.parse(result.intent) as { action:string; reason:string; reworkRoutingId:string };
-  assert.equal(intent.action,'rework'); assert.equal(intent.reason,'REDACTED'); assert.notEqual(intent.reworkRoutingId,requestId);
-  assert.equal(intent.reworkRoutingId,result.requestKey); assert(!JSON.stringify(result).includes('Private engineering discussion'));
+  const requestId = "a0aac416-e9c5-425a-a029-94249704fd6b";
+  const embedded = JSON.stringify({
+    action: "rework",
+    reason: "Private engineering discussion",
+    reworkRoutingId: requestId,
+  });
+  const result = (
+    await db.execute<{ evidence: { requestKey: string; intent: string } }>(
+      sql`select production_clone_safe_evidence(${JSON.stringify({ requestKey: requestId, intent: embedded })}::jsonb,${options.seed}::uuid,'',${options.sandboxOrgId}::uuid,true) as evidence`,
+    )
+  ).rows[0]!.evidence;
+  const intent = JSON.parse(result.intent) as {
+    action: string;
+    reason: string;
+    reworkRoutingId: string;
+  };
+  assert.equal(intent.action, "rework");
+  assert.equal(intent.reason, "REDACTED");
+  assert.notEqual(intent.reworkRoutingId, requestId);
+  assert.equal(intent.reworkRoutingId, result.requestKey);
+  assert(!JSON.stringify(result).includes("Private engineering discussion"));
 });

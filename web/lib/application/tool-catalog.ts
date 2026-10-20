@@ -19,7 +19,7 @@ import { updateBudgetCells } from "./budgets";
 import {
   advanceCloseRun,
   createReopenRequest,
-  decideReopenRequest,
+  submitReopenRequest,
   getCloseRun,
   listCloseRuns,
   runPeriodRevaluation,
@@ -285,7 +285,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     description: "One org snapshot from the screen resolvers: cash and runway, AR/AP outstanding and aging, pending approvals, latest close run. Unreadable sections return available:false with reason; absent is never zero.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context) => ({ ok: true, ...await orgVitals(context) }),
+    execute: async (context) => ({ ok: true, ...(await orgVitals(context)) }),
   }),
   definition({
     name: "list_record_types", title: "List Record Types",
@@ -305,7 +305,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       subsidiaryId: UUID.optional(),
     }),
     readOnly: true, destructive: false, openWorld: false, assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await listRecords(context, input) }),
+    execute: async (context, input) => ({ ok: true, ...(await listRecords(context, input)),
+    }),
   }),
   definition({
     name: "get_record", title: "Get Record",
@@ -319,28 +320,32 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     description: "Create a record through its authoritative domain writer and validation controls.",
     inputSchema: z.object({ typeKey: TYPE_KEY, body: CUSTOM, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await createApplicationRecord(context, input) }),
+    execute: async (context, input) => ({ ok: true, ...(await createApplicationRecord(context, input)),
+    }),
   }),
   definition({
     name: "update_record", title: "Update Record",
     description: "Update a record through its domain writer. Documents (and data-replacing custom records) require expectedUpdatedAt copied verbatim from get_record; never generate or reformat it.",
     inputSchema: updateRecordSchema,
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await updateApplicationRecord(context, input) }),
+    execute: async (context, input) => ({ ok: true, ...(await updateApplicationRecord(context, input)),
+    }),
   }),
   definition({
     name: "delete_record", title: "Delete Record",
     description: "Delete an authorized record only when domain lifecycle and referential-integrity controls permit it.",
     inputSchema: z.object({ typeKey: TYPE_KEY, id: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: true, openWorld: false, assistantConfirmation: "always", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await deleteApplicationRecord(context, input) }),
+    execute: async (context, input) => ({ ok: true, ...(await deleteApplicationRecord(context, input)),
+    }),
   }),
   definition({
     name: "describe_page_layout_vocabulary", title: "Describe Page Layout Vocabulary",
     description: "Block/cell/widget/frame names a page layout may use, from the live registries, plus the rules layouts obey. Start here; unlisted widgets are refused at save.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context) => ({ ok: true, ...await describeLayoutVocabulary(context) }),
+    execute: async (context) => ({ ok: true, ...(await describeLayoutVocabulary(context)),
+    }),
   }),
   definition({
     name: "describe_page_layout", title: "Describe Page Layout",
@@ -354,14 +359,15 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     }),
     readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await describePageLayout(context, input as never) }),
+    execute: async (context, input) => ({ ok: true, ...(await describePageLayout(context, input as never)),
+    }),
   }),
   definition({
     name: "list_page_layouts", title: "List Page Layouts",
     description: "List the routes this org has customized, with the stored layout for each. A route absent from this list renders its built-in layout.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context) => ({ ok: true, ...await listLayouts(context) }),
+    execute: async (context) => ({ ok: true, ...(await listLayouts(context)) }),
   }),
   definition({
     name: "validate_page_layout", title: "Validate Page Layout",
@@ -369,7 +375,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     inputSchema: z.object({ spec: LAYOUT_SPEC }),
     readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await validateLayout(context, input) }),
+    execute: async (context, input) => ({ ok: true, ...(await validateLayout(context, input)),
+    }),
   }),
   definition({
     name: "preview_page_layout", title: "Preview Page Layout",
@@ -383,7 +390,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await previewLayout(context, input as never) }),
+    execute: async (context, input) => ({ ok: true, ...(await previewLayout(context, input as never)),
+    }),
   }),
   definition({
     name: "set_page_layout", title: "Set Page Layout",
@@ -393,7 +401,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
         .describe("org (default) changes the page for everyone; user stores it for you alone.") }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await setLayout(context, input) }),
+    execute: async (context, input) => ({ ok: true, ...(await setLayout(context, input)),
+    }),
   }),
   definition({
     name: "list_page_layout_history", title: "List Page Layout History",
@@ -401,7 +410,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     inputSchema: z.object({ route: ROUTE }),
     readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await listLayoutHistory(context, input as never) }),
+    execute: async (context, input) => ({ ok: true, ...(await listLayoutHistory(context, input as never)),
+    }),
   }),
   definition({
     name: "restore_page_layout", title: "Restore Page Layout",
@@ -409,7 +419,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     inputSchema: z.object({ route: ROUTE, versionId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await restoreLayout(context, input as never) }),
+    execute: async (context, input) => ({ ok: true, ...(await restoreLayout(context, input as never)),
+    }),
   }),
   definition({
     name: "clear_page_layout", title: "Clear Page Layout",
@@ -418,7 +429,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
         .describe("org (default) changes the page for everyone; user stores it for you alone.") }),
     readOnly: false, destructive: true, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await clearLayout(context, input) }),
+    execute: async (context, input) => ({ ok: true, ...(await clearLayout(context, input)),
+    }),
   }),
   definition({
     name: "list_app_packages", title: "List Apps",
@@ -426,7 +438,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     description: "List this organization's app packages, their active versions, status, management and workspace links.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async context => ({ ok: true, ...await listExtensions(context) }),
+    execute: async (context) => ({ ok: true, ...(await listExtensions(context)),
+    }),
   }),
   definition({
     name: "describe_app_vocabulary", title: "Describe App Capabilities",
@@ -434,7 +447,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     description: "Start here to build an app. Returns the native screen and package contract, governed objects and backend capabilities, an example, and the draft → preview → approve workflow.",
     inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async context => ({ ok: true, ...await describeExtensionVocabulary(context) }),
+    execute: async (context) => ({ ok: true, ...(await describeExtensionVocabulary(context)),
+    }),
   }),
   definition({
     name: "draft_app", title: "Prepare App Draft",
@@ -447,7 +461,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await draftExtension(context, input as never) }),
+    execute: async (context, input) => ({ ok: true, ...(await draftExtension(context, input as never)),
+    }),
   }),
   definition({
     name: "get_app_draft", title: "Read App Draft",
@@ -463,7 +478,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     description: "Read the installed package or one of its historical versions before preparing an upgrade or rollback. Preserve owned object definitions and use a new version label, then draft and review it.",
     inputSchema: z.object({ key: EXTENSION_KEY, versionId: UUID.optional() }), readOnly: true, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await getExtensionPackage(context, input as never) }),
+    execute: async (context, input) => ({ ok: true, ...(await getExtensionPackage(context, input as never)),
+    }),
   }),
   definition({
     name: "discard_app_draft", title: "Discard App Draft",
@@ -476,7 +492,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await discardExtensionDraft(context, input as never) }),
+    execute: async (context, input) => ({ ok: true, ...(await discardExtensionDraft(context, input as never)),
+    }),
   }),
   definition({
     name: "activate_app_draft", title: "Activate Reviewed Extension",
@@ -489,7 +506,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
-    execute: async (context, input) => ({ ok: true, ...await activateExtensionDraft(context, input as never) }),
+    execute: async (context, input) => ({ ok: true, ...(await activateExtensionDraft(context, input as never)),
+    }),
   }),
   definition({
     name: "list_approvals", title: "List Approvals",
@@ -509,7 +527,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
     readOnly: false, destructive: false, openWorld: true, assistantConfirmation: "always", visibleTo: hasPermission("flows.approve"),
-    execute: async (context, input) => ({ ok: true, ...await decideApproval(context, input) }),
+    execute: async (context, input) => ({ ok: true, ...(await decideApproval(context, input)),
+    }),
   }),
   definition({
     name: "list_close_runs", title: "List Close Runs",
@@ -539,13 +558,13 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: hasPermission("close.run"),
-    execute: async (context, input) => ({ ok: true, ...await startApplicationCloseRun(context, input) }),
+    execute: async (context, input) => ({ ok: true, ...(await startApplicationCloseRun(context, input)),
+    }),
   }),
-  ...(["refresh", "request_approval", "attest", "close", "publish"] as const).map((action) => {
+  ...(["refresh", "request_approval", "close", "publish"] as const).map((action) => {
     const names = {
       refresh: ["refresh_close_run", "Refresh Close Run"],
       request_approval: ["request_close_approval", "Request Close Approval"],
-      attest: ["attest_close_run", "Attest Close Run"],
       close: ["close_period", "Close Period"],
       publish: ["publish_close_package", "Publish Close Package"],
     } as const;
@@ -554,24 +573,31 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       description: action === "publish"
         ? "Freeze and publish the approved close binder; configured package delivery may be queued after commit. Requires Advanced close controls — omitted when that Features switch is off."
         : `${names[action][1]} through the controlled close lifecycle.`,
-      inputSchema: z.object({
+        inputSchema: z.object({
         runId: UUID,
         comment: z.string().trim().max(2000).optional().describe("Note recorded on the close run"),
         idempotencyKey: IDEMPOTENCY_KEY,
       }),
-      readOnly: false,
-      destructive: action === "close",
-      openWorld: action === "publish",
-      assistantConfirmation: "always",
-      // publish is refused without Advanced close controls (advanceCloseRun);
-      // the catalog must omit it there too, as the description already claims.
-      featureKey: action === "publish" ? "advancedClose" : undefined,
-      visibleTo: hasPermission(action === "attest" || action === "close" ? "close.approve" : "close.run"),
-      execute: async (context, input) => ({ ok: true, ...await advanceCloseRun(context, { ...input, action }) }),
-    });
-  }),
+        readOnly: false,
+        destructive: action === 'close',
+        openWorld: action === 'publish',
+        assistantConfirmation: 'always',
+        // publish is refused without Advanced close controls (advanceCloseRun);
+        // the catalog must omit it there too, as the description already claims.
+        featureKey: action === "publish" ? "advancedClose" : undefined,
+        visibleTo: hasPermission(
+          action === 'close' ? 'close.approve' : 'close.run',
+        ),
+        execute: async (context, input) => ({
+          ok: true,
+          ...(await advanceCloseRun(context, { ...input, action })),
+        }),
+      })
+    },
+  ),
   definition({
-    name: "request_period_reopen", title: "Request Period Reopen",
+    name: 'request_period_reopen',
+    title: 'Request Period Reopen',
     description: "Create an independently approved, time-bounded request to reopen explicit period modules.",
     inputSchema: z.object({
       periodId: UUID, bookId: UUID, subsidiaryId: UUID.optional(),
@@ -579,21 +605,35 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       reason: z.string().trim().min(5).max(2000).describe("Business reason for the reopen request"),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
-    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: hasPermission("close.reopen"),
-    execute: async (context, input) => ({ ok: true, ...await createReopenRequest(context, input) }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: 'always',
+    visibleTo: hasPermission('close.reopen'),
+    execute: async (context, input) => ({
+      ok: true,
+      ...(await createReopenRequest(context, input)),
+    }),
   }),
   definition({
-    name: "decide_period_reopen", title: "Decide Period Reopen",
-    description: "Independently approve or reject a period-reopen request; approved access is bounded by policy and expiry.",
+    name: 'submit_period_reopen',
+    title: 'Submit Period Reopen',
+    description:
+      'Submit the requester’s period reopen through tenant Flows. Configured gates hold reopening; zero gates release the bounded access window.',
     inputSchema: z.object({
       requestId: UUID,
-      approve: z.boolean().describe("True approves the reopen; false rejects it"),
       hours: z.number().int().min(1).max(168).optional().describe("Approved access window in hours"),
-      decisionReason: z.string().max(500).optional().describe("Required 10-500 character reason when rejecting"),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
-    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: hasPermission("close.reopen"),
-    execute: async (context, input) => ({ ok: true, ...await decideReopenRequest(context, input) }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: 'always',
+    visibleTo: hasPermission('close.reopen'),
+    execute: async (context, input) => ({
+      ok: true,
+      ...(await submitReopenRequest(context, input)),
+    }),
   }),
   definition({
     name: "run_revaluation", title: "Run FX Revaluation",
@@ -603,13 +643,23 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     visibleTo: hasPermission("close.run"), featureKey: "multiCurrency",
     execute: async (context, input) => ({ ok: true, ...(await runPeriodRevaluation(context, input)) }),
   }),
-  ...(["submit", "post"] as const).map((action) => definition({
-    name: `${action}_document`, title: `${action === "submit" ? "Submit" : "Post"} Document`,
-    description: action === "submit" ? "Submit a draft document into its authoritative approval workflow." : "Post an approved document through the accounting kernel; a draft is submitted first and may return pending approval.",
-    inputSchema: z.object({ documentId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
-    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: documentActor,
-    execute: async (context, input) => ({ ok: true, ...await advanceDocumentLifecycle(context, { ...input, action }) }),
-  })),
+  ...(['submit', 'post'] as const).map((action) =>
+    definition({
+      name: `${action}_document`,
+      title: `${action === "submit" ? "Submit" : "Post"} Document`,
+      description: action === "submit" ? "Submit a draft document into its authoritative approval workflow." : "Post an approved document through the accounting kernel; a draft is submitted first and may return pending approval.",
+      inputSchema: z.object({ documentId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
+      readOnly: false,
+      destructive: false,
+      openWorld: false,
+      assistantConfirmation: 'always',
+      visibleTo: documentActor,
+      execute: async (context, input) => ({
+        ok: true,
+        ...(await advanceDocumentLifecycle(context, { ...input, action })),
+      }),
+    }),
+  ),
   definition({
     name: "post_journal", title: "Post Journal",
     description: "Submit (if draft) and post a manual journal; drafts may return pending approval. Journals skip the generic document lifecycle.",
@@ -619,7 +669,8 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     execute: async (context, input) => ({ ok: true, ...(await postJournalDocument(context, input)) }),
   }),
   definition({
-    name: "void_document", title: "Void Document",
+    name: 'void_document',
+    title: 'Void Document',
     description: "Request a controlled void; posted documents reverse through the kernel and retained evidence is preserved.",
     inputSchema: z.object({
       documentId: UUID,
@@ -627,22 +678,39 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       reversalDate: DATE.nullable().optional(),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
-    readOnly: false, destructive: true, openWorld: false, assistantConfirmation: "always", visibleTo: documentActor,
-    execute: async (context, input) => ({ ok: true, ...await voidDocument(context, input) }),
+    readOnly: false,
+    destructive: true,
+    openWorld: false,
+    assistantConfirmation: 'always',
+    visibleTo: documentActor,
+    execute: async (context, input) => ({
+      ok: true,
+      ...(await voidDocument(context, input)),
+    }),
   }),
   definition({
-    name: "correct_document", title: "Correct Posted Document",
+    name: 'correct_document',
+    title: 'Correct Posted Document',
     description: "Create a correcting replacement draft and request a controlled void of the posted source in one exactly-once transaction. The correction requires expectedUpdatedAt copied verbatim from the persisted source revision.",
     inputSchema: z.object({
       documentId: UUID,
       correction: correctionSchema.describe("Replacement header and lines for the correcting draft"),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
-    readOnly: false, destructive: true, openWorld: false, assistantConfirmation: "always", visibleTo: documentActor,
-    execute: async (context, input) => ({ ok: true, ...await correctPostedDocument(context, input) }),
+    readOnly: false,
+    destructive: true,
+    openWorld: false,
+    assistantConfirmation: 'always',
+    visibleTo: documentActor,
+    execute: async (context, input) => ({
+      ok: true,
+      ...(await correctPostedDocument(context, input)),
+    }),
   }),
   definition({
-    name: "create_payment", title: "Create Payment", tier: "core",
+    name: 'create_payment',
+    title: 'Create Payment',
+    tier: 'core',
     description: "Create a governed vendor-payment or customer-receipt draft with exact currency and subsidiary context.",
     inputSchema: z.object({
       kind: z.enum(["vendor_payment", "customer_payment"]).describe("Draft kind: vendor_payment pays a vendor, customer_payment records a receipt"),
@@ -652,22 +720,39 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       currency: z.string().regex(/^[A-Z]{3}$/).optional().describe("Three-letter currency code, e.g. CAD"),
       fxRate: RATE.optional(), idempotencyKey: IDEMPOTENCY_KEY,
     }),
-    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("ap.pay", "ar.pay"),
-    execute: async (context, input) => ({ ok: true, ...await createPayment(context, input) }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: 'always',
+    visibleTo: anyPermission("ap.pay", "ar.pay"),
+    execute: async (context, input) => ({
+      ok: true,
+      ...(await createPayment(context, input)),
+    }),
   }),
   definition({
-    name: "update_payment", title: "Update Payment",
+    name: 'update_payment',
+    title: 'Update Payment',
     description: "Update a draft payment or receipt and its exact open-item allocations.",
     inputSchema: z.object({
       documentId: UUID,
       patch: paymentPatchSchema.describe("Draft changes: header fields and exact open-item allocations"),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
-    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("ap.pay", "ar.pay"),
-    execute: async (context, input) => ({ ok: true, ...await updatePayment(context, input) }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: 'always',
+    visibleTo: anyPermission("ap.pay", "ar.pay"),
+    execute: async (context, input) => ({
+      ok: true,
+      ...(await updatePayment(context, input)),
+    }),
   }),
   definition({
-    name: "post_payment", title: "Post Payment", tier: "core",
+    name: 'post_payment',
+    title: 'Post Payment',
+    tier: 'core',
     description: "Submit and post a payment or receipt with open-item applications atomically; may return pending approval.",
     inputSchema: z.object({
       documentId: UUID,
@@ -675,8 +760,15 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
         .describe("Open-item applications built from list_open_items rows; omit when nothing is applied"),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
-    readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("ap.pay", "ar.pay"),
-    execute: async (context, input) => ({ ok: true, ...await postPayment(context, input) }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: 'always',
+    visibleTo: anyPermission("ap.pay", "ar.pay"),
+    execute: async (context, input) => ({
+      ok: true,
+      ...(await postPayment(context, input)),
+    }),
   }),
   definition({
     name: "start_reconciliation", title: "Start Reconciliation",
@@ -936,7 +1028,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     },
   }),
   ...MIGRATION_APPLICATION_TOOLS,
-];
+]
 
 export function applicationTool(name: string): ApplicationToolDefinition | undefined {
   return APPLICATION_TOOLS.find((candidate) => candidate.name === name);

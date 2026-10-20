@@ -20,7 +20,6 @@ import {
   NewFolderButton,
   TimesheetWeekJump,
   WeeklyGrid,
-  TimesheetBulkApprove,
   CrmNewButton,
   OpportunityDrawer,
   OpportunityViewSwitcher,
@@ -33,12 +32,25 @@ import {
   PartyDrawer,
 } from './native-widgets.client'
 import { type ComponentProps } from 'react'
-import { RecordCountCell, InNavCell } from '../../app/(app)/records/types/sections'
+import {
+  RecordCountCell,
+  InNavCell,
+} from '../../app/(app)/records/types/sections'
 import { PartyRolesCell } from '../../app/(app)/parties/sections'
 import { AssignPartyRoleButton } from '../../app/(app)/parties/AssignPartyRoleButton'
 import { TrashBackLink } from '../../app/(app)/documents/trash/sections'
-import { DocumentsActions, DocumentsBreadcrumb, DocumentsLinkNotice } from '../../app/(app)/documents/sections'
-import { ForecastKpiGroup, ForecastExcludedNote, ManageQuotasButton, QuotaEmptyAction, ForecastSnapshotAction } from '../../app/(app)/crm/forecasts/sections'
+import {
+  DocumentsActions,
+  DocumentsBreadcrumb,
+  DocumentsLinkNotice,
+} from '../../app/(app)/documents/sections'
+import {
+  ForecastKpiGroup,
+  ForecastExcludedNote,
+  ManageQuotasButton,
+  QuotaEmptyAction,
+  ForecastSnapshotAction,
+} from '../../app/(app)/crm/forecasts/sections'
 import { DOC_KINDS } from '../../lib/document-kinds'
 import { RelatedTxnSlot } from './related-txn-slot'
 import { Badge } from '@openbooks/ui'
@@ -47,70 +59,109 @@ import { str, type WidgetRenderer } from './widget-props'
 
 /** People, pipeline and content adapters: parties, CRM, forecasts, documents and record types. Compose native components without changing their props or boundaries. */
 export const RECORDS_WIDGETS = {
-
   /* --- data export ------------------------------------------------------------------ */
   /** No props: `ExportClient` fetches its own resource descriptors after
    *  mount and owns every string. The `query-console` precedent. */
   'data-export': () => <ExportClient />,
   /** The wizard owns its step state; its loader supplies the permitted return destination. */
-  'import-wizard': (props) => <ImportWizard backHref={str(props, 'backHref')} backLabel={str(props, 'backLabel')} />,
+  'import-wizard': (props) => (
+    <ImportWizard
+      backHref={str(props, 'backHref')}
+      backLabel={str(props, 'backLabel')}
+    />
+  ),
 
   /* --- internal billing ------------------------------------------------------------- */
   /** Keyed per record so opening another document starts from its own state. */
   'internal-billing-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof InternalBillingDrawer> | null | undefined
+    const drawer = props.drawer as
+      ComponentProps<typeof InternalBillingDrawer> | null | undefined
     if (!drawer) return null
-    return <InternalBillingDrawer key={drawer.detail?.document.id ?? 'new'} {...drawer} />
+    return (
+      <InternalBillingDrawer
+        key={drawer.detail?.document.id ?? 'new'}
+        {...drawer}
+      />
+    )
   },
 
   /* --- intercompany ------------------------------------------------------------------ */
   /** Generate or link a counterpart for one unpaired intercompany document. */
   'intercompany-unpaired-actions': (props) => {
-    const actions = props.actions as ComponentProps<typeof IntercompanyUnpairedActions>['actions'] | null | undefined
+    const actions = props.actions as
+      | ComponentProps<typeof IntercompanyUnpairedActions>['actions']
+      | null
+      | undefined
     if (!actions) return null
     return <IntercompanyUnpairedActions actions={actions} />
   },
   /** Keyed per pair so a record switch starts from that pair's own state. */
   'intercompany-pair-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof IntercompanyPairDrawer> | null | undefined
+    const drawer = props.drawer as
+      ComponentProps<typeof IntercompanyPairDrawer> | null | undefined
     if (!drawer) return null
     return <IntercompanyPairDrawer key={drawer.pair.id} {...drawer} />
   },
   'intercompany-link-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof IntercompanyLinkDrawer> | null | undefined
+    const drawer = props.drawer as
+      ComponentProps<typeof IntercompanyLinkDrawer> | null | undefined
     if (!drawer) return null
     return <IntercompanyLinkDrawer key={drawer.source.documentId} {...drawer} />
   },
   'intercompany-netting-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof IntercompanyNettingDrawer> | null | undefined
+    const drawer = props.drawer as
+      ComponentProps<typeof IntercompanyNettingDrawer> | null | undefined
     if (!drawer) return null
-    return <IntercompanyNettingDrawer key={drawer.mode === 'view' ? drawer.run.id : 'new'} {...drawer} />
+    return (
+      <IntercompanyNettingDrawer
+        key={drawer.mode === 'view' ? drawer.run.id : 'new'}
+        {...drawer}
+      />
+    )
   },
   'intercompany-transfer-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof IntercompanyTransferDrawer> | null | undefined
+    const drawer = props.drawer as
+      ComponentProps<typeof IntercompanyTransferDrawer> | null | undefined
     if (!drawer) return null
-    return <IntercompanyTransferDrawer key={drawer.mode === 'view' ? drawer.transfer.id : 'new'} {...drawer} />
+    return (
+      <IntercompanyTransferDrawer
+        key={drawer.mode === 'view' ? drawer.transfer.id : 'new'}
+        {...drawer}
+      />
+    )
   },
 
   /* --- document trash --------------------------------------------------------------- */
   /** Not `pageHeader({ back })`: that slot renders UiBackLink (`← label`),
    *  and this page's native back link is a chevron with its own classes. */
   'trash-back-link': (props) => (
-    <TrashBackLink href={str(props, 'href') ?? '/documents'} label={str(props, 'label') ?? ''} />
+    <TrashBackLink
+      href={str(props, 'href') ?? '/documents'}
+      label={str(props, 'label') ?? ''}
+    />
   ),
   /** Passed whole: per-row busy state, the purge confirm dialog and the
    *  restore/delete fetches are client behaviour. */
   'trash-list': (props) => (
-    <TrashList items={(props.rows as ComponentProps<typeof TrashList>['items']) ?? []} />
+    <TrashList
+      items={(props.rows as ComponentProps<typeof TrashList>['items']) ?? []}
+    />
   ),
 
   /* --- crm setup -------------------------------------------------------------- */
   /** One client island, like the labor-costing workspace. Six per-tab column
    *  sets with row-click routing are a six-way conditional pair, not presence,
    *  and neither table variant can carry row navigation. */
-  'crm-sales-workspace': (props) => <SalesWorkspace data={props.data as ComponentProps<typeof SalesWorkspace>['data']} params={props.params as ComponentProps<typeof SalesWorkspace>['params']} />,
+  'crm-sales-workspace': (props) => (
+    <SalesWorkspace
+      data={props.data as ComponentProps<typeof SalesWorkspace>['data']}
+      params={props.params as ComponentProps<typeof SalesWorkspace>['params']}
+    />
+  ),
   'crm-setup-workspace': (props) => (
-    <CrmSetupWorkspace {...(props as ComponentProps<typeof CrmSetupWorkspace>)} />
+    <CrmSetupWorkspace
+      {...(props as ComponentProps<typeof CrmSetupWorkspace>)}
+    />
   ),
 
   /* --- file cabinet --------------------------------------------------------- */
@@ -119,14 +170,20 @@ export const RECORDS_WIDGETS = {
       trashHref={str(props, 'trashHref') ?? '/documents/trash'}
       trashLabel={str(props, 'trashLabel') ?? ''}
       newFolder={<NewFolderButton />}
-      upload={<UploadButton folderId={str(props, 'newFolderParentId') ?? undefined} />}
+      upload={
+        <UploadButton folderId={str(props, 'newFolderParentId') ?? undefined} />
+      }
     />
   ),
   'documents-breadcrumb': (props) => (
     <DocumentsBreadcrumb
       homeHref={str(props, 'homeHref') ?? '/documents'}
       homeLabel={str(props, 'homeLabel') ?? ''}
-      crumbs={(props.crumbs as ComponentProps<typeof DocumentsBreadcrumb>['crumbs']) ?? []}
+      crumbs={
+        (props.crumbs as ComponentProps<
+          typeof DocumentsBreadcrumb
+        >['crumbs']) ?? []
+      }
     />
   ),
   /** Stale ?file= / ?folder= deep link: the loader resolved nothing, so the
@@ -142,7 +199,9 @@ export const RECORDS_WIDGETS = {
   ),
   'folder-tree': (props) => (
     <FolderTree
-      folders={(props.folders as ComponentProps<typeof FolderTree>['folders']) ?? []}
+      folders={
+        (props.folders as ComponentProps<typeof FolderTree>['folders']) ?? []
+      }
       activeFolderId={str(props, 'activeFolderId') ?? undefined}
     />
   ),
@@ -150,25 +209,35 @@ export const RECORDS_WIDGETS = {
    *  targets and bulk fetches are client state a spec cannot name. */
   'file-list': (props) => (
     <FileList
-      folders={(props.folders as ComponentProps<typeof FileList>['folders']) ?? []}
+      folders={
+        (props.folders as ComponentProps<typeof FileList>['folders']) ?? []
+      }
       files={(props.files as ComponentProps<typeof FileList>['files']) ?? []}
       activeFolderId={str(props, 'activeFolderId') ?? undefined}
       showLocation={props.showLocation === true}
       canEdit={props.canEdit === true}
       canDelete={props.canDelete === true}
-      currentParams={(props.currentParams as ComponentProps<typeof FileList>['currentParams']) ?? {}}
+      currentParams={
+        (props.currentParams as ComponentProps<
+          typeof FileList
+        >['currentParams']) ?? {}
+      }
       sort={str(props, 'sort') ?? 'name'}
-      dir={(str(props, 'dir') ?? 'asc') as ComponentProps<typeof FileList>['dir']}
+      dir={
+        (str(props, 'dir') ?? 'asc') as ComponentProps<typeof FileList>['dir']
+      }
     />
   ),
   'file-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof FileDrawer> & { remountKey: string }) | null
+    const drawer = props.drawer as
+      (ComponentProps<typeof FileDrawer> & { remountKey: string }) | null
     if (!drawer) return null
     const { remountKey, ...rest } = drawer
     return <FileDrawer key={remountKey} {...rest} />
   },
   'folder-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof FolderDrawer> & { remountKey: string }) | null
+    const drawer = props.drawer as
+      (ComponentProps<typeof FolderDrawer> & { remountKey: string }) | null
     if (!drawer) return null
     const { remountKey, ...rest } = drawer
     return <FolderDrawer key={remountKey} {...rest} />
@@ -178,7 +247,9 @@ export const RECORDS_WIDGETS = {
   'new-role-party': (props) => (
     <NewPartyButton
       basePath={str(props, 'basePath') ?? '/parties'}
-      role={(str(props, 'role') ?? 'customer') as 'customer' | 'vendor' | 'employee'}
+      role={
+        (str(props, 'role') ?? 'customer') as 'customer' | 'vendor' | 'employee'
+      }
       label={str(props, 'label') ?? ''}
     />
   ),
@@ -186,7 +257,10 @@ export const RECORDS_WIDGETS = {
   'new-timesheet': (props) => (
     <span className="inline-flex items-center gap-1.5">
       {str(props, 'jumpEmployeeId') ? (
-        <TimesheetWeekJump basePath={str(props, 'jumpBasePath') ?? '/timesheets'} employeeId={str(props, 'jumpEmployeeId') ?? ''} />
+        <TimesheetWeekJump
+          basePath={str(props, 'jumpBasePath') ?? '/timesheets'}
+          employeeId={str(props, 'jumpEmployeeId') ?? ''}
+        />
       ) : null}
       <Link
         href={(str(props, 'href') ?? '/timesheets') as never}
@@ -197,18 +271,12 @@ export const RECORDS_WIDGETS = {
     </span>
   ),
   'timesheet-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof WeeklyGrid> & { remountKey: string }) | null
+    const drawer = props.drawer as
+      (ComponentProps<typeof WeeklyGrid> & { remountKey: string }) | null
     if (!drawer) return null
     const { remountKey, ...rest } = drawer
     return <WeeklyGrid key={remountKey} {...rest} />
   },
-  /** Bulk approval for gateless submitted weeks: checkboxes plus per-week results, approvers only. */
-  'timesheet-bulk-approve': (props) => (
-    <TimesheetBulkApprove
-      weeks={(props.weeks as ComponentProps<typeof TimesheetBulkApprove>['weeks']) ?? []}
-    />
-  ),
-
   /* --- crm opportunities ---------------------------------------------------- */
   'crm-new-button': (props) => (
     <CrmNewButton
@@ -221,13 +289,15 @@ export const RECORDS_WIDGETS = {
     />
   ),
   'activity-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof ActivityDrawer> & { remountKey: string }) | null
+    const drawer = props.drawer as
+      (ComponentProps<typeof ActivityDrawer> & { remountKey: string }) | null
     if (!drawer) return null
     const { remountKey, ...rest } = drawer
     return <ActivityDrawer key={remountKey} {...rest} />
   },
   'opportunity-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof OpportunityDrawer> & { remountKey: string }) | null
+    const drawer = props.drawer as
+      (ComponentProps<typeof OpportunityDrawer> & { remountKey: string }) | null
     if (!drawer) return null
     const { remountKey, ...rest } = drawer
     return <OpportunityDrawer key={remountKey} {...rest} />
@@ -269,7 +339,9 @@ export const RECORDS_WIDGETS = {
   'forecast-kpi-group': (props) => (
     <ForecastKpiGroup
       currency={str(props, 'currency') ?? ''}
-      items={(props.items as ComponentProps<typeof ForecastKpiGroup>['items']) ?? []}
+      items={
+        (props.items as ComponentProps<typeof ForecastKpiGroup>['items']) ?? []
+      }
     />
   ),
   'forecast-excluded-note': (props) => (
@@ -282,10 +354,19 @@ export const RECORDS_WIDGETS = {
 
   /* --- custom record modules ----------------------------------------------- */
   'new-record': (props) => (
-    <NewRecordButton typeKey={str(props, 'typeKey') ?? ''} typeName={str(props, 'typeName') ?? ''} basePath={str(props, 'basePath')} currentParams={props.currentParams as Record<string, string | string[] | undefined> | undefined} />
+    <NewRecordButton
+      typeKey={str(props, 'typeKey') ?? ''}
+      typeName={str(props, 'typeName') ?? ''}
+      basePath={str(props, 'basePath')}
+      currentParams={
+        props.currentParams as
+          Record<string, string | string[] | undefined> | undefined
+      }
+    />
   ),
   'record-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof RecordDrawer> & { remountKey: string }) | null
+    const drawer = props.drawer as
+      (ComponentProps<typeof RecordDrawer> & { remountKey: string }) | null
     if (!drawer) return null
     const { remountKey, ...rest } = drawer
     return <RecordDrawer key={remountKey} {...rest} />
@@ -294,7 +375,9 @@ export const RECORDS_WIDGETS = {
   /* --- documents lists ----------------------------------------------------- */
   'new-document': (props) => (
     <NewDocumentButton
-      items={(props.items as ComponentProps<typeof NewDocumentButton>['items']) ?? []}
+      items={
+        (props.items as ComponentProps<typeof NewDocumentButton>['items']) ?? []
+      }
       basePath={str(props, 'basePath') ?? ''}
       triggerLabel={str(props, 'triggerLabel') ?? ''}
     />
@@ -302,7 +385,9 @@ export const RECORDS_WIDGETS = {
   /** The remount key rides along as a prop: switching documents must reset the
    *  drawer's client state, and a widget at a fixed position would otherwise
    *  be reused (same as `account-drawer` / `party-drawer`). */
-  'document-drawer': (props) => <NativeListDrawer widget="document-drawer" drawer={props.drawer} />,
+  'document-drawer': (props) => (
+    <NativeListDrawer widget="document-drawer" drawer={props.drawer} />
+  ),
   /** `config` is re-derived from the row's kind via the static DOC_KINDS map;
    *  the loader never ships a registry entry as data. The post grant arrives
    *  as loader-resolved booleans (the same decisions the drawer reads):
@@ -324,16 +409,23 @@ export const RECORDS_WIDGETS = {
       )
     }
     const namespace = config.permNamespace
-    const namespaced = namespace === 'gl' ? props.canPostGl
-      : namespace === 'ar' ? props.canPostAr
-      : namespace === 'ap' ? props.canPostAp
-      : undefined
+    const namespaced =
+      namespace === 'gl'
+        ? props.canPostGl
+        : namespace === 'ar'
+          ? props.canPostAr
+          : namespace === 'ap'
+            ? props.canPostAp
+            : undefined
     return (
       <DocumentRowActions
         id={String(props.id ?? '')}
         status={String(props.status ?? '')}
         config={config}
-        openHref={str(props, 'openHref') ?? `${str(props, 'basePath') ?? ''}?doc=${String(props.id ?? '')}`}
+        openHref={
+          str(props, 'openHref') ??
+          `${str(props, 'basePath') ?? ''}?doc=${String(props.id ?? '')}`
+        }
         canPost={(namespaced ?? props.canPost) === true}
       />
     )
@@ -350,20 +442,33 @@ export const RECORDS_WIDGETS = {
   },
   'assign-party-role': (props) => (
     <AssignPartyRoleButton
-      roles={((props.roles as { value: string; label: string }[] | undefined) ?? []).filter((r) => typeof r?.value === 'string' && typeof r?.label === 'string')}
-      total={typeof props.total === 'number' && Number.isInteger(props.total) ? props.total : 0}
+      roles={(
+        (props.roles as { value: string; label: string }[] | undefined) ?? []
+      ).filter(
+        (r) => typeof r?.value === 'string' && typeof r?.label === 'string',
+      )}
+      total={
+        typeof props.total === 'number' && Number.isInteger(props.total)
+          ? props.total
+          : 0
+      }
       q={str(props, 'q') ?? ''}
       includeInactive={props.includeInactive === true}
     />
   ),
   'party-roles-cell': (props) => (
-    <PartyRolesCell badges={(props.badges as ComponentProps<typeof PartyRolesCell>['badges']) ?? []} />
+    <PartyRolesCell
+      badges={
+        (props.badges as ComponentProps<typeof PartyRolesCell>['badges']) ?? []
+      }
+    />
   ),
   /** The remount key rides along as a prop: switching parties must reset the
    *  drawer's client state, and a widget at a fixed position would otherwise
    *  be reused. */
   'party-drawer': (props) => {
-    const drawer = props.drawer as (ComponentProps<typeof PartyDrawer> & { remountKey: string }) | null
+    const drawer = props.drawer as
+      (ComponentProps<typeof PartyDrawer> & { remountKey: string }) | null
     if (!drawer) return null
     const { remountKey, ...rest } = drawer
     return <PartyDrawer key={remountKey} {...rest} />
@@ -384,9 +489,24 @@ export const RECORDS_WIDGETS = {
   /** A badge when present, an em-dash placeholder when not. Generic because
    *  several lists use exactly this "flag or nothing" cell. */
   'badge-or-dash': (props) => {
-    if (props.shown !== true) return <span className={str(props, 'dashClassName') ?? 'text-slate-300 dark:text-slate-600'}>—</span>
+    if (props.shown !== true)
+      return (
+        <span
+          className={
+            str(props, 'dashClassName') ?? 'text-slate-300 dark:text-slate-600'
+          }
+        >
+          —
+        </span>
+      )
     return (
-      <Badge variant={(str(props, 'variant') ?? 'default') as ComponentProps<typeof Badge>['variant']}>
+      <Badge
+        variant={
+          (str(props, 'variant') ?? 'default') as ComponentProps<
+            typeof Badge
+          >['variant']
+        }
+      >
         {str(props, 'label') ?? ''}
       </Badge>
     )
@@ -395,7 +515,9 @@ export const RECORDS_WIDGETS = {
     <InNavCell shown={props.shown === true} label={str(props, 'label') ?? ''} />
   ),
   'type-builder-drawer': (props) => {
-    const drawer = props.drawer as ComponentProps<typeof TypeBuilderDrawer> | null
+    const drawer = props.drawer as ComponentProps<
+      typeof TypeBuilderDrawer
+    > | null
     if (!drawer) return null
     return <TypeBuilderDrawer key={drawer.type.id || 'new'} {...drawer} />
   },

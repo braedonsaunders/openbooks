@@ -8,7 +8,7 @@ import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 // controls vanished silently on a pending document. A blocked endpoint must
 // surface a named error state with a working retry instead.
 const script = {
-  mode: 'blocked' as 'blocked' | 'named-refusal' | 'healed' | 'no-state' | 'code-refusal',
+  mode: 'blocked' as 'blocked' | 'named-refusal' | 'healed' | 'no-state' | 'code-refusal' | 'malformed',
 }
 Object.assign(globalThis, {
   __approvalLoadRouter: {
@@ -63,6 +63,7 @@ function healedState() {
 globalThis.fetch = (async (url: unknown) => {
   const href = String(url)
   if (href.includes('/api/flows/record-state')) {
+    if(script.mode==='malformed')return Response.json({unrelated:'payload'});
     if (script.mode === 'healed') return Response.json(healedState())
     if (script.mode === 'no-state') return Response.json({ error: 'not_found' }, { status: 404 })
     if (script.mode === 'code-refusal') return Response.json({ error: 'invalid_subject' }, { status: 400 })
@@ -196,3 +197,13 @@ test('a refusal carrying only a machine code shows the translated failure, never
     assert.ok(text.includes('Failed to load (status 400)'), `the translated failure names its status, got: ${JSON.stringify(text)}`)
   }
 })
+
+
+test('a malformed successful record-state response refuses decisions and offers a working reload',async t=>{
+ script.mode='malformed';const {host,root}=await mount(<ApprovalActions subjectKind="bill" subjectId="bill-malformed"/>);await unmount(t,host,root);
+ assert.match(host.textContent??'',/Failed to load/);
+ assert.equal([...host.querySelectorAll('button')].some(button=>button.textContent?.trim()==='Approve'),false);
+ const retry=[...host.querySelectorAll('button')].find(button=>/retry/i.test(button.textContent??''));assert.ok(retry);
+ script.mode='healed';await act(async()=>{retry.click();await tick();await tick()});
+ assert.ok([...host.querySelectorAll('button')].some(button=>button.textContent?.trim()==='Approve'));
+});

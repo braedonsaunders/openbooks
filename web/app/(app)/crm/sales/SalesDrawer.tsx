@@ -1,6 +1,7 @@
-"use client";
-import dynamic from "next/dynamic";
-import Link from "next/link";
+'use client'
+import { ApprovalActions } from '@/components/approval-actions'
+import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -54,9 +55,9 @@ export function SalesDrawer({
   data: SalesWorkspaceData;
   closeHref: string;
 }) {
-  const t = useTranslations("crm.sales");
-  const router = useRouter();
-  const source = data.selected;
+  const t = useTranslations('crm.sales')
+  const router = useRouter()
+  const source = data.selected
   const row = data.creating ? null : data.selected;
   const [name, setName] = useState(source?.name ?? "");
   const [subsidiaryId, setSubsidiary] = useState(
@@ -74,7 +75,7 @@ export function SalesDrawer({
   const [enabled, setEnabled] = useState(source?.is_sales_rep ?? true);
   const [since, setSince] = useState(source?.sales_rep_since ?? data.periodEnd);
   const [members, setMembers] = useState(source?.members ?? []);
-  const [adding, setAdding] = useState("");
+  const [adding, setAdding] = useState('')
   const [memberDate, setMemberDate] = useState(data.periodEnd);
   const [amount, setAmount] = useState(source?.amount ?? "");
   const [currency, setCurrency] = useState(
@@ -109,8 +110,8 @@ export function SalesDrawer({
   );
   const [isActive, setActive] = useState(source?.is_active ?? true);
   const [preview, setPreview] = useState<TerritoryPreview | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
   const editable =
     data.canManage &&
     (data.page !== "quotas" || !row || row.lifecycle === "draft");
@@ -275,10 +276,10 @@ export function SalesDrawer({
   return (
     <UrlDrawer
       open
-      openKey={row?.id ?? "new"}
+      openKey={row?.id ?? 'new'}
       closeHref={closeHref}
       title={row?.name ?? t(`tabs.${data.page}`)}
-      description={t("drawerDescription")}
+      description={t('drawerDescription')}
       size={
         data.page === "territories" || data.page === "representatives"
           ? "2xl"
@@ -329,7 +330,7 @@ export function SalesDrawer({
                   {t("submitApproval")}
                 </Button>
               ) : null}
-              {row.lifecycle === "pending_approval" ? (
+              {row.lifecycle === 'pending_approval' ? (
                 <>
                   <Button
                     variant="outline"
@@ -338,14 +339,10 @@ export function SalesDrawer({
                   >
                     {t("returnDraft")}
                   </Button>
-                  {data.canApprove ? (
-                    <Button
-                      disabled={busy}
-                      onClick={() => transition("approved")}
-                    >
-                      {t("approve")}
-                    </Button>
-                  ) : null}
+                  <ApprovalActions
+                    subjectKind="sales_quota"
+                    subjectId={row.id}
+                  />
                 </>
               ) : null}
               {row.lifecycle === "approved" ? (
@@ -1020,7 +1017,7 @@ export function SalesDrawer({
         ) : null}
       </div>
     </UrlDrawer>
-  );
+  )
 }
 function LocationVerification({
   addressId,

@@ -1486,7 +1486,7 @@
         "discard": "Sessão descartada",
         "confirm_opening": "Abertura confirmada",
         "session_adjustment": "Sessão ajustada",
-        "revalidate_sign_off": "Revisão independente da aprovação"
+        "revalidate_sign_off": "Revisão da validação"
       },
       "signOffStatement": "Saldo do extrato {balance} · até {date} · {matched} linhas de diário marcadas · {excluded} linhas de extrato excluídas",
       "signOffSource": "Evidência de origem · saldo {balance} · até {date} · {matched} linhas de diário conciliadas",
@@ -1502,12 +1502,12 @@
   },
   "revalidation": {
     "action": "Revisar histórico neutro da conta",
-    "title": "Revisar esta aprovação de forma independente",
+    "title": "Revisar esta validação",
     "reason": "Motivo da revisão (10–500 caracteres)",
     "confirm": "Registrar revisão",
     "preview": "O saldo assinado até {date} permanece {balance}. Revise {entries} lançamentos tardios ({lines} linhas) com a evidência preservada. Extrato, correspondências, assinatura e marcas de conciliação permanecem inalterados.",
     "failed": "Não foi possível concluir esta revisão. Recarregue as evidências e tente novamente.",
-    "recorded": "Revisão independente registrada",
+    "recorded": "Revisão da validação registrada",
     "reasonRequired": "Informe um motivo de revisão de 10–500 caracteres.",
     "reviewedBadge": "Histórico neutro revisado",
     "reviewedBasis": "Evidência revisada até {date}",

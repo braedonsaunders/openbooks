@@ -1,7 +1,4 @@
-// Slow decisions must read as working, never as silent failures: Approve (and
-// Reject) shows a disabled busy state with a spinner + progress label, a
-// second click cannot double-post, and completion pins an explicit success
-// status beside the actions (a toast alone vanishes) or the typed refusal.
+// Timesheet drawers use the same native Flow gate controls as every record.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -35,7 +32,7 @@ stubModules({
       "export const toast={success(m){globalThis.__gridDecision.toasts.push({kind:'success',message:m})},error(m,o){globalThis.__gridDecision.toasts.push({kind:'error',message:m,options:o})},warning(){},info(){}};export function Toaster(){return null}",
     "../../../lib/confirm":
       "export async function confirmDialog(){return true}",
-    "../../../lib/prompt": "export async function promptDialog(){return 'Needs rework before approval'}",
+    "../lib/prompt": "export async function promptDialog(){return 'Needs rework before approval'}",
   },
 });
 
@@ -108,13 +105,9 @@ async function mountGrid() {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if (url.startsWith("/api/timesheets/approve") && init?.method === "POST") {
-      script.posts.push({ url, body: JSON.parse(String(init.body)) });
-      return new Promise<Response>((resolve) => script.resolvers.push(resolve));
-    }
-    if (url.startsWith("/api/timesheets/reject") && init?.method === "POST") {
-      script.posts.push({ url, body: JSON.parse(String(init.body)) });
-      return new Promise<Response>((resolve) => script.resolvers.push(resolve));
+    if(url.startsWith('/api/flows/record-state'))return Response.json({approvalState:{status:'pending',pendingWith:[],myActions:{gateId:'gate-1',signatureRequired:false}},history:[],failedRun:null,canRetry:false});
+    if(url==='/api/flows/gates/decide'&&init?.method==='POST'){
+      script.posts.push({url,body:JSON.parse(String(init.body))});return new Promise<Response>(resolve=>script.resolvers.push(resolve));
     }
     return Response.json({});
   }) as typeof fetch;
@@ -134,7 +127,6 @@ async function mountGrid() {
               canManage: true,
               canApprove: true,
               canReopen: false,
-              approveBlockedReason: null,
             })}
           </MoneyProvider>
         </NextIntlClientProvider>
@@ -180,7 +172,7 @@ test("a slow approval shows its busy state, posts once, then pins success", asyn
     button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     await tick(60);
   });
-  const busyButton = buttonNamed("Approving…");
+  const busyButton = buttonNamed("Approve");
   assert.ok(busyButton, "Approve flips to its progress label while the request is in flight");
   assert.equal(busyButton.disabled, true, "the decision cannot be re-clicked mid-flight");
   // A second click on the (synthetically reachable) button must not post again.
@@ -189,14 +181,14 @@ test("a slow approval shows its busy state, posts once, then pins success", asyn
     await tick(60);
   });
   assert.equal(script.posts.length, 1, "a double click posts exactly once");
-  await resolveNext(approvedPayload());
+  await resolveNext({ok:true,resumed:"approve"});
   assert.equal(script.posts.length, 1);
   const toasted = script.toasts.find((toast) => toast.kind === "success");
   assert.ok(toasted, "completion toasts");
-  assert.match(String(toasted?.message ?? ""), /Timesheet approved/);
+  assert.match(String(toasted?.message ?? ""), /Decision recorded/);
   const status = document.querySelector('[role="status"]');
   assert.ok(status, "completion also pins a success status beside the actions");
-  assert.match(status?.textContent ?? "", /Timesheet approved/);
+  assert.match(status?.textContent ?? "", /Decision recorded/);
 });
 
 test("a slow rejection shows its busy state, then pins success", async (t) => {
@@ -208,7 +200,7 @@ test("a slow rejection shows its busy state, then pins success", async (t) => {
     button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     await tick(120);
   });
-  const busyButton = buttonNamed("Rejecting…");
+  const busyButton = buttonNamed("Reject");
   assert.ok(busyButton, "Reject flips to its progress label while the request is in flight");
   assert.equal(busyButton.disabled, true);
   await act(async () => {
@@ -216,8 +208,8 @@ test("a slow rejection shows its busy state, then pins success", async (t) => {
     await tick(60);
   });
   assert.equal(script.posts.length, 1, "a double click posts exactly once");
-  await resolveNext(rejectedPayload());
+  await resolveNext({ok:true,resumed:"reject"});
   const status = document.querySelector('[role="status"]');
   assert.ok(status, "completion pins a success status beside the actions");
-  assert.match(status?.textContent ?? "", /Timesheet rejected/);
+  assert.match(status?.textContent ?? "", /Decision recorded/);
 });

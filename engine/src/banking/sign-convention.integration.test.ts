@@ -1,3 +1,4 @@
+import { before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -20,7 +21,10 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-type CsvImportInput = Omit<Parameters<typeof importStatement>[0], "source" | "sourceEvidence"> & {
+type CsvImportInput = Omit<
+  Parameters<typeof importStatement>[0],
+  "source" | "sourceEvidence"
+> & {
   source: "csv";
 };
 
@@ -30,13 +34,21 @@ type CsvImportInput = Omit<Parameters<typeof importStatement>[0], "source" | "so
  * the lines into deterministic CSV bytes with that mapping: an identical
  * input reproduces the identical file (and source hash).
  */
-function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement>[1]) {
+function importCsv(
+  input: CsvImportInput,
+  ctx: Parameters<typeof importStatement>[1],
+) {
   const quote = (value: string) => `"${value.replace(/"/g, '""')}"`;
   const content =
     [
       "date,amount,description,bank_transaction_id",
       ...input.lines.map((line) =>
-        [line.postedOn, line.amount, quote(line.description ?? ""), line.bankTransactionId ?? ""].join(","),
+        [
+          line.postedOn,
+          line.amount,
+          quote(line.description ?? ""),
+          line.bankTransactionId ?? "",
+        ].join(","),
       ),
     ].join("\n") + "\n";
   return importStatement(
@@ -46,7 +58,12 @@ function importCsv(input: CsvImportInput, ctx: Parameters<typeof importStatement
         content,
         filename: "statement.csv",
         contentType: "text/csv",
-        csvMapping: { date: 0, amount: 1, description: 2, bankTransactionId: 3 },
+        csvMapping: {
+          date: 0,
+          amount: 1,
+          description: 2,
+          bankTransactionId: 3,
+        },
       },
     },
     ctx,
@@ -71,8 +88,11 @@ async function postCardJournal(
          ${`CARD-${label}-${entryId.slice(0, 8)}`}, ${date}, ${org.periodId},
          ${`Card ${label}`}, 'draft', 'manual', ${actorId}, ${actorId})
     `);
-    const offsetAmount = bankAmount.startsWith("-") ? bankAmount.slice(1) : `-${bankAmount}`;
-    const [bankLine] = (await tx.execute<{ id: string }>(sql`
+    const offsetAmount = bankAmount.startsWith("-")
+      ? bankAmount.slice(1)
+      : `-${bankAmount}`;
+    const [bankLine] = (
+      await tx.execute<{ id: string }>(sql`
       insert into journal_lines
         (id, org_id, entry_id, line_number, account_id, subsidiary_id,
          amount, currency, txn_amount, fx_rate, memo)
@@ -84,7 +104,8 @@ async function postCardJournal(
          ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offsetAmount}, 'CAD',
          ${offsetAmount}, 1, ${label})
       returning id
-    `)).rows;
+    `)
+    ).rows;
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
@@ -102,28 +123,44 @@ async function setup(accountType: string) {
        set type = ${accountType}, reconcilable = true, currency_restriction = 'CAD'
      where id = ${org.accounts.bank} and org_id = ${org.orgId}
   `);
-  return { org, actor, ctx: { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null } };
+  return {
+    org,
+    actor,
+    ctx: { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null },
+  };
 }
 
-async function statementLineIds(orgId: string, statementId: string): Promise<string[]> {
-  return (await db.execute<{ id: string }>(sql`
+async function statementLineIds(
+  orgId: string,
+  statementId: string,
+): Promise<string[]> {
+  return (
+    await db.execute<{ id: string }>(sql`
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId}
      order by line_number
-  `)).rows.map((row) => row.id);
+  `)
+  ).rows.map((row) => row.id);
 }
 
 async function lineStatus(orgId: string, lineId: string): Promise<string> {
-  return (await db.execute<{ match_status: string }>(sql`
+  return (
+    await db.execute<{ match_status: string }>(sql`
     select match_status from bank_statement_lines where org_id = ${orgId} and id = ${lineId}
-  `)).rows[0]!.match_status;
+  `)
+  ).rows[0]!.match_status;
 }
 
 async function matchedPairs(orgId: string, reconId: string) {
-  return (await db.execute<{ statement_line_id: string | null; journal_line_id: string }>(sql`
+  return (
+    await db.execute<{
+      statement_line_id: string | null;
+      journal_line_id: string;
+    }>(sql`
     select statement_line_id, journal_line_id from reconciliation_matches
      where org_id = ${orgId} and reconciliation_id = ${reconId}
-  `)).rows;
+  `)
+  ).rows;
 }
 
 test(
@@ -134,7 +171,13 @@ test(
     try {
       // A $1,236.90 card charge — the portal prints it
       // owing-positive while the GL carries the credit (-1,236.90).
-      const journal = await postCardJournal(org, actor, "-1236.90", org.date, "charge");
+      const journal = await postCardJournal(
+        org,
+        actor,
+        "-1236.90",
+        org.date,
+        "charge",
+      );
       const imported = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -142,34 +185,74 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "1236.90", description: "Card charge", bankTransactionId: "card-charge" },
+            {
+              postedOn: org.date,
+              amount: "1236.90",
+              description: "Card charge",
+              bankTransactionId: "card-charge",
+            },
           ],
         },
         ctx,
       );
       const [charge] = await statementLineIds(org.orgId, imported.statementId!);
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "1236.90" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "1236.90",
+        },
         ctx,
       );
 
       // A cent-apart pairing still refuses naming both totals.
-      const other = await postCardJournal(org, actor, "-50.00", org.date, "other");
+      const other = await postCardJournal(
+        org,
+        actor,
+        "-50.00",
+        org.date,
+        "other",
+      );
       await assert.rejects(
         createMatch(
-          { reconciliationId: recon.id, statementLineIds: [charge!], journalLineIds: [other!] },
+          {
+            reconciliationId: recon.id,
+            statementLineIds: [charge!],
+            journalLineIds: [other!],
+          },
           ctx,
         ),
         /Selected bank lines total 1236\.9000; selected journal lines total -50\.0000/,
       );
 
       const totals = await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [charge!], journalLineIds: [journal!] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [charge!],
+          journalLineIds: [journal!],
+        },
         ctx,
       );
-      assert.equal(totals.difference, "0.0000", "the opposite-sign pair clears the session");
-      assert.equal(totals.clearedBalance, "1236.9000", "the cleared balance reads owing-positive");
+      assert.equal(
+        totals.difference,
+        "0.0000",
+        "the opposite-sign pair clears the session",
+      );
+      assert.equal(
+        totals.clearedBalance,
+        "1236.9000",
+        "the cleared balance reads owing-positive",
+      );
       const signed = await markReconciled(recon.id, ctx);
+      assert.equal(
+        signed.status,
+        "signed_off",
+        "The zero-gate submission must complete its native outcome",
+      );
+      if (signed.status !== "signed_off")
+        throw new Error(
+          "The zero-gate submission unexpectedly awaits approval.",
+        );
       assert.equal(signed.journalLinesReconciled, 1);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -185,7 +268,13 @@ test(
     try {
       // OFX carries card charges GL-signed: statement and GL agree directly,
       // and the typed balance is negative. That working flow must survive.
-      const journal = await postCardJournal(org, actor, "-500.00", org.date, "ofx-charge");
+      const journal = await postCardJournal(
+        org,
+        actor,
+        "-500.00",
+        org.date,
+        "ofx-charge",
+      );
       const imported = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -193,22 +282,44 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "-500.00", description: "Card charge", bankTransactionId: "ofx-charge" },
+            {
+              postedOn: org.date,
+              amount: "-500.00",
+              description: "Card charge",
+              bankTransactionId: "ofx-charge",
+            },
           ],
         },
         ctx,
       );
       const [charge] = await statementLineIds(org.orgId, imported.statementId!);
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "-500.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "-500.00",
+        },
         ctx,
       );
       const totals = await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [charge!], journalLineIds: [journal!] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [charge!],
+          journalLineIds: [journal!],
+        },
         ctx,
       );
       assert.equal(totals.difference, "0.0000");
       const signed = await markReconciled(recon.id, ctx);
+      assert.equal(
+        signed.status,
+        "signed_off",
+        "The zero-gate submission must complete its native outcome",
+      );
+      if (signed.status !== "signed_off")
+        throw new Error(
+          "The zero-gate submission unexpectedly awaits approval.",
+        );
       assert.equal(signed.journalLinesReconciled, 1);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -222,7 +333,13 @@ test(
   async () => {
     const { org, actor, ctx } = await setup("asset_bank");
     try {
-      const journal = await postCardJournal(org, actor, "-100.00", org.date, "mismatch");
+      const journal = await postCardJournal(
+        org,
+        actor,
+        "-100.00",
+        org.date,
+        "mismatch",
+      );
       const imported = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -230,19 +347,35 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "100.00", description: "Deposit", bankTransactionId: "deposit" },
+            {
+              postedOn: org.date,
+              amount: "100.00",
+              description: "Deposit",
+              bankTransactionId: "deposit",
+            },
           ],
         },
         ctx,
       );
-      const [deposit] = await statementLineIds(org.orgId, imported.statementId!);
+      const [deposit] = await statementLineIds(
+        org.orgId,
+        imported.statementId!,
+      );
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "100.00",
+        },
         ctx,
       );
       await assert.rejects(
         createMatch(
-          { reconciliationId: recon.id, statementLineIds: [deposit!], journalLineIds: [journal!] },
+          {
+            reconciliationId: recon.id,
+            statementLineIds: [deposit!],
+            journalLineIds: [journal!],
+          },
           ctx,
         ),
         /Selected bank lines total 100\.0000; selected journal lines total -100\.0000/,
@@ -264,8 +397,20 @@ test(
       // has no GL counterpart, and auto-match must never pair it with the
       // same-amount Nov-12 payment. The Nov-12 charge pairs its same-day
       // GL across the sign convention instead.
-      const payment = await postCardJournal(org, actor, "1914.90", "2026-11-12", "payment");
-      const charge = await postCardJournal(org, actor, "-500.00", "2026-11-12", "charge");
+      const payment = await postCardJournal(
+        org,
+        actor,
+        "1914.90",
+        "2026-11-12",
+        "payment",
+      );
+      const charge = await postCardJournal(
+        org,
+        actor,
+        "-500.00",
+        "2026-11-12",
+        "charge",
+      );
       const imported = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -273,16 +418,37 @@ test(
           statementDate: "2026-11-30",
           currency: "CAD",
           lines: [
-            { postedOn: "2026-11-01", amount: "1914.90", description: "Opening 1,914.90", bankTransactionId: "opening" },
-            { postedOn: "2026-11-12", amount: "500.00", description: "Store purchase", bankTransactionId: "purchase" },
+            {
+              postedOn: "2026-11-01",
+              amount: "1914.90",
+              description: "Opening 1,914.90",
+              bankTransactionId: "opening",
+            },
+            {
+              postedOn: "2026-11-12",
+              amount: "500.00",
+              description: "Store purchase",
+              bankTransactionId: "purchase",
+            },
           ],
         },
         ctx,
       );
-      assert.equal(imported.imported, 2, "the bare opening row imports as a line");
-      const [opening, purchase] = await statementLineIds(org.orgId, imported.statementId!);
+      assert.equal(
+        imported.imported,
+        2,
+        "the bare opening row imports as a line",
+      );
+      const [opening, purchase] = await statementLineIds(
+        org.orgId,
+        imported.statementId!,
+      );
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: "2026-11-30", statementBalance: "2414.90" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: "2026-11-30",
+          statementBalance: "2414.90",
+        },
         ctx,
       );
       const result = await autoMatch(recon.id, ctx);
@@ -293,7 +459,11 @@ test(
         [{ statement_line_id: purchase!, journal_line_id: charge! }],
         "the exact-date opposite-sign pair wins",
       );
-      assert.equal(await lineStatus(org.orgId, opening!), "unmatched", "the opening row stays for review");
+      assert.equal(
+        await lineStatus(org.orgId, opening!),
+        "unmatched",
+        "the opening row stays for review",
+      );
       assert.ok(
         !pairs.some((pair) => pair.journal_line_id === payment!),
         "the same-amount payment stays free",
@@ -310,7 +480,13 @@ test(
   async () => {
     const { org, actor, ctx } = await setup("asset_bank");
     try {
-      const journal = await postCardJournal(org, actor, "500.00", "2026-11-05", "same-day");
+      const journal = await postCardJournal(
+        org,
+        actor,
+        "500.00",
+        "2026-11-05",
+        "same-day",
+      );
       const imported = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -318,19 +494,40 @@ test(
           statementDate: "2026-11-30",
           currency: "CAD",
           lines: [
-            { postedOn: "2026-11-04", amount: "500.00", description: "Earlier receipt", bankTransactionId: "earlier" },
-            { postedOn: "2026-11-05", amount: "500.00", description: "Same-day receipt", bankTransactionId: "same-day" },
+            {
+              postedOn: "2026-11-04",
+              amount: "500.00",
+              description: "Earlier receipt",
+              bankTransactionId: "earlier",
+            },
+            {
+              postedOn: "2026-11-05",
+              amount: "500.00",
+              description: "Same-day receipt",
+              bankTransactionId: "same-day",
+            },
           ],
         },
         ctx,
       );
-      const [earlier, sameDay] = await statementLineIds(org.orgId, imported.statementId!);
+      const [earlier, sameDay] = await statementLineIds(
+        org.orgId,
+        imported.statementId!,
+      );
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: "2026-11-30", statementBalance: "1000.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: "2026-11-30",
+          statementBalance: "1000.00",
+        },
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [sameDay!], journalLineIds: [journal!] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [sameDay!],
+          journalLineIds: [journal!],
+        },
         ctx,
       );
       const blockers = await listSignOffBlockers(recon.id, ctx);
@@ -354,7 +551,13 @@ test(
   async () => {
     const { org, actor, ctx } = await setup("asset_bank");
     try {
-      const journal = await postCardJournal(org, actor, "500.00", "2026-11-05", "same-day");
+      const journal = await postCardJournal(
+        org,
+        actor,
+        "500.00",
+        "2026-11-05",
+        "same-day",
+      );
       const imported = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -362,15 +565,32 @@ test(
           statementDate: "2026-11-30",
           currency: "CAD",
           lines: [
-            { postedOn: "2026-11-04", amount: "500.00", description: "Earlier receipt", bankTransactionId: "earlier" },
-            { postedOn: "2026-11-05", amount: "500.00", description: "Same-day receipt", bankTransactionId: "same-day" },
+            {
+              postedOn: "2026-11-04",
+              amount: "500.00",
+              description: "Earlier receipt",
+              bankTransactionId: "earlier",
+            },
+            {
+              postedOn: "2026-11-05",
+              amount: "500.00",
+              description: "Same-day receipt",
+              bankTransactionId: "same-day",
+            },
           ],
         },
         ctx,
       );
-      const [earlier, sameDay] = await statementLineIds(org.orgId, imported.statementId!);
+      const [earlier, sameDay] = await statementLineIds(
+        org.orgId,
+        imported.statementId!,
+      );
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: "2026-11-30", statementBalance: "1000.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: "2026-11-30",
+          statementBalance: "1000.00",
+        },
         ctx,
       );
       const result = await autoMatch(recon.id, ctx);
@@ -393,7 +613,13 @@ test(
     try {
       // OFX reports the card's ledger balance GL-signed (-1,236.90); the
       // session holds the statement balance owing-positive (1,236.90).
-      const journal = await postCardJournal(org, actor, "-1236.90", org.date, "ofx-close");
+      const journal = await postCardJournal(
+        org,
+        actor,
+        "-1236.90",
+        org.date,
+        "ofx-close",
+      );
       const imported = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -402,18 +628,43 @@ test(
           closingBalance: "-1236.90",
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "-1236.90", description: "Card charge", bankTransactionId: "ofx-close" },
+            {
+              postedOn: org.date,
+              amount: "-1236.90",
+              description: "Card charge",
+              bankTransactionId: "ofx-close",
+            },
           ],
         },
         ctx,
       );
       const [charge] = await statementLineIds(org.orgId, imported.statementId!);
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "1236.90" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "1236.90",
+        },
         ctx,
       );
-      await createMatch({ reconciliationId: recon.id, statementLineIds: [charge!], journalLineIds: [journal!] }, ctx);
+      await createMatch(
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [charge!],
+          journalLineIds: [journal!],
+        },
+        ctx,
+      );
       const signed = await markReconciled(recon.id, ctx);
+      assert.equal(
+        signed.status,
+        "signed_off",
+        "The zero-gate submission must complete its native outcome",
+      );
+      if (signed.status !== "signed_off")
+        throw new Error(
+          "The zero-gate submission unexpectedly awaits approval.",
+        );
       assert.equal(signed.journalLinesReconciled, 1);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -427,7 +678,13 @@ test(
   async () => {
     const { org, actor, ctx } = await setup("asset_bank");
     try {
-      const journal = await postCardJournal(org, actor, "500.00", "2026-11-05", "receipt");
+      const journal = await postCardJournal(
+        org,
+        actor,
+        "500.00",
+        "2026-11-05",
+        "receipt",
+      );
       const imported = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -435,32 +692,62 @@ test(
           statementDate: "2026-11-30",
           currency: "CAD",
           lines: [
-            { postedOn: "2026-11-03", amount: "500.00", description: "Deposit", bankTransactionId: "leading" },
-            { postedOn: "2026-11-07", amount: "500.00", description: "Deposit", bankTransactionId: "lagging" },
+            {
+              postedOn: "2026-11-03",
+              amount: "500.00",
+              description: "Deposit",
+              bankTransactionId: "leading",
+            },
+            {
+              postedOn: "2026-11-07",
+              amount: "500.00",
+              description: "Deposit",
+              bankTransactionId: "lagging",
+            },
           ],
         },
         ctx,
       );
-      const [leading, lagging] = await statementLineIds(org.orgId, imported.statementId!);
+      const [leading, lagging] = await statementLineIds(
+        org.orgId,
+        imported.statementId!,
+      );
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: "2026-11-30", statementBalance: "1000.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: "2026-11-30",
+          statementBalance: "1000.00",
+        },
         ctx,
       );
       const result = await autoMatch(recon.id, ctx);
       assert.equal(result.matched, 1);
-      assert.equal(result.highConfidence, 1, "a two-day lag clears the review ceiling");
-      assert.deepEqual(await matchedPairs(org.orgId, recon.id), [
-        { statement_line_id: lagging!, journal_line_id: journal! },
-      ], "banks post after the book date, so the lagging line wins the tie in distance");
+      assert.equal(
+        result.highConfidence,
+        1,
+        "a two-day lag clears the review ceiling",
+      );
+      assert.deepEqual(
+        await matchedPairs(org.orgId, recon.id),
+        [{ statement_line_id: lagging!, journal_line_id: journal! }],
+        "banks post after the book date, so the lagging line wins the tie in distance",
+      );
       assert.equal(await lineStatus(org.orgId, leading!), "unmatched");
-      const stored = (await db.execute<{ confidence: string; match_reasons: unknown }>(sql`
+      const stored = (
+        await db.execute<{ confidence: string; match_reasons: unknown }>(sql`
         select confidence::text as confidence, match_reasons from reconciliation_matches
          where org_id = ${org.orgId} and reconciliation_id = ${recon.id}
-      `)).rows;
-      assert.deepEqual(stored, [{
-        confidence: "0.7400",
-        match_reasons: [{ code: "exact_amount" }, { code: "date_lag", days: 2 }],
-      }]);
+      `)
+      ).rows;
+      assert.deepEqual(stored, [
+        {
+          confidence: "0.7400",
+          match_reasons: [
+            { code: "exact_amount" },
+            { code: "date_lag", days: 2 },
+          ],
+        },
+      ]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -473,7 +760,13 @@ test(
   async () => {
     const { org, actor, ctx } = await setup("asset_bank");
     try {
-      await postCardJournal(org, actor, "-120.00", "2026-11-02", "Northwind Traders");
+      await postCardJournal(
+        org,
+        actor,
+        "-120.00",
+        "2026-11-02",
+        "Northwind Traders",
+      );
       await postCardJournal(org, actor, "-80.00", "2026-11-02", "office");
       await importCsv(
         {
@@ -482,28 +775,62 @@ test(
           statementDate: "2026-11-30",
           currency: "CAD",
           lines: [
-            { postedOn: "2026-11-08", amount: "-120.00", description: "NORTHWIND TRADERS 0042", bankTransactionId: "supported" },
-            { postedOn: "2026-11-08", amount: "-80.00", description: "POS 7731", bankTransactionId: "bare" },
+            {
+              postedOn: "2026-11-08",
+              amount: "-120.00",
+              description: "NORTHWIND TRADERS 0042",
+              bankTransactionId: "supported",
+            },
+            {
+              postedOn: "2026-11-08",
+              amount: "-80.00",
+              description: "POS 7731",
+              bankTransactionId: "bare",
+            },
           ],
         },
         ctx,
       );
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: "2026-11-30", statementBalance: "-200.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: "2026-11-30",
+          statementBalance: "-200.00",
+        },
         ctx,
       );
       const result = await autoMatch(recon.id, ctx);
       assert.equal(result.matched, 2);
-      assert.equal(result.highConfidence, 1, "shared payee words lift the six-day pair above the ceiling");
-      assert.equal(result.mediumConfidence, 1, "the bare six-day pair waits in the review queue");
-      const held = (await db.execute<{ n: number }>(sql`
+      assert.equal(
+        result.highConfidence,
+        1,
+        "shared payee words lift the six-day pair above the ceiling",
+      );
+      assert.equal(
+        result.mediumConfidence,
+        1,
+        "the bare six-day pair waits in the review queue",
+      );
+      const held = (
+        await db.execute<{ n: number }>(sql`
         select count(*)::int as n from reconciliation_matches
          where org_id = ${org.orgId} and reconciliation_id = ${recon.id}
            and matched_by = 'auto' and confidence <= 0.7
-      `)).rows[0]!.n;
-      assert.equal(held, 1, "the review tab's ceiling holds exactly the unsupported pair");
+      `)
+      ).rows[0]!.n;
+      assert.equal(
+        held,
+        1,
+        "the review tab's ceiling holds exactly the unsupported pair",
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
   },
 );
+
+// Exercise the same native Flow composition installed by application entry points.
+before(async () => {
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
+});

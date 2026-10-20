@@ -3,7 +3,11 @@ import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db } from "../platform/db.ts";
 import { canonicalPeriodLabel } from "../periods/period-policy.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
-import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
+import type {
+  FlowExecCtx,
+  FlowSubjectAdapter,
+  FlowSubjectContext,
+} from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
@@ -28,12 +32,17 @@ export const closeRunSubjectProfile: FlowSubjectProfile = {
   fields: [
     { key: "periodName", label: "Accounting period", type: "text" },
     { key: "fiscalYear", label: "Fiscal year", type: "number" },
-    { key: "periodType", label: "Period type", type: "enum", options: [
-      { value: "month", label: "Month-end" },
-      { value: "quarter", label: "Quarter-end" },
-      { value: "year", label: "Year-end" },
-      { value: "adjustment", label: "Adjustment" },
-    ] },
+    {
+      key: "periodType",
+      label: "Period type",
+      type: "enum",
+      options: [
+        { value: "month", label: "Month-end" },
+        { value: "quarter", label: "Quarter-end" },
+        { value: "year", label: "Year-end" },
+        { value: "adjustment", label: "Adjustment" },
+      ],
+    },
     { key: "bookId", label: "Accounting book", type: "text" },
     { key: "bookName", label: "Accounting book name", type: "text" },
     { key: "blueprintName", label: "Close blueprint", type: "text" },
@@ -42,7 +51,12 @@ export const closeRunSubjectProfile: FlowSubjectProfile = {
     { key: "targetCloseDate", label: "Target close date", type: "date" },
     { key: "openExceptionCount", label: "Open exceptions", type: "number" },
     { key: "startedBy", label: "Run initiator", type: "user" },
-    { key: "event_source", label: "Event source", type: "enum", options: [...EVENT_SOURCE_OPTIONS] },
+    {
+      key: "event_source",
+      label: "Event source",
+      type: "enum",
+      options: [...EVENT_SOURCE_OPTIONS],
+    },
   ],
 };
 
@@ -61,13 +75,15 @@ type CloseRunRow = {
   target_close_date: string;
   started_by: string | null;
   open_exception_count: number;
+  approval_fingerprint: string | null;
 };
 
 async function loadCloseRun(subjectId: string): Promise<CloseRunRow | null> {
-  const result = (await db.execute<CloseRunRow>(sql`
+  const result = await db.execute<CloseRunRow>(sql`
     select r.id, r.org_id, p.name as period_name, p.fiscal_year, p.period_number,
            p.is_adjustment, r.book_id, b.name as book_name, bp.name as blueprint_name,
            r.status, r.readiness_score, r.target_close_date, r.started_by,
+           public.close_run_approval_fingerprint(r.org_id,r.id) as approval_fingerprint,
            (select count(*)::int from close_exceptions x
              where x.run_id = r.id and x.org_id = r.org_id and x.status = 'open') as open_exception_count
       from close_runs r
@@ -75,90 +91,100 @@ async function loadCloseRun(subjectId: string): Promise<CloseRunRow | null> {
       join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
       join close_blueprints bp on bp.id = r.blueprint_id and bp.org_id = r.org_id
      where r.id = ${subjectId}
-  `));
+  `);
   return result.rows[0] ?? null;
 }
 
-function periodType(row: CloseRunRow): "month" | "quarter" | "year" | "adjustment" {
+function periodType(
+  row: CloseRunRow,
+): "month" | "quarter" | "year" | "adjustment" {
   if (row.is_adjustment) return "adjustment";
   if (row.period_number === 12 || row.period_number === 13) return "year";
   if (row.period_number % 3 === 0) return "quarter";
   return "month";
 }
 
-export const closeRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
-  subjectKind: CLOSE_RUN_SUBJECT_KIND,
-  // /close/runs requires close.run; reads ride close.read. A period close
-  // is org-wide.
-  permissions: { read: "close.read", edit: "close.run", approve: "close.approve" },
-  scope: { via: "none" },
-  profile: closeRunSubjectProfile,
-  // releaseApproval below delegates to the registered engine handler.
-  releaseViaHandler: true,
-  selfApprovalPolicy: "configurable",
+export const closeRunsFlowAdapter: FlowSubjectAdapter =
+  defineTableSubjectAdapter({
+    nativeCommandApproval: true,
+    subjectKind: CLOSE_RUN_SUBJECT_KIND,
+    // /close/runs requires close.run; reads ride close.read. A period close
+    // is org-wide.
+    permissions: {
+      read: "close.read",
+      edit: "close.run",
+      approve: "close.approve",
+    },
+    scope: { via: "none" },
+    profile: closeRunSubjectProfile,
+    // releaseApproval below delegates to the registered engine handler.
+    releaseViaHandler: true,
 
-  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-    const run = await loadCloseRun(subjectId);
-    if (!run) return null;
-    return {
-      values: {
-        id: run.id,
-        periodName: run.period_name,
-        // Locale-free label for titles and notifications; periodName stays the
-        // stored name that conditions are written against.
-        periodLabel: canonicalPeriodLabel({
+    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+      const run = await loadCloseRun(subjectId);
+      if (!run) return null;
+      return {
+        values: {
+          id: run.id,
+          periodName: run.period_name,
+          // Locale-free label for titles and notifications; periodName stays the
+          // stored name that conditions are written against.
+          periodLabel: canonicalPeriodLabel({
+            fiscalYear: run.fiscal_year,
+            periodNumber: run.period_number,
+            adjustment: run.is_adjustment,
+          }),
           fiscalYear: run.fiscal_year,
-          periodNumber: run.period_number,
-          adjustment: run.is_adjustment,
-        }),
-        fiscalYear: run.fiscal_year,
-        periodType: periodType(run),
-        bookId: run.book_id,
-        bookName: run.book_name,
-        blueprintName: run.blueprint_name,
-        status: run.status,
-        readinessScore: run.readiness_score,
-        targetCloseDate: run.target_close_date,
-        openExceptionCount: run.open_exception_count,
-        startedBy: run.started_by,
-      },
-      submitterUserId: run.started_by,
-    };
-  },
+          periodType: periodType(run),
+          bookId: run.book_id,
+          bookName: run.book_name,
+          blueprintName: run.blueprint_name,
+          status: run.status,
+          readinessScore: run.readiness_score,
+          targetCloseDate: run.target_close_date,
+          openExceptionCount: run.open_exception_count,
+          startedBy: run.started_by,
+          approvalFingerprint: run.approval_fingerprint,
+        },
+        submitterUserId: run.started_by,
+      };
+    },
 
-  label(subjectId: string, values: Record<string, unknown>): string {
-    return `${String(values.periodLabel ?? values.periodName ?? subjectId)} close · ${String(values.bookName ?? "")}`.trim();
-  },
+    label(subjectId: string, values: Record<string, unknown>): string {
+      return `${String(values.periodLabel ?? values.periodName ?? subjectId)} close · ${String(values.bookName ?? "")}`.trim();
+    },
 
-  deepLink(subjectId: string): string {
-    return `/close?run=${subjectId}&stage=lock`;
-  },
+    deepLink(subjectId: string): string {
+      return `/close?run=${subjectId}&stage=lock`;
+    },
 
-  async getStatus(subjectId: string): Promise<string | null> {
-    return (await loadCloseRun(subjectId))?.status ?? null;
-  },
+    async getStatus(subjectId: string): Promise<string | null> {
+      return (await loadCloseRun(subjectId))?.status ?? null;
+    },
 
-  async changeStatus(): Promise<void> {
-    throw new Error("close lifecycle transitions are controlled by the close engine");
-  },
+    async changeStatus(): Promise<void> {
+      throw new Error(
+        "close lifecycle transitions are controlled by the close engine",
+      );
+    },
 
-  async releaseApproval(
-    subjectId: string,
-    outcome: "approved" | "rejected",
-    ctx: FlowExecCtx,
-    _detail?: { comment?: string | null },
-    run?: { id: string; dispatchValues: Record<string, unknown> | null },
-  ): Promise<void> {
-    await releaseFlowApproval({
-      subjectKind: CLOSE_RUN_SUBJECT_KIND,
-      subjectId,
-      outcome,
-      ctx,
-      approvalRunId: run?.id,
-    });
-  },
+    async releaseApproval(
+      subjectId: string,
+      outcome: "approved" | "rejected",
+      ctx: FlowExecCtx,
+      _detail?: { comment?: string | null },
+      run?: { id: string; dispatchValues: Record<string, unknown> | null },
+    ): Promise<void> {
+      await releaseFlowApproval({
+        subjectKind: CLOSE_RUN_SUBJECT_KIND,
+        subjectId,
+        outcome,
+        ctx,
+        approvalRunId: run?.id,
+      });
+    },
 
-  async setField(): Promise<void> {
-    throw new Error("close run fields are not writable by flows");
-  },
-});
+    async setField(): Promise<void> {
+      throw new Error("close run fields are not writable by flows");
+    },
+  });

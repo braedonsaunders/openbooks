@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod'
 import { uuidString } from '@openbooks/engine/platform/identifiers';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -7,7 +7,11 @@ import { getLocale } from 'next-intl/server'
 import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
 import { sql } from 'drizzle-orm'
 import { effectiveExtraDimsSql } from '@openbooks/engine/budgets/dimensions'
-import { db } from '@openbooks/engine/platform/db'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import {
+  submitBudgetScenario,
+  withdrawBudgetScenario,
+} from '@openbooks/engine/flows/budget-submission'
 import { can, subsidiariesInScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
@@ -22,15 +26,18 @@ const POSTBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('copy_prior_actuals'), expectedRevision: revisionSchema, ...budgetDimensionsSchema }),
   z.object({ action: z.literal('apply_source'), expectedRevision: revisionSchema, sourceScenarioId: uuidString() }),
   z.object({ action: z.literal('submit'), expectedRevision: revisionSchema }),
-  z.object({ action: z.literal('approve'), expectedRevision: revisionSchema }),
-  z.object({ action: z.literal('reject'), expectedRevision: revisionSchema, reason: z.string().trim().min(1).max(2000) }),
-]);
-
-
+  z.object({ action: z.literal('withdraw'), expectedRevision: revisionSchema }),
+])
 
 export const runtime = 'nodejs'
 
-type Action = 'archive' | 'copy' | 'copy_prior_actuals' | 'apply_source' | 'submit' | 'approve' | 'reject'
+type Action =
+  | 'archive'
+  | 'copy'
+  | 'copy_prior_actuals'
+  | 'apply_source'
+  | 'submit'
+  | 'withdraw'
 
 /** A source period with no destination in the target year. */
 type UnmappedPeriodRow = {
@@ -57,9 +64,6 @@ async function unmappedPeriodNames(rows: UnmappedPeriodRow[]): Promise<string> {
     endsOn: row.ends_on,
   }, locale)).join(', ')
 }
-
-/** Approve/reject are checker decisions: the approve grant, not the manage grant. */
-const DECISION_ACTIONS: Action[] = ['approve', 'reject']
 
 function dims(body: Record<string, unknown>) {
   // A supplied dimension that is not a valid id refuses by name: the old code
@@ -88,123 +92,73 @@ export const POST = defineRoute({
   invalidBodyStatus: 422,
   handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
-    const gate = routeAuthz;
+    const gate = routeAuthz
     const user = gate.user
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
 
-    const body = (routeBody) as Record<string, unknown>
+    const body = routeBody as Record<string, unknown>
     const action = body.action as Action
-    if (!['archive', 'copy', 'copy_prior_actuals', 'apply_source', 'submit', 'approve', 'reject'].includes(action)) {
+    if (
+      ![
+        'archive',
+        'copy',
+        'copy_prior_actuals',
+        'apply_source',
+        'submit',
+        'withdraw',
+      ].includes(action)
+    ) {
         return NextResponse.json({ error: 'invalid_action' }, { status: 422 })
       }
-    if (DECISION_ACTIONS.includes(action)) {
-        if (!can(gate, 'budgets.approve')) {
-          return NextResponse.json({ error: 'missing permission: budgets.approve' }, { status: 403 })
-        }
-      } else if (!can(gate, 'budgets.manage')) {
-        return NextResponse.json({ error: 'missing permission: budgets.manage' }, { status: 403 })
-      }
+    if (!can(gate, 'budgets.manage'))
+      return NextResponse.json({ error: 'missing permission: budgets.manage' }, { status: 403 })
     const expectedRevision = Number(body.expectedRevision)
     if (!Number.isInteger(expectedRevision)) return NextResponse.json({ error: 'invalid_revision' }, { status: 422 })
     try {
-        const result = await db.transaction(async (tx) => {
-          const locked = (await tx.execute<{ id: string; name: string; description: string | null; book_id: string; fiscal_year: number; kind: string; status: string; revision: number; submitted_by: string | null }>(sql`
+      const result = await withOrgTransaction(user.orgId, async () => {
+        const tx = db
+        const locked = await tx.execute<{ id: string; name: string; description: string | null; book_id: string; fiscal_year: number; kind: string; status: string; revision: number; submitted_by: string | null }>(sql`
             select id, name, description, book_id, fiscal_year, kind, status, revision, submitted_by
               from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
-          `))
-          const scenario = locked.rows[0]
-          if (!scenario) throw new BudgetMutationError('not_found', 404)
-          if (Number(scenario.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+          `)
+        const scenario = locked.rows[0]
+        if (!scenario) throw new BudgetMutationError('not_found', 404)
+        if (Number(scenario.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
 
-          // Scenario-level transitions and source application govern the
-          // whole scenario. A restricted caller may copy visible lines into
-          // a new scenario, but may only apply a source they can fully access.
-          if (action === 'submit' || action === 'approve' || action === 'reject' || action === 'archive') {
+        // Scenario-level transitions and source application govern the
+        // whole scenario. A restricted caller may copy visible lines into
+        // a new scenario, but may only apply a source they can fully access.
+        if (
+          action === 'submit' ||
+          action === 'withdraw' ||
+          action === 'archive'
+        ) {
             const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)
             if (outOfScope.length > 0) throw outOfScopeScenarioError(outOfScope)
           }
 
-          // The maker's submit and the checker's decision. Direct
-          // status transitions (no tenant-authored flow graph required) so the
-          // Pending approval / Approved states the list already offers are
-          // reachable out of the box. approved_by/submitted_by provenance mirrors
-          // the flows adapter's change_status semantics.
-          if (action === 'submit') {
-            if (scenario.status !== 'draft') throw new BudgetMutationError('only_drafts_can_be_submitted', 409)
-            // The scenario-guard trigger refuses line-less submits with a raw
-            // Postgres raise (a 500 with no code). Refuse first with the typed
-            // message the drawer pins, using the trigger's exact predicate so
-            // the two can never disagree.
-            const linePresent = (await tx.execute(sql`
-              select 1 from budget_lines
-               where org_id = ${user.orgId} and scenario_id = ${id} and amount <> 0 limit 1
-            `))
-            if (!linePresent.rows[0]) throw new BudgetMutationError('budget_requires_lines', 422)
-            const nextRevision = expectedRevision + 1
-            const decision = await tx.execute(sql`
-              update budget_scenarios set
-                status = 'pending_approval', revision = ${nextRevision},
-                submitted_at = now(), submitted_by = ${user.id},
-                updated_at = now(), updated_by = ${user.id}
-              where id = ${id} and org_id = ${user.orgId} and revision = ${expectedRevision}
-              returning id
-            `)
-            if (decision.rows.length !== 1) throw new BudgetMutationError('revision_conflict', 409)
-            await tx.execute(sql`
-              insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
-                ${JSON.stringify({ action: 'submit', from: 'draft', to: 'pending_approval' })}::jsonb, ${user.id})
-            `)
-            return { revision: nextRevision, status: 'pending_approval' }
-          }
+        if (action === 'submit')
+          return submitBudgetScenario(user.orgId, user.id, id, expectedRevision)
+        if (action === 'withdraw')
+          return withdrawBudgetScenario(
+            user.orgId,
+            user.id,
+            id,
+            expectedRevision,
+          )
 
-          if (action === 'approve' || action === 'reject') {
-            if (scenario.status !== 'pending_approval') throw new BudgetMutationError('only_pending_budgets_can_be_decided', 409)
-            // Separation of duties, mirroring the document path
-            // ("the submitter cannot approve their own document"). The submitter
-            // may not decide their own budget even when they hold
-            // budgets.approve; a single-admin exception would need to be an
-            // explicit, audited, configurable opt-out, not this code path.
-            // Reject (return to draft) stays open to the submitter: sending a
-            // budget back is not an approval.
-            if (action === 'approve' && scenario.submitted_by && scenario.submitted_by === user.id) {
-              throw new BudgetMutationError('self_approval_forbidden', 409)
-            }
-            const to = action === 'approve' ? 'approved' : 'draft'
-            const nextRevision = expectedRevision + 1
-            const decision = await tx.execute(sql`
-              update budget_scenarios set
-                status = ${to}, revision = ${nextRevision},
-                submitted_at = case when ${to} = 'draft' then null else submitted_at end,
-                submitted_by = case when ${to} = 'draft' then null else submitted_by end,
-                approved_at = case when ${to} = 'approved' then now() else approved_at end,
-                approved_by = case when ${to} = 'approved' then ${user.id} else approved_by end,
-                updated_at = now(), updated_by = ${user.id}
-              where id = ${id} and org_id = ${user.orgId} and revision = ${expectedRevision}
-              returning id
-            `)
-            if (decision.rows.length !== 1) throw new BudgetMutationError('revision_conflict', 409)
-            await tx.execute(sql`
-              insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
-                ${JSON.stringify({ action, from: 'pending_approval', to, revisionBefore: expectedRevision, revisionAfter: nextRevision,
-                  ...(action === 'reject' ? { reason: body.reason } : {}) })}::jsonb, ${user.id})
-            `)
-            return { revision: nextRevision, status: to }
-          }
-
-          // Every source line must land on a destination period: the copy join
-          // maps by (calendar, period_number), so a target year missing any of
-          // the source's periods would silently drop those lines (possibly all
-          // of them) while the new scenario reports success. Verify the FULL
-          // mapping before any write and refuse naming the unmapped periods.
-          const assertFullPeriodMapping = async (
-            sourceYear: number | null,
-            sourceScenarioId: string | null,
-            targetYear: number,
-          ) => {
-            const unmapped = (await tx.execute<UnmappedPeriodRow>(sql`
+        // Every source line must land on a destination period: the copy join
+        // maps by (calendar, period_number), so a target year missing any of
+        // the source's periods would silently drop those lines (possibly all
+        // of them) while the new scenario reports success. Verify the FULL
+        // mapping before any write and refuse naming the unmapped periods.
+        const assertFullPeriodMapping = async (
+          sourceYear: number | null,
+          sourceScenarioId: string | null,
+          targetYear: number,
+        ) => {
+          const unmapped = await tx.execute<UnmappedPeriodRow>(sql`
               select distinct source_period.id, source_period.fiscal_year, source_period.period_number,
                      source_period.is_adjustment,
                      source_period.starts_on::text as starts_on, source_period.ends_on::text as ends_on
@@ -223,56 +177,56 @@ export const POST = defineRoute({
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
                  and destination.id is null
                order by starts_on, source_period.id
-            `))
-            if (unmapped.rows.length > 0) {
+            `)
+          if (unmapped.rows.length > 0) {
               const names = await unmappedPeriodNames(unmapped.rows)
               throw new BudgetMutationError(`unmapped_periods: no ${targetYear} period matches source period(s) ${names}`)
             }
-          }
+        }
 
-          if (action === 'copy') {
-            const targetYearRaw = Number(body.fiscalYear)
-            const targetYear = Number.isInteger(targetYearRaw) ? targetYearRaw : Number(scenario.fiscal_year)
-            const periods = (await tx.execute(sql`
+        if (action === 'copy') {
+          const targetYearRaw = Number(body.fiscalYear)
+          const targetYear = Number.isInteger(targetYearRaw) ? targetYearRaw : Number(scenario.fiscal_year)
+          const periods = await tx.execute(sql`
               select 1 from accounting_periods
                where org_id = ${user.orgId} and fiscal_year = ${targetYear} and not is_adjustment limit 1
-            `))
-            if (!periods.rows[0]) throw new BudgetMutationError('target_year_has_no_periods')
-            await assertFullPeriodMapping(null, null, targetYear)
-            // Budgets cover the P&L only: refuse legacy balance-sheet source
-            // lines by name instead of copying lines the worksheet hides (the
-            // line guard would fail them with a raw error at insert time).
-            const nonPnlCopy = (await tx.execute<{ display: string }>(sql`
+            `)
+          if (!periods.rows[0]) throw new BudgetMutationError('target_year_has_no_periods')
+          await assertFullPeriodMapping(null, null, targetYear)
+          // Budgets cover the P&L only: refuse legacy balance-sheet source
+          // lines by name instead of copying lines the worksheet hides (the
+          // line guard would fail them with a raw error at insert time).
+          const nonPnlCopy = await tx.execute<{ display: string }>(sql`
               select distinct (case when a.number is null then a.name else a.name || ' (' || a.number || ')' end) as display
                 from budget_lines bl
                 join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
                where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
                  and a.type not in ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred')
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-            `))
-            if (nonPnlCopy.rows.length > 0) {
+            `)
+          if (nonPnlCopy.rows.length > 0) {
               throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${nonPnlCopy.rows.map((row) => row.display).join(', ')}`)
             }
-            await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${user.orgId}:${scenario.book_id}:${targetYear}:${scenario.kind}`}, 0))`)
-            const baseName = `${scenario.name} Copy`
-            const existing = (await tx.execute<{ name: string }>(sql`
+          await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${user.orgId}:${scenario.book_id}:${targetYear}:${scenario.kind}`}, 0))`)
+          const baseName = `${scenario.name} Copy`
+          const existing = await tx.execute<{ name: string }>(sql`
               select name from budget_scenarios
                where org_id = ${user.orgId} and book_id = ${scenario.book_id}
                  and fiscal_year = ${targetYear} and kind = ${scenario.kind}
                  and (name = ${baseName} or name like ${`${baseName} (%`})
-            `))
-            const used = new Set(existing.rows.map((row) => row.name))
-            let name = baseName
-            for (let i = 2; used.has(name); i++) name = `${baseName} (${i})`
-            const created = (await tx.execute<{ id: string }>(sql`
+            `)
+          const used = new Set(existing.rows.map((row) => row.name))
+          let name = baseName
+          for (let i = 2; used.has(name); i++) name = `${baseName} (${i})`
+          const created = await tx.execute<{ id: string }>(sql`
               insert into budget_scenarios
                 (org_id, book_id, fiscal_year, name, description, kind, status, created_by, updated_by)
               values (${user.orgId}, ${scenario.book_id}, ${targetYear}, ${name}, ${scenario.description},
                       ${scenario.kind}, 'draft', ${user.id}, ${user.id})
               returning id
-            `))
-            const newId = created.rows[0]!.id
-            await tx.execute(sql`
+            `)
+          const newId = created.rows[0]!.id
+          await tx.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
                  extra_dims, amount, note, created_by, updated_by)
@@ -290,47 +244,47 @@ export const POST = defineRoute({
                where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
             `)
-            await tx.execute(sql`
+          await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
               values (${user.orgId}, 'budget_scenarios', ${newId}, 'insert',
                 ${JSON.stringify({ copiedFrom: id, targetYear })}::jsonb, ${user.id})
             `)
-            return { id: newId, revision: 1 }
-          }
+          return { id: newId, revision: 1 }
+        }
 
-          if (action === 'copy_prior_actuals') {
-            if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
-            const selected = dims(body)
-            if (selected.subsidiaryId !== null && !subsidiariesInScope(gate, [selected.subsidiaryId])) {
+        if (action === 'copy_prior_actuals') {
+          if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
+          const selected = dims(body)
+          if (selected.subsidiaryId !== null && !subsidiariesInScope(gate, [selected.subsidiaryId])) {
               throw new BudgetMutationError('invalid_subsidiary')
             }
-            // A selected dimension filters the source activity and stamps its value
-            // onto every copied line. An unselected dimension is copied through:
-            // each source line keeps its own value instead of being silently
-            // collapsed into the NULL-dimension bucket.
-            const sourceDimFilters = [
+          // A selected dimension filters the source activity and stamps its value
+          // onto every copied line. An unselected dimension is copied through:
+          // each source line keeps its own value instead of being silently
+          // collapsed into the NULL-dimension bucket.
+          const sourceDimFilters = [
               selected.subsidiaryId === null ? null : sql`l.subsidiary_id is not distinct from ${selected.subsidiaryId}`,
               selected.departmentId === null ? null : sql`l.department_id is not distinct from ${selected.departmentId}`,
               selected.projectId === null ? null : sql`l.project_id is not distinct from ${selected.projectId}`,
               selected.locationId === null ? null : sql`l.location_id is not distinct from ${selected.locationId}`,
               selected.classId === null ? null : sql`l.class_id is not distinct from ${selected.classId}`,
             ].filter((predicate) => predicate !== null)
-            // Clear exactly what this copy replaces: the selected dimensions'
-            // existing lines, or the whole scenario when nothing narrows the scope.
-            const clearDimFilters = [
+          // Clear exactly what this copy replaces: the selected dimensions'
+          // existing lines, or the whole scenario when nothing narrows the scope.
+          const clearDimFilters = [
               selected.subsidiaryId === null ? null : sql`subsidiary_id is not distinct from ${selected.subsidiaryId}`,
               selected.departmentId === null ? null : sql`department_id is not distinct from ${selected.departmentId}`,
               selected.projectId === null ? null : sql`project_id is not distinct from ${selected.projectId}`,
               selected.locationId === null ? null : sql`location_id is not distinct from ${selected.locationId}`,
               selected.classId === null ? null : sql`class_id is not distinct from ${selected.classId}`,
             ].filter((predicate) => predicate !== null)
-            // Verify before the delete below: it clears the target first, so a
-            // prior-year period with real actuals but no current-year counterpart
-            // would destroy lines it can never replace. The group/having mirrors
-            // the copy query exactly — a period netting to zero copies nothing,
-            // so only nonzero periods can block.
-            const priorYear = Number(scenario.fiscal_year) - 1
-            const unmappedActuals = (await tx.execute<UnmappedPeriodRow>(sql`
+          // Verify before the delete below: it clears the target first, so a
+          // prior-year period with real actuals but no current-year counterpart
+          // would destroy lines it can never replace. The group/having mirrors
+          // the copy query exactly — a period netting to zero copies nothing,
+          // so only nonzero periods can block.
+          const priorYear = Number(scenario.fiscal_year) - 1
+          const unmappedActuals = await tx.execute<UnmappedPeriodRow>(sql`
               select source_period.id, source_period.fiscal_year, source_period.period_number,
                      source_period.is_adjustment,
                      source_period.starts_on::text as starts_on, source_period.ends_on::text as ends_on
@@ -353,18 +307,18 @@ export const POST = defineRoute({
                         source_period.is_adjustment, source_period.starts_on, source_period.ends_on
               having sum(l.amount) <> 0
                order by source_period.starts_on, source_period.id
-            `))
-            if (unmappedActuals.rows.length > 0) {
+            `)
+          if (unmappedActuals.rows.length > 0) {
               const names = await unmappedPeriodNames(unmappedActuals.rows)
               throw new BudgetMutationError(`unmapped_periods: no ${scenario.fiscal_year} period matches prior-year actuals period(s) ${names}`)
             }
-            await tx.execute(sql`
+          await tx.execute(sql`
               delete from budget_lines
                where org_id = ${user.orgId} and scenario_id = ${id}
                  ${clearDimFilters.length > 0 ? sql`and ${sql.join(clearDimFilters, sql` and `)}` : sql``}
                  ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
             `)
-            await tx.execute(sql`
+          await tx.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
                  extra_dims, amount, created_by, updated_by)
@@ -393,56 +347,56 @@ export const POST = defineRoute({
                group by 3, 4, 5, 6, 7, 8, 9, 10
               having sum(l.amount) <> 0
             `)
-            const nextRevision = expectedRevision + 1
-            await tx.execute(sql`
+          const nextRevision = expectedRevision + 1
+          await tx.execute(sql`
               update budget_scenarios set revision = ${nextRevision}, updated_at = now(), updated_by = ${user.id}
                where id = ${id} and org_id = ${user.orgId}
             `)
-            await tx.execute(sql`
+          await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
               values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
                 ${JSON.stringify({ action, sourceFiscalYear: Number(scenario.fiscal_year) - 1, dimensions: selected })}::jsonb,
                 ${user.id})
             `)
-            return { revision: nextRevision }
-          }
+          return { revision: nextRevision }
+        }
 
-          if (action === 'apply_source') {
-            if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
-            const sourceScenarioId = typeof body.sourceScenarioId === 'string' && isUuid(body.sourceScenarioId)
+        if (action === 'apply_source') {
+          if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
+          const sourceScenarioId = typeof body.sourceScenarioId === 'string' && isUuid(body.sourceScenarioId)
               ? body.sourceScenarioId
               : null
-            if (!sourceScenarioId || sourceScenarioId === id) throw new BudgetMutationError('invalid_source_scenario')
-            const source = (await tx.execute<{ id: string }>(sql`
+          if (!sourceScenarioId || sourceScenarioId === id) throw new BudgetMutationError('invalid_source_scenario')
+          const source = await tx.execute<{ id: string }>(sql`
               select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
-            `))
-            if (!source.rows[0]) throw new BudgetMutationError('invalid_source_scenario')
-            const sourceOutOfScope = await scenarioOutOfScopeSubsidiaryNames(
+            `)
+          if (!source.rows[0]) throw new BudgetMutationError('invalid_source_scenario')
+          const sourceOutOfScope = await scenarioOutOfScopeSubsidiaryNames(
               sourceScenarioId,
               user.orgId,
               gate.allowedSubsidiaryIds,
             )
-            if (sourceOutOfScope.length > 0) throw outOfScopeScenarioError(sourceOutOfScope)
-            // Verify before the delete below: it clears the target first, so an
-            // unmapped source period would destroy lines it can never replace.
-            await assertFullPeriodMapping(null, sourceScenarioId, Number(scenario.fiscal_year))
-            const nonPnlApply = (await tx.execute<{ display: string }>(sql`
+          if (sourceOutOfScope.length > 0) throw outOfScopeScenarioError(sourceOutOfScope)
+          // Verify before the delete below: it clears the target first, so an
+          // unmapped source period would destroy lines it can never replace.
+          await assertFullPeriodMapping(null, sourceScenarioId, Number(scenario.fiscal_year))
+          const nonPnlApply = await tx.execute<{ display: string }>(sql`
               select distinct (case when a.number is null then a.name else a.name || ' (' || a.number || ')' end) as display
                 from budget_lines bl
                 join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
                where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
                  and a.type not in ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred')
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-            `))
-            if (nonPnlApply.rows.length > 0) {
+            `)
+          if (nonPnlApply.rows.length > 0) {
               throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${nonPnlApply.rows.map((row) => row.display).join(', ')}`)
             }
-            await tx.execute(sql`
+          await tx.execute(sql`
               delete from budget_lines
                where scenario_id = ${id} and org_id = ${user.orgId}
                  ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
             `)
-            await tx.execute(sql`
+          await tx.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
                  extra_dims, amount, note, created_by, updated_by)
@@ -460,41 +414,41 @@ export const POST = defineRoute({
                where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
             `)
-            const nextRevision = expectedRevision + 1
-            await tx.execute(sql`
+          const nextRevision = expectedRevision + 1
+          await tx.execute(sql`
               update budget_scenarios set revision = ${nextRevision}, updated_at = now(), updated_by = ${user.id}
                where id = ${id} and org_id = ${user.orgId}
             `)
-            await tx.execute(sql`
+          await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
               values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
                 ${JSON.stringify({ action, sourceScenarioId })}::jsonb, ${user.id})
             `)
-            return { revision: nextRevision, status: 'draft' }
-          }
+          return { revision: nextRevision, status: 'draft' }
+        }
 
-          if (!['draft', 'pending_approval', 'approved'].includes(scenario.status)) {
+        if (!['draft', 'pending_approval', 'approved'].includes(scenario.status)) {
             throw new BudgetMutationError('invalid_status_transition', 409)
           }
-          if (scenario.status === 'approved' && !can(gate, 'budgets.approve')) {
+        if (scenario.status === 'approved' && !can(gate, 'budgets.approve')) {
             throw new BudgetMutationError('approved_budget_requires_approver', 403)
           }
-          const nextRevision = expectedRevision + 1
-          await tx.execute(sql`
+        const nextRevision = expectedRevision + 1
+        await tx.execute(sql`
             update budget_scenarios set
               status = 'archived', revision = ${nextRevision},
               updated_at = now(), updated_by = ${user.id}
             where id = ${id} and org_id = ${user.orgId}
           `)
-          await tx.execute(sql`
+        await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
               ${JSON.stringify({ action: 'archive', from: scenario.status, to: 'archived' })}::jsonb, ${user.id})
           `)
-          return { revision: nextRevision, status: 'archived' }
-        })
-        return NextResponse.json(result)
-      } catch (error) {
+        return { revision: nextRevision, status: 'archived' }
+      })
+      return NextResponse.json(result)
+    } catch (error) {
         if (error instanceof BudgetMutationError) return apiErrorResponse(error)
         // A line deleted between the pre-check and the status flip still trips
         // the scenario-guard trigger: translate its raise to the same typed
@@ -505,4 +459,4 @@ export const POST = defineRoute({
         throw error
       }
   },
-});
+})

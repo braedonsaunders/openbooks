@@ -1,3 +1,7 @@
+import {
+  decideReopenFixture,
+  requestReviewedReopenFixture,
+} from "../testing/close.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -6,9 +10,7 @@ import { CloseError } from "../periods/period-policy.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 import {
   consumeReopenRequestsForClosedModules,
-  decidePeriodReopen,
   recloseApprovedReopen,
-  requestPeriodReopen,
 } from "./reopening.ts";
 import {
   createScratchOrg,
@@ -74,18 +76,28 @@ SELECT e.org_id,
   FROM ended AS e
 `;
 
-async function requestStatus(orgId: string, requestId: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`
+async function requestStatus(
+  orgId: string,
+  requestId: string,
+): Promise<string> {
+  return (
+    await db.execute<{ status: string }>(sql`
     select status from close_reopen_requests where id = ${requestId} and org_id = ${orgId}
-  `)).rows[0]!.status;
+  `)
+  ).rows[0]!.status;
 }
 
-async function endAuditCount(orgId: string, requestId: string): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
+async function endAuditCount(
+  orgId: string,
+  requestId: string,
+): Promise<number> {
+  return (
+    await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'close_reopen_requests'
        and row_id = ${requestId} and action = 'end'
-  `)).rows[0]!.n;
+  `)
+  ).rows[0]!.n;
 }
 
 test(
@@ -95,37 +107,98 @@ test(
     const org = await createScratchOrg();
     try {
       const actors = await seedFlowActors(org.orgId);
-      const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
+      const target = {
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+      };
       // The live control window sits in a subsidiary scope: closing GL
       // refuses while any same-scope subledger is open, so a same-scope
       // live window would make the stale re-close unarrangeable.
-      await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const stale = await requestPeriodReopen({ ...target, modules: ["ap"], actorId: actors.adminId, reason: "Stale correction window" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: stale, actorId: actors.approver1Id, approve: true, hours: 2 });
-      await setPeriodLockState({ ...target, subsidiaryId: org.subsidiaryId, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const live = await requestPeriodReopen({ ...target, subsidiaryId: org.subsidiaryId, modules: ["gl"], actorId: actors.adminId, reason: "Live correction window" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: live, actorId: actors.approver1Id, approve: true, hours: 2 });
+      await setPeriodLockState({
+        ...target,
+        module: "ap",
+        state: "closed",
+        actorId: actors.adminId,
+        reason: "Close for review",
+      });
+      const stale = await requestReviewedReopenFixture({
+        ...target,
+        modules: ["ap"],
+        actorId: actors.adminId,
+        reason: "Stale correction window",
+      });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: stale,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
+      await setPeriodLockState({
+        ...target,
+        subsidiaryId: org.subsidiaryId,
+        module: "gl",
+        state: "closed",
+        actorId: actors.adminId,
+        reason: "Close for review",
+      });
+      const live = await requestReviewedReopenFixture({
+        ...target,
+        subsidiaryId: org.subsidiaryId,
+        modules: ["gl"],
+        actorId: actors.adminId,
+        reason: "Live correction window",
+      });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: live,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
 
       // A re-close from Setup that predates the consume hook: the lock
       // flips but the window still reads approved — the stale state the
       // reconciliation exists to clear.
-      await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Correction work completed" });
+      await setPeriodLockState({
+        ...target,
+        module: "ap",
+        state: "closed",
+        actorId: actors.adminId,
+        reason: "Correction work completed",
+      });
       assert.equal(await requestStatus(org.orgId, stale), "approved");
 
       await db.execute(sql.raw(RECONCILE_STALE_REOPEN_WINDOWS));
       assert.equal(await requestStatus(org.orgId, stale), "reclosed");
-      const ended = (await db.execute<{ reclosed_at: string | null; updated_by: string | null }>(sql`
+      const ended = (
+        await db.execute<{
+          reclosed_at: string | null;
+          updated_by: string | null;
+        }>(sql`
         select reclosed_at::text as reclosed_at, updated_by::text as updated_by
           from close_reopen_requests where id = ${stale} and org_id = ${org.orgId}
-      `)).rows[0]!;
+      `)
+      ).rows[0]!;
       assert.ok(ended.reclosed_at, "the re-close fields are set");
-      assert.equal(ended.updated_by, null, "a system reconciliation names no actor");
-      assert.equal(await endAuditCount(org.orgId, stale), 1, "one audit row per ended window");
-      const auditReason = (await db.execute<{ reason: string }>(sql`
+      assert.equal(
+        ended.updated_by,
+        null,
+        "a system reconciliation names no actor",
+      );
+      assert.equal(
+        await endAuditCount(org.orgId, stale),
+        1,
+        "one audit row per ended window",
+      );
+      const auditReason = (
+        await db.execute<{ reason: string }>(sql`
         select changes->>'reason' as reason from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
            and row_id = ${stale} and action = 'end'
-      `)).rows[0]!.reason;
+      `)
+      ).rows[0]!.reason;
       assert.match(auditReason, /every covered module is already closed/);
 
       // The window still guarding open AP work is untouched.
@@ -149,19 +222,57 @@ test(
     const org = await createScratchOrg();
     try {
       const actors = await seedFlowActors(org.orgId);
-      const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
-      await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const stale = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Stale correction window" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: stale, actorId: actors.approver1Id, approve: true, hours: 2 });
-      await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Correction work completed" });
+      const target = {
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+      };
+      await setPeriodLockState({
+        ...target,
+        module: "gl",
+        state: "closed",
+        actorId: actors.adminId,
+        reason: "Close for review",
+      });
+      const stale = await requestReviewedReopenFixture({
+        ...target,
+        modules: ["gl"],
+        actorId: actors.adminId,
+        reason: "Stale correction window",
+      });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: stale,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
+      await setPeriodLockState({
+        ...target,
+        module: "gl",
+        state: "closed",
+        actorId: actors.adminId,
+        reason: "Correction work completed",
+      });
 
       await db.execute(sql.raw(RECONCILE_STALE_REOPEN_WINDOWS));
       assert.equal(await requestStatus(org.orgId, stale), "reclosed");
 
       // The replacement window over the same scope approves: no live
       // window blocks it anymore.
-      const next = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Follow-up correction work" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: next, actorId: actors.approver1Id, approve: true, hours: 2 });
+      const next = await requestReviewedReopenFixture({
+        ...target,
+        modules: ["gl"],
+        actorId: actors.adminId,
+        reason: "Follow-up correction work",
+      });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: next,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
       assert.equal(await requestStatus(org.orgId, next), "approved");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -176,14 +287,60 @@ test(
     async function buildStalePlusLive() {
       const org = await createScratchOrg();
       const actors = await seedFlowActors(org.orgId);
-      const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
-      await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const stale = await requestPeriodReopen({ ...target, modules: ["ap"], actorId: actors.adminId, reason: "Stale correction window" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: stale, actorId: actors.approver1Id, approve: true, hours: 2 });
-      await setPeriodLockState({ ...target, subsidiaryId: org.subsidiaryId, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const live = await requestPeriodReopen({ ...target, subsidiaryId: org.subsidiaryId, modules: ["gl"], actorId: actors.adminId, reason: "Live correction window" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: live, actorId: actors.approver1Id, approve: true, hours: 2 });
-      await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Correction work completed" });
+      const target = {
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+      };
+      await setPeriodLockState({
+        ...target,
+        module: "ap",
+        state: "closed",
+        actorId: actors.adminId,
+        reason: "Close for review",
+      });
+      const stale = await requestReviewedReopenFixture({
+        ...target,
+        modules: ["ap"],
+        actorId: actors.adminId,
+        reason: "Stale correction window",
+      });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: stale,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
+      await setPeriodLockState({
+        ...target,
+        subsidiaryId: org.subsidiaryId,
+        module: "gl",
+        state: "closed",
+        actorId: actors.adminId,
+        reason: "Close for review",
+      });
+      const live = await requestReviewedReopenFixture({
+        ...target,
+        subsidiaryId: org.subsidiaryId,
+        modules: ["gl"],
+        actorId: actors.adminId,
+        reason: "Live correction window",
+      });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: live,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
+      await setPeriodLockState({
+        ...target,
+        module: "ap",
+        state: "closed",
+        actorId: actors.adminId,
+        reason: "Correction work completed",
+      });
       return { org, actors, stale, live };
     }
     const first = await buildStalePlusLive();
@@ -199,17 +356,32 @@ test(
         reason: "Correction work completed",
       });
       assert.deepEqual(consumed, [second.stale]);
-      assert.equal(await requestStatus(second.org.orgId, second.stale), "reclosed");
-      assert.equal(await requestStatus(second.org.orgId, second.live), "approved");
+      assert.equal(
+        await requestStatus(second.org.orgId, second.stale),
+        "reclosed",
+      );
+      assert.equal(
+        await requestStatus(second.org.orgId, second.live),
+        "approved",
+      );
 
       // The reconciliation then agrees on the identical fixtures: the
       // other stale window ends with its audit row, both live windows
       // stay approved, and nothing new happens on the consumed side.
       await db.execute(sql.raw(RECONCILE_STALE_REOPEN_WINDOWS));
-      assert.equal(await requestStatus(first.org.orgId, first.stale), "reclosed");
+      assert.equal(
+        await requestStatus(first.org.orgId, first.stale),
+        "reclosed",
+      );
       assert.equal(await endAuditCount(first.org.orgId, first.stale), 1);
-      assert.equal(await requestStatus(first.org.orgId, first.live), "approved");
-      assert.equal(await requestStatus(second.org.orgId, second.live), "approved");
+      assert.equal(
+        await requestStatus(first.org.orgId, first.live),
+        "approved",
+      );
+      assert.equal(
+        await requestStatus(second.org.orgId, second.live),
+        "approved",
+      );
       assert.equal(await endAuditCount(second.org.orgId, second.live), 0);
     } finally {
       await dropScratchOrg(first.org.orgId);
@@ -225,13 +397,39 @@ test(
     const org = await createScratchOrg();
     try {
       const actors = await seedFlowActors(org.orgId);
-      const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
-      await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const first = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Correction window" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: first, actorId: actors.approver1Id, approve: true, hours: 2 });
-      await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
+      const target = {
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+      };
+      await setPeriodLockState({
+        ...target,
+        module: "gl",
+        state: "closed",
+        actorId: actors.adminId,
+        reason: "Close for review",
+      });
+      const first = await requestReviewedReopenFixture({
+        ...target,
+        modules: ["gl"],
+        actorId: actors.adminId,
+        reason: "Correction window",
+      });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: first,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
+      await db.execute(
+        sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`,
+      );
       const error = await recloseApprovedReopen({
-        orgId: org.orgId, requestId: first, actorId: actors.approver2Id, reason: "too short",
+        orgId: org.orgId,
+        requestId: first,
+        actorId: actors.approver2Id,
+        reason: "too short",
       }).catch((failure: unknown) => failure);
       assert.ok(error instanceof CloseError);
       assert.match(error.message, /10-500 character/);

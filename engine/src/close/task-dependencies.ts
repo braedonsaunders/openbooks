@@ -15,6 +15,9 @@ export async function resolveTaskDependenciesTx(
              join close_run_tasks dep on dep.run_id = t.run_id and dep.blueprint_step_id = d.depends_on_step_id and dep.org_id = t.org_id
             where d.step_id = t.blueprint_step_id and d.org_id = t.org_id and dep.status not in ('complete','waived')
          ) then 'blocked'
+         when t.completion_mode='manual' and t.data_fingerprint is not null
+           and t.data_fingerprint is distinct from (select r.data_fingerprint from close_runs r where r.org_id=t.org_id and r.id=t.run_id)
+           then 'invalidated'
          else 'ready'
        end,
        updated_at = now()

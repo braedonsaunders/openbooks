@@ -19,7 +19,6 @@ function program(overrides: Partial<BenefitProgram> = {}): BenefitProgram {
     code: "QPS",
     name: "Quarterly profit share",
     family: "incentive",
-    approvalMode: "none",
     description: null,
     legalEntityId: "sub-1",
     currency: "USD",
@@ -137,7 +136,6 @@ test("hourly incentives value approved member hours once at the registered curre
   }
 });
 
-
 const invalidComputations: [string, Partial<ComputeIncentiveInput>, RegExp[]][] = [
   [
     "a fixed program without a fixed amount refuses by name",
@@ -234,7 +232,6 @@ test("fixed awards pay every eligible member the configured amount", () => {
   assert.ok(result.recipients.every((r) => r.share === "fixed"));
 });
 
-
 test("hours allocation splits by approved time and refuses missing evidence", async () => {
   const result = calc({
     program: program({ allocation: "hours", frequency: "manual", metric: "approved_hours" }),
@@ -296,9 +293,6 @@ test("a threshold miss pays nothing and explains itself", () => {
   assert.ok(result.summaryLines.some((l) => l.includes("threshold") && l.includes("not met")));
 });
 
-
-
-
 test("period shapes follow the measurement frequency", async () => {
   const ok: ComputeIncentiveInput = {
     program: program({ frequency: "monthly" }),
@@ -331,7 +325,6 @@ test("period shapes follow the measurement frequency", async () => {
     /whole quarters/,
   );
 });
-
 
 test("money measures need a currency; hours measures use the program currency", async () => {
   await refuses(
@@ -414,8 +407,6 @@ test("an inverted membership span refuses with the remedy", async () => {
     /end it on or after its start/,
   );
 });
-
-
 
 test("a duplicated employment in one apportionment refuses instead of double-paying", async () => {
   await refuses(

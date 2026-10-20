@@ -1,5 +1,6 @@
 'use client'
 
+import { ApprovalActions } from '@/components/approval-actions'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
@@ -36,7 +37,10 @@ async function readError(response: Response): Promise<ErrorBody> {
   }
 }
 
-async function readMonths(loadFailed: string, signal?: AbortSignal): Promise<{
+async function readMonths(
+  loadFailed: string,
+  signal?: AbortSignal,
+): Promise<{
   months: MonthState[]
   problem: ErrorBody | null
 }> {
@@ -51,7 +55,11 @@ async function readMonths(loadFailed: string, signal?: AbortSignal): Promise<{
         months: [],
         problem: {
           ...body,
-          error: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: loadFailed }) ?? loadFailed,
+          error:
+            refusalMessageFromBody(
+              { ...body, remedy: undefined },
+              { fallback: loadFailed },
+            ) ?? loadFailed,
         },
       }
     }
@@ -77,7 +85,9 @@ export function SaasMetricsNormalization() {
   const [busy, setBusy] = useState(false)
   // One idempotency key per month+reason draft: an unchanged retry after a
   // committed or lost response replays stably, while a changed body rotates.
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
+  const [idempotencyKey, setIdempotencyKey] = useState(() =>
+    crypto.randomUUID(),
+  )
   const [keyFingerprint, setKeyFingerprint] = useState('')
 
   const load = useCallback(async () => {
@@ -88,7 +98,10 @@ export function SaasMetricsNormalization() {
 
   useEffect(() => {
     const controller = new AbortController()
-    void readMonths(t('saasMetrics.normalization.loadFailed'), controller.signal).then((result) => {
+    void readMonths(
+      t('saasMetrics.normalization.loadFailed'),
+      controller.signal,
+    ).then((result) => {
       if (controller.signal.aborted) return
       setProblem(result.problem)
       setMonths(result.months)
@@ -122,7 +135,11 @@ export function SaasMetricsNormalization() {
         // The refusal reads through the shared helper (see readMonths above).
         setProblem({
           ...body,
-          error: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: copy('requestFailed') }) ?? copy('requestFailed'),
+          error:
+            refusalMessageFromBody(
+              { ...body, remedy: undefined },
+              { fallback: copy('requestFailed') },
+            ) ?? copy('requestFailed'),
         })
         return
       }
@@ -138,73 +155,72 @@ export function SaasMetricsNormalization() {
     }
   }
 
-  async function approve(requestId: string) {
-    setBusy(true)
-    try {
-      let res: Response
-      try {
-        res = await fetch(`/api/metrics/normalization/requests/${requestId}/approve`, { method: 'POST' })
-      } catch {
-        setProblem({ error: copy('approveFailed') })
-        return
-      }
-      if (!res.ok) {
-        const body = await readError(res)
-        // The refusal reads through the shared helper (see readMonths above).
-        setProblem({
-          ...body,
-          error: refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: copy('approveFailed') }) ?? copy('approveFailed'),
-        })
-        return
-      }
-      setProblem(null)
-      await load()
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <div className="space-y-4 border-t border-slate-200 pt-4 dark:border-slate-700">
       <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{copy('title')}</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{copy('description')}</p>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {copy('title')}
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {copy('description')}
+        </p>
       </div>
       {problem?.error ? (
         <Alert>
           <AlertTitle>{problem.error}</AlertTitle>
-          {problem.remedy ? <AlertDescription>{problem.remedy}</AlertDescription> : null}
+          {problem.remedy ? (
+            <AlertDescription>{problem.remedy}</AlertDescription>
+          ) : null}
         </Alert>
       ) : null}
       {months === null ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{copy('loadFailed')}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {copy('loadFailed')}
+        </p>
       ) : months.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{copy('empty')}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {copy('empty')}
+        </p>
       ) : (
         <PagedTable<MonthState>
           rows={months}
           rowKey={(entry) => entry.month}
           pageSize={25}
-          empty={<p className="text-sm text-slate-500 dark:text-slate-400">{copy('empty')}</p>}
+          empty={
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {copy('empty')}
+            </p>
+          }
           columns={[
             {
               key: 'month',
               header: copy('monthColumn'),
-              cell: (entry) => <span className="text-slate-900 dark:text-slate-100">{entry.month}</span>,
+              cell: (entry) => (
+                <span className="text-slate-900 dark:text-slate-100">
+                  {entry.month}
+                </span>
+              ),
             },
             {
               key: 'status',
               header: copy('statusColumn'),
               cell: (entry) => (
                 <>
-                  <span className="text-slate-700 dark:text-slate-300">{copy(`states.${entry.state}`)}</span>
-                  {entry.state === 'ready' && entry.denominationVersion && entry.reportingCurrency ? (
+                  <span className="text-slate-700 dark:text-slate-300">
+                    {copy(`states.${entry.state}`)}
+                  </span>
+                  {entry.state === 'ready' &&
+                  entry.denominationVersion &&
+                  entry.reportingCurrency ? (
                     <span className="block text-xs text-slate-500 dark:text-slate-400">
-                      {copy('resultDenomination')}: {entry.denominationVersion} · {copy('resultCurrency')}: {entry.reportingCurrency}
+                      {copy('resultDenomination')}: {entry.denominationVersion}{' '}
+                      · {copy('resultCurrency')}: {entry.reportingCurrency}
                     </span>
                   ) : null}
                   {entry.request ? (
-                    <span className="block text-xs text-slate-500 dark:text-slate-400">{entry.request.id}</span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400">
+                      {entry.request.id}
+                    </span>
                   ) : null}
                   {entry.failure ? (
                     <span className="block text-xs text-red-600 dark:text-red-400">
@@ -224,7 +240,8 @@ export function SaasMetricsNormalization() {
               header: copy('countsColumn'),
               cell: (entry) => (
                 <span className="text-slate-700 dark:text-slate-300 tabular-nums">
-                  {entry.counts.monthly} / {entry.counts.facts} / {entry.counts.cohorts}
+                  {entry.counts.monthly} / {entry.counts.facts} /{' '}
+                  {entry.counts.cohorts}
                 </span>
               ),
             },
@@ -232,11 +249,13 @@ export function SaasMetricsNormalization() {
               key: 'approve',
               header: <span className="sr-only">{copy('approveSubmit')}</span>,
               cell: (entry) => {
-                const requestId = entry.state === 'pending' ? entry.request?.id : undefined
+                const requestId =
+                  entry.state === 'pending' ? entry.request?.id : undefined
                 return requestId ? (
-                  <Button disabled={busy} onClick={() => void approve(requestId)}>
-                    {copy('approveSubmit')}
-                  </Button>
+                  <ApprovalActions
+                    subjectKind="metrics_normalization"
+                    subjectId={requestId}
+                  />
                 ) : null
               },
             },
@@ -244,10 +263,14 @@ export function SaasMetricsNormalization() {
         />
       )}
       <div className="space-y-3">
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{copy('requestTitle')}</h4>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {copy('requestTitle')}
+        </h4>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="normalization-month">{copy('requestMonth')}</FieldLabel>
+            <FieldLabel htmlFor="normalization-month">
+              {copy('requestMonth')}
+            </FieldLabel>
             <Input
               id="normalization-month"
               value={month}
@@ -256,7 +279,10 @@ export function SaasMetricsNormalization() {
             />
           </div>
           <div className="space-y-1.5">
-            <FieldLabel htmlFor="normalization-reason" help={copy('requestReasonHint')}>
+            <FieldLabel
+              htmlFor="normalization-reason"
+              help={copy('requestReasonHint')}
+            >
               {copy('requestReason')}
             </FieldLabel>
             <Input

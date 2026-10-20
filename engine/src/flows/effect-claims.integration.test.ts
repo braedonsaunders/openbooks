@@ -85,12 +85,13 @@ function postPlan(): AutomationPlan {
 async function createRun(
   orgId: string,
   submitterId: string,
+  plan: AutomationPlan = {actions:[],actionNodes:[],gates:[]},
 ): Promise<{ runId: string; flowId: string; subjectId: string }> {
   const flowId = randomUUID();
   const subjectId = await seedDraftDocument(orgId, { kind: "vendor_bill", createdBy: submitterId });
-  await db.execute(sql`
-    insert into flows (id, org_id, name, subject_kind, enabled, graph)
-    values (${flowId}, ${orgId}, ${"Race probe"}, 'vendor_bill', true, '{"schemaVersion":1,"nodes":[],"edges":[]}'::jsonb)`);
+  const graph={schemaVersion:1,nodes:plan.gates.map(({nodeId,gate})=>({id:nodeId,position:{x:0,y:0},data:{kind:"gate",gate}})),edges:[]};
+  await db.execute(sql`insert into flows(id,org_id,name,subject_kind,enabled,graph)
+    values(${flowId},${orgId},'Effect transaction coverage','vendor_bill',true,${JSON.stringify(graph)}::jsonb)`);
   const [run] = await db
     .insert(schema.flowRuns)
     .values({
@@ -100,7 +101,8 @@ async function createRun(
       subjectId,
       trigger: "on_submit",
       status: "running",
-      context: {},
+      createdBy:submitterId,
+      context: {submissionPolicy:{flowId,graph}},
     })
     .returning({ id: schema.flowRuns.id });
   return { runId: run!.id, flowId, subjectId };
@@ -240,15 +242,13 @@ test("a checkpoint orphaned before its side effect is retried", { skip: !DB }, a
 
 test("two concurrent executions of one run create a gate's approval notifications once", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
-    const run = await createRun(org.orgId, actors.submitterId);
+    const plan=gatePlan([{type:"user",userId:actors.approver1Id},{type:"user",userId:actors.approver2Id}]);
+    const run = await createRun(org.orgId, actors.submitterId,plan);
     const params = {
       flow: { id: run.flowId, name: "Gate race probe", subjectKind: "vendor_bill", graph: {} },
       runId: run.runId,
       subjectId: run.subjectId,
-      plan: gatePlan([
-        { type: "user", userId: actors.approver1Id },
-        { type: "user", userId: actors.approver2Id },
-      ]),
+      plan,
       evalCtx: { values: {}, rows: {} },
     };
 
@@ -312,7 +312,7 @@ test("post_document flow rejects semantically invalid control accounts", { skip:
            true
          )
        where id = ${org.orgId}`);
-    const rejected = await executeFlowPlan({ orgId: org.orgId }, adapter, params);
+    const rejected = await executeFlowPlan({ orgId: org.orgId,userId:actors.adminId }, adapter, params);
     assert.equal(rejected.completed.length, 0);
     assert.equal(rejected.failed.length, 1);
     assert.match(rejected.failed[0]!, /Accounts receivable control account must be Accounts receivable; the selected account is Expense/);
@@ -332,7 +332,7 @@ test("post_document flow rejects semantically invalid control accounts", { skip:
            true
          )
        where id = ${org.orgId}`);
-    const posted = await executeFlowPlan({ orgId: org.orgId }, adapter, params);
+    const posted = await executeFlowPlan({ orgId: org.orgId,userId:actors.adminId }, adapter, params);
     assert.equal(posted.failed.length, 0);
     assert.equal(posted.completed.length, 1);
     assert.match(posted.completed[0]!, /^post_document→/);

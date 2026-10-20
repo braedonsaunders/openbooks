@@ -10,7 +10,10 @@ import {
   type ControlAccountRole,
   type OrgControlAccounts,
 } from "../records/control-accounts.ts";
-import { createDocument, DocumentCreateConflict } from "../ledger/document-write.ts";
+import {
+  createDocument,
+  DocumentCreateConflict,
+} from "../ledger/document-write.ts";
 import type { DocumentEditInput } from "../ledger/document-input.ts";
 import { controlDeps } from "../ledger/document-service.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -18,10 +21,19 @@ import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { runRecordFlows } from "../flows/run.ts";
 import { subsidiaryFunctionalCurrency } from "../ledger/document-fx.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { carryingAmountForSettlement, rateMeasuringExactly } from "./settlement-policy.ts";
-import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import {
+  carryingAmountForSettlement,
+  rateMeasuringExactly,
+} from "./settlement-policy.ts";
+import {
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+} from "../organization/subsidiary-scope.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
-import { applyStandaloneCredits, creditSettlementState } from "./credit-settlement.ts";
+import {
+  applyStandaloneCredits,
+  creditSettlementState,
+} from "./credit-settlement.ts";
 
 /**
  * Governed invoice write-off: an uncollectible balance of a posted customer
@@ -75,11 +87,13 @@ const AMOUNT_PATTERN = /^\d+(\.\d{1,4})?$/;
  * when neither control is configured: a write-off with no debit account would
  * otherwise have nowhere to post.
  */
-export function resolveInvoiceWriteOffAccount(
-  mappings: OrgControlAccounts,
-): { role: InvoiceWriteOffAccountRole; accountId: string } {
+export function resolveInvoiceWriteOffAccount(mappings: OrgControlAccounts): {
+  role: InvoiceWriteOffAccountRole;
+  accountId: string;
+} {
   const allowance = mappings.allowanceForDoubtfulAccounts;
-  if (allowance) return { role: "allowanceForDoubtfulAccounts", accountId: allowance };
+  if (allowance)
+    return { role: "allowanceForDoubtfulAccounts", accountId: allowance };
   const expense = mappings.badDebtExpense;
   if (expense) return { role: "badDebtExpense", accountId: expense };
   throw new PaymentError(
@@ -97,10 +111,13 @@ export function resolveInvoiceWriteOffAccount(
 export function normalizeInvoiceWriteOffAmount(raw: unknown): string {
   const text = typeof raw === "string" ? raw.trim() : "";
   if (!AMOUNT_PATTERN.test(text)) {
-    throw new PaymentError("Write-off amount must be a positive amount with at most four decimal places, such as 125.1250");
+    throw new PaymentError(
+      "Write-off amount must be a positive amount with at most four decimal places, such as 125.1250",
+    );
   }
   const units = toUnits(text);
-  if (units <= 0n) throw new PaymentError("Write-off amount must be greater than zero");
+  if (units <= 0n)
+    throw new PaymentError("Write-off amount must be greater than zero");
   return fromUnits(units);
 }
 
@@ -119,8 +136,15 @@ export function assertInvoiceWriteOffWithinOpenBalance(
 }
 
 /** A write-off date is a calendar date and cannot precede the invoice it clears. */
-export function validateInvoiceWriteOffDate(date: unknown, invoiceNumber: string, invoiceDate: string): string {
-  if (!isIsoCalendarDate(date)) throw new PaymentError("Write-off date must be a calendar date (YYYY-MM-DD)");
+export function validateInvoiceWriteOffDate(
+  date: unknown,
+  invoiceNumber: string,
+  invoiceDate: string,
+): string {
+  if (!isIsoCalendarDate(date))
+    throw new PaymentError(
+      "Write-off date must be a calendar date (YYYY-MM-DD)",
+    );
   if (date < invoiceDate) {
     throw new PaymentError(
       `Write-off date ${date} is before invoice ${invoiceNumber} dated ${invoiceDate}; choose a date on or after the invoice date`,
@@ -133,10 +157,14 @@ export function validateInvoiceWriteOffDate(date: unknown, invoiceNumber: string
 export function normalizeInvoiceWriteOffReason(raw: unknown): string {
   const reason = typeof raw === "string" ? raw.trim() : "";
   if (reason.length === 0) {
-    throw new PaymentError("A write-off needs a reason: state why the balance is uncollectible");
+    throw new PaymentError(
+      "A write-off needs a reason: state why the balance is uncollectible",
+    );
   }
   if (reason.length > MAX_REASON_LENGTH) {
-    throw new PaymentError(`Write-off reason must be ${MAX_REASON_LENGTH} characters or fewer`);
+    throw new PaymentError(
+      `Write-off reason must be ${MAX_REASON_LENGTH} characters or fewer`,
+    );
   }
   return reason;
 }
@@ -148,7 +176,9 @@ export function normalizeInvoiceWriteOffReason(raw: unknown): string {
  */
 export class InvoiceWriteOffConflictError extends PaymentError {
   constructor() {
-    super("this Idempotency-Key was already used for a different write-off; start a new write-off with a new key");
+    super(
+      "this Idempotency-Key was already used for a different write-off; start a new write-off with a new key",
+    );
     this.name = "InvoiceWriteOffConflictError";
   }
 }
@@ -195,7 +225,9 @@ export async function writeOffInvoice(
   input: InvoiceWriteOffInput,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<InvoiceWriteOffResult> {
-  const outcome = await withOrgTransaction(orgId, () => writeOffInvoiceInTransaction(orgId, userId, input, allowedSubsidiaryIds));
+  const outcome = await withOrgTransaction(orgId, () =>
+    writeOffInvoiceInTransaction(orgId, userId, input, allowedSubsidiaryIds),
+  );
   await runInvoiceWriteOffFlows(orgId, userId, outcome);
   return outcome.result;
 }
@@ -219,7 +251,9 @@ export async function writeOffInvoiceInTransaction(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<InvoiceWriteOffOutcome> {
   if (!isUuid(input.idempotencyKey)) {
-    throw new PaymentError("an Idempotency-Key with a UUID is required, so a retried write-off cannot post twice");
+    throw new PaymentError(
+      "an Idempotency-Key with a UUID is required, so a retried write-off cannot post twice",
+    );
   }
   const reason = normalizeInvoiceWriteOffReason(input.reason);
   const amount = normalizeInvoiceWriteOffAmount(input.amount);
@@ -227,17 +261,25 @@ export async function writeOffInvoiceInTransaction(
     // The key lock createDocument takes for the same key. Taking it first makes
     // a concurrent retry wait for this write-off to commit, then observe the
     // posted credit and replay, instead of reading a stale open balance.
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${input.idempotencyKey}, 0))`);
+    await db.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${input.idempotencyKey}, 0))`,
+    );
 
-    const invoice = (await db.execute<InvoiceRow>(sql`
+    const invoice = (
+      await db.execute<InvoiceRow>(sql`
       select d.id, d.kind, d.status, d.document_number as "documentNumber",
              d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
              d.currency, d.document_date::text as "documentDate",
              d.posted_entry_id as "entryId"
         from documents d
        where d.org_id = ${orgId} and d.id = ${input.invoiceId}
-       for update`)).rows[0];
-    if (!invoice || (invoice.subsidiaryId !== null && !subsidiaryScopeAllows(allowedSubsidiaryIds, invoice.subsidiaryId))) {
+       for update`)
+    ).rows[0];
+    if (
+      !invoice ||
+      (invoice.subsidiaryId !== null &&
+        !subsidiaryScopeAllows(allowedSubsidiaryIds, invoice.subsidiaryId))
+    ) {
       throw new ScopeNotFoundError();
     }
     if (invoice.kind !== "customer_invoice") {
@@ -249,25 +291,37 @@ export async function writeOffInvoiceInTransaction(
       );
     }
     if (!invoice.partyId) {
-      throw new PaymentError(`${invoice.documentNumber} has no customer; a write-off settles a customer receivable`);
+      throw new PaymentError(
+        `${invoice.documentNumber} has no customer; a write-off settles a customer receivable`,
+      );
     }
     if (!invoice.subsidiaryId) {
-      throw new PaymentError(`${invoice.documentNumber} has no legal entity; a write-off must post to one`);
+      throw new PaymentError(
+        `${invoice.documentNumber} has no legal entity; a write-off must post to one`,
+      );
     }
-    const functionalCurrency = await subsidiaryFunctionalCurrency(db, orgId, invoice.subsidiaryId);
+    const functionalCurrency = await subsidiaryFunctionalCurrency(
+      db,
+      orgId,
+      invoice.subsidiaryId,
+    );
     if (!functionalCurrency) {
-      throw new PaymentError(`${invoice.documentNumber}'s legal entity has no functional currency; set its base currency in Setup, then write off the invoice again`);
+      throw new PaymentError(
+        `${invoice.documentNumber}'s legal entity has no functional currency; set its base currency in Setup, then write off the invoice again`,
+      );
     }
     const foreign = invoice.currency !== functionalCurrency;
 
-    const openItems = (await db.execute<{ id: string; amount: string; txnAmount: string }>(sql`
+    const openItems = (
+      await db.execute<{ id: string; amount: string; txnAmount: string }>(sql`
       select jl.id, abs(jl.amount)::text as amount, abs(jl.txn_amount)::text as "txnAmount"
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${orgId} and je.id = ${invoice.entryId} and je.status = 'posted' -- Live entries only: only a current invoice open item authorizes a write-off.
          and jl.is_open_item
        order by jl.id
-       for update of jl`)).rows;
+       for update of jl`)
+    ).rows;
     if (openItems.length !== 1) {
       throw new PaymentError(
         `${invoice.documentNumber} has ${openItems.length} open items; an invoice write-off settles a single open item, so resolve the invoice's open items before writing it off`,
@@ -276,27 +330,46 @@ export async function writeOffInvoiceInTransaction(
     const openLine = openItems[0]!;
     // The remaining receivable in both frames: what is still owed in the
     // invoice's currency, and the functional amount it is carried at.
-    const applied = (await db.execute<{ applied: string; applied_txn: string }>(sql`
+    const applied = (
+      await db.execute<{ applied: string; applied_txn: string }>(sql`
       select coalesce(sum(${appliedLegAmountExpr("a", sql`${openLine.id}`, "base")}), 0)::text as applied,
              coalesce(sum(${appliedLegAmountExpr("a", sql`${openLine.id}`, "transaction")}), 0)::text as applied_txn
         from applications a
        where a.org_id = ${orgId} and a.unapplied_at is null
-         and (a.to_line_id = ${openLine.id} or a.from_line_id = ${openLine.id})`)).rows[0]!;
-    const openCarrying = fromUnits(toUnits(openLine.amount) - toUnits(applied.applied));
-    const openBalance = fromUnits(toUnits(openLine.txnAmount) - toUnits(applied.applied_txn));
+         and (a.to_line_id = ${openLine.id} or a.from_line_id = ${openLine.id})`)
+    ).rows[0]!;
+    const openCarrying = fromUnits(
+      toUnits(openLine.amount) - toUnits(applied.applied),
+    );
+    const openBalance = fromUnits(
+      toUnits(openLine.txnAmount) - toUnits(applied.applied_txn),
+    );
 
     // A key that already produced a credit memo is a replay: its amount was
     // checked against the balance when it first posted, and that balance is now
     // partly or wholly settled by the write-off itself.
-    const date = validateInvoiceWriteOffDate(input.date, invoice.documentNumber, invoice.documentDate);
-    const priorCredit = (await db.execute<{ id: string }>(sql`
-      select id from documents where org_id = ${orgId} and id = ${input.idempotencyKey}`)).rows[0];
+    const date = validateInvoiceWriteOffDate(
+      input.date,
+      invoice.documentNumber,
+      invoice.documentDate,
+    );
+    const priorCredit = (
+      await db.execute<{ id: string }>(sql`
+      select id from documents where org_id = ${orgId} and id = ${input.idempotencyKey}`)
+    ).rows[0];
     if (!priorCredit) {
-      assertInvoiceWriteOffWithinOpenBalance(amount, openBalance, invoice.documentNumber);
+      assertInvoiceWriteOffWithinOpenBalance(
+        amount,
+        openBalance,
+        invoice.documentNumber,
+      );
     }
 
     const account = resolveInvoiceWriteOffAccount(
-      await loadControlAccountsForRoles(db, orgId, ["allowanceForDoubtfulAccounts", "badDebtExpense"]),
+      await loadControlAccountsForRoles(db, orgId, [
+        "allowanceForDoubtfulAccounts",
+        "badDebtExpense",
+      ]),
     );
 
     // A foreign-currency invoice is written off in its own currency at the
@@ -315,7 +388,11 @@ export async function writeOffInvoiceInTransaction(
             `which needs Multi-currency — turn it on in Company Settings → Features, then write off the invoice again`,
         );
       }
-      const carrying = carryingAmountForSettlement(openCarrying, openBalance, amount);
+      const carrying = carryingAmountForSettlement(
+        openCarrying,
+        openBalance,
+        amount,
+      );
       explicitFx = {
         rate: rateMeasuringExactly(amount, carrying).rate,
         source: "Receivable carrying rate",
@@ -361,18 +438,23 @@ export async function writeOffInvoiceInTransaction(
         },
       });
     } catch (error) {
-      if (error instanceof DocumentCreateConflict) throw new InvoiceWriteOffConflictError();
+      if (error instanceof DocumentCreateConflict)
+        throw new InvoiceWriteOffConflictError();
       throw error;
     }
 
     if (created.status === "created") {
-      const submission = await submitAndReleaseIfUngated("customer_credit", created.id, userId);
+      const submission = await submitAndReleaseIfUngated(
+        "customer_credit",
+        created.id,
+        userId,
+      );
       if (submission.flowError) {
         throw new PaymentError(
           `The write-off could not be released for approval: ${submission.flowError}. Correct the approval flow for customer credit memos, then write off the invoice again`,
         );
       }
-      if (submission.gated || submission.approvalRequired) {
+      if (submission.gated) {
         throw new PaymentError(
           `Customer credit memos are gated by an approval flow, and a write-off must settle in one step. ` +
             `Remove or narrow that approval flow for customer credit memos, then write off ${invoice.documentNumber} again`,
@@ -382,8 +464,10 @@ export async function writeOffInvoiceInTransaction(
         audit: { actorId: userId, source: "invoice_write_off" },
       });
     } else {
-      const status = (await db.execute<{ status: string }>(sql`
-        select status from documents where org_id = ${orgId} and id = ${created.id}`)).rows[0]?.status;
+      const status = (
+        await db.execute<{ status: string }>(sql`
+        select status from documents where org_id = ${orgId} and id = ${created.id}`)
+      ).rows[0]?.status;
       if (status !== "posted") {
         throw new PaymentError(
           `This write-off was already recorded as ${created.documentNumber} and is ${status ?? "missing"}; ` +
@@ -392,24 +476,35 @@ export async function writeOffInvoiceInTransaction(
       }
     }
 
-    const credit = await creditSettlementState(orgId, created.id, allowedSubsidiaryIds);
+    const credit = await creditSettlementState(
+      orgId,
+      created.id,
+      allowedSubsidiaryIds,
+    );
     if (!credit?.lineId) {
-      throw new PaymentError(`The write-off credit memo ${created.documentNumber} did not post an open item to settle`);
+      throw new PaymentError(
+        `The write-off credit memo ${created.documentNumber} did not post an open item to settle`,
+      );
     }
-    const settled = await applyStandaloneCredits(orgId, userId, {
-      partyId: invoice.partyId,
-      side: "ar",
-      appliedOn: date,
-      credits: [
-        {
-          fromLineId: credit.lineId,
-          toLineId: openLine.id,
-          amount,
-          sourceDocumentId: created.id,
-        },
-      ],
-      idempotencyKey: input.idempotencyKey,
-    }, allowedSubsidiaryIds);
+    const settled = await applyStandaloneCredits(
+      orgId,
+      userId,
+      {
+        partyId: invoice.partyId,
+        side: "ar",
+        appliedOn: date,
+        credits: [
+          {
+            fromLineId: credit.lineId,
+            toLineId: openLine.id,
+            amount,
+            sourceDocumentId: created.id,
+          },
+        ],
+        idempotencyKey: input.idempotencyKey,
+      },
+      allowedSubsidiaryIds,
+    );
 
     return {
       created,
@@ -430,10 +525,24 @@ export async function writeOffInvoiceInTransaction(
  * Record flows fire only after the write-off commits (the createDocument
  * contract), and only for a write-off this request created.
  */
-export async function runInvoiceWriteOffFlows(orgId: string, userId: string, outcome: InvoiceWriteOffOutcome): Promise<void> {
+export async function runInvoiceWriteOffFlows(
+  orgId: string,
+  userId: string,
+  outcome: InvoiceWriteOffOutcome,
+): Promise<void> {
   if (outcome.created.status !== "created") return;
-  await runRecordFlows({ kind: "on_create", source: "ui" }, "customer_credit", outcome.created.id, { orgId, userId });
+  await runRecordFlows(
+    { kind: "on_create", source: "ui" },
+    "customer_credit",
+    outcome.created.id,
+    { orgId, userId },
+  );
   if (outcome.created.deferredUpdate) {
-    await runRecordFlows(outcome.created.deferredUpdate, "customer_credit", outcome.created.id, { orgId, userId });
+    await runRecordFlows(
+      outcome.created.deferredUpdate,
+      "customer_credit",
+      outcome.created.id,
+      { orgId, userId },
+    );
   }
 }

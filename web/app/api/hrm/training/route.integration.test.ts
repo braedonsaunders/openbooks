@@ -1,8 +1,14 @@
+import { before } from "node:test";
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { DB, setupHarness, withHarness, seedEmployment } from '@openbooks/engine/testing/hrm'
+import {
+  DB,
+  setupHarness,
+  withHarness,
+  seedEmployment,
+} from '@openbooks/engine/testing/hrm'
 import { db } from '@openbooks/engine/platform/database'
 import { sql } from 'drizzle-orm'
 
@@ -14,7 +20,10 @@ const virtual = (source: string) => ({
 })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))
+    if (
+      specifier === '@/lib/feature-gates' &&
+      context.parentURL?.includes('/lib/api/route')
+    )
       return virtual(
         `export async function guardFeaturePermission(){const s=globalThis.__trainingRouteActor;return {user:{orgId:s.orgId,id:s.actorId},allowedSubsidiaryIds:null}}`,
       )
@@ -24,7 +33,8 @@ registerHooks({
   },
 })
 const { POST: create } = await import('./courses/route')
-const { POST: transition, GET: read } = await import('./courses/[courseId]/route')
+const { POST: transition, GET: read } =
+  await import('./courses/[courseId]/route')
 const spec = {
   features: ['hrm', 'hrmCertifications', 'hrmTraining'],
   users: [
@@ -47,7 +57,10 @@ const spec = {
 const request = (body: unknown, key?: string) =>
   new Request('http://training.test/api/hrm/training/courses', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(key ? { 'Idempotency-Key': key } : {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(key ? { 'Idempotency-Key': key } : {}),
+    },
     body: JSON.stringify(body),
   })
 const payload = (subsidiaryId: string) => ({
@@ -79,12 +92,24 @@ test(
           key = randomUUID()
         const missing = await create(request(body))
         assert.equal(missing.status, 400)
-        assert.match((await missing.json()).error, /UUID Idempotency-Key.*reopen/)
-        const malformed = await create(request({ ...body, minimumAttendancePercent: 101 }, key))
+        assert.match(
+          (await missing.json()).error,
+          /UUID Idempotency-Key.*reopen/,
+        )
+        const malformed = await create(
+          request({ ...body, minimumAttendancePercent: 101 }, key),
+        )
         assert.equal(malformed.status, 422)
-        assert.match((await malformed.json()).error, /Minimum attendance percentage.*0 to 100.*enter a value/)
+        assert.match(
+          (await malformed.json()).error,
+          /Minimum attendance percentage.*0 to 100.*enter a value/,
+        )
         assert.equal(
-          (await db.execute(sql`select id from hrm_training_courses where org_id=${f.org.orgId}`)).rows.length,
+          (
+            await db.execute(
+              sql`select id from hrm_training_courses where org_id=${f.org.orgId}`,
+            )
+          ).rows.length,
           0,
         )
         const saved = await create(request(body, key))
@@ -95,11 +120,20 @@ test(
         const retry = await create(request(body, key))
         assert.equal(retry.status, 201)
         assert.equal((await retry.json()).id, row.id)
-        const changed = await create(request({ ...body, name: 'Changed policy' }, key))
+        const changed = await create(
+          request({ ...body, name: 'Changed policy' }, key),
+        )
         assert.equal(changed.status, 422)
-        assert.match((await changed.json()).error, /different content.*existing record is preserved/)
+        assert.match(
+          (await changed.json()).error,
+          /different content.*existing record is preserved/,
+        )
         assert.equal(
-          (await db.execute(sql`select id from hrm_training_courses where org_id=${f.org.orgId}`)).rows.length,
+          (
+            await db.execute(
+              sql`select id from hrm_training_courses where org_id=${f.org.orgId}`,
+            )
+          ).rows.length,
           1,
         )
       },
@@ -107,7 +141,7 @@ test(
   },
 )
 test(
-  'course approval refusal reaches the HTTP caller and a stale revision cannot change approved policy',
+  'zero-gate course submission permits its author and a stale revision cannot change approved policy',
   { skip: !DB },
   async () => {
     await withHarness(
@@ -115,17 +149,23 @@ test(
       async (f) => {
         state.orgId = f.org.orgId
         state.actorId = f.authorId
-        const saved = await create(request(payload(f.org.subsidiaryId), randomUUID()))
+        const saved = await create(
+          request(payload(f.org.subsidiaryId), randomUUID()),
+        )
         const row = await saved.json()
         const context = { params: Promise.resolve({ courseId: row.id }) }
-        const body = { action: 'approve', expectedRevision: row.revision, reason: 'Independent review' }
-        const refused = await transition(request(body), context)
-        assert.equal(refused.status, 422)
-        assert.match((await refused.json()).error, /someone other than the author/)
-        state.actorId = f.reviewerId
+        const body = {
+          action: 'submit',
+          expectedRevision: row.revision,
+          reason: 'Independent review',
+        }
         const approved = await transition(request(body), context)
-        assert.equal(approved.status, 200)
-        const stale = await transition(request({ ...body, action: 'retire' }), context)
+        assert.equal(approved.status, 200, await approved.clone().text())
+        assert.equal((await approved.json()).decidedBy, f.authorId)
+        const stale = await transition(
+          request({ ...body, action: 'retire' }),
+          context,
+        )
         assert.equal(stale.status, 422)
         assert.match((await stale.json()).error, /revision changed.*reload/)
         const current = await read(new Request('http://training.test'), context)
@@ -149,23 +189,33 @@ test(
       async (f) => {
         state.orgId = f.org.orgId
         state.actorId = f.authorId
-        const saved = await create(request(payload(f.org.subsidiaryId), randomUUID()))
+        const saved = await create(
+          request(payload(f.org.subsidiaryId), randomUUID()),
+        )
         const row = await saved.json()
         state.actorId = f.reviewerId
         assert.equal(
           (
             await transition(
-              request({ action: 'approve', expectedRevision: row.revision, reason: 'Reviewed delivery policy' }),
+              request({
+                action: 'submit',
+                expectedRevision: row.revision,
+                reason: 'Reviewed delivery policy',
+              }),
               { params: Promise.resolve({ courseId: row.id }) },
             )
           ).status,
           200,
         )
         state.actorId = f.authorId
-        const { POST: createSession } = await import('./courses/[courseId]/sessions/route')
-        const { POST: sessionAction } = await import('./sessions/[sessionId]/route')
-        const { POST: invite } = await import('./sessions/[sessionId]/participants/route')
-        const { POST: result } = await import('./participants/[participantId]/result/route')
+        const { POST: createSession } =
+          await import('./courses/[courseId]/sessions/route')
+        const { POST: sessionAction } =
+          await import('./sessions/[sessionId]/route')
+        const { POST: invite } =
+          await import('./sessions/[sessionId]/participants/route')
+        const { POST: result } =
+          await import('./participants/[participantId]/result/route')
         const sessionResponse = await createSession(
           request(
             {
@@ -183,24 +233,45 @@ test(
         )
         assert.equal(sessionResponse.status, 201)
         const delivery = await sessionResponse.json(),
-          sessionContext = { params: Promise.resolve({ sessionId: delivery.id }) }
+          sessionContext = {
+            params: Promise.resolve({ sessionId: delivery.id }),
+          }
         const scheduled = await sessionAction(
-          request({ action: 'schedule', expectedRevision: delivery.revision, reason: 'Published delivery' }),
+          request({
+            action: 'schedule',
+            expectedRevision: delivery.revision,
+            reason: 'Published delivery',
+          }),
           sessionContext,
         )
         assert.equal(scheduled.status, 200)
-        const subject = await seedEmployment(f.org.orgId, f.org.subsidiaryId, { from: '2026-01-01' })
+        const subject = await seedEmployment(f.org.orgId, f.org.subsidiaryId, {
+          from: '2026-01-01',
+        })
         const hidden = await invite(
-          request({ employmentId: randomUUID(), reason: 'Required safety training' }, randomUUID()),
+          request(
+            { employmentId: randomUUID(), reason: 'Required safety training' },
+            randomUUID(),
+          ),
           sessionContext,
         )
         assert.equal(hidden.status, 404)
         assert.equal(
-          (await db.execute(sql`select id from hrm_training_participants where org_id=${f.org.orgId}`)).rows.length,
+          (
+            await db.execute(
+              sql`select id from hrm_training_participants where org_id=${f.org.orgId}`,
+            )
+          ).rows.length,
           0,
         )
         const invited = await invite(
-          request({ employmentId: subject.employmentId, reason: 'Required safety training' }, randomUUID()),
+          request(
+            {
+              employmentId: subject.employmentId,
+              reason: 'Required safety training',
+            },
+            randomUUID(),
+          ),
           sessionContext,
         )
         assert.equal(invited.status, 201)
@@ -214,7 +285,9 @@ test(
           sessionContext,
         )
         assert.equal(started.status, 200)
-        const participantContext = { params: Promise.resolve({ participantId: participant.id }) }
+        const participantContext = {
+          params: Promise.resolve({ participantId: participant.id }),
+        }
         const body = {
           expectedRevision: participant.revision,
           attendanceSeconds: 3600,
@@ -226,7 +299,10 @@ test(
         }
         const refused = await result(request(body), participantContext)
         assert.equal(refused.status, 422)
-        assert.match((await refused.json()).error, /requires an assessment score.*record the score/)
+        assert.match(
+          (await refused.json()).error,
+          /requires an assessment score.*record the score/,
+        )
         assert.equal(
           (
             await db.execute<{ status: string }>(
@@ -235,10 +311,19 @@ test(
           ).rows[0]!.status,
           'invited',
         )
-        const completed = await result(request({ ...body, score: 80 }), participantContext)
+        const completed = await result(
+          request({ ...body, score: 80 }),
+          participantContext,
+        )
         assert.equal(completed.status, 200)
         assert.equal((await completed.json()).status, 'completed')
       },
     )
   },
 )
+
+// Exercise the same native Flow composition installed by application entry points.
+before(async () => {
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});

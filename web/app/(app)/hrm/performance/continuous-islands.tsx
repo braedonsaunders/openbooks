@@ -1,5 +1,6 @@
 'use client'
 
+import { ApprovalActions } from '../../../../components/approval-actions'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
@@ -14,17 +15,20 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 export function SessionActions({
   sessionId,
   status,
+  approvalPending,
   openLabel,
   closeLabel,
   failed,
 }: {
   sessionId: string
   status: string
+  approvalPending: boolean
   openLabel: string
   closeLabel: string
   failed: string
 }) {
   const router = useRouter()
+  const [approvalVersion,setApprovalVersion]=useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,6 +47,7 @@ export function SessionActions({
         return
       }
       setBusy(false)
+      setApprovalVersion(value=>value+1)
       router.refresh()
     } catch {
       setError(failed)
@@ -59,10 +64,11 @@ export function SessionActions({
         </Button>
       ) : null}
       {status === 'open' ? (
-        <Button type="button" disabled={busy} onClick={() => act('close')}>
+        <Button type="button" disabled={busy || approvalPending} onClick={() => act('close')}>
           {closeLabel}
         </Button>
       ) : null}
+      {status==='open'?<ApprovalActions key={approvalVersion} subjectKind="hrm_calibration_session" subjectId={sessionId}/>:null}
       {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
     </div>
   )

@@ -1116,14 +1116,8 @@
     },
     "approvals": {
       "title": "Approvals",
-      "description": "Control when vendor bills release after submit.",
-      "requireVendorBillApproval": "Require approval before vendor bills release",
-      "requireVendorBillApprovalHint": "When on, a vendor bill releases only through an approval flow. A bill with no matching flow stays submitted, and the submitter is told to set up a flow or turn this off.",
-      "requireStockCountReview": "Require a different user to post stock counts",
-      "requireStockCountReviewHint": "When on, the user who recorded or submitted a count cannot post it — a different user with posting authority must. When off, anyone with posting authority can post their own count.",
-      "noFlowTitle": "No approval flow for vendor bills",
-      "noFlowWarningAuto": "No approval flow is configured for vendor bills. <flows>Set one up in Flows</flows> — until then, submitted bills release automatically with no approver.",
-      "noFlowWarningRequired": "No approval flow is configured for vendor bills. <flows>Set one up in Flows</flows> — until then, every vendor-bill submit is refused."
+      "description": "Flows control whether a submission needs approval, who approves it and how many decisions are required. With no applicable approval gates, the submission proceeds without an approver.",
+      "manageFlows": "Manage approval Flows"
     },
     "documentKinds": {
       "vendorBill": "Vendor bill",
@@ -1924,7 +1918,10 @@
       "keyRemoved": "Document provider key removed.",
       "model": "Invoice model",
       "provider": "Document reader",
-      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "AI model ({provider})"},
+      "providers": {
+        "azure_document_intelligence": "Azure Document Intelligence",
+        "llm_vision": "AI model ({provider})"
+      },
       "azureHint": "Reads bills and receipts with your Azure Document Intelligence resource and key.",
       "llmHint": "Reads bills and receipts with the AI provider, key and models configured below ({provider}). Each field carries the model's confidence; fields below the threshold stay blank for review.",
       "llmNoVision": "{provider} reads no images. Choose a provider with vision models below, or use Azure Document Intelligence.",
@@ -2935,14 +2932,14 @@
       "saveFailed": "Could not save the configuration."
     },
     "usFilingLineage": {
-          "stateAccount": "State filing account",
-          "employer": "Original legal employer",
-          "federalAccount": "Original federal EIN",
-          "federalHelp": "Retired EIN registrations remain available for historical qualification.",
-          "datesHelp": "Inclusive original registration dates. Close a range only after its last committed payroll date.",
-          "sourceReference": "Original registration evidence reference",
-          "sourceHelp": "Identify the registration letter, filing record or other retained evidence establishing this employer EIN and date range.",
-          "reason": "Change reason"
+      "stateAccount": "State filing account",
+      "employer": "Original legal employer",
+      "federalAccount": "Original federal EIN",
+      "federalHelp": "Retired EIN registrations remain available for historical qualification.",
+      "datesHelp": "Inclusive original registration dates. Close a range only after its last committed payroll date.",
+      "sourceReference": "Original registration evidence reference",
+      "sourceHelp": "Identify the registration letter, filing record or other retained evidence establishing this employer EIN and date range.",
+      "reason": "Change reason"
     },
     "entities": {
       "schedule-patterns": {
@@ -3435,9 +3432,9 @@
         "description": "Enacted income tax rates by jurisdiction, effective-dated — they drive the ASC 740 provision."
       },
       "payroll-us-filing-account-employer-lineage": {
-              "title": "Employer EIN history",
-              "singularTitle": "Employer EIN affiliation",
-              "description": "Original state-registration ownership, with inclusive dates and retained evidence."
+        "title": "Employer EIN history",
+        "singularTitle": "Employer EIN affiliation",
+        "description": "Original state-registration ownership, with inclusive dates and retained evidence."
       },
       "payroll-filing-accounts": {
         "title": "Filing Accounts",
@@ -4007,8 +4004,14 @@
         "title": "GL Audit Number Policies",
         "description": "GL Audit Number Policies"
       },
-      "project-loss-policies": {"title": "Project Loss Policies", "description": "When projects forecasting a loss are flagged at close, and whether the close waits for their loss assessment."},
-      "expense-fx-policies": {"title": "Expense FX Policies", "description": "Whether a foreign-currency expense line may convert at an explicit exchange rate with a reason instead of the dated rate."},
+      "project-loss-policies": {
+        "title": "Project Loss Policies",
+        "description": "When projects forecasting a loss are flagged at close, and whether the close waits for their loss assessment."
+      },
+      "expense-fx-policies": {
+        "title": "Expense FX Policies",
+        "description": "Whether a foreign-currency expense line may convert at an explicit exchange rate with a reason instead of the dated rate."
+      },
       "service-dispatch-policies": {
         "title": "Service dispatch policy",
         "singularTitle": "Service dispatch policy version",
@@ -5863,7 +5866,11 @@
         "fiscal_year": "Per fiscal year",
         "never": "Never"
       },
-      "projectLossPolicy": {"off": "Off", "warn": "Warn at close", "require": "Require assessment before close"}
+      "projectLossPolicy": {
+        "off": "Off",
+        "warn": "Warn at close",
+        "require": "Require assessment before close"
+      }
     },
     "payroll": {
       "navTitle": "Payroll"
@@ -7410,7 +7417,7 @@
       "chooseApprovedVersion": "Approved policy version",
       "chooseVersionHint": "Choose an approved version before assigning employees. Every assignment retains that version and its effective dates.",
       "review": "Review and decision",
-      "reviewHint": "Submitted terms require an independent linked person to approve them. Approved terms are preserved; changes use a new version or successor assignment.",
+      "reviewHint": "Tenant Flows determines the approval stages. Zero gates releases valid submissions immediately. Approved terms are preserved; changes use a new version or successor assignment.",
       "noActions": "This record has no available transition for your permissions and its current state.",
       "actions": {
         "submit": "Submit for approval",
@@ -7490,7 +7497,7 @@
       "reason": "Reason",
       "reasonHint": "Record the reason for this policy, delivery or outcome change.",
       "review": "Review and actions",
-      "reviewHint": "Actions use the current record revision. Course approval requires someone other than the author.",
+      "reviewHint": "Actions use the current record revision. Tenant Flows determines approval stages and who may decide them.",
       "history": "History",
       "result": "Attendance and assessment",
       "resultHint": "Record actual attendance and assessment. Qualification verification remains separate; voiding preserves the original result.",
@@ -8096,10 +8103,7 @@
         "connectAction": "Connect",
         "connectPlaceholder": "Choose a step…",
         "connectEmpty": "There is no other step yet — add a node first."
-      },
-      "ungatedOutcomeLabel": "When no approval step applies",
-      "ungatedApply": "Apply immediately",
-      "ungatedRequireApproval": "Require an approval step"
+      }
     },
     "node": {
       "trigger": "Trigger",
@@ -9482,7 +9486,7 @@
     "changeSetDefaultName": "Sandbox changes",
     "captureChanges": "Capture changes",
     "captureFailed": "Capture did not complete. Check the change-set list before trying again.",
-    "captureTitle": "Capture configuration changes for independent review and approval"
+    "captureTitle": "Capture configuration changes for submission through Flows"
   },
   "sandboxes": {
     "changeSets": {
@@ -9512,7 +9516,7 @@
       "capturedFrom": "Captured from {name}",
       "retained": "Retained configuration change set",
       "listTitle": "Change sets",
-      "listDescription": "Inspect captured configuration changes, record independent review and approval, then apply the approved changes to production.",
+      "listDescription": "Inspect captured configuration changes, submit them through tenant Flows, then apply released changes to production.",
       "listBack": "Environments",
       "requestFailed": "The request did not complete. Refresh to check the recorded status before trying again.",
       "working": "Working…",
@@ -9549,8 +9553,7 @@
       "reasons": {
         "incomplete": "This capture is incomplete. Capture a new change set from the environment.",
         "noSnapshot": "This older capture has no production snapshot. Capture and review a new change set before applying it.",
-        "empty": "No configuration changes were captured.",
-        "segregation": "The creator, reviewer, approver and applier must be four different users. Another authorized user must perform the next step."
+        "empty": "No configuration changes were captured."
       }
     }
   }

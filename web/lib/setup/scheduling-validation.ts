@@ -30,7 +30,7 @@ export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ bo
         >(sql`select row_kind as "rowKind", views, default_view as "defaultView",
       resource_kind as "resourceKind", department_id as "departmentId", location_id as "locationId", range_days as "rangeDays", prefill_timesheets as "prefillTimesheets", prefill_crew_time as "prefillCrewTime",
       prefill_field_tickets as "prefillFieldTickets", notify_assignees as "notifyAssignees", subsidiary_id as "subsidiaryId", distribution_visibility as "distributionVisibility",time_zone as "timeZone",automatic_delivery_policy as "automaticDeliveryPolicy",
-      board_type as "boardType", publish_policy as "publishPolicy", governed_from::text as "governedFrom"
+      board_type as "boardType", publish_policy as "publishPolicy"
       from schedule_boards where org_id = ${orgId} and id = ${rowId}`)
       ).rows[0] ?? {};
   }
@@ -98,9 +98,8 @@ export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ bo
   // The board's registered type decides its publication policies and capabilities.
   const boardType = scheduleBoardType(String(merged.boardType ?? rowKind))
   if (!boardType || boardType.rowKind !== rowKind) return 'Choose a board type that schedules this kind of row.'
-  const publishPolicy = String(merged.publishPolicy ?? 'live') as 'live' | 'staged' | 'governed'
-  if (!boardType.publishPolicies.includes(publishPolicy)) return 'Governed publication is available on managed shift roster boards; choose live or staged publishing for this board.'
-  if (publishPolicy === 'governed' && !merged.governedFrom) return 'Choose the first booking date that governed publication covers.'
+  const publishPolicy = String(merged.publishPolicy ?? 'live') as 'live' | 'staged'
+  if (!boardType.publishPolicies.includes(publishPolicy)) return 'Choose a publication timing supported by this board type. Tenant Flows determine its required approvals.'
   if (merged.distributionVisibility === 'board' && !merged.subsidiaryId) return 'Choose a legal entity before allowing whole-board schedule reports.'
   const views = list(merged.views) ?? []
   const allowedViews = new Set(boardType.views)

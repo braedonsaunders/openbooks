@@ -154,6 +154,7 @@ export async function loadMaskingPolicies(
  * fails unless each is masked here or explicitly allow-listed as
  * non-personal. Add a policy there before allow-listing anyone's identity. */
 export const DEFAULT_POLICIES: MaskingPolicy[] = [
+  { tableName: "depreciation_schedule_lines", columnName: "reversal_reason", transform: "redact" },
   { tableName: "performance_obligations", columnName: "hold_reason", transform: "redact" },
   // Warehouse reasons and external carton keys can identify workers or recipients.
   { tableName: "consignment_events", columnName: "reason", transform: "redact" },

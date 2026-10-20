@@ -9,8 +9,8 @@
  * board. Occurrences no longer wanted — an omission, a removed slot or an
  * assignment that ended — lose their future bookings. Bookings that have
  * started are never touched, and the board's publication policy decides
- * whether a generated change is published now, staged as a draft or held
- * for an independent approver.
+ * when a generated change is submitted. Tenant Flows alone determine
+ * whether it releases immediately or waits for configured decisions.
  */
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
@@ -512,7 +512,7 @@ async function generate(actor: ScheduleActor, board: ScheduleBoard, allowed: Rea
         if (!head) {
           // Occurrences already under way are history, not new bookings.
           if (want.startsAt <= clock.now) return;
-          await insertEntry({ ...common, id: crypto.randomUUID(), status: board.publishPolicy === "live" ? "published" : "draft", supersedesId: null });
+          await insertEntry({ ...common, id: crypto.randomUUID(), status: "draft", supersedesId: null });
           summary.created++;
           return;
         }
@@ -520,9 +520,6 @@ async function generate(actor: ScheduleActor, board: ScheduleBoard, allowed: Rea
           // A generated draft is replaced by a draft of the current definition.
           await setStatus(actor, head, "cancelled", reason);
           await insertEntry({ ...common, id: crypto.randomUUID(), status: "draft", supersedesId: head.supersedesId });
-        } else if (board.publishPolicy === "live" && !head.governed) {
-          await setStatus(actor, head, "cancelled", reason);
-          await insertEntry({ ...common, id: crypto.randomUUID(), status: "published", supersedesId: head.id });
         } else {
           await insertEntry({ ...common, id: crypto.randomUUID(), status: "draft", supersedesId: head.id });
         }
@@ -532,6 +529,19 @@ async function generate(actor: ScheduleActor, board: ScheduleBoard, allowed: Rea
       const refusal = scheduleDatabaseRefusal(error);
       if (!(refusal instanceof ScheduleError)) throw refusal;
       summary.failures.push({ occursOn: occursOn!, slotIndex, message: refusal.message, remedy: refusal.remedy ?? null });
+    }
+  }
+  if(board.publishPolicy === "live") {
+    const drafts=(await db.execute<{id:string;starts_on:string;ends_on:string}>(sql`select d.id,d.starts_on::text,d.ends_on::text from schedule_entries d
+      left join schedule_entries prior on prior.org_id=d.org_id and prior.id=d.supersedes_id
+      where d.org_id=${actor.orgId} and d.board_id=${board.id} and d.status='draft'
+        and coalesce(d.pattern_assignment_id,prior.pattern_assignment_id)=${assignmentId} order by d.starts_on,d.id for update of d`)).rows;
+    if(drafts.length) {
+      const {publishScheduleBoard}=await import("./publications.ts");
+      const dates=drafts.flatMap(draft=>[draft.starts_on,draft.ends_on]).sort();
+      const published=await publishScheduleBoard({...actor,boardId:board.id,from:dates[0]!,through:dates.at(-1)!,entryIds:drafts.map(draft=>draft.id),reason});
+      const {deliverScheduleNotice}=await import("./distribution-hooks.ts");
+      if(published.notices.length)await deliverScheduleNotice({orgId:actor.orgId,actorId:actor.actorId,boardName:board.name,notices:published.notices});
     }
   }
   const generatedThrough = lastWanted !== null && lastWanted >= from ? [assignment.generatedThrough ?? lastWanted, lastWanted].sort().at(-1)! : assignment.generatedThrough;
@@ -547,11 +557,7 @@ async function generate(actor: ScheduleActor, board: ScheduleBoard, allowed: Rea
 
 /** Generation removes its own occurrences without recording an omission. */
 async function removePublishedForPattern(actor: ScheduleActor, board: ScheduleBoard, row: StoredEntry, reason: string): Promise<void> {
-  if (row.governed) {
-    await removePublished(actor, board, row, reason);
-    return;
-  }
-  await setStatus(actor, row, "cancelled", reason);
+  await removePublished(actor,board,row,reason);
 }
 
 /**

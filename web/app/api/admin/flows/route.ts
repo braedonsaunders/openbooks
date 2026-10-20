@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { uuidString } from "@openbooks/engine/platform/identifiers";
-import { defineRoute } from "@/lib/api/route";
+import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
+import { defineRoute } from '@/lib/api/route'
 
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -9,48 +9,42 @@ import { db } from '@openbooks/engine/platform/db'
 import {
   boardAuthority,
   getBoard,
-} from "@openbooks/engine/schedule-boards/boards";
-import { scheduleBoardTimerGraph } from "@openbooks/engine/flows/schedule-board-adapter";
+} from '@openbooks/engine/schedule-boards/boards'
+import { scheduleBoardTimerGraph } from '@openbooks/engine/flows/schedule-board-adapter'
 import { emptyAutomationGraph } from '@openbooks/forms-core'
-import { flowSubjectProfileForOrg, lintFlowGraphForSubject, listFlowSubjectProfiles } from '@openbooks/engine/flows/module'
+import {
+  flowSubjectProfileForOrg,
+  lintFlowGraphForSubject,
+  listFlowSubjectProfiles,
+} from '@openbooks/engine/flows/module'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 import { filterFlowRunSubjectsToScope } from '../../flows/_lib'
 
-const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map((profile) => profile.subjectKind) as [string, ...string[]];
-const requestBodySchema = z.object({
-  name: z.string().trim().min(1).max(200),
-  subjectKind: z.enum(FLOW_SUBJECT_KINDS),
+const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map(
+  (profile) => profile.subjectKind,
+) as [string, ...string[]]
+const requestBodySchema = z
+  .strictObject({
+    name: z.string().trim().min(1).max(200),
+    subjectKind: z.enum(FLOW_SUBJECT_KINDS),
     boardId: uuidString().optional(),
-    schedulePreset: z.literal("weekday-morning-afternoon").optional(),
-  ungatedOutcome: z.literal('apply').optional(),
-}).superRefine((value, ctx) => {
+    schedulePreset: z.literal('weekday-morning-afternoon').optional(),
+  })
+  .superRefine((value, ctx) => {
     if (value.schedulePreset && !value.boardId)
       ctx.addIssue({
-        code: "custom",
-        message: "Choose a board before selecting a delivery timing preset.",
-        path: ["schedulePreset"],
-      });
-    if (value.boardId && value.subjectKind !== "schedule_board")
+        code: 'custom',
+        message: 'Choose a board before selecting a delivery timing preset.',
+        path: ['schedulePreset'],
+      })
+    if (value.boardId && value.subjectKind !== 'schedule_board')
       ctx.addIssue({
-        code: "custom",
-        message: "Board context is only valid for schedule board delivery.",
-        path: ["boardId"],
-      });
-    if (
-      value.ungatedOutcome &&
-      !listFlowSubjectProfiles().find(
-        (profile) => profile.subjectKind === value.subjectKind,
-      )?.supportsUngatedSubmission
-    )
-      ctx.addIssue({
-        code: "custom",
-        message:
-          "This record type does not support saving without approval steps.",
-        path: ["ungatedOutcome"],
-      });
-});
-
+        code: 'custom',
+        message: 'Board context is only valid for schedule board delivery.',
+        path: ['boardId'],
+      })
+  })
 
 export const runtime = 'nodejs'
 
@@ -75,7 +69,7 @@ async function legacyGET() {
         ) lr on true
        where f.org_id = ${gate.user.orgId}
        order by f.name
-    `);
+    `)
     return NextResponse.json({ flows: r.rows })
   }
   // A subsidiary-restricted caller must not learn org-wide run counts or
@@ -91,7 +85,13 @@ async function legacyGET() {
        where f.org_id = ${gate.user.orgId}
        order by f.name
     `),
-    db.execute<{ flowId: string; status: string; startedAt: Date; kind: string; id: string }>(sql`
+    db.execute<{
+      flowId: string
+      status: string
+      startedAt: Date
+      kind: string
+      id: string
+    }>(sql`
       select flow_id as "flowId", status, started_at as "startedAt",
              subject_kind as kind, subject_id as id
         from flow_runs
@@ -112,8 +112,10 @@ async function legacyGET() {
   }
   return NextResponse.json({
     flows: flows.rows.map((flow) => {
-      const scoped = (byFlow.get(String(flow.id)) ?? [])
-        .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+      const scoped = (byFlow.get(String(flow.id)) ?? []).sort(
+        (a, b) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+      )
       return {
         ...flow,
         run_count: String(scoped.length),
@@ -124,78 +126,67 @@ async function legacyGET() {
   })
 }
 
-
-
 export const GET = defineRoute({
-  permission: "flows.manage",
-  feature: "flows",
+  permission: 'flows.manage',
+  feature: 'flows',
   handler: async () => legacyGET(),
-});
+})
 
 export const POST = defineRoute({
-  permission: "flows.manage",
-  feature: "flows",
-  scope: "unrestricted",
+  permission: 'flows.manage',
+  feature: 'flows',
+  scope: 'unrestricted',
   body: requestBodySchema,
   handler: async ({ request, body, authz: routeAuthz }) => {
-
     const gate = routeAuthz
-
-
 
     const user = gate.user
 
-
-
-
     const name = String(body.name ?? '').trim()
     if (!name || name.length > 200) {
-      return NextResponse.json({ error: 'name required (max 200 chars)' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'name required (max 200 chars)' },
+        { status: 400 },
+      )
     }
     const subjectKind = String(body.subjectKind ?? '')
     if (!listFlowSubjectProfiles().some((p) => p.subjectKind === subjectKind)) {
-      return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 })
+      return NextResponse.json(
+        { error: `unknown subject kind "${subjectKind}"` },
+        { status: 400 },
+      )
     }
 
     const board = body.boardId
       ? await getBoard({ orgId: user.orgId, actorId: user.id }, body.boardId)
-      : null;
+      : null
     if (board)
       await boardAuthority(
         { orgId: user.orgId, actorId: user.id },
         board,
-        "manage",
-      );
+        'manage',
+      )
     const graph = board
       ? scheduleBoardTimerGraph(board.id, board.timeZone, !!body.schedulePreset)
-      : body.ungatedOutcome
-        ? {
-            schemaVersion: 1,
-            ungatedOutcome: body.ungatedOutcome,
-            nodes: [
-              {
-                id: "submit",
-                position: { x: 0, y: 0 },
-                data: { kind: "trigger", trigger: { trigger: "on_submit" } },
-              },
-            ],
-            edges: [],
-          }
-        : emptyAutomationGraph();
+      : emptyAutomationGraph()
     // A new flow starts enabled exactly when its initial graph validates:
     // the save path refuses to leave an enabled flow warning-bearing, so
     // create-time enablement must apply the same lint or a fresh flow could
     // never be enabled without edits. An empty draft graph stays disabled
     // (it cannot fire), and the designer banner says so.
-    const profile = await flowSubjectProfileForOrg(user.orgId, subjectKind);
-    const lint = lintFlowGraphForSubject(subjectKind, graph, profile ?? undefined);
+    const profile = await flowSubjectProfileForOrg(user.orgId, subjectKind)
+    const lint = lintFlowGraphForSubject(
+      subjectKind,
+      graph,
+      profile ?? undefined,
+    )
     const id = await db.transaction(async (tx) => {
       const r = await tx.execute<{ id: string }>(sql`
         insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
         values (${user.orgId}, ${name}, ${subjectKind}, ${lint.ok},
                 ${JSON.stringify(graph)}::jsonb, ${user.id}, ${user.id})
         returning *
-      `);
+      `)
       const created = r.rows[0]!
       await tx.execute(sql`
         insert into audit_log
@@ -209,4 +200,4 @@ export const POST = defineRoute({
     })
     return NextResponse.json({ id })
   },
-});
+})

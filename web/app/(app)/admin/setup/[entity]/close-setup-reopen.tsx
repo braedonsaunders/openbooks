@@ -1,19 +1,19 @@
-"use client";
+'use client'
 
-import Link from "next/link";
+import Link from 'next/link'
 import { ApiResponseError } from "@/lib/api-error";
-import { useEffect, useState } from "react";
+import { useState } from 'react'
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useViewerFormat } from "../../../../../lib/viewer-format";
-import { toast } from "sonner";
-import { promptDialog } from "@/lib/prompt";
+import { toast } from 'sonner'
+import { ReopenDecision } from '@/app/(app)/accounting/reopen-requests/ReopenDecision'
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, Textarea, UrlDrawer } from "@openbooks/ui";
 import { ChevronRight } from "lucide-react";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
 import { ReopenDecisionEvidence } from "../../../../../components/reopen-decision-evidence";
-import { BASE, Check, Field, MODULES, drawerHref, post } from "./close-setup-shared";
+import { BASE, Field, MODULES, drawerHref, post } from './close-setup-shared'
 import type { Props, ReopenRow } from "./close-setup-types";
 
 export function ReopenList(props: Props) {
@@ -80,93 +80,12 @@ export function ReopenList(props: Props) {
 }
 
 export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
-  const t = useTranslations("close.setup");
-  const viewerFormat = useViewerFormat();
-  const router = useRouter();
+  const t = useTranslations('close.setup')
+  const viewerFormat = useViewerFormat()
+  const router = useRouter()
   const closeHref = drawerHref(props.currentParams, "periods", "reopen", null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null);
-  const [conflicts, setConflicts] = useState<
-    { kind: string; count: number; examples: string[] }[] | null
-  >(null);
-  // Decision posture for the viewer: the same scan the approval path
-  // enforces, plus whether the engine will demand an independent approver
-  // or accept a self-approval attestation. Approve mirrors that decision
-  // instead of rendering enabled and refusing on click.
-  const [decisionPreview, setDecisionPreview] = useState<{
-    ownRequest: boolean;
-    independenceRequired: boolean;
-    selfApprovalAllowed: boolean;
-    eligibleApprovers: string[];
-    conflictAcknowledgementAllowed: boolean;
-  } | null>(null);
-  const [selfAttestation, setSelfAttestation] = useState("");
-  const [selfAttested, setSelfAttested] = useState(false);
-  useEffect(() => {
-    if (row.status !== "requested") return;
-    let live = true;
-    post({ action: "reopen-conflicts", requestId: row.id }, t("errors.actionFailed"))
-      .then((data) => {
-        if (!live) return;
-        const preview = data as {
-          conflicts?: { kind: string; count: number; examples: string[] }[];
-          ownRequest?: boolean;
-          independenceRequired?: boolean;
-          selfApprovalAllowed?: boolean;
-          eligibleApprovers?: unknown;
-          conflictAcknowledgementAllowed?: boolean;
-        };
-        setConflicts(Array.isArray(preview.conflicts) ? preview.conflicts : []);
-        setDecisionPreview({
-          ownRequest: preview.ownRequest === true,
-          independenceRequired: preview.independenceRequired === true,
-          selfApprovalAllowed: preview.selfApprovalAllowed === true,
-          eligibleApprovers: Array.isArray(preview.eligibleApprovers)
-            ? preview.eligibleApprovers.filter((name): name is string => typeof name === "string")
-            : [],
-          conflictAcknowledgementAllowed: preview.conflictAcknowledgementAllowed === true,
-        });
-      })
-      .catch(() => {
-        if (!live) return;
-        setConflicts([]);
-        setDecisionPreview(null);
-      });
-    return () => {
-      live = false;
-    };
-  }, [row.id, row.status, t]);
-  const conflictTotal = (conflicts ?? []).reduce((sum, item) => sum + item.count, 0);
-  const conflictExamples = (conflicts ?? [])
-    .flatMap((item) => item.examples)
-    .slice(0, 3)
-    .join(", ");
-  // Approve will refuse when the viewer is conflicted and independence
-  // applies, or when the viewer requested it and independence applies: in
-  // both cases the button stays disabled with the reason. A sole eligible
-  // approver deciding their own request attests instead.
-  // The preview decides when it loaded; until then (or if it failed) the
-  // request row itself says whose request it is, so a requester always sees
-  // Withdraw on their own pending request.
-  const ownRequest = props.viewerId != null
-    ? row.requested_by === props.viewerId
-    : (decisionPreview?.ownRequest ?? false);
-  // No unconflicted approver exists: a conflicted approver records a
-  // conflict acknowledgement instead of leaving the request stuck.
-  const conflictAcknowledgement = !ownRequest && (decisionPreview?.conflictAcknowledgementAllowed ?? false);
-  const approveBlocked =
-    (conflictTotal > 0 || ownRequest) &&
-    (decisionPreview?.independenceRequired ?? false) &&
-    !conflictAcknowledgement;
-  const selfApproval = ownRequest && (decisionPreview?.selfApprovalAllowed ?? false);
-  const attests = selfApproval || conflictAcknowledgement;
-  const approverNames = decisionPreview?.eligibleApprovers ?? [];
-  const ownRequestNote = approverNames.length > 0
-    ? t("periods.reopenOwnRequestNamedNote", { approvers: approverNames.join(", ") })
-    : t("periods.reopenOwnRequestNote");
-  const selfAttestationReady = selfAttested && selfAttestation.trim().length >= 10;
-  // Ending acts on the active window. Extending or widening submits a new
-  // request whose approval replaces the window; both retain their reasons.
   const [endReason, setEndReason] = useState("");
   const [extendReason, setExtendReason] = useState("");
   // Widening and extending are separate choices: no hours are added unless
@@ -174,81 +93,6 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
   const [extendHours, setExtendHours] = useState("");
   const [extendModules, setExtendModules] = useState<string[]>([]);
   const includedModules = new Set(row.modules.map((module) => String(module)));
-  async function decide(approve: boolean, decisionReason?: string) {
-    setBusy(true);
-    setActionError(null);
-    try {
-      await post(
-        {
-          action: "decide-reopen",
-          requestId: row.id,
-          approve,
-          ...(approve && attests ? { attestation: selfAttestation.trim() } : {}),
-          ...(decisionReason !== undefined ? { decisionReason } : {}),
-        },
-        t("errors.actionFailed"),
-      );
-      toast.success(
-        t(approve ? "messages.reopenApproved" : "messages.reopenRejected"),
-      );
-      router.push(closeHref);
-      router.refresh();
-    } catch (error) {
-      const message =
-        error instanceof ApiResponseError
-          ? error.message
-          : t("errors.actionFailed");
-      setActionError(message);
-      toast.error(message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  // A rejection is an approver's recorded decision and needs a reason;
-  // cancelling the prompt posts nothing.
-  async function rejectWithReason() {
-    const reason = await promptDialog({
-      title: t("periods.reopenRejectTitle"),
-      message: t("periods.reopenReasonHint"),
-      label: t("fields.reason"),
-      multiline: true,
-      confirmLabel: t("actions.reject"),
-    });
-    if (reason === null) return;
-    await decide(false, reason);
-  }
-  // The requester withdraws their own pending request with a reason. It is
-  // recorded as withdrawn, never as rejected.
-  async function withdraw() {
-    const reason = await promptDialog({
-      title: t("periods.reopenWithdrawTitle"),
-      message: t("periods.reopenReasonHint"),
-      label: t("fields.reason"),
-      multiline: true,
-      confirmLabel: t("periods.reopenWithdraw"),
-    });
-    if (reason === null) return;
-    setBusy(true);
-    setActionError(null);
-    try {
-      await post(
-        { action: "withdraw-reopen", requestId: row.id, reason },
-        t("errors.actionFailed"),
-      );
-      toast.success(t("messages.reopenWithdrawn"));
-      router.push(closeHref);
-      router.refresh();
-    } catch (error) {
-      const message =
-        error instanceof ApiResponseError
-          ? error.message
-          : t("errors.actionFailed");
-      setActionError(message);
-      toast.error(message);
-    } finally {
-      setBusy(false);
-    }
-  }
   async function endReopen() {
     if (endReason.trim().length < 10) {
       const message = t("periods.endReopenReasonRequired");
@@ -319,44 +163,14 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
       open
       closeHref={closeHref}
       size="md"
-      title={t("periods.reopenTitle")}
+      title={t('periods.reopenTitle')}
       description={`${row.period_name} · ${row.book_name}`}
       footer={
         row.status === "requested" && props.canReopen ? (
-          <div className="flex w-full justify-end gap-2">
-            {ownRequest ? (
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => void withdraw()}
-              >
-                {t("periods.reopenWithdraw")}
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => void rejectWithReason()}
-              >
-                {t("actions.reject")}
-              </Button>
-            )}
-            <Button
-              disabled={busy || approveBlocked || (attests && !selfAttestationReady)}
-              title={
-                approveBlocked
-                  ? ownRequest
-                    ? ownRequestNote
-                    : t("periods.reopenConflictNotice", { count: conflictTotal, examples: conflictExamples })
-                  : attests && !selfAttestationReady
-                    ? t("periods.reopenSelfAttestationNeeded")
-                    : undefined
-              }
-              onClick={() => decide(true)}
-            >
-              {t("actions.approve")}
-            </Button>
-          </div>
+          <ReopenDecision
+            requestId={row.id}
+            ownRequest={row.requested_by === props.viewerId}
+          />
         ) : undefined
       }
     >
@@ -365,42 +179,6 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
           <p role="alert" className="text-sm text-red-600">
             {actionError}
           </p>
-        ) : null}
-        {conflictTotal > 0 ? (
-          <p role="note" className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-            {t("periods.reopenConflictNotice", {
-              count: conflictTotal,
-              examples: conflictExamples,
-            })}
-          </p>
-        ) : null}
-        {ownRequest && decisionPreview && !selfApproval ? (
-          <p role="note" className="rounded-md border border-slate-300 bg-slate-50 p-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-            {ownRequestNote}
-          </p>
-        ) : null}
-        {attests ? (
-          <div className="space-y-2 rounded-md border border-teal-300 bg-teal-50/50 p-3 dark:border-teal-800 dark:bg-teal-950/20">
-            <p role="note" className="text-sm text-slate-700 dark:text-slate-200">
-              {selfApproval
-                ? t("periods.reopenSelfApprovalNotice")
-                : t("periods.reopenConflictAcknowledgementNotice", { count: conflictTotal, examples: conflictExamples })}
-            </p>
-            <Field label={t("periods.reopenSelfAttestationLabel")}>
-              <Textarea
-                value={selfAttestation}
-                onChange={(e) => setSelfAttestation(e.target.value)}
-              />
-            </Field>
-            <Check checked={selfAttested} onChange={setSelfAttested}>
-              {t("periods.reopenSelfAttestationConfirm")}
-            </Check>
-            {!selfAttestationReady ? (
-              <p className="text-xs text-slate-600 dark:text-slate-300">
-                {t("periods.reopenSelfAttestationNeeded")}
-              </p>
-            ) : null}
-          </div>
         ) : null}
         <div>
           <Label>{t("fields.reason")}</Label>
@@ -491,9 +269,10 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
             </Field>
             <div className="space-y-1">
               <Label>{t("periods.extendModulesLabel")}</Label>
-              {MODULES.filter((module) => !includedModules.has(module)).map((module) => (
-                <label key={module} className="flex items-center gap-2 text-sm">
-                  <input
+              {MODULES.filter((module) => !includedModules.has(module)).map(
+                (module) => (
+                  <label key={module} className="flex items-center gap-2 text-sm">
+                    <input
                     type="checkbox"
                     checked={extendModules.includes(module)}
                     onChange={(e) =>
@@ -504,9 +283,10 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
                       )
                     }
                   />
-                  {t(`modules.${module}`)}
-                </label>
-              ))}
+                    {t(`modules.${module}`)}
+                  </label>
+                ),
+              )}
             </div>
             <Field label={t("fields.reason")}>
               <Textarea
@@ -530,5 +310,5 @@ export function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
         ) : null}
       </div>
     </UrlDrawer>
-  );
+  )
 }

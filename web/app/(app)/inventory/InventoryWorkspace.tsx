@@ -12,7 +12,10 @@ import { BomWorkspace, NewBomButton, type BomAssembly } from './BomWorkspace'
 import { CountsList, NewCountButton } from './counts/CountsList'
 import { InventoryActionDrawer } from './InventoryActionDrawer'
 import { NewMovementButton } from './NewMovementButton'
-import { ReceiveAgainstPoDrawer, type ReceivablePurchaseOrder } from './ReceiveAgainstPoDrawer'
+import {
+  ReceiveAgainstPoDrawer,
+  type ReceivablePurchaseOrder,
+} from './ReceiveAgainstPoDrawer'
 import { ReverseLandedVoucherAction } from './ReverseLandedVoucherAction'
 import { INVENTORY_ACTION_PERMISSIONS } from '@openbooks/engine/inventory/contracts'
 import type { StockCountSummary } from '@openbooks/engine/inventory/stock-count-queries'
@@ -25,7 +28,15 @@ type MovementPickers = {
 }
 
 export interface InventoryWorkspaceData {
-  view: 'onhand' | 'movements' | 'counts' | 'locations' | 'bom' | 'holds' | 'consignment' | 'cycles'
+  view:
+    | 'onhand'
+    | 'movements'
+    | 'counts'
+    | 'locations'
+    | 'bom'
+    | 'holds'
+    | 'consignment'
+    | 'cycles'
   sp: Record<string, string | string[] | undefined>
   receiveLabel: string
   tabs: { href: string; label: string; active: boolean }[]
@@ -52,10 +63,14 @@ export interface InventoryWorkspaceData {
   items: { id: string; code: string | null; name: string | null }[]
   stockLocations: { id: string; code: string | null; locationId: string }[]
   lots: { id: string; item_id: string; lot_number: string }[]
-  reviewRequired: boolean
   itemsExcludedCount: number
   bomAssemblies: BomAssembly[]
-  bomItems: { id: string; code: string | null; name: string | null; kind: string }[]
+  bomItems: {
+    id: string
+    code: string | null
+    name: string | null
+    kind: string
+  }[]
 }
 
 export function InventoryPageHeaderActions({
@@ -68,30 +83,50 @@ export function InventoryPageHeaderActions({
   setupNewLabel: string
 }) {
   const { view } = workspace
-  const action = view === 'onhand' || view === 'movements' ? (
-    <>
-      {workspace.canPostMovement ? <NewMovementButton href={workspace.movementHref} /> : null}
-      {workspace.canReceive ? (
-        <Button asChild variant="outline">
-          <Link href={workspace.receiveHref}><Plus size={15} /> {workspace.receiveLabel}</Link>
+  const action =
+    view === 'onhand' || view === 'movements' ? (
+      <>
+        {workspace.canPostMovement ? (
+          <NewMovementButton href={workspace.movementHref} />
+        ) : null}
+        {workspace.canReceive ? (
+          <Button asChild variant="outline">
+            <Link href={workspace.receiveHref}>
+              <Plus size={15} /> {workspace.receiveLabel}
+            </Link>
+          </Button>
+        ) : null}
+        {workspace.canReverse ? <ReverseLandedVoucherAction /> : null}
+      </>
+    ) : view === 'counts' ? (
+      workspace.canPost ? (
+        <NewCountButton label={newCountLabel} currentParams={workspace.sp} />
+      ) : null
+    ) : view === 'locations' ? (
+      workspace.canSetup ? (
+        <Button asChild>
+          <Link href="/inventory?inventoryView=locations&row=new">
+            <Plus size={15} /> {setupNewLabel}
+          </Link>
         </Button>
-      ) : null}
-      {workspace.canReverse ? <ReverseLandedVoucherAction /> : null}
-    </>
-  ) : view === 'counts' ? (
-    workspace.canPost ? <NewCountButton label={newCountLabel} currentParams={workspace.sp} /> : null
-  ) : view === 'locations' ? (
-    workspace.canSetup ? (
-      <Button asChild><Link href="/inventory?inventoryView=locations&row=new"><Plus size={15} /> {setupNewLabel}</Link></Button>
+      ) : null
+    ) : view === 'bom' && workspace.canSetup ? (
+      <NewBomButton label={setupNewLabel} />
     ) : null
-  ) : view === 'bom' && workspace.canSetup ? (
-    <NewBomButton label={setupNewLabel} />
-  ) : null
 
-  return <>{action}<ModuleHomeTabs tabs={workspace.tabs} /></>
+  return (
+    <>
+      {action}
+      <ModuleHomeTabs tabs={workspace.tabs} />
+    </>
+  )
 }
 
-export async function InventoryWorkspace({ workspace }: { workspace: InventoryWorkspaceData }) {
+export async function InventoryWorkspace({
+  workspace,
+}: {
+  workspace: InventoryWorkspaceData
+}) {
   const authz = await requirePermission('items.read')
   return <InventoryWorkspaceBody authz={authz} workspace={workspace} />
 }
@@ -105,29 +140,36 @@ async function InventoryWorkspaceBody({
 }) {
   const orgId = authz.user.orgId
   const { view, sp } = workspace
-  const allowedActions = (Object.keys(INVENTORY_ACTION_PERMISSIONS) as (keyof typeof INVENTORY_ACTION_PERMISSIONS)[])
-    .filter((action) => can(authz, INVENTORY_ACTION_PERMISSIONS[action]))
+  const allowedActions = (
+    Object.keys(
+      INVENTORY_ACTION_PERMISSIONS,
+    ) as (keyof typeof INVENTORY_ACTION_PERMISSIONS)[]
+  ).filter((action) => can(authz, INVENTORY_ACTION_PERMISSIONS[action]))
 
   return (
     <>
       {view === 'onhand' || view === 'movements' ? (
         <EntityListView
-          recordType={view === 'onhand' ? 'inventory_onhand' : 'inventory_movement'}
+          recordType={
+            view === 'onhand' ? 'inventory_onhand' : 'inventory_movement'
+          }
           orgId={orgId}
           userId={authz.user.id}
           canManage={workspace.canManage}
           sp={sp}
-          drawer={workspace.showMovementDrawer && workspace.movementPickers ? (
-            <InventoryActionDrawer
-              items={workspace.movementPickers.items}
-              stockLocations={workspace.movementPickers.stockLocations}
-              accounts={workspace.movementPickers.accounts}
-              subsidiaries={workspace.movementPickers.subsidiaries}
-              canManageTracking={workspace.canManage}
-              allowedActions={allowedActions}
-              closeHref={workspace.closeMovementHref}
-            />
-          ) : undefined}
+          drawer={
+            workspace.showMovementDrawer && workspace.movementPickers ? (
+              <InventoryActionDrawer
+                items={workspace.movementPickers.items}
+                stockLocations={workspace.movementPickers.stockLocations}
+                accounts={workspace.movementPickers.accounts}
+                subsidiaries={workspace.movementPickers.subsidiaries}
+                canManageTracking={workspace.canManage}
+                allowedActions={allowedActions}
+                closeHref={workspace.closeMovementHref}
+              />
+            ) : undefined
+          }
         />
       ) : null}
 
@@ -142,13 +184,24 @@ async function InventoryWorkspaceBody({
       ) : null}
 
       {workspace.showReceivePicker && workspace.receivablePos ? (
-        <ReceiveAgainstPoDrawer orders={workspace.receivablePos} closeHref={workspace.closeMovementHref} />
+        <ReceiveAgainstPoDrawer
+          orders={workspace.receivablePos}
+          closeHref={workspace.closeMovementHref}
+        />
       ) : null}
-      {pickString(sp.layerItem) ? <LayerInquiry itemId={pickString(sp.layerItem)!} stockLocationId={pickString(sp.layerLocation)} /> : null}
+      {pickString(sp.layerItem) ? (
+        <LayerInquiry
+          itemId={pickString(sp.layerItem)!}
+          stockLocationId={pickString(sp.layerLocation)}
+        />
+      ) : null}
 
       {view === 'counts' ? (
         <CountsList
-          key={pickString(sp.countId) ?? (pickString(sp.count) === 'new' ? 'new' : 'list')}
+          key={
+            pickString(sp.countId) ??
+            (pickString(sp.count) === 'new' ? 'new' : 'list')
+          }
           counts={workspace.counts}
           totalCount={workspace.totalCount}
           page={workspace.countPage}
@@ -159,7 +212,6 @@ async function InventoryWorkspaceBody({
           stockLocations={workspace.stockLocations}
           lots={workspace.lots}
           canPost={workspace.canPost}
-          reviewRequired={workspace.reviewRequired}
           canManageStockLocations={workspace.canSetup}
           canManageItems={workspace.canManage}
           barcodeScanningEnabled={workspace.barcodeScanningEnabled}

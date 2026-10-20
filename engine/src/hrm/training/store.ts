@@ -1,3 +1,7 @@
+import {
+  lockApprovalSubject,
+  requestNativeCommandApproval,
+} from "../../platform/approval-routing.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint } from "../../platform/db.ts";
 import { addMonthsClamped } from "../../platform/business-date.ts";
@@ -81,9 +85,12 @@ async function transaction<T>(input: TrainingActor, fn: () => Promise<T>): Promi
   }
 }
 
-async function begin(input: TrainingActor, permission: "hrm.certifications.read" | "hrm.certifications.manage" | "hrm.self.read" | "hrm.self.request", subsidiaryId: string | null = null) {
+async function begin(input: TrainingActor, permission: "hrm.certifications.read" | "hrm.certifications.manage" | "hrm.self.read" | "hrm.self.request", subsidiaryId: string | null = null,
+) {
   const scope = await lockActorCommandAuthority(db, input.orgId, input.actorId, subsidiaryId, permission);
-  if (!await lockAndCheckOrgFeature(db, input.orgId, "hrm") || !await lockAndCheckOrgFeature(db, input.orgId, "hrmTraining")) {
+  if (
+    !(await lockAndCheckOrgFeature(db, input.orgId, "hrm")) ||
+    !(await lockAndCheckOrgFeature(db, input.orgId, "hrmTraining"))) {
     throw new TrainingError("Training delivery is disabled — enable HRM and Training delivery on Company Settings → Features; existing training history is preserved.");
   }
   return scope;
@@ -135,10 +142,12 @@ export async function listTrainingCourses(input: TrainingActor): Promise<Trainin
       ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} order by code,version desc,id`)).rows;
   });
 }
-export async function createTrainingCourse(input: TrainingActor & TrainingPolicy & {
+export async function createTrainingCourse(
+  input: TrainingActor & TrainingPolicy & {
   id: string; subsidiaryId: string; code: string; version: number; name: string; description: string | null;
   effectiveFrom: string; effectiveTo: string | null; reason: string;
-}): Promise<TrainingCourse> {
+},
+): Promise<TrainingCourse> {
   const id = requireUuid(input.id, "Request key"), subsidiaryId = requireUuid(input.subsidiaryId, "Employer");
   const definition = { subsidiaryId, code: trainingText(input.code, "Course code", 64), version: trainingInteger(input.version, "Course version", 2147483647),
     name: trainingText(input.name, "Course name", 160), description: optionalText(input.description, "Description", 2000),
@@ -151,7 +160,11 @@ export async function createTrainingCourse(input: TrainingActor & TrainingPolicy
     if (!identity.partyId) throw new TrainingError("Course authorship needs a native person identity — link your user to its person record before creating a course.");
     const hash = trainingRequestHash(definition), replay = await creationReplay<TrainingCourse>(input, "hrm_training_courses", id, hash, COURSE);
     if (replay) return replay;
-    if (definition.qualificationTypeId && !await lockAndCheckOrgFeature(db, input.orgId, "hrmCertifications")) throw new TrainingError("Qualification outcomes are disabled — enable Certifications and licenses on Company Settings → Features, or create a course without a qualification outcome.");
+    if (
+      definition.qualificationTypeId &&
+      !(await lockAndCheckOrgFeature(db, input.orgId, "hrmCertifications"))
+    )
+      throw new TrainingError("Qualification outcomes are disabled — enable Certifications and licenses on Company Settings → Features, or create a course without a qualification outcome.");
     const qualification = definition.qualificationTypeId ? (await db.execute<{ validityMonths: number | null; requiresEvidence: boolean }>(sql`select validity_months as "validityMonths",requires_evidence as "requiresEvidence"
       from hrm_qualification_types where org_id=${input.orgId} and id=${definition.qualificationTypeId} and is_active for share`)).rows[0] : null;
     if (definition.qualificationTypeId && !qualification) {
@@ -163,23 +176,46 @@ export async function createTrainingCourse(input: TrainingActor & TrainingPolicy
         ${definition.qualificationTypeId},${qualification?.validityMonths ?? null},${qualification?.requiresEvidence ?? false},${definition.minimumAttendancePercent},${definition.passingScore},${identity.partyId},${hash},${definition.reason},${input.actorId},${input.actorId}) returning ${COURSE}`)).rows);
   });
 }
-export async function transitionTrainingCourse(input: TrainingActor & { courseId: string; expectedRevision: number; action: "approve" | "retire" | "cancel"; reason: string }): Promise<TrainingCourse> {
+export async function transitionTrainingCourse(
+  input: TrainingActor & {
+    courseId: string;
+    expectedRevision: number;
+    action: "submit" | "retire" | "cancel";
+    reason: string;
+    approvalRunId?: string;
+  },
+): Promise<TrainingCourse> {
   const reason = trainingText(input.reason, "Reason");
   return transaction(input, async () => {
+    await lockApprovalSubject(
+      input.orgId,
+      "training_course",
+      requireUuid(input.courseId, "Course"),
+    );
     const row = await course(input, input.courseId, true);
-    const status = input.action === "approve" ? "approved" : input.action === "retire" ? "retired" : input.action === "cancel" ? "cancelled" : null;
-    if (!status) throw new TrainingError("Choose approve, retire or cancel for the course.");
+    const status =
+      input.action === "submit"
+        ? "approved"
+        : input.action === "retire" ? "retired" : input.action === "cancel" ? "cancelled" : null;
+    if (!status)
+      throw new TrainingError(
+        "Choose submit, retire or cancel for the course.",
+      );
     if (row.revision === input.expectedRevision + 1 && row.status === status && (await db.execute(sql`select id from hrm_training_courses where org_id=${input.orgId} and id=${row.id} and updated_by=${input.actorId} and reason=${reason}`)).rows.length) return row;
     revision(row, input.expectedRevision);
     if (row.status !== (input.action === "retire" ? "approved" : "draft")) throw new TrainingError("This course cannot make that transition — reload and use an action available for its current state.");
-    if (status === "approved") {
-      const identities = (await db.execute<{ id: string; partyId: string | null; active: boolean }>(sql`select id,party_id as "partyId",is_active as active
-        from users where org_id=${input.orgId} and id in (${input.actorId},${row.createdBy}) order by id for share`)).rows;
-      const author = identities.find(r => r.id === row.createdBy), reviewer = identities.find(r => r.id === input.actorId);
-      if (!author?.partyId || !reviewer?.active || !reviewer.partyId || reviewer.id === row.createdBy || reviewer.partyId === author.partyId || reviewer.partyId === row.authorPartyId) {
-        throw new TrainingError("Course approval needs an independently identified person — link the approver to their person record and choose someone other than the author.");
-      }
-    }
+    if (
+      status === "approved" &&
+      (await requestNativeCommandApproval({
+        orgId: input.orgId,
+        actorId: input.actorId,
+        subjectKind: "training_course",
+        subjectId: row.id,
+        approvalRunId: input.approvalRunId,
+        command: { expectedRevision: input.expectedRevision, reason },
+      }))
+    )
+      return row;
     return single((await db.execute<TrainingCourse>(sql`update hrm_training_courses set status=${status},revision=revision+1,reason=${reason},updated_by=${input.actorId},updated_at=now(),
       decided_by=case when ${status === "approved"} then ${input.actorId}::uuid else decided_by end,decided_at=case when ${status === "approved"} then now() else decided_at end
       where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${COURSE}`)).rows);

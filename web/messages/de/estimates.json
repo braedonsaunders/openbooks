@@ -52,7 +52,7 @@
     "timingAdvance": "Im Voraus",
     "timingArrears": "Rückwirkend",
     "singlePeriodNote": "Mehrperiodige Staffeln brauchen erweiterte Abonnements — sonst wird diese Position als eine Pauschale abgerechnet.",
-    "approvalHint": "Rabatte über {threshold} % — oder Positionen unter Katalogpreis — brauchen vor dem Versand die Flows-Genehmigung.",
+    "approvalHint": "Die Angebotsfreigabe wird über die Flows Ihrer Organisation gesteuert.",
     "sendForSignature": "Zur Signatur senden",
     "signerName": "Name des Unterzeichners",
     "signerEmail": "E-Mail des Unterzeichners",

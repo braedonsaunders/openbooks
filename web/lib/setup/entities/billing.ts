@@ -302,24 +302,33 @@ export const BILLING_ENTITIES: SetupEntity[] = [
     ],
   },
   {
-    key: 'quote-to-cash-policy', table: 'quote_to_cash_settings', groupKey: 'billing',
-    featureKey: 'quoteToCash', iconKey: 'file', orgScoped: true, hasActive: false,
-    singularTitleKey: 'quoteCashPolicy', writePermission: 'ar.create', mutationPath: '/api/quote-to-cash/settings',
+    key: 'quote-to-cash-policy',
+    table: 'quote_to_cash_settings',
+    groupKey: 'billing',
+    featureKey: 'quoteToCash',
+    iconKey: 'file',
+    orgScoped: true,
+    hasActive: false,
+    singularTitleKey: 'quoteCashPolicy',
+    writePermission: 'ar.create',
+    mutationPath: '/api/quote-to-cash/settings',
     // A singleton validated whole by its settings endpoint: row import
     // cannot express it.
     importVia: 'none',
-    drawerSize: 'lg', formDescriptionKey: 'quoteCashPolicyFields.description',
+    drawerSize: 'lg',
+    formDescriptionKey: 'quoteCashPolicyFields.description',
     formSections: [
-      { titleKey: 'quoteCashPolicyFields.approval', fields: ['maxDiscountPercent', 'autoActivateOnSign'] },
+      {
+        titleKey: 'quoteCashPolicyFields.approval',
+        fields: ['autoActivateOnSign'],
+      },
       { titleKey: 'quoteCashPolicyFields.terms', fields: ['defaultBillingTiming', 'defaultStartRule', 'signatureExpiryDays', 'orderFormTemplateId'] },
     ],
     columns: [
-      { key: 'maxDiscountPercent', labelKey: 'quoteCashPolicyFields.maxDiscountPercent', kind: 'percent' },
       { key: 'autoActivateOnSign', labelKey: 'quoteCashPolicyFields.autoActivateOnSign', kind: 'badge-active' },
       { key: 'signatureExpiryDays', labelKey: 'quoteCashPolicyFields.signatureExpiryDays', kind: 'number' },
     ],
     fields: [
-      { key: 'maxDiscountPercent', labelKey: 'quoteCashPolicyFields.maxDiscountPercent', kind: 'percent', required: true, min: 0, max: 100, defaultValue: '10', helpTextKey: 'quoteCashPolicyFields.maxDiscountPercentHelp' },
       { key: 'autoActivateOnSign', labelKey: 'quoteCashPolicyFields.autoActivateOnSign', kind: 'boolean', defaultValue: false, booleanStyle: 'switch', fullWidth: true, helpTextKey: 'quoteCashPolicyFields.autoActivateOnSignHelp' },
       { key: 'defaultBillingTiming', labelKey: 'quoteCashPolicyFields.defaultBillingTiming', kind: 'select', defaultValue: 'advance', options: [
         { value: 'advance', labelKey: 'quoteCashPolicyFields.timingAdvance' },

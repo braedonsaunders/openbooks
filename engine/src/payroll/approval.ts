@@ -14,49 +14,11 @@ import { flowGraphAdmitsSubjectSql } from "../flows/subject-admission.ts";
 type Executor = Pick<typeof db, "execute">;
 
 /**
- * Pay-run approval — payroll's segregation-of-duties control.
- *
- * The tenant's authored Flow determines whether approval is required and
- * which decisions release the run. A tenant without an approval policy can
- * operate payroll directly; configured gates protect commit and payment.
- *
- * There is NO payroll approval engine. Approval is the Flows engine's
- * on_submit gates over the `pay_run` document subject, exactly as for a vendor
- * bill; this module only answers "is an approval outstanding?" for the payroll
- * actions that must fail closed while one is:
- *
- * - commit (materializes the GL projection and claims the period's time),
- * - post (already refused by posting.ts for any status but `approved`),
- * - the bank file (the actual instruction to move money).
- *
- * A tenant with no pay_run flow has no gate, and every action behaves exactly
- * as it did before.
- *
- * "No gate yet" and "no policy exists" are NOT the same state, and the whole
- * control turns on telling them apart. Gates only exist after the run has been
- * SUBMITTED (flows/submit.ts fires on_submit and parks the document); a run in
- * a policy org that has simply never been submitted therefore has zero gates.
- * Reading that as released would let every pay run in a gated tenant skip the
- * approval entirely by going straight to commit.
- *
- * So this module resolves release exactly the way every other document kind
- * does — through the submission lifecycle, not through a gate count:
- *
- * - no on_submit approval policy → unchanged: released unless a gate is open;
- * - policy exists → the run must have been through submission
- *   (`documents.submitted_at`, which flows/submit.ts sets and the reject path
- *   clears) AND have no outstanding gate. A policy flow that matched but
- *   produced no gate for THIS run still releases it, because submission is
- *   what evaluated the policy.
- *
- * `policyExists` counts only flows that can actually gate a submission: an
- * enabled `pay_run` flow whose graph carries an `on_submit` trigger and at
- * least one gate node. A pay-run flow that only does before_void routing or
- * pure automation is not an approval policy and must not block a commit.
- * A flow limited by legal entity counts only for runs it would admit
- * (flows/subject-admission.ts): a resolved entity outside its list is not
- * this run's policy, while a run whose entity cannot be resolved still
- * counts it, so the run fails closed instead of releasing.
+ * Payroll reads the native document lifecycle and tenant Flow configuration.
+ * A draft without a gating policy may enter commit, which routes and releases
+ * it atomically before creating the payroll projection. Submission timestamps
+ * alone never authorize a gated run; its native approved state is required.
+ * Approved and posted history retains its original decision when policies change.
  */
 
 export interface PayRunApprovalState {
@@ -118,7 +80,7 @@ export async function payRunApprovalState(
     outstandingGates,
     policyExists,
     submitted,
-    released: !pending && (!policyExists || submitted),
+    released: !pending && (row.status === "approved" || row.status === "posted" || (!policyExists && !row.submitted)),
   };
 }
 

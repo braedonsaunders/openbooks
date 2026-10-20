@@ -1,3 +1,4 @@
+import { BUILT_IN_ROLES } from "../organization/permissions.ts";
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
 import { sql, getTableColumns, type Table } from "drizzle-orm";
@@ -770,12 +771,12 @@ export async function createScratchUser(
 ): Promise<string> {
   await assertFixtureDatabase();
   await db.transaction(async (tx) => {
-    const role = (await tx.execute<{ id: string }>(sql`
+    const role = await tx.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions)
       values (${orgId}, ${roleKey}, ${roleKey.replaceAll('_', ' ')}, false, '[]'::jsonb)
       on conflict (org_id, key) do update set updated_at = now()
       returning id
-    `));
+    `);
     await tx.execute(sql`
       insert into users (id, org_id, email, name, password_hash, is_active)
       values (${userId}, ${orgId}, ${`u-${userId.slice(0, 8)}@scratch.test`}, ${name}, 'x', true)
@@ -871,13 +872,22 @@ export async function seedFlowActors(orgId: string): Promise<FlowActors> {
   const mk = async (name: string, role: string): Promise<string> => {
     return createScratchUser(orgId, name, role);
   };
-  return {
+  const actors = {
     submitterId: await mk("Submitter", "accountant"),
     approver1Id: await mk("Approver One", "approver"),
     approver2Id: await mk("Approver Two", "approver"),
     adminId: await mk("Admin", "admin"),
     outsiderId: await mk("Outsider", "viewer"),
   };
+  for (const key of ["accountant", "approver", "admin"]) {
+    const role = BUILT_IN_ROLES[key]!;
+    const written =
+      await db.execute(sql`update app_roles set permissions=${JSON.stringify(role.permissions)}::jsonb
+      where org_id=${orgId} and key=${key} and permissions='[]'::jsonb returning id`);
+    if (written.rows.length > 1)
+      throw new Error("A fixture role has ambiguous native authority.");
+  }
+  return actors;
 }
 
 export type SeedAssignee =
@@ -1007,7 +1017,7 @@ async function setTeardownGucs(tx: TeardownTx): Promise<void> {
 
 /** Every base table in public that carries an org_id column. */
 export async function listOrgIdTables(): Promise<string[]> {
-  const result = (await db.execute<{ tableName: string }>(sql`
+  const result = await db.execute<{ tableName: string }>(sql`
     select c.table_name as "tableName"
       from information_schema.columns c
       join information_schema.tables t
@@ -1015,7 +1025,7 @@ export async function listOrgIdTables(): Promise<string[]> {
      where c.table_schema = 'public'
        and c.column_name = 'org_id'
        and t.table_type = 'BASE TABLE'
-     order by c.table_name`));
+     order by c.table_name`);
   return result.rows.map((r) => r.tableName);
 }
 
@@ -1049,7 +1059,9 @@ export async function orgRowCounts(orgId: string): Promise<Record<string, number
   return withBypassContext(() => orgRowCountsCommitted(orgId));
 }
 
-async function orgRowCountsCommitted(orgId: string): Promise<Record<string, number>> {
+async function orgRowCountsCommitted(
+  orgId: string,
+): Promise<Record<string, number>> {
   const tables = await listOrgIdTables();
   const counts: Record<string, number> = {};
   await db.transaction(async (tx) => {
@@ -1063,7 +1075,7 @@ async function orgRowCountsCommitted(orgId: string): Promise<Record<string, numb
       ],
       sql` union all `,
     );
-    const result = (await tx.execute<{ tableName: string; n: number }>(union));
+    const result = await tx.execute<{ tableName: string; n: number }>(union);
     for (const row of result.rows) if (Number(row.n) > 0) counts[row.tableName] = Number(row.n);
   });
   return counts;
@@ -1291,8 +1303,8 @@ async function bulkDeletePass(
         end loop;
       end
       $teardown$`);
-    const r = (await tx.execute<{ table: string; error: string }>(sql`
-      select table_name as "table", error from scratch_teardown_failures`));
+    const r = await tx.execute<{ table: string; error: string }>(sql`
+      select table_name as "table", error from scratch_teardown_failures`);
     return r.rows;
   });
 }
@@ -1407,14 +1419,17 @@ export async function dropSimOrg(orgId: string): Promise<void> {
   return withBypassContext(() => dropDisposableOrgEscaped(orgId, "sim"));
 }
 
-async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind): Promise<void> {
+async function dropDisposableOrgEscaped(
+  orgId: string,
+  kind: DisposableOrgKind,
+): Promise<void> {
   const operation = kind === "scratch" ? "dropScratchOrg" : "dropSimOrg";
   // Hard scope guard. If the orgs row is gone the wipe already completed
   // (orgs is deleted last); if it exists under any other name, refuse.
   const orgRow = await db.transaction(async (tx) => {
     await setTeardownGucs(tx);
-    const r = (await tx.execute<{ name: string; allowed: boolean }>(sql`
-      select name, coalesce((${disposableOrgPredicate(kind)}), false) as allowed from orgs where id = ${orgId}`));
+    const r = await tx.execute<{ name: string; allowed: boolean }>(sql`
+      select name, coalesce((${disposableOrgPredicate(kind)}), false) as allowed from orgs where id = ${orgId}`);
     return r.rows[0];
   });
   if (!orgRow) {
@@ -1490,9 +1505,9 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
     // for this one transaction and clear the bank-file rows BEFORE the blob
     // delete below; the ALTERs take an exclusive lock, so pay for them only
     // when such rows exist.
-    const bankFiles = (await tx.execute(
+    const bankFiles = await tx.execute(
       sql`select 1 as x from pay_run_bank_files where org_id = ${orgId} limit 1`,
-    ));
+    );
     const hasBankFiles = bankFiles.rows.length > 0;
     if (hasBankFiles) {
       await tx.execute(sql.raw(`alter table public."pay_run_bank_files" disable trigger pay_run_bank_file_immutable`));
@@ -1530,9 +1545,9 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
     if (!SQL_IDENT.test(trigger)) throw new Error(`unsafe trigger identifier: ${trigger}`);
     await db.transaction(async (tx) => {
       await guardTeardownTransaction(tx, orgId, kind);
-      const r = (await tx.execute(
+      const r = await tx.execute(
         sql`select 1 as x from ${qualified(table)} where org_id = ${orgId} limit 1`,
-      ));
+      );
       if (r.rows.length === 0) return;
       await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
       await tx.execute(sql`delete from ${qualified(table)} where org_id = ${orgId}`);
@@ -2424,10 +2439,12 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
 }
 
 export function getScratchOrgLifecycleMetrics(): ScratchOrgLifecycleMetrics {
-  return scratchPoolInstance?.metrics ?? {
+  return (
+    scratchPoolInstance?.metrics ?? {
     poolSize: scratchOrgPoolSize(), fullBootstrap: 0, leases: 0, releases: 0, resets: 0,
     fullTeardown: 0, schemaWideVerification: 0, activeLeases: 0, leakDetections: 0,
-  };
+  }
+  );
 }
 
 export async function closeScratchOrgPool(): Promise<void> {

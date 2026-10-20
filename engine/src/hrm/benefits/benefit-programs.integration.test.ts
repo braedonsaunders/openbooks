@@ -102,28 +102,40 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     ).rows[0]!.id;
   }
 
-  async function approveThroughWorkflow(orgId: string, actorId: string, awardId: string): Promise<void> {
+    async function approveThroughWorkflow(orgId: string, actorId: string, awardId: string): Promise<void> {
     await approveBenefitFixture({ orgId, actorId, awardId });
   }
 
-  async function draftProgram(code: string, overrides: Record<string, unknown> = {}) {
-    const orgId = ARTIFACT!.orgId;
-    return seedPayrollBenefitProgram({ orgId, actorId: HRMGR!, subsidiaryId: ENTITY!, componentId: COMPONENT! }, {
-      code, name: code, family: "reward", approvalMode: "flows", valuation: "fixed",
-      fixedAmount: "100.0000", sourceAccountIds: [ACCOUNT!], ...overrides,
-    } as Parameters<typeof seedPayrollBenefitProgram>[1], { employmentIds: [EMPLOYMENT!], activate: false });
-  }
+    async function draftProgram(
+      code: string,
+      overrides: Record<string, unknown> = {},
+    ) {
+      const orgId = ARTIFACT!.orgId;
+      return seedPayrollBenefitProgram(
+        { orgId, actorId: HRMGR!, subsidiaryId: ENTITY!, componentId: COMPONENT! },
+        {
+          code,
+          name: code,
+          family: "reward",
+          valuation: "fixed",
+          fixedAmount: "100.0000",
+          sourceAccountIds: [ACCOUNT!],
+          ...overrides,
+        } as Parameters<typeof seedPayrollBenefitProgram>[1],
+        { employmentIds: [EMPLOYMENT!], activate: false },
+      );
+    }
 
-  function programFor(options: Partial<Parameters<typeof createBenefitProgram>[0]> & Pick<Parameters<typeof createBenefitProgram>[0], "code" | "name" | "family">) {
+    function programFor(options: Partial<Parameters<typeof createBenefitProgram>[0]> & Pick<Parameters<typeof createBenefitProgram>[0], "code" | "name" | "family">) {
     return createBenefitProgram({ orgId: ARTIFACT!.orgId, actorId: HRMGR!, currency: "CAD", effectiveFrom: "2026-01-01", payComponentId: COMPONENT!, ...options });
   }
-  function awardFor(programId: string, options: Pick<Parameters<typeof createBenefitAward>[0], "periodFrom"> & Partial<Parameters<typeof createBenefitAward>[0]>) {
+    function awardFor(programId: string, options: Pick<Parameters<typeof createBenefitAward>[0], "periodFrom"> & Partial<Parameters<typeof createBenefitAward>[0]>) {
     return createBenefitAward({ orgId: ARTIFACT!.orgId, actorId: HRMGR!, employmentId: EMPLOYMENT!, currency: "CAD", value: "100.0000", ...options, programId });
   }
-  function activate(programId: string) {
+    function activate(programId: string) {
     return activateBenefitProgram({ orgId: ARTIFACT!.orgId, actorId: HRMGR!, programId });
   }
-  await t.test("second organization sees nothing of the first", async () => {
+    await t.test("second organization sees nothing of the first", async () => {
     const other = await createScratchOrg();
     try {
       await enableHrm(other.orgId);
@@ -142,43 +154,44 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     }
   });
 
-  await t.test("restricted actor configures only their own entity", async () => {
-    const orgId = ARTIFACT!.orgId;
-    const restricted = await mkHr(orgId, "Entity Author", "entity_author", [ENTITY as string], [
+    await t.test(
+      "restricted actor configures only their own entity",
+      async () => {
+        const orgId = ARTIFACT!.orgId;
+        const restricted = await mkHr(orgId, "Entity Author", "entity_author", [ENTITY as string], [
       "hrm.benefits.read",
       "hrm.benefits.manage",
     ]);
-    await assert.rejects(
-      programFor({
-        actorId: restricted,
-        code: `WIDE${Date.now().toString(36).toUpperCase()}`,
-        name: "wide",
-        family: "reward",
-        approvalMode: "flows",
-        valuation: "fixed",
-        fixedAmount: "100.0000",
-        legalEntityId: null,
-        sourceAccountIds: [ACCOUNT!],
-      }),
-      /unrestricted managers/,
+        await assert.rejects(
+          programFor({
+            actorId: restricted,
+            code: `WIDE${Date.now().toString(36).toUpperCase()}`,
+            name: "wide",
+            family: "reward",
+            valuation: "fixed",
+            fixedAmount: "100.0000",
+            legalEntityId: null,
+            sourceAccountIds: [ACCOUNT!],
+          }),
+          /unrestricted managers/,
+        );
+        await assert.rejects(
+          programFor({
+            actorId: restricted,
+            code: `OTHR${Date.now().toString(36).toUpperCase()}`,
+            name: "other",
+            family: "reward",
+            valuation: "fixed",
+            fixedAmount: "100.0000",
+            legalEntityId: OTHER_ENTITY!,
+            sourceAccountIds: [ACCOUNT!],
+          }),
+          (error: unknown) => error instanceof BenefitsError,
+        );
+      },
     );
-    await assert.rejects(
-      programFor({
-        actorId: restricted,
-        code: `OTHR${Date.now().toString(36).toUpperCase()}`,
-        name: "other",
-        family: "reward",
-        approvalMode: "flows",
-        valuation: "fixed",
-        fixedAmount: "100.0000",
-        legalEntityId: OTHER_ENTITY!,
-        sourceAccountIds: [ACCOUNT!],
-      }),
-      (error: unknown) => error instanceof BenefitsError,
-    );
-  });
 
-  await t.test("activation needs a legal entity; closure preserves history", async () => {
+    await t.test("activation needs a legal entity; closure preserves history", async () => {
     const orgId = ARTIFACT!.orgId;
     const bare = await programFor({
       code: `BARE${Date.now().toString(36).toUpperCase()}`,
@@ -206,7 +219,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     );
   });
 
-  await t.test("repeated settlement with the same source key lands once", async () => {
+    await t.test("repeated settlement with the same source key lands once", async () => {
     const orgId = ARTIFACT!.orgId;
     const program = await draftProgram(`RTY${Date.now().toString(36).toUpperCase()}`);
     await activate(program.id);
@@ -221,7 +234,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     assert.equal(first.status, "draft");
   });
 
-  await t.test("per-award cap and pool budget refuse over-issuance", async () => {
+    await t.test("per-award cap and pool budget refuse over-issuance", async () => {
     const capped = await draftProgram(`CAP${Date.now().toString(36).toUpperCase()}`, {
       valuation: "pool",
       fixedAmount: null,
@@ -241,7 +254,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     );
   });
 
-  await t.test("award snapshots are immutable evidence; voiding keeps the row", async () => {
+    await t.test("award snapshots are immutable evidence; voiding keeps the row", async () => {
     const orgId = ARTIFACT!.orgId;
     const program = await draftProgram(`HST${Date.now().toString(36).toUpperCase()}`);
     await activate(program.id);
@@ -272,26 +285,27 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     assert.ok((audits ?? 0) >= 2);
   });
 
-  await t.test("membership overlap refuses; ending is prospective, never a rewrite", async () => {
-    const orgId = ARTIFACT!.orgId;
-    const program = await programFor({
-      code: `MBR${Date.now().toString(36).toUpperCase()}`,
-      name: "mbr",
-      family: "reward",
-      approvalMode: "flows",
-      valuation: "fixed",
-      fixedAmount: "100.0000",
-      legalEntityId: ENTITY!,
-      sourceAccountIds: [ACCOUNT!],
-    });
-    const member = await addProgramMembership({
+    await t.test(
+      "membership overlap refuses; ending is prospective, never a rewrite",
+      async () => {
+        const orgId = ARTIFACT!.orgId;
+        const program = await programFor({
+          code: `MBR${Date.now().toString(36).toUpperCase()}`,
+          name: "mbr",
+          family: "reward",
+          valuation: "fixed",
+          fixedAmount: "100.0000",
+          legalEntityId: ENTITY!,
+          sourceAccountIds: [ACCOUNT!],
+        });
+        const member = await addProgramMembership({
       orgId,
       actorId: HRMGR!,
       programId: program.id,
       employmentId: EMPLOYMENT!,
       effectiveFrom: "2026-01-01",
     });
-    await assert.rejects(
+        await assert.rejects(
       addProgramMembership({
         orgId,
         actorId: HRMGR!,
@@ -301,7 +315,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
       }),
       /already holds membership/,
     );
-    await assert.rejects(
+        await assert.rejects(
       removeProgramMembership({
         orgId,
         actorId: HRMGR!,
@@ -311,46 +325,49 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
       }),
       /rewrites source history/,
     );
-    const ended = await removeProgramMembership({
+        const ended = await removeProgramMembership({
       orgId,
       actorId: HRMGR!,
       membershipId: member.id,
       reason: "transferred out",
     });
-    assert.ok(ended.effectiveTo !== null);
-    const members = await listProgramMemberships({ orgId, actorId: HRMGR!, programId: program.id });
-    assert.equal(members.length, 1);
-  });
+        assert.ok(ended.effectiveTo !== null);
+        const members = await listProgramMemberships({ orgId, actorId: HRMGR!, programId: program.id });
+        assert.equal(members.length, 1);
+      },
+    );
 
-  await t.test("restricted actors list and read only their own entity", async () => {
-    const orgId = ARTIFACT!.orgId;
-    const restricted = await mkHr(orgId, "Entity Reader", "entity_reader", [ENTITY as string], [
+    await t.test(
+      "restricted actors list and read only their own entity",
+      async () => {
+        const orgId = ARTIFACT!.orgId;
+        const restricted = await mkHr(orgId, "Entity Reader", "entity_reader", [ENTITY as string], [
       "hrm.benefits.read",
       "hrm.benefits.manage",
     ]);
-    const own = await draftProgram(`OWN${Date.now().toString(36).toUpperCase()}`);
-    const foreign = await programFor({
-      code: `FRN${Date.now().toString(36).toUpperCase()}`,
-      name: "foreign",
-      family: "reward",
-      approvalMode: "flows",
-      valuation: "fixed",
-      fixedAmount: "100.0000",
-      legalEntityId: OTHER_ENTITY!,
-      sourceAccountIds: [ACCOUNT!],
-    });
-    const seen = await listBenefitPrograms({ orgId, actorId: restricted });
-    assert.ok(seen.programs.some((row) => row.id === own.id));
-    assert.ok(seen.programs.every((row) => row.id !== foreign.id));
-    await assert.rejects(
+        const own = await draftProgram(`OWN${Date.now().toString(36).toUpperCase()}`);
+        const foreign = await programFor({
+          code: `FRN${Date.now().toString(36).toUpperCase()}`,
+          name: "foreign",
+          family: "reward",
+          valuation: "fixed",
+          fixedAmount: "100.0000",
+          legalEntityId: OTHER_ENTITY!,
+          sourceAccountIds: [ACCOUNT!],
+        });
+        const seen = await listBenefitPrograms({ orgId, actorId: restricted });
+        assert.ok(seen.programs.some((row) => row.id === own.id));
+        assert.ok(seen.programs.every((row) => row.id !== foreign.id));
+        await assert.rejects(
       getBenefitProgram(db, orgId, restricted, foreign.id),
       (error: unknown) => error instanceof BenefitsError && error.code === "NOT_FOUND",
     );
-    const read = await getBenefitProgram(db, orgId, restricted, own.id);
-    assert.equal(read.id, own.id);
-  });
+        const read = await getBenefitProgram(db, orgId, restricted, own.id);
+        assert.equal(read.id, own.id);
+      },
+    );
 
-  await t.test("nonprivileged connection cannot SET its way across tenants or history", async () => {
+    await t.test("nonprivileged connection cannot SET its way across tenants or history", async () => {
     const orgId = ARTIFACT!.orgId;
     const program = await draftProgram(`GUC${Date.now().toString(36).toUpperCase()}`);
     await activate(program.id);
@@ -393,7 +410,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     });
   });
 
-  await t.test("realistic refusals name the remedy", async () => {
+    await t.test("realistic refusals name the remedy", async () => {
     const program = await draftProgram(`RM${Date.now().toString(36).toUpperCase()}`);
     await activate(program.id);
     await assert.rejects(
@@ -417,7 +434,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     );
   });
 
-  await t.test("a payroll award cannot queue without a native adjustment and remains approved", async () => {
+    await t.test("a payroll award cannot queue without a native adjustment and remains approved", async () => {
     const orgId = ARTIFACT!.orgId;
     const program = await draftProgram(`LINK${Date.now().toString(36).toUpperCase()}`);
     await activate(program.id);
@@ -433,7 +450,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     assert.equal(listed.awards[0]!.createdBy, HRMGR);
   });
 
-  await t.test("award visibility and employer identity remain bound to the original legal entity", async () => {
+    await t.test("award visibility and employer identity remain bound to the original legal entity", async () => {
     const orgId = ARTIFACT!.orgId;
     const program = await draftProgram(`SCOPE${Date.now().toString(36).toUpperCase()}`);
     await activate(program.id);
@@ -448,7 +465,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     await assert.rejects(getBenefitAward(db, orgId, foreign, award.id), /not found/);
   });
 
-  await t.test("HR award DTOs never serialize private source measurements", async () => {
+    await t.test("HR award DTOs never serialize private source measurements", async () => {
     const orgId = ARTIFACT!.orgId;
     const program = await draftProgram(`PRIV${Date.now().toString(36).toUpperCase()}`);
     await activate(program.id);
@@ -459,7 +476,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     assert.equal("programSnapshot" in dto, false);
   });
 
-  async function queuedPayrollAward() {
+    async function queuedPayrollAward() {
     const orgId = ARTIFACT!.orgId;
     const program = await draftProgram(`PAY${randomUUID().slice(0, 8).toUpperCase()}`);
     await activate(program.id);
@@ -493,7 +510,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     return { orgId, program, queued, run };
   }
 
-  await t.test("queued linkage freezes and void removes its native payable input atomically", async () => {
+    await t.test("queued linkage freezes and void removes its native payable input atomically", async () => {
     const { orgId, queued, run } = await queuedPayrollAward();
     assert.equal(queued.award.payRunDocumentId, run);
     assert.equal(queued.award.payRunAdjustmentId, queued.adjustmentId);
@@ -507,7 +524,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     assert.equal(remaining.length, 0);
   });
 
-  await t.test("committed run without the award's paid stub cannot report delivery or void", async () => {
+    await t.test("committed run without the award's paid stub cannot report delivery or void", async () => {
     const { orgId, queued, run } = await queuedPayrollAward();
     await seedCommittedBenefitRunWithoutStubs(orgId, run);
     await assert.rejects(recordPayrollDelivery({ orgId, actorId: FINANCE!, awardId: queued.award.id,
@@ -516,7 +533,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     assert.equal((await getBenefitAward(db, orgId, HRMGR!, queued.award.id)).status, "queued");
   });
 
-  await t.test("draft source replacement records the full before and after policy in the audit", async () => {
+    await t.test("draft source replacement records the full before and after policy in the audit", async () => {
     const orgId = ARTIFACT!.orgId;
     const program = await draftProgram(`AUD${randomUUID().slice(0, 8).toUpperCase()}`);
     await updateBenefitProgram({ orgId, actorId: HRMGR!, programId: program.id,
@@ -534,7 +551,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     assert.equal(rows[0]!.changes.reason, "Use the component's native expense mapping");
   });
 
-  await t.test("direct program and award reads honor the authoritative HRM feature gate", async () => {
+    await t.test("direct program and award reads honor the authoritative HRM feature gate", async () => {
     const orgId = ARTIFACT!.orgId;
     const program = await draftProgram(`GATE${randomUUID().slice(0, 8).toUpperCase()}`);
     await activate(program.id);
@@ -550,7 +567,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     assert.equal((await getBenefitAward(db, orgId, HRMGR!, award.id)).id, award.id);
   });
 
-  await t.test("award eligibility unions current active spans and excludes end dates and superseded versions", async () => {
+    await t.test("award eligibility unions current active spans and excludes end dates and superseded versions", async () => {
     const orgId = ARTIFACT!.orgId;
     const program = await draftProgram(`SPAN${randomUUID().slice(0, 8).toUpperCase()}`);
     await activate(program.id);
@@ -573,7 +590,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     await assert.rejects(createBenefitAward({ ...base, employmentId: superseded.employmentId }), /current employment history/);
   });
 
-  await t.test("role allocation never accepts an unweighted member or silently converts equal memberships", async () => {
+    await t.test("role allocation never accepts an unweighted member or silently converts equal memberships", async () => {
     const orgId = ARTIFACT!.orgId;
     const weighted = await programFor({
       code: `ROLE${randomUUID().slice(0, 8).toUpperCase()}`,
@@ -609,8 +626,8 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     await assert.rejects(activate(noRevenue.id), /without an income source/);
     assert.equal((await getBenefitProgram(db, orgId, HRMGR!, noRevenue.id)).status, "draft");
   });
-
-});
+  },
+);
 
 test("program creation retains supplied reasons through the native writer", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();

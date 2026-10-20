@@ -29,18 +29,23 @@ const collection = await import('./route')
 const versionRoute = await import('./[id]/versions/route')
 const versionUpdate = await import('./[id]/versions/[versionId]/route')
 const submitRoute = await import('./[id]/versions/[versionId]/submit/route')
-const decisionRoute = await import('./[id]/versions/[versionId]/decision/route')
+const { decideGate }=await import('@openbooks/engine/flows/module')
+const { seedApprovalFlow }=await import('@openbooks/engine/testing/fixtures')
+const { installEngineSeams }=await import('@openbooks/engine/composition/install')
 const previewRoute = await import('./[id]/versions/[versionId]/preview/route')
 const assignments = await import('./[id]/assignments/route')
 const assignmentAction = await import('./[id]/assignments/[assignmentId]/route')
-const assignmentDecision = await import('./[id]/assignments/[assignmentId]/decision/route')
 
-const spec = { country: 'CA', features: ['payroll', 'hrm', 'compensationPackages'], users: [
+
+const spec = { country: 'CA', features: ['payroll', 'hrm', 'compensationPackages','flows'], users: [
   { key: 'authorId', name: 'Package author', handle: 'package_author', permissions: ['payroll.manage', 'payroll.read', 'hrm.compensation.approve'], link: true },
   { key: 'approverId', name: 'Package approver', handle: 'package_approver', permissions: ['payroll.read', 'hrm.compensation.approve'], link: true },
 ] } as const
 async function setup() {
-  return setupHarness(spec, async ({ org, authorId }) => {
+  installEngineSeams()
+  return setupHarness(spec, async ({ org, authorId,approverId }) => {
+    for(const subjectKind of ['compensation_package_version','compensation_package_assignment'])
+      await seedApprovalFlow(org.orgId,{subjectKind,assignees:[{type:'user',userId:approverId}],mode:'all',preventSelfApproval:true})
     const worker = await seedEmployment(org.orgId, org.subsidiaryId, { from: '2026-01-01' })
     const schedule = randomUUID()
     await seedPayrollSchedule(org.orgId, schedule, authorId, { name: 'Monthly', frequency: 'monthly', periodsPerYear: 12, anchorPeriodEnd: '2026-01-31', payDateOffsetDays: 1 })
@@ -98,10 +103,12 @@ test('native package endpoints preserve independent decisions, exact previews an
     await refusal(await post(versionUpdate.PATCH, { definition, effectiveFrom: '2026-01-01', effectiveTo: null, expectedRevision: draftRevision, reason: 'Stale draft editor' }, params, null, 'PATCH'), 422, /revision changed.*reload/i)
     const submitted = await saved<{ revision: number }>(await post(submitRoute.POST, { expectedRevision: version.revision, reason: 'Review proposal' }, params))
     await refusal(await post(versionUpdate.PATCH, { definition, effectiveFrom: '2026-01-01', effectiveTo: null, expectedRevision: submitted.revision, reason: 'Rewrite submitted policy' }, params, null, 'PATCH'), 422, /draft|submitted.*immutable/i)
-    await refusal(await post(decisionRoute.POST, { expectedRevision: submitted.revision, action: 'approve', reason: 'Self decision' }, params), 422, /author.*independent approver/)
+    const gate=(await withOrgContext(f.org.orgId,()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${version.id} and status='pending'`))).rows[0]!
+    await assert.rejects(decideGate({gateId:gate.id,userId:f.authorId,decision:'approved'}),/not an approver|not assigned|own submission/)
     state.actorId = f.approverId
-    const approved = await saved<{ status: string }>(await post(decisionRoute.POST, { expectedRevision: submitted.revision, action: 'approve', reason: 'Independent policy review' }, params))
-    assert.equal(approved.status, 'approved'); assert.equal(state.permissions.at(-1), 'hrm.compensation.approve')
+    await decideGate({gateId:gate.id,userId:f.approverId,decision:'approved',comment:'Review the employer policy terms'})
+    const approved=(await withOrgContext(f.org.orgId,()=>db.execute<{status:string}>(sql`select status from payroll_compensation_versions where org_id=${f.org.orgId} and id=${version.id}`))).rows[0]!
+    assert.equal(approved.status,'approved')
     const preview = await saved<{ coveredDays: number; lines: { amount: string }[] }>(await post(previewRoute.POST, { context: {
       periodStart: '2026-01-01', periodEnd: '2026-01-31', effectiveFrom: '2026-01-16', effectiveTo: null,
       values: { allowance: '310' }, occupiedComponentIds: [], replacementComponentIds: [],
@@ -117,7 +124,9 @@ test('native package endpoints preserve independent decisions, exact previews an
     await refusal(await post(assignmentAction.PATCH, { ...employeeInput, inputs: { allowance: '310' }, expectedRevision: assignmentRevision, reason: 'Stale employee editor' }, employeeParams, null, 'PATCH'), 422, /revision changed.*reload/i)
     const proposed = await saved<{ revision: number }>(await post(assignmentAction.POST, { expectedRevision: assignment.revision, action: 'submit', reason: 'Employee proposal review' }, employeeParams))
     state.actorId = f.approverId
-    const active = await saved<{ status: string }>(await post(assignmentDecision.POST, { expectedRevision: proposed.revision, action: 'approve', reason: 'Independent employee terms review' }, employeeParams))
+    const assignmentGate=(await withOrgContext(f.org.orgId,()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${assignment.id} and status='pending'`))).rows[0]!
+    await decideGate({gateId:assignmentGate.id,userId:f.approverId,decision:'approved',comment:'Review the employee assignment terms'})
+    const active=(await withOrgContext(f.org.orgId,()=>db.execute<{status:string}>(sql`select status from payroll_compensation_assignments where org_id=${f.org.orgId} and id=${assignment.id}`))).rows[0]!
     assert.equal(active.status, 'active')
   }, { bypass: true })
 })

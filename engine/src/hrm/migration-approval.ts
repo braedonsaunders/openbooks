@@ -1,28 +1,4 @@
-/**
- * Flows approval authority for operator employment mapping sets.
- *
- * Free-text approvedBy/approvedAt/rationale on a mapping carry no
- * authority: a mapping is applicable only under a decided Flows gate over
- * the digest of the exact mapping set. This module is the only place that
- * reads that authority from the database:
- *
- * - resolveMappingApprovalSnapshots re-resolves every named gate from
- *   flow_gates plus its migration-mapping approval subject row, inside the
- *   caller's own org transaction, and overwrites whatever snapshot (if
- *   any) the input rows claim — caller JSON can never forge authority.
- *   A gate (or its subject row) no read can observe, or a gate deciding
- *   some other subject kind, throws: that is confusion, not a routine
- *   refusal. Status, decider, and digest attach truthfully and the pure
- *   classifier turns them into per-candidate verdicts in the report.
- * - requestMigrationMappingApproval pins a mapping set's digest into a new
- *   approval subject row (idempotent per org and digest) and submits it
- *   through the Flows engine — the one approvals system, never a second
- *   one — mirroring the HRM change-request submit path (failed dispatch
- *   cancels its stray gates; no enabled flow is a named refusal).
- *
- * Both entry points run inside the caller's withOrgTransaction with bypass
- * off; every statement carries an explicit org predicate.
- */
+/** Mapping sets derive authority solely from their canonical tenant Flow submission. */
 
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
@@ -33,7 +9,11 @@ import {
   type SourcePersonRow,
 } from "./migration-preflight.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { pinnedGateAllowsSelfApproval } from "../flows/gate-policy.ts";
+import {
+  routeNativeApproval,
+  lockApprovalSubject,
+} from "../platform/approval-routing.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 
 /** A mapping-approval authority failure that must reach the operator. */
 export class MappingApprovalError extends Error {
@@ -44,8 +24,7 @@ export class MappingApprovalError extends Error {
 }
 
 const APPROVAL_REMEDY =
-  "request Flows approval for the exact mapping set, then re-run with the " +
-  "decided approval gate id and the applying actor (--applied-by)";
+  "Submit the exact mapping set through Flows and supply its native submission receipt and applying actor.";
 
 function requireUuid(value: string, what: string): string {
   if (!isUuid(value)) {
@@ -61,111 +40,67 @@ function isNonBlank(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-type GateResolution = {
-  gate_id: string;
-  gate_status: string;
-  decided_by: string | null;
-  subject_kind: string;
-  subject_digest: string | null;
-  node_id: string;
-  run_context: unknown;
-};
-
-/**
- * Re-resolve every named approval gate from the database and attach the
- * truthful snapshot to its rows. Rows naming no gate get an explicit null
- * snapshot (any input-claimed snapshot is stripped: authority is
- * re-resolved, never accepted). Returns new row objects; never mutates
- * input. Throws MappingApprovalError when a named gate, its subject row,
- * or the gate's subject kind is not what a mapping approval must be —
- * a reference no read can observe, or an approval for something else, is
- * a failure, never a silent skip.
- */
+/** Resolve every authority claim from the canonical immutable Flow submission ledger. */
 export async function resolveMappingApprovalSnapshots(
   orgId: string,
   rows: readonly SourcePersonRow[],
 ): Promise<SourcePersonRow[]> {
   requireUuid(orgId, "org");
-  const gateIds = new Map<string, string>();
+  const proofs = new Map<
+    string,
+    {
+      submissionId: string;
+      status: string;
+      subjectKind: string;
+      subjectDigest: string;
+    }
+  >();
   for (const row of rows) {
-    const gateId = row.resolution?.approvalGateId ?? "";
-    if (!isNonBlank(gateId)) continue;
-    requireUuid(gateId, "operator mapping approval gate");
-    // UUID text is case-insensitive: fold the lookup key so one gate named
-    // in two cases still resolves to one snapshot (postgres compares
-    // uuid values, never text).
-    gateIds.set(gateId.toLowerCase(), gateId);
+    const id = row.resolution?.approvalSubmissionId;
+    if (!id || proofs.has(id.toLowerCase())) continue;
+    requireUuid(id, "mapping Flow submission");
+    const proof = (
+      await db.execute<{
+        submissionId: string;
+        status: string;
+        subjectKind: string;
+        subjectDigest: string;
+      }>(sql`
+   select s.id as "submissionId",s.subject_kind as "subjectKind",a.mapping_digest as "subjectDigest",
+    case when a.status='approved' and s.context->>'mappingDigest'=a.mapping_digest
+      and (public.flow_ungated_submission_authorized(s.org_id,s.subject_kind,s.subject_id,s.actor_id) or public.flow_submission_approved(s.org_id,s.subject_kind,s.subject_id,s.id))
+      and not exists(select 1 from flow_submissions newer where newer.org_id=s.org_id and newer.subject_kind=s.subject_kind
+        and newer.subject_id=s.subject_id and (newer.created_at,newer.id)>(s.created_at,s.id)) then 'approved' else a.status||'_unreleased' end as status
+   from flow_submissions s join hrm_employment_migration_approvals a on a.org_id=s.org_id and a.id=s.subject_id
+   where s.org_id=${orgId} and s.id=${id} and s.subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND}`)
+    ).rows[0];
+    if (!proof)
+      throw new MappingApprovalError(
+        "The named mapping submission is unavailable in this organization. Submit the exact mapping set through Flows.",
+      );
+    proofs.set(id.toLowerCase(), proof);
   }
-  const snapshots = new Map<string, GateResolution>();
-  for (const [lookupKey, gateId] of gateIds) {
-    const found = (await db.execute<GateResolution>(sql`
-      select g.id::text as gate_id, g.status as gate_status,
-             g.decided_by::text as decided_by,
-             g.subject_kind as subject_kind,
-             a.mapping_digest as subject_digest,
-             g.node_id, r.context as run_context
-        from flow_gates g
-        left join flow_runs r
-          on r.org_id = g.org_id and r.id = g.run_id and r.flow_id = g.flow_id
-        left join hrm_employment_migration_approvals a
-          on a.org_id = g.org_id and a.id = g.subject_id
-       where g.org_id = ${orgId} and g.id = ${gateId}`)) as unknown as {
-      rows: GateResolution[];
-    };
-    const gate = found.rows[0] ?? null;
-    if (gate === null) {
-      // A write that matches zero rows is a failure, not a success: under
-      // RLS an unscoped gate id silently matches nothing and reports
-      // success — the most dangerous shape here.
-      throw new MappingApprovalError(
-        `operator mapping names approval gate ${gateId} which no read can observe in this org; ` +
-          `refusing to migrate under an unobservable approval — ${APPROVAL_REMEDY}`,
-      );
-    }
-    if (gate.subject_kind !== HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND) {
-      throw new MappingApprovalError(
-        `approval gate ${gateId} decides subject kind ${gate.subject_kind}, not a migration mapping ` +
-          `set; refusing to let an approval for something else authorize these mappings — ${APPROVAL_REMEDY}`,
-      );
-    }
-    if (gate.subject_digest === null) {
-      throw new MappingApprovalError(
-        `approval gate ${gateId} names a migration approval subject no read can observe; ` +
-          `refusing to migrate onto a missing approval subject — re-request approval for this mapping set`,
-      );
-    }
-    snapshots.set(lookupKey, gate);
-  }
-  return rows.map((row) => {
-    if (row.resolution === null) return row;
-    const gateId = row.resolution.approvalGateId ?? "";
-    if (!isNonBlank(gateId)) {
-      return { ...row, resolution: { ...row.resolution, approval: null } };
-    }
-    const gate = snapshots.get(gateId.toLowerCase());
-    if (!gate) {
-      return { ...row, resolution: { ...row.resolution, approval: null } };
-    }
-    return {
-      ...row,
-      resolution: {
-        ...row.resolution,
-        approval: {
-          gateId: gate.gate_id,
-          status: gate.gate_status,
-          decidedBy: gate.decided_by,
-          subjectKind: gate.subject_kind,
-          subjectDigest: gate.subject_digest ?? "",
-          requireIndependentActor: !pinnedGateAllowsSelfApproval(gate.run_context, gate.node_id),
-        },
-      },
-    };
-  });
+  return rows.map((row) =>
+    row.resolution
+      ? {
+          ...row,
+          resolution: {
+            ...row.resolution,
+            approval:
+              proofs.get(
+                row.resolution.approvalSubmissionId?.toLowerCase() ?? "",
+              ) ?? null,
+          },
+        }
+      : row,
+  );
 }
 
 export interface RequestedMappingApproval {
   /** The approval subject row id (stable per org and digest). */
   readonly approvalId: string;
+  readonly submissionId: string;
+  readonly status: "pending_approval" | "approved";
   /** The pinned mapping-set digest the approver saw. */
   readonly digest: string;
   /** False when an earlier request already pinned this digest. */
@@ -196,91 +131,111 @@ export async function requestMigrationMappingApproval(
   }
   const digest = hashOperatorMappingSet(entries);
   return withOrgTransaction(orgId, async () => {
-    const existing = (await db.execute<{ id: string; status: string }>(sql`
-      select id::text as id, status
-        from hrm_employment_migration_approvals
-       where org_id = ${orgId} and mapping_digest = ${digest}`)) as unknown as {
-      rows: Array<{ id: string; status: string }>;
-    };
-    const prior = existing.rows[0] ?? null;
-    if (prior !== null) return { approvalId: prior.id, digest, created: false, runIds: [], gateIds: [] };
-
-    const inserted = (await db.execute<{ id: string }>(sql`
-      insert into hrm_employment_migration_approvals
-        (org_id, mapping_digest, status, requested_by, created_by, updated_by)
-      values (${orgId}, ${digest}, 'draft', ${requestedBy}, ${requestedBy}, ${requestedBy})
-      returning id::text as id`)) as unknown as { rows: Array<{ id: string }> };
-    const approvalId = inserted.rows[0]?.id ?? null;
-    if (approvalId === null) {
-      // A write that matches zero rows is a failure, never success.
+    const scope = await lockActorCommandAuthority(
+      db,
+      orgId,
+      requestedBy,
+      null,
+      "hrm.employment.manage",
+    );
+    if (scope !== null)
       throw new MappingApprovalError(
-        "recording the mapping approval subject matched zero rows; refusing to report success " +
-          "for an unobservable write — check the org RLS scope and re-request",
+        "Organization-wide employment authority is required to submit a mapping set.",
       );
-    }
-
-    // Lazy: engine/src/flows/run.ts → registry → this service's adapter.
-    const { runRecordFlows } = await import("../flows/run.ts");
-    const flowResult = await runRecordFlows(
-      { kind: "on_submit", source: "api" },
+    await db.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${"mapping-submission:" + orgId + ":" + digest},0))`,
+    );
+    let prior = (
+      await db.execute<{
+        id: string;
+        status: string;
+        submissionId: string | null;
+      }>(sql`select a.id,a.status,
+      (select s.id from flow_submissions s where s.org_id=a.org_id and s.subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND} and s.subject_id=a.id order by created_at desc,id desc limit 1) as "submissionId"
+      from hrm_employment_migration_approvals a where a.org_id=${orgId} and a.mapping_digest=${digest}`)
+    ).rows[0];
+    const approvalId =
+      prior?.id ??
+      (
+        await db.execute<{
+          id: string;
+        }>(sql`insert into hrm_employment_migration_approvals(org_id,mapping_digest,status,requested_by,created_by,updated_by)
+      values(${orgId},${digest},'draft',${requestedBy},${requestedBy},${requestedBy}) returning id`)
+      ).rows[0]?.id;
+    if (!approvalId)
+      throw new MappingApprovalError("The mapping submission was not stored.");
+    await lockApprovalSubject(
+      orgId,
       HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND,
       approvalId,
-      { orgId, userId: requestedBy },
     );
-    const gatedRuns = flowResult.runs.filter((run) => run.gatesCreated > 0);
-    if (flowResult.failed || gatedRuns.length === 0) {
-      const strayRunIds = flowResult.runs.map((run) => run.runId);
-      if (strayRunIds.length > 0) {
-        await db.execute(sql`
-          update flow_gates set status = 'cancelled', updated_at = now()
-           where run_id in (
-             select jsonb_array_elements_text(${JSON.stringify(strayRunIds)}::jsonb)::uuid
-           ) and org_id = ${orgId} and status in ('pending', 'escalated')
-        `);
-        await db.execute(sql`
-          update flow_runs set status = 'cancelled', finished_at = now()
-           where id in (
-             select jsonb_array_elements_text(${JSON.stringify(strayRunIds)}::jsonb)::uuid
-           ) and org_id = ${orgId} and status in ('running', 'waiting')
-        `);
-      }
-      if (flowResult.failed) {
+    if (prior) {
+      const current = (
+        await db.execute<{ status: string }>(
+          sql`select status from hrm_employment_migration_approvals where org_id=${orgId} and id=${approvalId} for update`,
+        )
+      ).rows[0];
+      if (!current)
         throw new MappingApprovalError(
-          "approval routing failed for this mapping set — fix the approval flow, then request again",
+          "The mapping submission is no longer available.",
         );
-      }
-      throw new MappingApprovalError(
-        "no enabled approval flow produced an approval gate for employment migration mappings — " +
-          "configure a flow for employment migration mappings before requesting",
-      );
+      prior = { ...prior, status: current.status };
     }
-    const flipped = (await db.execute<{ id: string }>(sql`
-      update hrm_employment_migration_approvals
-         set status = 'pending_approval', updated_by = ${requestedBy}, updated_at = now()
-       where id = ${approvalId} and org_id = ${orgId} and status = 'draft'
-      returning id::text as id`)) as unknown as { rows: Array<{ id: string }> };
-    if (flipped.rows.length !== 1) {
-      throw new MappingApprovalError(
-        `mapping approval ${approvalId} changed while submission was being recorded; ` +
-          "refusing to report success for an unobservable write",
-      );
+    if (
+      prior?.submissionId &&
+      ["pending_approval", "approved"].includes(prior.status)
+    ) {
+      const gates = (
+        await db.execute<{ id: string; run_id: string }>(
+          sql`select id,run_id from flow_gates where org_id=${orgId} and subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND} and subject_id=${approvalId} and status in('pending','escalated')`,
+        )
+      ).rows;
+      if (prior.status === "approved" || gates.length)
+        return {
+          approvalId,
+          digest,
+          submissionId: prior.submissionId,
+          status: prior.status as "approved" | "pending_approval",
+          created: false,
+          runIds: [...new Set(gates.map((g) => g.run_id))],
+          gateIds: gates.map((g) => g.id),
+        };
     }
-    const runIds = gatedRuns.map((run) => run.runId);
-    const gates = (await db.execute<{ id: string }>(sql`
-      select g.id::text as id
-        from flow_gates g
-       where g.org_id = ${orgId}
-         and g.run_id in (
-           select jsonb_array_elements_text(${JSON.stringify(runIds)}::jsonb)::uuid
-         )
-         and g.status in ('pending', 'escalated')
-       order by g.created_at`)) as unknown as { rows: Array<{ id: string }> };
+    if (prior)
+      await db.execute(
+        sql`update hrm_employment_migration_approvals set status='draft',updated_by=${requestedBy},updated_at=now() where org_id=${orgId} and id=${approvalId}`,
+      );
+    const routing = await routeNativeApproval({
+      orgId,
+      actorId: requestedBy,
+      subjectKind: HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND,
+      subjectId: approvalId,
+    });
+    const status =
+      routing.policy.kind === "gated" ? "pending_approval" : "approved";
+    const saved = await db.execute(
+      sql`update hrm_employment_migration_approvals set status=${status},updated_by=${requestedBy},updated_at=now() where org_id=${orgId} and id=${approvalId} and status='draft' returning id`,
+    );
+    if (saved.rows.length !== 1)
+      throw new MappingApprovalError(
+        "The mapping submission changed before its outcome was recorded.",
+      );
+    await db.execute(
+      sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'hrm_employment_migration_approvals',${approvalId},'submit',${JSON.stringify({ digest, submissionId: routing.submissionId, policy: routing.policy, status })}::jsonb,${requestedBy})`,
+    );
+    const gates = (
+      await db.execute<{ id: string }>(
+        sql`select id from flow_gates where org_id=${orgId} and subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND} and subject_id=${approvalId} and status in('pending','escalated')`,
+      )
+    ).rows;
     return {
       approvalId,
       digest,
+      submissionId: routing.submissionId,
+      status,
       created: true,
-      runIds,
-      gateIds: gates.rows.map((gate) => gate.id),
+      runIds: routing.policy.runIds,
+      gateIds: gates.map((g) => g.id),
     };
   });
 }

@@ -73,7 +73,6 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'approvals-pagination',
   // HR-16 begin
   'assign-party-role',
-  'automation-approval-settings',
   'automation-builder',
   'automation-last-run-cell',
   'automation-name-cell',

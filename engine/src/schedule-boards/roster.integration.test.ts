@@ -8,7 +8,7 @@ import { createScratchOrg, createScratchUser, dropScratchOrgReporting, seedAppro
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { decideGate } from "../flows/gates.ts";
-import { applyBoardChanges, publishBoard } from "./entries.ts";
+import { applyBoardChanges } from "./entries.ts";
 import type { ScheduleNotice } from "./entries.ts";
 import { publishScheduleBoard } from "./publications.ts";
 import { ScheduleError } from "./errors.ts";
@@ -49,10 +49,10 @@ async function person(orgId: string, subsidiaryId: string, name: string, userId?
   return id;
 }
 
-async function board(orgId: string, code: string, type: "people" | "shift_roster", policy: "live" | "staged" | "governed", governedFrom: string | null = null): Promise<string> {
+async function board(orgId: string, code: string, type: "people" | "shift_roster", policy: "live" | "staged"): Promise<string> {
   const id = randomUUID();
-  affected(await db.execute(sql`insert into schedule_boards (id, org_id, code, name, row_kind, board_type, views, default_view, grain, time_zone, publish_policy, governed_from)
-    values (${id}, ${orgId}, ${code}, ${`Board ${code}`}, 'people', ${type}, '{timeline,grid}', 'timeline', 'timed', 'UTC', ${policy}, ${governedFrom})`), "board");
+  affected(await db.execute(sql`insert into schedule_boards (id, org_id, code, name, row_kind, board_type, views, default_view, grain, time_zone, publish_policy)
+    values (${id}, ${orgId}, ${code}, ${`Board ${code}`}, 'people', ${type}, '{timeline,grid}', 'timeline', 'timed', 'UTC', ${policy})`), "board");
   return id;
 }
 
@@ -77,7 +77,7 @@ async function fixture(run: (f: Fixture) => Promise<void>): Promise<void> {
       return {
         scheduler, approver, anaUser, benUser, ana, ben, today,
         roster: await board(org.orgId, "WARD", "shift_roster", "live"),
-        governed: await board(org.orgId, "ICU", "shift_roster", "governed", today),
+        governed: await board(org.orgId, "ICU", "shift_roster", "staged"),
         people: await board(org.orgId, "FIELD", "people", "live"),
       };
     });
@@ -98,9 +98,10 @@ const live = async (f: Fixture, assignmentId: string) => (await withBypassContex
     to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "startsAt"
   from schedule_entries where org_id = ${f.org.orgId} and pattern_assignment_id = ${assignmentId} and status <> 'cancelled' order by pattern_occurs_on, status`))).rows;
 
-test("board types fix their row kind and capabilities; governed publication is a shift roster policy", enabled, async () => fixture(async (f) => {
+test("board types fix their row kind and capabilities and refuse retired publication timing", enabled, async () => fixture(async (f) => {
   await withBypassContext(async () => {
-    await assert.rejects(board(f.org.orgId, "BAD", "people", "governed", f.today), refused(/Governed publication is available on shift roster boards/));
+    await assert.rejects(withBypassContext(()=>db.execute(sql`insert into schedule_boards(id,org_id,code,name,row_kind,board_type,views,default_view,time_zone,publish_policy)
+      values(${randomUUID()},${f.org.orgId},'BAD','Unsupported publication policy','people','people','{grid}','grid','UTC','governed')`)),refused(/schedule_boards_(?:publish_policy_check|governed_from)/));
     await assert.rejects(db.execute(sql`update schedule_boards set board_type = 'people' where org_id = ${f.org.orgId} and id = ${f.roster}`), refused(/keeps its type/));
     const standard = randomUUID();
     affected(await db.execute(sql`insert into schedule_boards (id, org_id, code, name, row_kind, views, default_view, time_zone)
@@ -178,7 +179,7 @@ test("without a Flow a governed publication applies at once, records that no app
   const record = (await withBypassContext(() => db.execute<{ status: string; released: boolean; decidedBy: string | null; reason: string }>(sql`select status,
     released_without_approval as released, decided_by as "decidedBy", decision_reason as reason from schedule_publications where org_id = ${f.org.orgId} and id = ${published.publicationId}`))).rows[0];
   assert.deepEqual(record, { status: "approved", released: true, decidedBy: null, reason: "No approval Flow applied; released when submitted." });
-  await assert.rejects(publishBoard({ ...scheduler, boardId: f.governed, from: start, through: start }), (error: unknown) => error instanceof ScheduleError && error.code === "schedule_governed_board");
+  await assert.rejects(publishScheduleBoard({ ...scheduler, boardId: f.governed, from: start, through: start }), (error: unknown) => error instanceof ScheduleError && error.code === "schedule_nothing_to_publish");
   const [first] = await live(f, key);
   // A governed booking's notes and removal are revisions that are published.
   const notes = await applyBoardChanges({ ...scheduler, boardId: f.governed, changes: [{ op: "update", id: first!.id, expectedRevision: first!.revision, fields: { notes: "Bring badge" } }] });
@@ -204,7 +205,8 @@ test("a Schedule publication Flow owns governed publishing: the changes wait, th
   await createAssignment({ ...scheduler, id: key, boardId: f.governed, patternId: pattern.id, workerPartyId: f.ana, effectiveFrom: start, effectiveTo: null, reason: "ICU rotation" });
   const first = await publishScheduleBoard({ ...scheduler, boardId: f.governed, from: start, through: addCalendarDays(start, 7) });
   assert.deepEqual([first.pending, first.published], [true, 0]);
-  await assert.rejects(publishScheduleBoard({ ...scheduler, boardId: f.governed, from: start, through: addCalendarDays(start, 7) }), /awaiting its approval/);
+  const replay = await publishScheduleBoard({ ...scheduler, boardId: f.governed, from: start, through: addCalendarDays(start, 7) });
+  assert.deepEqual([replay.publicationId, replay.pending], [first.publicationId, true], "the same publication request retains its original submission");
   const [draft] = await live(f, key);
   const edit = await applyBoardChanges({ ...scheduler, boardId: f.governed, changes: [{ op: "update", id: draft!.id, expectedRevision: draft!.revision, fields: { notes: "late change" } }] });
   assert.equal(edit.results[0]?.ok, false, "a submitted change cannot be edited while its publication waits");
@@ -242,23 +244,23 @@ test("without a Flow employee releases, changes and swaps apply when submitted a
   const mine = await loadMySchedule({ ...ana, from: f.today, through: addCalendarDays(start, 7) });
   assert.deepEqual(new Set(mine.requestableEntryIds), new Set([anaShift, anaLater, anaRelease]));
   assert.ok(mine.entries.some((entry) => entry.id === fieldDay), "the people-board booking still shows on My schedule");
-  await assert.rejects(createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: fieldDay, expectedRevision: 1, kind: "release", reason: "Not a roster" }),
+  await assert.rejects(createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: fieldDay, expectedRevision: await entryRevision(f.org.orgId,fieldDay), kind: "release", reason: "Not a roster" }),
     refused(/cannot be requested/));
-  await assert.rejects(createOwnShiftRequest({ ...ben, id: randomUUID(), entryId: anaShift, expectedRevision: 1, kind: "release", reason: "Not mine" }), (error: unknown) => error instanceof ScopeNotFoundError);
-  const change = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaShift, expectedRevision: 1, kind: "change", change: { starts: "11:00", ends: "19:00", breakMinutes: 30 }, reason: "Appointment" });
+  await assert.rejects(createOwnShiftRequest({ ...ben, id: randomUUID(), entryId: anaShift, expectedRevision: await entryRevision(f.org.orgId,anaShift), kind: "release", reason: "Not mine" }), (error: unknown) => error instanceof ScopeNotFoundError);
+  const change = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaShift, expectedRevision: await entryRevision(f.org.orgId,anaShift), kind: "change", change: { starts: "11:00", ends: "19:00", breakMinutes: 30 }, reason: "Appointment" });
   assert.deepEqual([change.request.status, change.request.releasedWithoutApproval, change.request.decisionReason], ["approved", true, "No approval Flow applied; applied when submitted."]);
   const changed = await withBypassContext(() => db.execute<{ startsAt: string; origin: string | null }>(sql`select to_char(starts_at at time zone 'UTC', 'HH24:MI') as "startsAt", origin_request_id as origin
     from schedule_entries where org_id = ${f.org.orgId} and supersedes_id = ${anaShift} and status = 'published'`));
   assert.deepEqual(changed.rows, [{ startsAt: "11:00", origin: change.request.id }]);
   const afterChange = await loadMySchedule({ ...ana, from: f.today, through: addCalendarDays(start, 7) });
   assert.ok(!afterChange.requestableEntryIds.includes(anaShift) && afterChange.entries.every((entry) => entry.id !== anaShift), "the replaced shift is no longer offered");
-  const released = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaRelease, expectedRevision: 1, kind: "release", reason: "Sick child" });
+  const released = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaRelease, expectedRevision: await entryRevision(f.org.orgId,anaRelease), kind: "release", reason: "Sick child" });
   assert.equal(released.request.status, "approved");
   assert.equal((await withBypassContext(() => db.execute<{ status: string }>(sql`select status from schedule_entries where org_id = ${f.org.orgId} and id = ${anaRelease}`))).rows[0]?.status, "cancelled");
   // A swap waits for the colleague and applies when they accept.
   const candidates = await listSwapCandidates({ ...ana, entryId: anaLater });
   assert.ok(candidates.some((candidate) => candidate.entryId === benShift));
-  const swap = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaLater, expectedRevision: 1, kind: "swap", counterpartEntryId: benShift, counterpartRevision: 1, reason: "Trade days" });
+  const swap = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaLater, expectedRevision: await entryRevision(f.org.orgId,anaLater), kind: "swap", counterpartEntryId: benShift, counterpartRevision: await entryRevision(f.org.orgId,benShift), reason: "Trade days" });
   assert.equal(swap.request.status, "awaiting_counterpart");
   const accepted = await respondToSwap({ ...ben, requestId: swap.request.id, expectedRevision: swap.request.revision, accept: true, reason: "Happy to" });
   assert.equal(accepted.request.status, "approved");
@@ -286,7 +288,7 @@ test("a Shift request Flow owns the decision: the requester cannot decide, concu
   await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "schedule_entry_request", assignees: [{ type: "user", userId: f.approver }, { type: "user", userId: f.scheduler }, { type: "user", userId: f.anaUser }], mode: "any" }));
   const id = randomUUID();
   await applyBoardChanges({ ...scheduler, boardId: f.roster, changes: [{ op: "create", id, workerPartyId: f.ana, onDate: addCalendarDays(f.today, 2), target: null, span: { mode: "timed", starts: "09:00", ends: "17:00", breakMinutes: 30 } }] });
-  const submitted = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: id, expectedRevision: 1, kind: "release", reason: "Course" });
+  const submitted = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: id, expectedRevision: await entryRevision(f.org.orgId,id), kind: "release", reason: "Course" });
   assert.deepEqual([submitted.request.status, submitted.request.flowGated], ["pending", true]);
   await assert.rejects(withdrawOwnShiftRequest({ ...ana, requestId: submitted.request.id, expectedRevision: submitted.request.revision }), /with its approval Flow/);
   const pendingGate = (await gate(f, "schedule_entry_request", submitted.request.id))!;
@@ -324,3 +326,29 @@ test("roster records stay inside their organization", enabled, async () => fixtu
     await dropScratchOrgReporting(other.orgId);
   }
 }));
+
+
+test('live and staged publication both wait for every tenant Flow gate',enabled,async()=>fixture(async f=>{
+  const {seedApprovalFlow}=await import('../testing/fixtures.ts');
+  const {decideGate}=await import('../flows/gates.ts');
+  for(let index=0;index<10;index++)await withBypassContext(()=>seedApprovalFlow(f.org.orgId,{subjectKind:'schedule_publication',assignees:[{type:'user',userId:f.approver}],mode:'all'}));
+  for(const [index,boardId]of[f.roster,f.governed].entries()){
+    const id=randomUUID(),onDate=addCalendarDays(f.today,3+index);
+    const saved=await applyBoardChanges({...as(f,f.scheduler),boardId,changes:[{op:'create',id,workerPartyId:f.ana,onDate,target:null,span:{mode:'timed',starts:'09:00',ends:'17:00',breakMinutes:30}}]});
+    assert.equal(saved.results[0]?.ok,true);
+    if(index===1){const submitted=await publishScheduleBoard({...as(f,f.scheduler),boardId,from:onDate,through:onDate});assert.equal(submitted.pending,true);}
+    const gates=(await withBypassContext(()=>db.execute<{id:string}>(sql`select g.id from schedule_publications p join flow_gates g on g.org_id=p.org_id and g.subject_kind='schedule_publication' and g.subject_id=p.id
+      where p.org_id=${f.org.orgId} and ${id}::uuid=any(p.entry_ids) and g.status='pending' order by g.id`))).rows;
+    assert.equal(gates.length,10);
+    for(let gateIndex=0;gateIndex<gates.length;gateIndex++){
+      const before=(await withBypassContext(()=>db.execute<{status:string}>(sql`select status from schedule_entries where org_id=${f.org.orgId} and id=${id}`))).rows[0];
+      assert.equal(before?.status,'draft','no publication timing can release before the final tenant decision');
+      await decideGate({gateId:gates[gateIndex]!.id,decision:'approved',userId:f.approver});
+    }
+    assert.equal((await withBypassContext(()=>db.execute<{status:string}>(sql`select status from schedule_entries where org_id=${f.org.orgId} and id=${id}`))).rows[0]?.status,'published');
+  }
+}));
+
+async function entryRevision(orgId:string,id:string){
+ return (await db.execute<{revision:number}>(sql`select revision from schedule_entries where org_id=${orgId} and id=${id}`)).rows[0]!.revision;
+}

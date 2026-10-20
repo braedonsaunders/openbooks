@@ -1,3 +1,4 @@
+import { lockApprovalSubject, cancelNativeApprovals } from "../platform/approval-routing.ts";
 import { canonicalPeriodLabelSql, CloseError } from "../periods/period-policy.ts";
 import { advancedCloseEnabled } from "./features.ts";
 import { claimCloseAutomationExecution, commitCloseEffectStage, finishCloseExecution, CloseAutomationLeaseFencedError, type CloseAutomationContext } from "./automations.ts";
@@ -5,7 +6,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
-import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { db, withOrgTransaction, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { fingerprintChangeBuckets, periodFingerprintWithEvidence, readinessChecks, type PeriodFingerprintEvidence } from "./readiness.ts";
 import { snapshotCommerceCloseEvidence } from "./commerce-close.ts";
 import { resolveTaskDependenciesTx } from "./task-dependencies.ts";
@@ -70,9 +71,21 @@ export async function refreshCloseRun(
       100,
   );
 
-  const outcome = await db.transaction(async (tx) => {
+  const outcome = await withOrgTransaction(orgId, async () => {
+    const tx=db;
+    await lockApprovalSubject(orgId,"close_run",runId);
+    const tasks=(await tx.execute<{id:string}>(sql`select id from close_run_tasks where org_id=${orgId} and run_id=${runId} order by id`)).rows;
+    for(const task of tasks)await lockApprovalSubject(orgId,"close_task",task.id);
+    const current=(await tx.execute<{data_fingerprint:string|null}>(sql`select data_fingerprint from close_runs
+      where org_id=${orgId} and id=${runId} for update`)).rows[0];
+    if(!current || current.data_fingerprint!==run.data_fingerprint)throw new CloseError("The close changed during validation; revalidate its current evidence.");
+    const stale=(await tx.execute<{id:string}>(sql`select id from close_run_tasks where org_id=${orgId} and run_id=${runId}
+      and id in(select jsonb_array_elements_text(${JSON.stringify(tasks.map(task=>task.id))}::jsonb)::uuid)
+      and status in('complete','submitted','waived') and data_fingerprint is distinct from ${fingerprint}`)).rows;
     let invalidated = 0;
-    if (dataChanged) {
+    if (dataChanged || stale.length>0) {
+      await cancelNativeApprovals({orgId,subjectKind:"close_run",subjectId:runId,actorId:actorId??null});
+      for(const task of stale)await cancelNativeApprovals({orgId,subjectKind:"close_task",subjectId:task.id,actorId:actorId??null});
       // The invalidation reason rides on the task row so the heading can say
       // re-review is needed because <what> changed. Computed tasks get a
       // fresh result below; manual attestations keep this until re-decided,
@@ -85,21 +98,10 @@ export async function refreshCloseRun(
                  ? sql`, result = coalesce(result, '{}'::jsonb) || ${JSON.stringify({ invalidatedBecause: changedBuckets })}::jsonb`
                  : sql``}
          where run_id = ${runId} and org_id = ${orgId}
-           and status in ('complete','submitted') and data_fingerprint is not null
-           and data_fingerprint <> ${fingerprint}
+           and id in(select jsonb_array_elements_text(${JSON.stringify(stale.map(task=>task.id))}::jsonb)::uuid)
+           and status in ('complete','submitted','waived') and data_fingerprint is distinct from ${fingerprint}
          returning id`));
       invalidated = changed.rows.length;
-      await tx.execute(sql`
-        update flow_gates set status = 'cancelled', updated_at = now(), updated_by = ${actorId ?? null}
-         where org_id = ${orgId} and subject_kind = 'close_run' and subject_id = ${runId}
-           and status in ('pending','escalated')
-      `);
-      await tx.execute(sql`
-        update flow_runs set status = 'cancelled', finished_at = now(), updated_at = now(),
-               updated_by = ${actorId ?? null}
-         where org_id = ${orgId} and subject_kind = 'close_run' and subject_id = ${runId}
-           and status in ('running','waiting')
-      `);
       await tx.execute(sql`
         insert into close_events (org_id, run_id, event_type, actor_id, payload)
         values (${orgId}, ${runId}, 'run.data_changed', ${actorId ?? null},
@@ -187,12 +189,12 @@ export async function refreshCloseRun(
     await resolveTaskDependenciesTx(tx, orgId, runId);
     await tx.execute(sql`
       update close_runs set readiness_score = ${readinessScore}, data_fingerprint = ${fingerprint},
-             status = case when ${dataChanged} and status in ('review','approved') then 'in_progress' else status end,
-             approved_at = case when ${dataChanged} and status in ('review','approved') then null else approved_at end,
-             approved_by = case when ${dataChanged} and status in ('review','approved') then null else approved_by end,
+             status = case when ${dataChanged || invalidated>0} and status in ('review','approved') then 'in_progress' else status end,
+             approved_at = case when ${dataChanged || invalidated>0} and status in ('review','approved') then null else approved_at end,
+             approved_by = case when ${dataChanged || invalidated>0} and status in ('review','approved') then null else approved_by end,
              current_stage = case
                when status in ('closed','published') then 'publish'
-               when status = 'approved' and not ${dataChanged} then 'lock'
+               when status = 'approved' and not ${dataChanged || invalidated>0} then 'lock'
                when exists (select 1 from close_exceptions x where x.run_id = ${runId}
                  and x.org_id = ${orgId} and x.status = 'open' and x.severity in ('error','critical')) then 'readiness'
                when exists (select 1 from close_run_tasks t where t.run_id = ${runId}
@@ -437,26 +439,21 @@ export async function runCloseAutomations(
           config.ownerUserId,
           config.ownerRoleKey,
         );
-        const reviewerId = await resolveUser(
-          config.reviewerUserId,
-          config.reviewerRoleKey,
-        );
-        if (!ownerId && !reviewerId)
-          throw new CloseError(
-            "assignment automation resolved no owner or reviewer",
-          );
+        if(config.reviewerUserId!==undefined || config.reviewerRoleKey!==undefined)
+          throw new CloseError("Configure close task approvals in Flows; assignment automations only choose the preparation owner.");
+        if(!ownerId)throw new CloseError("assignment automation resolved no owner");
         // Route through the canonical assignment so automation writes the
         // same task audit event as every other task write. A vanished task
         // throws by name and lands in the automation result as failed —
         // never a silent success on zero matched rows.
         const { assignCloseTaskTx } = await import("./tasks.ts");
-        await db.transaction(async (tx) => {
+        await withOrgTransaction(context.orgId, async () => {
+          const tx=db;
           await assignCloseTaskTx(tx, {
             orgId: context.orgId,
             runId: context.runId,
             taskId: assignTaskId,
             ownerId,
-            reviewerId,
             actorId: context.actorId ?? null,
           });
         });
@@ -468,19 +465,15 @@ export async function runCloseAutomations(
           throw new CloseError(
             "complete-task automation requires a task event",
           );
-        // Route through the canonical task transition so automation is bound
-        // by the same owner, blocked, evidence, reviewer, and segregation
-        // controls as the manual path, and writes the same task audit event.
-        // A reviewer-gated task is refused (never auto-approved): the owner
-        // submits it for review and the assigned reviewer approves it. The
-        // shared transition performs no automation fan-out, so this cannot
-        // re-enter runCloseAutomations; the refresh below is the only fan-out.
+        // The native task command applies the same tenant Flow policy to
+        // manual and automated preparation, without recursive automation fan-out.
         const { transitionCloseTaskTx } = await import("./tasks.ts");
-        await db.transaction(async (tx) => {
+        await withOrgTransaction(context.orgId, async () => {
+          const tx=db;
           const task = (await tx.execute<{ status: string; completion_mode: string }>(sql`
             select status, completion_mode from close_run_tasks
              where id = ${taskId} and run_id = ${context.runId}
-               and org_id = ${context.orgId} for update`));
+               and org_id = ${context.orgId}`));
           if (!task.rows[0]) throw new CloseError("automation task not found");
           if (
             task.rows[0].status === "complete" ||

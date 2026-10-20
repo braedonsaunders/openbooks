@@ -311,7 +311,7 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
                   }
                   onClick={() =>
                     void mutate(
-                      `/api/hrm/processes/steps/${selected.id}/${selected.design?.approval && selected.approvalStatus !== 'approved' ? 'submit' : 'complete'}`,
+                      `/api/hrm/processes/steps/${selected.id}/${'complete'}`,
                       {
                         ...(selected.evidenceKind === 'attachment' ? { attachmentId } : {}),
                         ...(selected.evidenceKind === 'acknowledgement'
@@ -326,9 +326,7 @@ export function ProcessChecklistBody({ detail }: { detail: ProcessDetail }) {
                     )
                   }
                 >
-                  {selected.design?.approval && selected.approvalStatus !== 'approved'
-                    ? td('submitApproval')
-                    : t('processes.completeStep')}
+                  {t('processes.completeStep')}
                 </Button>
                 {selected.canSkip !== false ? (
                   <Button

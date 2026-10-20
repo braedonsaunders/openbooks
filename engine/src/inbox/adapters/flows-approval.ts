@@ -1,34 +1,21 @@
-/**
- * HR-15 flows_approval adapter — the approvals leg of the inbox.
- *
- * Wraps worklistApprovalsPage (the same paged union reader the inbox page
- * and the dashboard tile render from — documents, budgets, flow gates — so
- * the three can never disagree) and acts through decideGate /
- * delegateGate / decideDocumentApproval — the existing write path, never
- * a second one.
- *
- * Mapped legs: flow gates (payment runs included) and gateless documents
- * carry inbox actions. The budget leg is a decision item with its own
- * checker path — it stays on the inbox page's union table and is not an
- * inbox action.
- *
- * Dedupe: gates whose subject is owned by a dedicated inbox adapter are
- * excluded here and listed there instead (leave, change request,
- * timesheet week, expense report). One piece of work is one inbox item.
- */
+/** Native Flow approvals share one worklist and one gate decision path.
+ * Dedicated subject adapters own their gates so one decision appears once. */
 
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { TIMESHEET_WEEK_SUBJECT_KIND } from "../../flows/timesheet-weeks-adapter.ts";
 import { CREW_TIME_BATCH_SUBJECT_KIND } from "../../flows/crew-batches-adapter.ts";
 import {
-  decideDocumentApproval,
   worklistApprovalById,
-  worklistDocumentKindCounts,
   worklistApprovalsPage,
   type UnifiedApproval,
 } from "../../flows/approval-worklist.ts";
-import { decideGate, delegateGate, gateDecisionCapability, worklistGateKindCounts } from "../../flows/gates.ts";
+import {
+  decideGate,
+  delegateGate,
+  gateDecisionCapability,
+  worklistGateKindCounts,
+} from "../../flows/gates.ts";
 import { isUuid } from "../../platform/uuid.ts";
 import { toWorklistScope } from "../guard.ts";
 import { parseDelegationReason } from "../delegation.ts";
@@ -50,15 +37,23 @@ export const INBOX_OWNED_GATE_SUBJECTS: ReadonlySet<string> = new Set([
 /** Bounded head window: the inbox is a working list, not an archive scan. */
 export const INBOX_UNION_WINDOW = { offset: 0, limit: 100 } as const;
 
-async function gateItem(gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["gate"], ctx: InboxListContext): Promise<InboxItem | null> {
-  if (INBOX_OWNED_GATE_SUBJECTS.has(gate.subjectKind)) return null;
-  const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
-  const onBehalf = gate.onBehalfOf ? ` on behalf of ${gate.onBehalfOf.name}` : "";
+async function gateItem(
+  gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["gate"],
+  ctx: InboxListContext,
+): Promise<InboxItem | null> {
+  if (!ctx.approvalWorklistOwnsGates && INBOX_OWNED_GATE_SUBJECTS.has(gate.subjectKind)) return null;
+  const dueAt = gate.escalateAt
+    ? new Date(gate.escalateAt).toISOString()
+    : null;
+  const onBehalf = gate.onBehalfOf
+    ? ` on behalf of ${gate.onBehalfOf.name}`
+    : "";
   // Resolve the separation-of-duties outcome in advance through the same
   // native gate check the decide path enforces: a submitter/maker the
   // gate's prevent-self-approval excludes sees "Awaiting another approver"
   // with NO decision actions, never an Approve that refuses on click.
-  const awaitingAnother = (await gateDecisionCapability(gate.id, ctx.actorId)).sodBlocked;
+  const awaitingAnother = (await gateDecisionCapability(gate.id, ctx.actorId))
+    .sodBlocked;
   return {
     id: inboxItemId("flows_approval", `gate:${gate.id}`),
     kind: "flows_approval",
@@ -74,33 +69,26 @@ async function gateItem(gate: Extract<UnifiedApproval, { kind: "flow_gate" }>["g
     actions: awaitingAnother
       ? []
       : [
-          { key: "approve", label: "Approve", style: "primary", needsReason: false },
-          { key: "reject", label: "Reject", style: "danger", needsReason: true },
-          { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },
+          {
+            key: "approve",
+            label: "Approve",
+            style: "primary",
+            needsReason: false,
+          },
+          {
+            key: "reject",
+            label: "Reject",
+            style: "danger",
+            needsReason: true,
+          },
+          {
+            key: "delegate",
+            label: "Delegate",
+            style: "secondary",
+            needsReason: true,
+          },
         ],
     source: { kind: "flow_gate", id: gate.id },
-  };
-}
-
-function documentItem(
-  doc: Extract<UnifiedApproval, { kind: "document" }>["document"],
-): InboxItem | null {
-  if (doc.docKind === "expense_report") return null;
-  const createdAt = new Date(doc.submittedAt ?? doc.createdAt).toISOString();
-  return {
-    id: inboxItemId("flows_approval", `document:${doc.id}`),
-    kind: "flows_approval",
-    title: doc.documentNumber ? `${doc.docKind} ${doc.documentNumber}` : doc.docKind,
-    subtitle: doc.partyName ?? null,
-    dueAt: null,
-    createdAt,
-    priority: "normal",
-    subjectHref: `/inbox`,
-    actions: [
-      { key: "approve", label: "Approve", style: "primary", needsReason: false },
-      { key: "reject", label: "Reject", style: "danger", needsReason: true },
-    ],
-    source: { kind: "document", id: doc.id },
   };
 }
 
@@ -111,7 +99,10 @@ export const flowsApprovalAdapter: InboxAdapter = {
     // Honor the caller's window so every counted item is reachable by
     // paging; absent means the bounded default, never the whole table.
     const window = page
-      ? { offset: page.offset ?? 0, limit: page.limit ?? INBOX_UNION_WINDOW.limit }
+      ? {
+          offset: page.offset ?? 0,
+          limit: page.limit ?? INBOX_UNION_WINDOW.limit,
+        }
       : { ...INBOX_UNION_WINDOW };
     const approvals = await worklistApprovalsPage(
       ctx.orgId,
@@ -119,9 +110,13 @@ export const flowsApprovalAdapter: InboxAdapter = {
       {
         ...(scope?.roles ? { roles: scope.roles } : {}),
         ...(scope?.allowedSubsidiaryIds !== undefined
-          ? { allowedSubsidiaryIds: scope.allowedSubsidiaryIds === null ? null : new Set(scope.allowedSubsidiaryIds) }
+          ? {
+              allowedSubsidiaryIds:
+                scope.allowedSubsidiaryIds === null
+                  ? null
+                  : new Set(scope.allowedSubsidiaryIds),
+            }
           : {}),
-        ...(scope?.includeBudgets !== undefined ? { includeBudgets: scope.includeBudgets } : {}),
       },
       window,
     );
@@ -130,38 +125,40 @@ export const flowsApprovalAdapter: InboxAdapter = {
       if (item.kind === "flow_gate") {
         const mapped = await gateItem(item.gate, ctx);
         if (mapped) out.push(mapped);
-      } else if (item.kind === "document") {
-        const mapped = documentItem(item.document);
-        if (mapped) out.push(mapped);
       }
-      // The budget leg is intentionally unmapped (see header).
     }
     return out;
   },
-  async lookup(ctx: InboxListContext, sourceId: string): Promise<InboxItem | null> {
+  async lookup(
+    ctx: InboxListContext,
+    sourceId: string,
+  ): Promise<InboxItem | null> {
     const separator = sourceId.indexOf(":");
     if (separator < 1) return null;
     const leg = sourceId.slice(0, separator);
     const id = sourceId.slice(separator + 1);
-    if (!isUuid(id) || (leg !== "gate" && leg !== "document")) return null;
-    const item = await worklistApprovalById(ctx.orgId, ctx.actorId, toWorklistScope(ctx), leg, id);
+    if (!isUuid(id) || leg !== "gate") return null;
+    const item = await worklistApprovalById(
+      ctx.orgId,
+      ctx.actorId,
+      toWorklistScope(ctx),
+      id,
+    );
     if (!item) return null;
     if (item.kind === "flow_gate") return gateItem(item.gate, ctx);
-    if (item.kind === "document") return documentItem(item.document);
     return null;
   },
   async count(ctx: InboxListContext): Promise<number> {
     const scope = toWorklistScope(ctx);
-    const [gateCounts, documentCounts] = await Promise.all([
-      worklistGateKindCounts(ctx.orgId, ctx.actorId, scope.roles, scope.allowedSubsidiaryIds),
-      worklistDocumentKindCounts(ctx.orgId, ctx.actorId, scope.allowedSubsidiaryIds),
-    ]);
+    const gateCounts = await worklistGateKindCounts(
+      ctx.orgId,
+      ctx.actorId,
+      scope.roles,
+      scope.allowedSubsidiaryIds,
+    );
     let count = 0;
     for (const [kind, amount] of gateCounts) {
-      if (!INBOX_OWNED_GATE_SUBJECTS.has(kind)) count += amount;
-    }
-    for (const [kind, amount] of documentCounts) {
-      if (kind !== "expense_report") count += amount;
+      if (ctx.approvalWorklistOwnsGates || !INBOX_OWNED_GATE_SUBJECTS.has(kind)) count += amount;
     }
     return count;
   },
@@ -175,11 +172,23 @@ export const flowsApprovalAdapter: InboxAdapter = {
     const id = sourceId.slice(sep + 1);
     if (leg === "gate") {
       if (actionKey === "approve") {
-        await decideGate({ gateId: id, decision: "approved", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+        await decideGate({
+          gateId: id,
+          decision: "approved",
+          userId: ctx.actorId,
+          comment: reason,
+          allowedSubsidiaryIds,
+        });
         return;
       }
       if (actionKey === "reject") {
-        await decideGate({ gateId: id, decision: "rejected", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+        await decideGate({
+          gateId: id,
+          decision: "rejected",
+          userId: ctx.actorId,
+          comment: reason,
+          allowedSubsidiaryIds,
+        });
         return;
       }
       if (actionKey === "delegate") {
@@ -187,20 +196,18 @@ export const flowsApprovalAdapter: InboxAdapter = {
         // "user:<uuid>: <note>". delegateGate resolves the target and
         // persists the note on the delegate's notice and the audit row.
         const delegation = parseDelegationReason(reason);
-        await delegateGate(id, ctx.actorId, delegation.toUserId, allowedSubsidiaryIds, delegation.note);
+        await delegateGate(
+          id,
+          ctx.actorId,
+          delegation.toUserId,
+          allowedSubsidiaryIds,
+          delegation.note,
+        );
         return;
       }
     }
-    if (leg === "document") {
-      if (actionKey === "approve") {
-        await decideDocumentApproval(ctx.orgId, id, ctx.actorId, "approved", reason, allowedSubsidiaryIds);
-        return;
-      }
-      if (actionKey === "reject") {
-        await decideDocumentApproval(ctx.orgId, id, ctx.actorId, "rejected", reason, allowedSubsidiaryIds);
-        return;
-      }
-    }
-    throw new Error(`action ${JSON.stringify(actionKey)} is not available on this approval`);
+    throw new Error(
+      `action ${JSON.stringify(actionKey)} is not available on this approval`,
+    );
   },
 };

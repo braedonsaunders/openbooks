@@ -1,9 +1,13 @@
+import { installEngineSeams } from "../../composition/install.ts";
+import { seedApprovalFlow } from "../../testing/fixtures.ts";
+import { decideGate } from "../../flows/gates.ts";
 import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../platform/db.ts";
 import { perfError, setupPerformanceHarness, withHarness } from "../../testing/hrm-harness.ts";
 import {
+  closeCalibrationSession,
   calibrationPotentialOptions,
   createCalibrationSession,
   getCalibrationSession,
@@ -151,5 +155,35 @@ test("a template with no scale labels offers no potential options", async () => 
       await calibrationPotentialOptions({ orgId: h.org.orgId, actorId: h.hrId, sessionId: session.id }),
       [],
     );
+  });
+});
+
+for(const count of [0,10])test(`calibration publication applies exactly its ${count} tenant Flow gates`,async()=>{
+  await withHarness(()=>setupScalesHarness(),async h=>{
+    installEngineSeams();
+    const entryId=await openEntryId(h);
+    await setCalibratedRating({orgId:h.org.orgId,actorId:h.hrId,entryId,calibratedRating:"3",justification:"Reviewed the same supporting evidence"});
+    const sessionId=(await db.execute<{session_id:string}>(sql`select session_id from hrm_calibration_entries where org_id=${h.org.orgId} and id=${entryId}`)).rows[0]!.session_id;
+    for(let index=0;index<count;index++)await seedApprovalFlow(h.org.orgId,{subjectKind:"hrm_calibration_session",assignees:[{type:"user",userId:h.hrId}],mode:"all",preventSelfApproval:false});
+    const submitted=await closeCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId});
+    assert.equal(submitted.status,count?"open":"closed");
+    assert.equal(submitted.approvalPending,count>0);
+    const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.org.orgId} and subject_kind='hrm_calibration_session' and subject_id=${sessionId} order by id`)).rows;
+    assert.equal(gates.length,count);
+    for(let index=0;index<gates.length;index++){
+      const before=(await getCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId}));
+      assert.equal(before.status,"open");
+      await assert.rejects(setCalibratedRating({orgId:h.org.orgId,actorId:h.hrId,entryId,calibratedRating:"5",justification:"Change submitted ratings"}),/Recall the pending calibration/);
+      await decideGate({gateId:gates[index]!.id,userId:h.hrId,decision:"approved"});
+    }
+    const closed=await getCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId});
+    assert.equal(closed.status,"closed");
+    assert.equal(closed.entries[0]?.calibratedRating,"3.0000");
+    const published=(await db.execute<{status:string;calibrated_rating:string}>(sql`select r.status,r.calibrated_rating::text from hrm_reviews r join hrm_calibration_entries e
+      on e.org_id=r.org_id and e.review_id=r.id where e.org_id=${h.org.orgId} and e.id=${entryId}`)).rows[0]!;
+    assert.equal(published.status,"calibrated");
+    assert.equal(published.calibrated_rating,"3.0000");
+    assert.deepEqual(await closeCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId}),closed,"replay reads the same published session");
+    await assert.rejects(setCalibratedRating({orgId:h.org.orgId,actorId:h.hrId,entryId,calibratedRating:"4",justification:"Change published ratings"}),/closed/);
   });
 });

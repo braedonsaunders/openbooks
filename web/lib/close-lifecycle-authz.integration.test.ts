@@ -68,7 +68,8 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
       await withOrgContext(org.orgId, async () => {
         if (boundary === 'creation') assert.equal((await create(request(target))).status,404)
         if (boundary === 'actions') {
-          for (const verb of ['refresh','request_approval','attest','close','publish']) assert.equal((await action(request({action:verb}),params)).status,404,verb)
+          for (const verb of ['refresh','request_approval','close','publish']) assert.equal((await action(request({action:verb}),params)).status,404,verb)
+          assert.equal((await action(request({action:'attest'}),params)).status,400,'the removed alternate approval action is refused')
         }
         if (boundary === 'task') assert.equal((await task(request({action:'start'}),params)).status,404)
         if (boundary === 'evidence') assert.equal((await evidence(request({taskId,evidenceType:'note',label:'Unauthorized note',snapshot:{note:'test'}}),params)).status,404)
@@ -113,7 +114,7 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
           await assert.rejects(applicationClose.startApplicationCloseRun(context,{...target,subsidiaryIds:[org.subsidiaryId],idempotencyKey:randomUUID()}),{status:403})
           await assert.rejects(applicationClose.advanceCloseRun(context,{runId,action:'refresh',idempotencyKey:randomUUID()}),{status:403})
           await assert.rejects(applicationClose.createReopenRequest(context,{...target,subsidiaryId:org.subsidiaryId,modules:['gl'],reason:'Review',idempotencyKey:randomUUID()}),{status:403})
-          await assert.rejects(applicationClose.decideReopenRequest(context,{requestId:randomUUID(),approve:true,idempotencyKey:randomUUID()}),{status:403})
+          await assert.rejects(applicationClose.submitReopenRequest(context,{requestId:randomUUID(),idempotencyKey:randomUUID()}),{status:404})
         }
         if (boundary === 'locks') {
           const lock = {...target,action:'set-lock',module:'gl',state:'soft_closed',reason:'Review in progress'}

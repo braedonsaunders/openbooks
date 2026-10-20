@@ -13,7 +13,6 @@
 import {
   BENEFIT_AWARD_STATUSES as SCHEMA_AWARD_STATUSES,
   BENEFIT_PROGRAM_ALLOCATIONS as SCHEMA_ALLOCATIONS,
-  BENEFIT_PROGRAM_APPROVAL_MODES as SCHEMA_APPROVAL_MODES,
   BENEFIT_PROGRAM_DELIVERY as SCHEMA_DELIVERY,
   BENEFIT_PROGRAM_FAMILIES as SCHEMA_FAMILIES,
   BENEFIT_PROGRAM_FREQUENCIES as SCHEMA_FREQUENCIES,
@@ -24,9 +23,6 @@ import {
   BENEFIT_PROGRAM_STATUSES as SCHEMA_STATUSES,
   BENEFIT_PROGRAM_VALUATION as SCHEMA_VALUATION,
 } from "@openbooks/schema/src/benefits-programs.ts";
-
-export const BENEFIT_APPROVAL_MODES = SCHEMA_APPROVAL_MODES;
-export type BenefitApprovalMode = (typeof BENEFIT_APPROVAL_MODES)[number];
 
 export const BENEFIT_PROGRAM_FAMILIES = SCHEMA_FAMILIES;
 export type BenefitProgramFamily = (typeof BENEFIT_PROGRAM_FAMILIES)[number];
@@ -83,7 +79,6 @@ export interface BenefitProgram {
   readonly effectiveFrom: string;
   readonly effectiveTo: string | null;
   readonly payComponentId: string | null;
-  readonly approvalMode: BenefitApprovalMode;
   readonly deliveryMethod: BenefitDeliveryMethod;
   readonly valuation: BenefitValuation;
   readonly metric: BenefitMetric | null;
@@ -107,7 +102,9 @@ export interface BenefitProgram {
   /** Project-margin programs: open purchase commitments count as project cost. */
   readonly includeOpenCommitments: boolean;
   /** Approved-hour measures count only these time classifications (empty counts all). */
-  readonly hourClassifications: readonly ("regular" | "overtime" | "double_time" | "other")[];
+  readonly hourClassifications: readonly (
+    "regular" | "overtime" | "double_time" | "other"
+  )[];
   /** Named members only, or every employee of the employer in active service during the period. */
   readonly eligibility: "members" | "all_employees";
   readonly allocation: BenefitAllocation;

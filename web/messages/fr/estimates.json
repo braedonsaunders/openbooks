@@ -52,7 +52,7 @@
     "timingAdvance": "D’avance",
     "timingArrears": "À terme échu",
     "singlePeriodNote": "Les paliers multi-périodes exigent les abonnements avancés — sinon cette ligne se facture en une seule période.",
-    "approvalHint": "Les remises au-delà de {threshold} % — ou toute ligne sous catalogue — passent par l’approbation Flows avant envoi.",
+    "approvalHint": "Les approbations des devis sont définies dans les Flows de votre organisation.",
     "sendForSignature": "Envoyer pour signature",
     "signerName": "Nom du signataire",
     "signerEmail": "E-mail du signataire",

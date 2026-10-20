@@ -1,3 +1,10 @@
+import { lockApprovalSubject } from "../platform/approval-routing.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { allocationScopeVisible } from "../organization/allocation-scope.ts";
+import {
+  routeNativeApproval,
+  readNativeApprovalDecision,
+} from "../platform/approval-routing.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { resolveAccountGroups } from "../records/account-groups.ts";
@@ -138,7 +145,7 @@ export interface AllocationRunRecord {
  * conditions (scheduler and close automation pass their own source).
  */
 export interface PostAllocationRunOptions {
-  viaApproval?: boolean;
+  approvalRunId?: string;
   eventSource?: "api" | "schedule" | "close_automation";
 }
 
@@ -1756,23 +1763,7 @@ async function lockRun(tx: Tx, runId: string): Promise<RunRow> {
   return run;
 }
 
-/**
- * Open the version's approval flow for a previewed run: validate the
- * configured flow, dispatch the run's `on_submit` flows, recheck the
- * allocations fence, and park the run in `pending_approval` with
- * `flow_run_id` stamped. NO journal is written here — the flow engine's
- * release posts it (actor = approver) or records the rejection. Fails closed
- * when the configured flow is missing, disabled, for another subject kind,
- * or produces no gate: the run stays previewed.
- *
- * The dispatch runs BEFORE the fenced recheck on purpose. The flow engine
- * rechecks its own feature under the same per-org feature-gate advisory lock
- * in a separate transaction: dispatching while this transaction holds that
- * lock deadlocks the two writers until statement timeout. A disable that
- * lands between dispatch and the stamp still refuses — the dispatch is
- * cancelled and this transaction rolls back, so the run stays previewed
- * with zero writes, exactly as if the fence had run first.
- */
+/** Freeze native Flow routing for the exact preview; no gates permit immediate posting. */
 async function openRunApproval(
   tx: Tx,
   opts: {
@@ -1781,77 +1772,32 @@ async function openRunApproval(
     ruleKey: string;
     actorId: string;
     reason: string;
-    approvalFlowId: string;
     eventSource: "api" | "schedule" | "close_automation";
     fenceVerb: string;
   },
-): Promise<AllocationRunRecord> {
+): Promise<AllocationRunRecord | null> {
   const { orgId, run } = opts;
-  const flow = (await tx.execute<{ id: string; subject_kind: string; enabled: boolean }>(sql`
-    select id, subject_kind, enabled from flows
-     where id = ${opts.approvalFlowId} and org_id = ${orgId} for share`)).rows[0];
-  if (!flow) {
+  await assertAllocationsEnabled(tx, orgId, opts.fenceVerb);
+  const routing = await routeNativeApproval({
+    orgId,
+    actorId: opts.actorId,
+    subjectKind: "allocation_run",
+    subjectId: run.id,
+  });
+  if (routing.policy.kind === "ungated") {
+    await writeAudit(tx, orgId, run.id, opts.actorId, {
+      mode: "allocation_submission",
+      submissionId: routing.submissionId,
+      policy: routing.policy,
+    });
+    return null;
+  }
+  if (!routing.gatingRunId)
     throw new AllocationRunError(
       "INVALID",
-      `allocation approval flow ${opts.approvalFlowId} is not configured for this organization`,
+      "The submitted allocation has no pending Flow gate.",
     );
-  }
-  if (flow.subject_kind !== "allocation_run") {
-    throw new AllocationRunError(
-      "INVALID",
-      `allocation approval flow ${opts.approvalFlowId} is not an allocation_run flow`,
-    );
-  }
-  if (!flow.enabled) {
-    throw new AllocationRunError("INVALID", `allocation approval flow ${opts.approvalFlowId} is not enabled`);
-  }
-  // Break the static import cycle (the allocation adapter calls back into
-  // postAllocationRun on release).
-  const { runRecordFlows, cancelDispatchRuns, dispatchFailureReason, findGatingRun } =
-    await import("../flows/index.ts");
-  const dispatched = await runRecordFlows(
-    { kind: "on_submit", source: opts.eventSource },
-    "allocation_run",
-    run.id,
-    { orgId, userId: opts.actorId },
-  );
-  // Fail closed FIRST, before looking at gates: when ANY flow in the dispatch
-  // failed, the approval set is incomplete — even the configured flow's gate
-  // must not park the run, or its approval would release a run whose other
-  // approval never existed. Cancel everything the dispatch opened and refuse;
-  // the run stays previewed and no journal exists.
-  if (dispatched.failed) {
-    await cancelDispatchRuns(orgId, dispatched.runs.map((item) => item.runId), {
-      actorId: opts.actorId,
-    });
-    const cause = dispatchFailureReason(dispatched) ?? "allocation approval routing failed";
-    throw new AllocationRunError("INVALID", `allocation approval routing failed: ${cause}`);
-  }
-  const gated = findGatingRun(dispatched, opts.approvalFlowId);
-  if (!gated) {
-    // Fail closed like close approval: cancel anything the dispatch opened
-    // so a half-routed approval cannot linger, then refuse — the run stays
-    // previewed and no journal exists.
-    await cancelDispatchRuns(orgId, dispatched.runs.map((item) => item.runId), {
-      actorId: opts.actorId,
-    });
-    throw new AllocationRunError(
-      "INVALID",
-      `allocation approval flow ${opts.approvalFlowId} produced no approval gate`,
-    );
-  }
-  // Fenced recheck after the dispatch (see the header comment for why the
-  // fence cannot precede it): a disable that landed after preview refuses
-  // here, never parks the run. The dispatch is cancelled first so no
-  // half-routed approval lingers, and the throw rolls this transaction back.
-  try {
-    await assertAllocationsEnabled(tx, orgId, opts.fenceVerb);
-  } catch (error) {
-    await cancelDispatchRuns(orgId, dispatched.runs.map((item) => item.runId), {
-      actorId: opts.actorId,
-    });
-    throw error;
-  }
+  const gated = { runId: routing.gatingRunId };
   await tx.execute(sql`
     update allocation_runs
        set status = 'pending_approval', flow_run_id = ${gated.runId},
@@ -1861,7 +1807,8 @@ async function openRunApproval(
   await writeAudit(tx, orgId, run.id, opts.actorId, {
     mode: "allocation_run_approval_requested",
     reason: opts.reason,
-    approvalFlowId: opts.approvalFlowId,
+    submissionId: routing.submissionId,
+    policy: routing.policy,
     flowRunId: gated.runId,
   });
   return toRecord({ ...run, status: "pending_approval", flow_run_id: gated.runId });
@@ -1873,9 +1820,8 @@ async function openRunApproval(
  * from the STORED computation, stamp lineage, and flip previewed→posted.
  * At most one posted run per (rule, period, book, subsidiary).
  *
- * When the run's version names an approval_flow_id (and this call is not the
- * approval engine's release), the run is NOT posted: the approval flow opens
- * and the run waits in pending_approval instead.
+ * Tenant Flow gates hold posting until all configured decisions finish.
+ * Successful zero-gate routing permits the native posting in this transaction.
  */
 export async function postAllocationRun(
   runId: string,
@@ -1885,9 +1831,39 @@ export async function postAllocationRun(
 ): Promise<AllocationRunRecord> {
   requireActor(actorId);
   const cleanReason = requireReason(reason, "posting");
-  return inDbTransaction(async (tx) => {
-    const run = await lockRun(tx, runId);
-    if (opts.viaApproval) {
+  return withOrgTransaction(await readRunOrgId(runId), () =>
+    inDbTransaction(async (tx) => {
+      await lockApprovalSubject(
+        await readRunOrgId(runId),
+        "allocation_run",
+        runId,
+      );
+      const run = await lockRun(tx, runId);
+      const decision = opts.approvalRunId
+        ? await readNativeApprovalDecision({
+            orgId: run.org_id,
+            actorId,
+            subjectKind: "allocation_run",
+            subjectId: runId,
+            outcome: "approved",
+            approvalRunId: opts.approvalRunId,
+          })
+        : null;
+      if (opts.approvalRunId && !decision)
+        throw new AllocationRunError(
+          "INVALID",
+          "Complete the configured allocation Flow gates before posting.",
+        );
+      const scope = await lockActorCommandAuthority(
+        tx,
+        run.org_id,
+        actorId,
+        run.subsidiary_id,
+        decision ? "allocations.approve" : "allocations.run",
+      );
+      if (!allocationScopeVisible(scope, run.subsidiary_id, run.computation))
+        throw new AllocationRunError("NOT_FOUND", "Allocation run not found.");
+      if (Boolean(decision)) {
       // The approval engine's release: the run waited in pending_approval
       // for exactly this call. Anything else is a double-release or a
       // lifecycle violation — never post it.
@@ -1900,19 +1876,17 @@ export async function postAllocationRun(
     } else if (run.status !== "previewed") {
       throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be posted`);
     }
-    const orgId = run.org_id;
-    // No fence yet: the approval branch below dispatches flows first and the
-    // flow engine takes this same advisory lock in its own transaction, so
-    // fencing here would deadlock the dispatch. Each branch fences before
-    // its own writes instead (the approval stamp inside openRunApproval, the
-    // journal below for the direct post).
-    const period = await loadPeriod(tx, orgId, run.period_id);
-    // The preview's world may have moved on (rule deactivated, version
-    // retired): re-check the head and the pinned version before money moves,
-    // the same guards preview and rerun already enforce.
-    const rule = await loadRule(tx, orgId, run.rule_id);
-    const ruleKey = rule.key;
-    const version = (await tx.execute<VersionRow>(sql`
+      const orgId = run.org_id;
+      // The native transaction keeps the subject and period fences through
+      // its own writes instead (the approval stamp inside openRunApproval, the
+      // journal below for the direct post).
+      const period = await loadPeriod(tx, orgId, run.period_id);
+      // The preview's world may have moved on (rule deactivated, version
+      // retired): re-check the head and the pinned version before money moves,
+      // the same guards preview and rerun already enforce.
+      const rule = await loadRule(tx, orgId, run.rule_id);
+      const ruleKey = rule.key;
+      const version = (await tx.execute<VersionRow>(sql`
       select id, org_id, rule_id, status, effective_from::text, effective_to::text,
              book_scope, book_ids, account_scope, dimension_filters, source_measure,
              basis_kind, driver_id, driver_as_of, target_kind, dynamic_target, impact,
@@ -1920,36 +1894,35 @@ export async function postAllocationRun(
              memo_template, line_description_template, definition_hash, solve_method
         from allocation_rule_versions
        where id = ${run.version_id} and org_id = ${orgId} for share`)).rows[0];
-    if (!version || version.status !== "published") {
+      if (!version || version.status !== "published") {
       throw new AllocationRunError(
         "INVALID",
         `allocation rule ${ruleKey} version ${run.version_id} is ${version?.status ?? "missing"} and cannot take postings`,
       );
     }
-    // The preview may predate the boundary proof (or a mid-period version
-    // may have been hand-published since): re-prove the run's period before
-    // money moves or an approval gate opens.
-    await assertNoVersionEdgeInsidePeriod(tx, { id: rule.id, org_id: orgId, key: ruleKey }, period);
-    const approvalFlowId = version?.approval_flow_id ?? null;
-    if (approvalFlowId && !opts.viaApproval) {
-      return openRunApproval(tx, {
-        orgId,
-        run,
-        ruleKey,
-        actorId,
-        reason: cleanReason,
-        approvalFlowId,
-        eventSource: opts.eventSource ?? "api",
-        fenceVerb: "post",
-      });
-    }
-    // Fenced recheck before the journal write: a disable that landed after
-    // preview/submit must refuse, never post.
-    await assertAllocationsEnabled(tx, orgId, "post");
-    // An approved rerun replacement swaps atomically: unwind the superseded
-    // posted run FIRST (frees the one-posted-run slot), then post the
-    // replacement below in the same transaction.
-    if (opts.viaApproval && run.reverses_run_id) {
+      // The preview may predate the boundary proof (or a mid-period version
+      // may have been hand-published since): re-prove the run's period before
+      // money moves or an approval gate opens.
+      await assertNoVersionEdgeInsidePeriod(tx, { id: rule.id, org_id: orgId, key: ruleKey }, period);
+      if (!decision) {
+        const waiting = await openRunApproval(tx, {
+          orgId,
+          run,
+          ruleKey,
+          actorId,
+          reason: cleanReason,
+          eventSource: opts.eventSource ?? "api",
+          fenceVerb: "post",
+        });
+        if (waiting) return waiting;
+      }
+      // Fenced recheck before the journal write: a disable that landed after
+      // preview/submit must refuse, never post.
+      await assertAllocationsEnabled(tx, orgId, "post");
+      // An approved rerun replacement swaps atomically: unwind the superseded
+      // posted run FIRST (frees the one-posted-run slot), then post the
+      // replacement below in the same transaction.
+      if (run.reverses_run_id) {
       await reverseSupersededForApproval(tx, {
         orgId,
         actorId,
@@ -1959,8 +1932,8 @@ export async function postAllocationRun(
         reason: cleanReason,
       });
     }
-    let journalEntryId: string | null = null;
-    try {
+      let journalEntryId: string | null = null;
+      try {
       journalEntryId = await postStoredJournal(tx, {
         orgId,
         actorId,
@@ -1981,18 +1954,19 @@ export async function postAllocationRun(
       }
       throw error;
     }
-    await tx.execute(sql`
+      await tx.execute(sql`
       update allocation_runs
          set status = 'posted', journal_entry_id = ${journalEntryId},
              completed_at = now(), updated_at = now(), updated_by = ${actorId}
        where id = ${run.id} and org_id = ${orgId}`);
-    await writeAudit(tx, orgId, run.id, actorId, {
+      await writeAudit(tx, orgId, run.id, actorId, {
       mode: "allocation_run_post",
       reason: cleanReason,
       journalEntryId,
     });
-    return toRecord({ ...run, status: "posted", journal_entry_id: journalEntryId });
-  });
+      return toRecord({ ...run, status: "posted", journal_entry_id: journalEntryId });
+    }),
+  );
 }
 
 /** Subsidiaries whose GL a run touches: unwinding it must keep each open. */
@@ -2166,30 +2140,29 @@ export async function rerunAllocationRun(
   return withOrgTransaction(scopeOrgId, () =>
     inDbTransaction(async (tx) => {
       const run = await lockRun(tx, runId);
-    if (run.status !== "posted" && run.status !== "previewed" && run.status !== "reversed") {
+      if (run.status !== "posted" && run.status !== "previewed" && run.status !== "reversed") {
       throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be re-run`);
     }
-    const orgId = run.org_id;
-    // Fence placement matters here (see the version-load comment below): the
-    // direct branch fences before any write, while the approval branch
-    // dispatches flows first and fences inside openRunApproval. Every
-    // refusal rolls this whole transaction back, so all paths land zero
-    // writes.
-    const period = await loadPeriod(tx, orgId, run.period_id);
-    const book = await loadBook(tx, orgId, run.book_id);
-    if (run.subsidiary_id) await requireSubsidiary(tx, orgId, run.subsidiary_id);
-    const rule = await loadRule(tx, orgId, run.rule_id);
-    const version = await loadVersionInForce(tx, rule, period);
-    // The direct branch fences here, before any write (and before the
-    // idempotent early-return, so a disabled feature refuses by name even
-    // when there is nothing to recompute). The approval branch must NOT
-    // fence yet: it dispatches flows first and the flow engine takes this
-    // same advisory lock in its own transaction — openRunApproval fences
-    // after the dispatch instead.
-    const needsApproval = !!version.approval_flow_id;
-    if (!needsApproval) await assertAllocationsEnabled(tx, orgId, "re-run");
-    const targets = await loadTargets(tx, orgId, version.id);
-    const built = await buildComputation(
+      const orgId = run.org_id;
+      // Fence placement matters here (see the version-load comment below): the
+      // direct branch fences before any write, while the approval branch
+      // dispatches flows first and fences inside openRunApproval. Every
+      // refusal rolls this whole transaction back, so all paths land zero
+      // writes.
+      const period = await loadPeriod(tx, orgId, run.period_id);
+      const book = await loadBook(tx, orgId, run.book_id);
+      if (run.subsidiary_id) await requireSubsidiary(tx, orgId, run.subsidiary_id);
+      const rule = await loadRule(tx, orgId, run.rule_id);
+      const version = await loadVersionInForce(tx, rule, period);
+      // The direct branch fences here, before any write (and before the
+      // idempotent early-return, so a disabled feature refuses by name even
+      // when there is nothing to recompute). The approval branch must NOT
+      // fence yet: it dispatches flows first and the flow engine takes this
+      // same advisory lock in its own transaction — openRunApproval fences
+      // after the dispatch instead.
+      await assertAllocationsEnabled(tx, orgId, "re-run");
+      const targets = await loadTargets(tx, orgId, version.id);
+      const built = await buildComputation(
       tx,
       {
         orgId,
@@ -2203,14 +2176,14 @@ export async function rerunAllocationRun(
       },
       deps,
     );
-    if (built.fingerprint === run.fingerprint) {
-      // No writes follow on this path, so fencing here cannot deadlock —
-      // but the verb stays gated: a disabled feature refuses by name rather
-      // than reporting a quiet idempotent success.
-      if (needsApproval) await assertAllocationsEnabled(tx, orgId, "re-run");
-      return { run: toRecord(run), idempotent: true };
-    }
-    const fresh = await insertRunRow(tx, {
+      if (built.fingerprint === run.fingerprint) {
+        // No writes follow on this path, so fencing here cannot deadlock —
+        // but the verb stays gated: a disabled feature refuses by name rather
+        // than reporting a quiet idempotent success.
+        await assertAllocationsEnabled(tx, orgId, "re-run");
+        return { run: toRecord(run), idempotent: true };
+      }
+      const fresh = await insertRunRow(tx, {
       orgId,
       ruleId: rule.id,
       actorId,
@@ -2222,13 +2195,22 @@ export async function rerunAllocationRun(
       bookId: book.id,
       subsidiaryId: run.subsidiary_id,
     });
-    // A re-run under a flow-governed version needs fresh approval: the new
-    // run waits in pending_approval instead of posting (same path as post).
-    // A posted old run stays posted and effective until that approval lands
-    // (it is not touched below) — the release swaps atomically, and a
-    // rejection leaves the old run standing with nothing to clean up.
-    if (version.approval_flow_id) {
-      if (run.status === "reversed") {
+      // A re-run under a flow-governed version needs fresh approval: the new
+      // run waits in pending_approval instead of posting (same path as post).
+      // A posted old run stays posted and effective until that approval lands
+      // (it is not touched below) — the release swaps atomically, and a
+      // rejection leaves the old run standing with nothing to clean up.
+      const waiting = await openRunApproval(tx, {
+        orgId,
+        run: fresh,
+        ruleKey: rule.key,
+        actorId,
+        reason: cleanReason,
+        eventSource: "api",
+        fenceVerb: "re-run",
+      });
+      if (waiting) {
+        if (run.status === "reversed") {
         // Already unwound (reversal_entry_id kept): just chain forward.
         await tx.execute(sql`
           update allocation_runs
@@ -2242,33 +2224,23 @@ export async function rerunAllocationRun(
                  completed_at = now(), updated_at = now(), updated_by = ${actorId}
            where id = ${run.id} and org_id = ${orgId}`);
       }
-      const waiting = await openRunApproval(tx, {
-        orgId,
-        run: fresh,
-        ruleKey: rule.key,
-        actorId,
-        reason: cleanReason,
-        approvalFlowId: version.approval_flow_id,
-        eventSource: "api",
-        fenceVerb: "re-run",
-      });
-      await tx.execute(sql`
+        await tx.execute(sql`
         update allocation_runs
            set reverses_run_id = ${run.id}
          where id = ${fresh.id} and org_id = ${orgId}`);
-      await writeAudit(tx, orgId, fresh.id, actorId, {
+        await writeAudit(tx, orgId, fresh.id, actorId, {
         mode: "allocation_run_rerun",
         reason: cleanReason,
         reversesRunId: run.id,
         flowRunId: waiting.flowRunId,
       });
-      return {
+        return {
         run: { ...waiting, reversesRunId: run.id },
         idempotent: false,
       };
-    }
-    const reversalDate = opts.reversalDate ?? period.ends_on;
-    if (run.status === "posted") {
+      }
+      const reversalDate = opts.reversalDate ?? period.ends_on;
+      if (run.status === "posted") {
       await assertPeriodOpen(tx, orgId, period, run.book_id, touchedSubsidiaries(run));
       const reversalEntryId = await reverseStoredJournal(tx, {
         orgId,
@@ -2298,8 +2270,8 @@ export async function rerunAllocationRun(
                completed_at = now(), updated_at = now(), updated_by = ${actorId}
          where id = ${run.id} and org_id = ${orgId}`);
     }
-    let journalEntryId: string | null = null;
-    try {
+      let journalEntryId: string | null = null;
+      try {
       journalEntryId = await postStoredJournal(tx, {
         orgId,
         actorId,
@@ -2320,19 +2292,19 @@ export async function rerunAllocationRun(
       }
       throw error;
     }
-    await tx.execute(sql`
+      await tx.execute(sql`
       update allocation_runs
          set status = 'posted', journal_entry_id = ${journalEntryId},
              reverses_run_id = ${run.id},
              completed_at = now(), updated_at = now(), updated_by = ${actorId}
        where id = ${fresh.id} and org_id = ${orgId}`);
-    await writeAudit(tx, orgId, fresh.id, actorId, {
+      await writeAudit(tx, orgId, fresh.id, actorId, {
       mode: "allocation_run_rerun",
       reason: cleanReason,
       reversesRunId: run.id,
       journalEntryId,
     });
-    return {
+      return {
       run: toRecord({ ...fresh, status: "posted", journal_entry_id: journalEntryId, reverses_run_id: run.id }),
       idempotent: false,
     };
@@ -2345,7 +2317,3 @@ export async function rerunAllocationRun(
  * `queryLineage`) — the single run/list/detail surface shared with the Runs
  * tab. period-run.ts owns the lifecycle (preview/post/reverse/rerun) only.
  */
-
-
-
-

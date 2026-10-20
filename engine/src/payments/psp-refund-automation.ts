@@ -1,5 +1,10 @@
+import {
+  lockApprovalSubject,
+  requestNativeCommandApproval,
+  readNativeApprovalDecision,
+} from "../platform/approval-routing.ts";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../platform/db.ts";
+import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
@@ -9,7 +14,8 @@ import { lockActorCommandAuthority } from "../organization/actor-command-authori
 import { refundSource, refundSourceOf, refundDelta, postedAttemptRefunds } from "./refund-source.ts";
 import { returnFinancialStage, withdrawReturnReceipts } from "./psp-return-stages.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
-import { PSP_AUTOMATION_SYSTEM_ACTOR_ID, type PspAutomationPolicy, type ProviderRefundEvent, type RefundAutomationOutcome, PspAutomationError, loadAutomationContext } from "./psp-automation-context.ts";
+import { PSP_AUTOMATION_SYSTEM_ACTOR_ID, type ProviderRefundEvent, type RefundAutomationOutcome, PspAutomationError, loadAutomationContext,
+} from "./psp-automation-context.ts";
 import { insertDisputeRow, transitionDisputeRow, disputeRow, parkForReview, type ProviderDisputeEvent, type PendingAction, findDisputeByRef, historyHasEvent, pendingActionOf, pendingEventOf, parkDisputeForReview, asDocIds } from "./psp-automation-disputes.ts";
 import { voidAndReissueRemainder, refundAgainstCredit, openCreditCovering, setAttemptRefunded, openDisputeHold } from "./psp-automation-postings.ts";
 import { transitionDisputeOutcome, eventFee } from "./psp-automation-dispute-outcomes.ts";
@@ -50,7 +56,7 @@ import { transitionDisputeOutcome, eventFee } from "./psp-automation-dispute-out
 export async function processProviderRefundEvent(
   orgId: string,
   event: ProviderRefundEvent,
-  opts: { forcePolicy?: PspAutomationPolicy } = {},
+  opts: { resumeReview?: true } = {},
 ): Promise<RefundAutomationOutcome> {
   return withOrg(orgId, async () => {
     if (!(await orgFeatureEnabled(orgId, "onlinePayments"))) {
@@ -83,7 +89,7 @@ export async function processProviderRefundEvent(
         (persistedSource.currency !== null && persistedSource.currency !== source.currency))) {
       return parkForReview(orgId, disputeId, "The redelivered refund evidence changes its currency or amount basis; reconcile its provider identity before resuming.");
     }
-    const evidence = completingEvidence ? source : persistedSource ?? source;
+    const evidence = completingEvidence ? source : (persistedSource ?? source);
     if (!persistedSource || completingEvidence) {
       const recorded = await db.execute(sql`update payment_disputes
         set status_history = status_history || ${JSON.stringify({ at: new Date().toISOString(), refundSource: source })}::jsonb
@@ -106,8 +112,12 @@ export async function processProviderRefundEvent(
     const amountWritten = await db.execute(sql`update payment_disputes set amount = ${refundAmount}
       where org_id = ${orgId} and id = ${disputeId} and status = 'pending_review'`);
     if (amountWritten.rowCount !== 1) throw new PspAutomationError("The refund review changed before its amount could be recorded.");
-    if ((opts.forcePolicy ?? ctx.policy) === "review") return parkForReview(orgId, disputeId,
-      `Refund ${event.providerRef ?? event.providerEventId} needs approval before posting.`);
+    if (await reviewHasPendingGates(orgId, disputeId))
+      return parkForReview(
+        orgId,
+        disputeId,
+        "The provider return has a pending Flow submission. Recall and resubmit if its provider evidence changed.",
+      );
     const receipt = ctx.receipt;
     if (!receipt || receipt.status !== "posted") return parkForReview(orgId, disputeId,
       "The refund has no posted source receipt; reconcile its payment before resuming the review.");
@@ -161,7 +171,7 @@ export async function processProviderRefundEvent(
 export async function processProviderDisputeEvent(
   orgId: string,
   event: ProviderDisputeEvent,
-  opts: { forcePolicy?: PspAutomationPolicy } = {},
+  opts: { resumeReview?: true } = {},
 ): Promise<RefundAutomationOutcome> {
   return withOrg(orgId, async () => {
     if (!(await orgFeatureEnabled(orgId, "onlinePayments"))) {
@@ -196,7 +206,12 @@ export async function processProviderDisputeEvent(
     if (ctx && ctx.attempt.provider !== event.provider) throw new PspAutomationError("The dispute provider does not match its payment attempt.");
     const existing = await findDisputeByRef(orgId, event.provider, dispute.id);
     if (existing && event.attemptId !== existing.attempt_id) throw new PspAutomationError("The dispute delivery does not match its original payment attempt.");
-    if (existing && opts.forcePolicy !== "automatic" && existing.status !== "pending_review" && historyHasEvent(existing.status_history, event.providerEventId)) {
+    if (
+      existing &&
+      !opts.resumeReview &&
+      existing.status !== "pending_review" &&
+      historyHasEvent(existing.status_history, event.providerEventId)
+    ) {
       return { status: "duplicate", disputeId: existing.id };
     }
     if (existing && (existing.status === "won" || existing.status === "lost" || existing.status === "rejected")) {
@@ -207,29 +222,18 @@ export async function processProviderDisputeEvent(
         (asDocIds(existing.documents_posted).length > 0 || ["dispute-won", "dispute-lost"].includes(pendingActionOf(existing.status_history) ?? ""))) {
       return { status: "duplicate", disputeId: existing.id };
     }
-    if (ctx && (opts.forcePolicy ?? ctx.policy) === "review") {
-      const row = existing ?? (await insertDisputeRow(orgId, {
-        provider: event.provider,
-        providerEventId: event.providerEventId,
-        kind: "dispute",
-        status: "pending_review",
-        attemptId: event.attemptId,
-        receiptDocumentId: ctx.receipt?.id ?? null,
-        invoiceDocumentId: ctx.invoice.id,
-        currency: dispute.currency,
-        amount: dispute.amount,
-        feeAmount: "0",
-        providerRef: dispute.id,
-        reason: null,
-      }));
+    if (existing && (await reviewHasPendingGates(orgId, existing.id)))
       return parkDisputeForReview(
         orgId,
-        row.id,
-        `dispute-${dispute.state}` as PendingAction,
+        existing.id,
+        dispute.state === "won"
+          ? "dispute-won"
+          : dispute.state === "lost"
+            ? "dispute-lost"
+            : "dispute-opened",
         { providerEventId: event.providerEventId, dispute, feeAmount: eventFee(event) },
-        `dispute ${dispute.id} (${dispute.state}) needs approval before posting`,
+        "The provider return has a pending Flow submission. Recall and resubmit to review its updated provider evidence.",
       );
-    }
     if (dispute.state === "opened") {
       if (!ctx || !ctx.receipt || ctx.receipt.status !== "posted") {
         const row = existing ?? (await insertDisputeRow(orgId, {
@@ -328,8 +332,10 @@ export async function approveDisputeReview(
   disputeId: string,
   actorId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
+  approvalRunId?: string,
 ): Promise<RefundAutomationOutcome> {
-  return withOrg(orgId, async () => {
+  return withOrgTransaction(orgId, async () => {
+    await lockApprovalSubject(orgId, "payment_dispute_review", disputeId);
     const row = await lockReviewAuthority(orgId, disputeId, actorId, allowedSubsidiaryIds);
     if (row.status === "posted" || row.status === "won" || row.status === "lost") {
       return { status: "duplicate", disputeId };
@@ -338,6 +344,17 @@ export async function approveDisputeReview(
       throw new PspAutomationError("a rejected review cannot be approved; wait for the provider's next event");
     }
     const action = pendingActionOf(row.status_history) ?? (row.kind === "refund" ? "refund" : "dispute-opened");
+    if (
+      await requestNativeCommandApproval({
+        orgId,
+        actorId,
+        subjectKind: "payment_dispute_review",
+        subjectId: disputeId,
+        command: { action },
+        approvalRunId,
+      })
+    )
+      return { status: "pending_review", disputeId };
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'payment_disputes', ${disputeId}, 'approve',
@@ -382,7 +399,7 @@ export async function approveDisputeReview(
 }
 
 /** Approval re-runs post against the queued row itself (never a new row),
- *  under the automatic path: the operator's approval IS the policy gate. */
+ * under the native posting path after the tenant Flow decision. */
 async function runApprovedRefund(
   orgId: string,
   disputeId: string,
@@ -391,7 +408,7 @@ async function runApprovedRefund(
   const outcome = await processProviderRefundEvent(
     orgId,
     { ...event, providerEventId: event.providerEventId.replace(/#approved$/, "") },
-    { forcePolicy: "automatic" },
+    { resumeReview: true },
   );
   if (outcome.status === "duplicate" || outcome.disputeId !== disputeId) return outcome;
   return outcome;
@@ -405,7 +422,7 @@ async function runApprovedDispute(
   const outcome = await processProviderDisputeEvent(
     orgId,
     { ...event, providerEventId: event.providerEventId.replace(/#approved$/, "") },
-    { forcePolicy: "automatic" },
+    { resumeReview: true },
   );
   if (outcome.disputeId !== disputeId) return outcome;
   return outcome;
@@ -421,16 +438,35 @@ export async function rejectDisputeReview(
   actorId: string,
   reason: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
+  approvalRunId?: string,
 ): Promise<void> {
   const trimmed = reason.trim();
   if (trimmed.length < 5 || trimmed.length > 500) {
     throw new PspAutomationError("rejection reason must be between 5 and 500 characters");
   }
-  return withOrg(orgId, async () => {
+  return withOrgTransaction(orgId, async () => {
+    await lockApprovalSubject(orgId, "payment_dispute_review", disputeId);
     const row = await lockReviewAuthority(orgId, disputeId, actorId, allowedSubsidiaryIds);
     if (row.status !== "pending_review") {
       throw new PspAutomationError(`review is ${row.status}; only a queued review can be rejected`);
     }
+    const decision = await readNativeApprovalDecision({
+      orgId,
+      actorId,
+      subjectKind: "payment_dispute_review",
+      subjectId: disputeId,
+      outcome: "rejected",
+      approvalRunId,
+    });
+    const proof = (
+      await db.execute<{ valid: boolean }>(
+        sql`select public.flow_subject_decision_authorized(d.org_id,'payment_dispute_review',d.id,${actorId},public.flow_command_record_fingerprint(to_jsonb(d)),'rejected') as valid from payment_disputes d where d.org_id=${orgId} and d.id=${disputeId}`,
+      )
+    ).rows[0];
+    if (!decision || !proof?.valid)
+      throw new PspAutomationError(
+        "Reject this provider return through its configured native Flow gate.",
+      );
     await withdrawReturnReceipts(orgId, disputeId, actorId, trimmed);
     await transitionDisputeRow(orgId, disputeId, "rejected", asDocIds(row.documents_posted), trimmed);
     await db.execute(sql`
@@ -495,4 +531,19 @@ export async function replayParkedRefund(
     refundCurrency: parked.refundCurrency,
     providerRef: parked.providerRef,
   });
+}
+
+/** Provider redelivery cannot spend an operator command while its tenant gates are unresolved. */
+async function reviewHasPendingGates(
+  orgId: string,
+  id: string,
+): Promise<boolean> {
+  return (
+    (
+      await db.execute<{
+        open: boolean;
+      }>(sql`select exists(select 1 from flow_gates where org_id=${orgId}
+  and subject_kind='payment_dispute_review' and subject_id=${id} and status in('pending','escalated')) as open`)
+    ).rows[0]?.open === true
+  );
 }

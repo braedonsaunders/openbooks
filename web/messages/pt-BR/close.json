@@ -300,8 +300,8 @@
     "description": "Os subrazões operacionais são bloqueados antes do razão. O banco de dados rejeita lançamentos após a aplicação do bloqueio.",
     "blockedTitle": "A aprovação está bloqueada",
     "blockedDescription": "{count, plural, one {# tarefa com gate rígido permanece} other {# tarefas com gate rígido permanecem}}.",
-    "approvalTitle": "Aprovação independente e bloqueio",
-    "approvalDescription": "O iniciador da execução não pode fornecer a aprovação final. Qualquer alteração no razão após a aprovação reabre a revisão.",
+    "approvalTitle": "Aprovação e bloqueio",
+    "approvalDescription": "Os Flows da organização definem as decisões necessárias. Qualquer alteração no razão após a aprovação reabre a revisão.",
     "ownerTitle": "Atestado do responsável e bloqueio",
     "ownerDescription": "Para um fechamento conduzido pelo responsável, revise as demonstrações e registre por que o período está pronto. O atestado fica vinculado a este estado exato do razão.",
     "attestationLabel": "Por que estes livros estão prontos para fechar?",
@@ -335,6 +335,7 @@
       "started": "Execução de fechamento iniciada",
       "data_changed": "Alteração no razão invalidou o trabalho anterior",
       "approval_requested": "Aprovação do fechamento solicitada",
+      "approval_withdrawn": "Aprovação do fechamento retirada",
       "owner_attested": "O responsável atestou que os livros estão prontos",
       "approval_rejected": "Aprovação do fechamento rejeitada",
       "approved": "Fechamento recebeu aprovação final",
@@ -381,7 +382,7 @@
       },
       "controlledReopen": {
         "name": "Reabertura controlada",
-        "description": "Reaberturas exigem um motivo, aprovação independente e um prazo de expiração."
+        "description": "As reaberturas exigem um motivo, o encaminhamento pelos Flows da organização e uma data de expiração."
       },
       "sourceReconciliationEvidence": {
         "name": "Evidência de conciliação do sistema de origem",
@@ -444,11 +445,11 @@
     },
     "controller-approval": {
       "title": "Aprovação do controller",
-      "description": "Revise de forma independente a prontidão, exceções, evidências e saídas de relatórios."
+      "description": "Revise a preparação do fechamento, as exceções, as evidências e os relatórios."
     },
     "financial-review": {
       "title": "Revisar as demonstrações financeiras",
-      "description": "Revise o balancete de verificação, o balanço patrimonial e a demonstração de resultados antes de atestar: completude e saldos inesperados."
+      "description": "Verifique se o balancete, o balanço patrimonial e a demonstração do resultado estão completos e não apresentam saldos inesperados antes de concluir a revisão."
     },
     "lock-subledgers": {
       "title": "Bloquear subrazões operacionais",
@@ -494,7 +495,7 @@
   "setup": {
     "title": "Períodos e Fechamento",
     "description": "Projete calendários fiscais, gere períodos, gerencie bloqueios e reaberturas, versione blueprints de fechamento e configure controles, automação e pacotes de relatórios.",
-    "simpleMode": "O fechamento conduzido pelo responsável está ativo. Calendários, períodos, bloqueios, atestados e publicação imutável seguem disponíveis sem o custo de fluxos corporativos.",
+    "simpleMode": "Calendários, períodos, bloqueios e publicações imutáveis continuam disponíveis. Configure as aprovações em Flows.",
     "enableAdvanced": "Ver o fechamento avançado",
     "tabs": {
       "calendars": "Calendários",
@@ -782,7 +783,8 @@
       "lock": "Bloqueio",
       "review": "Revisão",
       "segregation": "Segregação de funções",
-      "exception": "Exceção"
+      "exception": "Exceção",
+      "evidence": "Evidências"
     },
     "automationTriggers": {
       "run_started": "Execução iniciada",

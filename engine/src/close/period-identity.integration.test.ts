@@ -1,3 +1,4 @@
+import {seedCloseRunApprovalFixture} from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -85,10 +86,7 @@ async function seedApprovedCloseRun(org: ScratchOrg): Promise<{
     bookId: org.bookId,
     actorId: actors.adminId,
   });
-  await db.execute(sql`
-    update close_runs set status = 'approved', current_stage = 'lock', approved_at = now(),
-           approved_by = ${actors.adminId}, updated_at = now(), updated_by = ${actors.adminId}
-     where id = ${runId} and org_id = ${org.orgId}`);
+  await seedCloseRunApprovalFixture(org.orgId,runId,actors.adminId);
   return { runId, entryId, actorId: actors.adminId };
 }
 
@@ -200,10 +198,7 @@ test(
         bookId: org.bookId,
         actorId: actors.adminId,
       });
-      await db.execute(sql`
-        update close_runs set status = 'approved', current_stage = 'lock', approved_at = now(),
-               approved_by = ${actors.adminId}, updated_at = now(), updated_by = ${actors.adminId}
-         where id = ${runId} and org_id = ${org.orgId}`);
+      await seedCloseRunApprovalFixture(org.orgId,runId,actors.adminId);
 
       // Sabotage the LAST statement of the close transaction: one 'run.closed'
       // event may exist per run, and one is planted before the close runs, so

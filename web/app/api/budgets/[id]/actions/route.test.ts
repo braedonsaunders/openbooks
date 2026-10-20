@@ -20,6 +20,7 @@ const state: RouteState = {
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksBudgetSqlText = sqlText
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksBudgetSql = sql
+;(globalThis as typeof globalThis & Record<string, unknown>).openbooksBudgetMockedQuery = mockedQuery
 
 /** Flatten a drizzle SQL chunk into the text emitted to the database. */
 function sqlText(query: unknown): string {
@@ -101,8 +102,7 @@ const mockSources = new Map<string, string>([
       const sqlText = globalThis.openbooksBudgetSqlText
       export const db = {
         async execute(query) {
-          state.queries.push(sqlText(query))
-          return { rows: [] }
+          return globalThis.openbooksBudgetMockedQuery(query)
         },
         async transaction(work) {
           return work({
@@ -129,6 +129,7 @@ const mockSources = new Map<string, string>([
       export const registerRequestOrgResolver = () => {}
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
+      export const withOrgTransaction = (_orgId, fn) => fn()
     `,
   ],
 ])
@@ -171,6 +172,7 @@ const vitestModule = 'vitest' as string
 if (process.env.VITEST) {
   const { vi } = await import(vitestModule)
   vi['mock']('@openbooks/engine/platform/db', () => ({
+    withOrgTransaction: async (_orgId: string, work: () => Promise<unknown>) => work(),
     db: {
       execute: async (query: unknown) => mockedQuery(query),
       transaction: async (work: (tx: { execute: (query: unknown) => Promise<{ rows: Record<string, unknown>[] }> }) => unknown) =>

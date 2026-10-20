@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import assert from 'node:assert/strict'
 import hrmCatalog from "../../../../messages/en/hrm.json";
 import type { PortfolioCatalog } from "../../../../lib/hrm/benefits-workspace";
 import { stubModules } from "../../../../testing/stub-modules";
@@ -13,8 +13,7 @@ const translate = createTranslator({ locale: 'en', messages: hrmCatalog, onError
 const portfolioCatalog: PortfolioCatalog = Object.assign(
   (key: string, params?: Record<string, string | number>) => translate(key as Parameters<typeof translate>[0], params),
   { has: (key: string) => translate.has(key as Parameters<typeof translate.has>[0]) },
-);
-(globalThis as Record<string, unknown>).__benefitsTranslations = portfolioCatalog;
+);(globalThis as Record<string, unknown>).__benefitsTranslations = portfolioCatalog;
 
 const authzSource = `export const can = (authz, perm) => authz.permissions.has('*') || authz.permissions.has(perm);
              export async function requirePermission() { throw new Error('stubbed requirePermission must not run here'); }
@@ -73,8 +72,8 @@ const { loadBenefitsPortfolio } = await import('../../../../lib/hrm/benefits-wor
 const { benefitsSpec } = await import('./view.ts')
 
 const gap = globalThis as Record<string, unknown>;
-const optionReads: string[] = [];
-gap.__benefitsOptionReads = optionReads;
+const optionReads: string[] = []
+gap.__benefitsOptionReads = optionReads
 gap.__benefitsExecute = (query: Parameters<PgDialect['sqlToQuery']>[0]) => {
   const text = new PgDialect().sqlToQuery(query).sql;
   optionReads.push(text);
@@ -277,7 +276,6 @@ test('New enrollment binds the native controlled election form to the HR filing 
   assert.equal(readonly.enrollmentDialog, null)
 })
 
-
 test('Programs combines insured plans and employer programs in one filterable population', async () => {
   gap.__benefitsReads = { windows: [], enrolments: [], catalogPlans: [
     { id: 'health', code: 'HEALTH', name: 'Health coverage', kind: 'health', currency: 'USD', isActive: true, effectiveFrom: '2026-01-01', effectiveTo: null },
@@ -329,7 +327,6 @@ test('cash payroll processing labels do not claim bank payment', async () => {
   assert.equal(data.awardRows[0]?.statusLabel, 'Processed in payroll')
 })
 
-
 test('external payout progress comes only from verified native payroll consumption', async () => {
   const program = { id: 'external-program', code: 'GIFTS', name: 'Gift cards', family: 'reward', currency: 'USD', status: 'active', deliveryMethod: 'external', valuation: 'fixed', fixedAmount: '25.00' }
   const award = { id: 'gift', programId: program.id, employmentId: 'employment', value: '25.00', currency: 'USD', status: 'queued' }
@@ -349,7 +346,17 @@ test('approval policy editing authority follows the native Flows grant rather th
 })
 
 test('Payouts contains only released delivery obligations and recorded payroll history', async () => {
-  const program = { id: 'program', code: 'THANKS', name: 'Recognition', family: 'reward', currency: 'USD', status: 'active', deliveryMethod: 'payroll', approvalMode: 'none', valuation: 'fixed', fixedAmount: '25.00' }
+  const program = {
+    id: 'program',
+    code: 'THANKS',
+    name: 'Recognition',
+    family: 'reward',
+    currency: 'USD',
+    status: 'active',
+    deliveryMethod: 'payroll',
+    valuation: 'fixed',
+    fixedAmount: '25.00',
+  }
   const statuses = ['draft', 'pending', 'approved', 'queued', 'delivered', 'rejected', 'voided']
   const awards = statuses.map((status) => ({ id: status, programId: program.id, employmentId: 'employment', value: '25.00', currency: 'USD', status, payRunDocumentId: null, payRunAdjustmentId: null }))
   awards.push({ ...awards[6]!, id: 'recorded-void', payRunDocumentId: 'run', payRunAdjustmentId: 'adjustment' } as never)

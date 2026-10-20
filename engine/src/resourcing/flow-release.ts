@@ -1,8 +1,10 @@
 import { releaseResourceRequest } from "./requests.ts";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type ReleaseArgs = {
+  approvalRunId?: string;
   subjectId: string;
   outcome: "approved" | "rejected";
   comment?: string | null;
@@ -14,7 +16,9 @@ type ReleaseArgs = {
 };
 
 /** Engine-owned release for the resource request subject. */
-export async function releaseResourcingRequestApproval(args: ReleaseArgs): Promise<void> {
+export async function releaseResourcingRequestApproval(
+  args: ReleaseArgs,
+): Promise<void> {
   const { subjectId, outcome, ctx } = args;
   if (!UUID_RE.test(subjectId)) {
     throw new Error(`unknown resource request ${subjectId}`);
@@ -27,6 +31,7 @@ export async function releaseResourcingRequestApproval(args: ReleaseArgs): Promi
     actorId: ctx.userId ?? null,
     allowedSubsidiaryIds: ctx.allowedSubsidiaryIds ?? null,
     requestId: subjectId,
+    approvalRunId: args.approvalRunId,
     outcome,
     comment: args.comment ?? null,
   });

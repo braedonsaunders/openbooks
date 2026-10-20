@@ -14,7 +14,6 @@ export interface BenefitPlanRow {
   readonly currency: string;
   readonly waitingPeriodDays: number;
   readonly waitingPeriodMonths?: number;
-  readonly approvalMode: "none" | "flows";
   readonly isActive: boolean;
   readonly effectiveFrom: string;
   readonly effectiveTo: string | null;
@@ -25,26 +24,28 @@ const PLAN_COLUMNS = sql`id, code, name, kind,
   employer_subsidiary_id as "employerSubsidiaryId",
   currency,
   waiting_period_days as "waitingPeriodDays", waiting_period_months as "waitingPeriodMonths",
-  approval_mode as "approvalMode",
   is_active as "isActive",
   effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`;
 
 function toPlanRow(row: Record<string, unknown>): BenefitPlanRow {
-  if (row.approvalMode !== 'none' && row.approvalMode !== 'flows') throw new BenefitsError('REFUSED','This plan has an unknown approval setting — choose no approvals or native Flows in its setup');
   return {
     id: String(row.id),
     code: String(row.code),
     name: String(row.name),
     kind: String(row.kind),
-    providerPartyId: row.providerPartyId != null ? String(row.providerPartyId) : null,
-    employerSubsidiaryId: row.employerSubsidiaryId != null ? String(row.employerSubsidiaryId) : null,
+    providerPartyId:
+      row.providerPartyId != null ? String(row.providerPartyId) : null,
+    employerSubsidiaryId:
+      row.employerSubsidiaryId != null
+        ? String(row.employerSubsidiaryId)
+        : null,
     currency: String(row.currency),
     waitingPeriodDays: Number(row.waitingPeriodDays ?? 0),
     waitingPeriodMonths: Number(row.waitingPeriodMonths ?? 0),
-    approvalMode: row.approvalMode === "flows" ? "flows" : "none",
     isActive: row.isActive === true,
     effectiveFrom: String(row.effectiveFrom).slice(0, 10),
-    effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
+    effectiveTo:
+      row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
   };
 }
 
@@ -68,4 +69,3 @@ export async function loadBenefitPlan(
   }
   return toPlanRow(row);
 }
-

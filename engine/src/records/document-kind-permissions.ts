@@ -8,7 +8,9 @@
 export type DocumentPermissionNamespace = "ap" | "ar" | "cash_sales" | "gl";
 
 /** Permission namespace of every drawer-registry document kind. */
-export const DOCUMENT_PERMISSION_NAMESPACE: Readonly<Record<string, DocumentPermissionNamespace>> = {
+export const DOCUMENT_PERMISSION_NAMESPACE: Readonly<
+  Record<string, DocumentPermissionNamespace>
+> = {
   vendor_bill: "ap",
   vendor_credit: "ap",
   customer_invoice: "ar",
@@ -31,11 +33,17 @@ export const DOCUMENT_PERMISSION_NAMESPACE: Readonly<Record<string, DocumentPerm
   pay_run: "gl",
 };
 
-export type DocumentKindPermissions = { read: string; edit: string; approve: string };
+export type DocumentKindPermissions = {
+  read: string;
+  edit: string;
+  approve: string;
+};
 
 /** Payroll owns pay-run workflow authority; GL grants govern its ledger posting. */
 export const PAY_RUN_WORKFLOW_PERMISSIONS: DocumentKindPermissions = {
-  read: "payroll.read", edit: "payroll.manage", approve: "payroll.manage",
+  read: "payroll.read",
+  edit: "payroll.manage",
+  approve: "payroll.manage",
 };
 
 function namespaceOf(kind: string): DocumentPermissionNamespace {
@@ -96,17 +104,43 @@ export function documentEditPermission(kind: string): string {
  * - pick_list / shipment: /picks and /shipments require orders.fulfill, and
  *   every fulfilment write (release, ship, void) requires it too.
  */
-const NON_REGISTRY_DOCUMENT_PERMISSIONS: Readonly<Record<string, DocumentKindPermissions>> = {
+const NON_REGISTRY_DOCUMENT_PERMISSIONS: Readonly<
+  Record<string, DocumentKindPermissions>
+> = {
   journal: { read: "gl.read", edit: "gl.post", approve: "gl.post" },
   vendor_payment: { read: "ap.pay", edit: "ap.pay", approve: "ap.pay" },
   customer_payment: { read: "ar.pay", edit: "ar.pay", approve: "ar.pay" },
-  expense_report: { read: "expenses.read", edit: "expenses.create", approve: "ap.post" },
+  expense_report: {
+    read: "expenses.read",
+    edit: "expenses.create",
+    approve: "ap.post",
+  },
   sales_order: { read: "ar.read", edit: "ar.create", approve: "ar.create" },
-  quote: { read: "estimates.read", edit: "estimates.create", approve: "estimates.issue" },
-  purchase_order: { read: "purchase_orders.read", edit: "purchase_orders.create", approve: "purchase_orders.create" },
-  field_ticket: { read: "time.read", edit: "time.manage", approve: "time.manage" },
-  pick_list: { read: "orders.fulfill", edit: "orders.fulfill", approve: "orders.fulfill" },
-  shipment: { read: "orders.fulfill", edit: "orders.fulfill", approve: "orders.fulfill" },
+  quote: {
+    read: "estimates.read",
+    edit: "estimates.create",
+    approve: "estimates.issue",
+  },
+  purchase_order: {
+    read: "purchase_orders.read",
+    edit: "purchase_orders.create",
+    approve: "purchase_orders.create",
+  },
+  field_ticket: {
+    read: "time.read",
+    edit: "time.manage",
+    approve: "time.manage",
+  },
+  pick_list: {
+    read: "orders.fulfill",
+    edit: "orders.fulfill",
+    approve: "orders.fulfill",
+  },
+  shipment: {
+    read: "orders.fulfill",
+    edit: "orders.fulfill",
+    approve: "orders.fulfill",
+  },
 };
 
 /**
@@ -115,13 +149,18 @@ const NON_REGISTRY_DOCUMENT_PERMISSIONS: Readonly<Record<string, DocumentKindPer
  * projects.manage edit grant), other kinds through the table above, null
  * for a kind neither covers.
  */
-export function documentKindPermissions(kind: string): DocumentKindPermissions | null {
+export function documentKindPermissions(
+  kind: string,
+): DocumentKindPermissions | null {
   if (kind === "pay_run") return PAY_RUN_WORKFLOW_PERMISSIONS;
   if (DOCUMENT_PERMISSION_NAMESPACE[kind]) {
     return {
       read: documentReadPermission(kind),
       edit: documentEditPermission(kind),
-      approve: kind === "project_charge" ? documentEditPermission(kind) : postPermission(kind),
+      approve:
+        kind === "project_charge"
+          ? documentEditPermission(kind)
+          : postPermission(kind),
     };
   }
   return NON_REGISTRY_DOCUMENT_PERMISSIONS[kind] ?? null;
@@ -142,5 +181,35 @@ export function documentRouteReadPermission(kind: string): string | null {
 
 /** Edit grant for a registry document kind through the generic endpoints. */
 export function documentRouteEditPermission(kind: string): string | null {
-  return DOCUMENT_PERMISSION_NAMESPACE[kind] ? documentEditPermission(kind) : null;
+  return DOCUMENT_PERMISSION_NAMESPACE[kind]
+    ? documentEditPermission(kind)
+    : null;
+}
+
+/** Decision authority is distinct from posting or paying the approved record. */
+export function documentApprovalPermission(kind: string): string | null {
+  if (
+    [
+      "vendor_bill",
+      "vendor_credit",
+      "card_charge",
+      "card_refund",
+      "check",
+      "vendor_payment",
+      "purchase_order",
+      "expense_report",
+    ].includes(kind)
+  )
+    return "ap.approve";
+  if (
+    [
+      "customer_invoice",
+      "customer_credit",
+      "customer_payment",
+      "sales_order",
+      "quote",
+    ].includes(kind)
+  )
+    return "ar.approve";
+  return documentKindPermissions(kind)?.approve ?? null;
 }

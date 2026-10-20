@@ -63,7 +63,6 @@ export interface BlueprintStepRow extends Record<string, unknown> {
   due_offset_business_days: number;
   evidence_required: boolean;
   default_owner_role_key: string | null;
-  default_reviewer_role_key: string | null;
   applicability: unknown;
   depends_on: string[];
 }
@@ -181,7 +180,6 @@ export interface BlueprintStepDraft extends Record<string, unknown> {
   dueOffsetBusinessDays: number;
   evidenceRequired: boolean;
   defaultOwnerRoleKey: string;
-  defaultReviewerRoleKey: string;
   applicabilityText: string;
   dependsOn: string[];
 }

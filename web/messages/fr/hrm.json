@@ -3320,15 +3320,11 @@
       "title": "Contrôles d’approbation",
       "openFlows": "Ouvrir Flows",
       "hint": "Flows applique les étapes d’approbation et les conditions configurées pour ce programme.",
-      "unconfigured": "Aucune politique d’approbation des avantages n’est configurée. Configurez Flows avant de soumettre des récompenses.",
+      "unconfigured": "Aucun Flow d’avantages n’est activé. Les soumissions de récompenses valides sont libérées immédiatement sans approbateur.",
       "policiesHint": "Les politiques actives sont évaluées lors de la soumission d’une récompense.",
       "openApprovals": "Ouvrir les approbations",
       "administratorRemedy": "Demandez à l’administrateur des workflows de votre entreprise de configurer ou modifier les politiques d’approbation.",
-      "unconfiguredStatus": "Aucune politique d’approbation des avantages n’est configurée.",
-      "modes": {
-        "none": "Aucune approbation requise",
-        "flows": "Utiliser les approbations Flows"
-      },
+      "unconfiguredStatus": "Aucun Flow d’avantages n’est activé. Les soumissions de récompenses valides sont libérées immédiatement sans approbateur.",
       "noneHint": "Les soumissions autorisées sont prêtes pour la paie. Aucune configuration de workflow ni aucun approbateur ne sont requis."
     },
     "externalPayrollProcessed": "Traité dans la paie · livraison en attente",

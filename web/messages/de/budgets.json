@@ -21,7 +21,10 @@
     "total": "Budgetsumme",
     "updated": "Aktualisiert"
   },
-  "kind": { "budget": "Budget", "forecast": "Prognose" },
+  "kind": {
+    "budget": "Budget",
+    "forecast": "Prognose"
+  },
   "status": {
     "draft": "Entwurf",
     "pending_approval": "Genehmigung ausstehend",
@@ -97,7 +100,8 @@
     "reject": "Ablehnen",
     "openReport": "Budget vs. Ist",
     "exportCsv": "CSV exportieren",
-    "exportXlsx": "Excel exportieren"
+    "exportXlsx": "Excel exportieren",
+    "withdraw": "Einreichung zurückziehen"
   },
   "confirm": {
     "archive": "Dieses Budget archivieren?",
@@ -137,7 +141,8 @@
     "revisionConflict": "Dieses Budget wurde anderweitig geändert. Laden Sie neu, um fortzufahren.",
     "selfApprovalForbidden": "Sie können ein von Ihnen eingereichtes Budget nicht genehmigen. Bitten Sie eine andere approbierende Person um eine Entscheidung.",
     "created": "Budgetentwurf erstellt.",
-    "savedWithLineFailure": "Der Budgetentwurf wurde erstellt, aber seine Zeilen konnten nicht gespeichert werden ({reason}). Er ist jetzt geöffnet. Prüfen Sie die Zeilen, bevor Sie es erneut versuchen."
+    "savedWithLineFailure": "Der Budgetentwurf wurde erstellt, aber seine Zeilen konnten nicht gespeichert werden ({reason}). Er ist jetzt geöffnet. Prüfen Sie die Zeilen, bevor Sie es erneut versuchen.",
+    "withdrawn": "Einreichung zurückgezogen"
   },
   "import": {
     "button": "Importieren",

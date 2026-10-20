@@ -1,9 +1,13 @@
+import { routeSubjectSubmission } from "../flows/submission-policy.ts";
 import { sql } from "drizzle-orm";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
-import { reversalJournalLines, type ReversalSourceJournalLine } from "../records/reversal-journal-lines.ts";
+import {
+  reversalJournalLines,
+  type ReversalSourceJournalLine,
+} from "../records/reversal-journal-lines.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { cmpMoney, negMoney, parseMoney, type Money } from "../money/brands.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
@@ -36,7 +40,8 @@ import {
   type NonprofitFrameworkKey,
 } from "./frameworks.ts";
 
-export type FundReleaseStatus = "draft" | "pending_approval" | "posted" | "void";
+export type FundReleaseStatus =
+  "draft" | "pending_approval" | "posted" | "void";
 
 interface FundReleaseRow extends Record<string, unknown> {
   id: string;
@@ -183,7 +188,8 @@ function releaseAmount(value: unknown): Money {
     throw refusal({
       message: "The fund release amount is not a readable financial amount.",
       code: "fund_release_amount_invalid",
-      remedy: "Enter the amount as a plain decimal string in the organization currency.",
+      remedy:
+        "Enter the amount as a plain decimal string in the organization currency.",
       field: "amount",
     });
   }
@@ -223,7 +229,8 @@ async function loadRelease(
   lock = false,
 ): Promise<FundReleaseRow> {
   const lockClause = lock ? sql`for update` : sql``;
-  const row = (await executor.execute<FundReleaseRow>(sql`
+  const row = (
+    await executor.execute<FundReleaseRow>(sql`
     select id, org_id, release_number, from_fund_id, to_fund_id,
            release_account_id, release_date::text, amount::text, purpose,
            satisfaction_ref, status, submitted_by::text, submitted_at::text,
@@ -232,7 +239,8 @@ async function loadRelease(
       from fund_releases
      where org_id = ${orgId} and id = ${releaseId}
      ${lockClause}
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!row) {
     throw refusal({
       message: `Fund release ${releaseId} was not found in this organization.`,
@@ -250,13 +258,15 @@ async function loadFund(
   fundId: string,
   field: "fromFundId" | "toFundId",
 ): Promise<FundDetail> {
-  const row = (await executor.execute<FundDetail>(sql`
+  const row = (
+    await executor.execute<FundDetail>(sql`
     select f.id, f.kind, f.restriction_class, sv.code, sv.name, sv.is_active
       from funds f
       join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
      where f.org_id = ${orgId} and f.id = ${fundId}
      for share
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!row || !row.is_active) {
     throw refusal({
       message: `Fund ${fundId} is not an active fund in this organization.`,
@@ -273,25 +283,31 @@ async function loadReleaseAccount(
   orgId: string,
   accountId: string,
 ): Promise<void> {
-  const account = (await executor.execute<{ id: string; type: string }>(sql`
+  const account = (
+    await executor.execute<{ id: string; type: string }>(sql`
     select id, type from accounts
      where org_id = ${orgId} and id = ${accountId}
        and is_active and not is_summary
      for share
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!account) {
     throw refusal({
-      message: "The fund release account is missing, inactive, or cannot receive postings.",
+      message:
+        "The fund release account is missing, inactive, or cannot receive postings.",
       code: "fund_release_account_invalid",
-      remedy: "Choose an active posting account from this organization's chart of accounts.",
+      remedy:
+        "Choose an active posting account from this organization's chart of accounts.",
       field: "releaseAccountId",
     });
   }
   if (!RELEASE_ACCOUNT_TYPES.has(account.type)) {
     throw refusal({
-      message: "The fund release account must represent a net asset reclassification on the statement of activities or net assets.",
+      message:
+        "The fund release account must represent a net asset reclassification on the statement of activities or net assets.",
       code: "fund_release_account_type_invalid",
-      remedy: "Choose an income or equity account for net assets released from restrictions in the chart of accounts.",
+      remedy:
+        "Choose an income or equity account for net assets released from restrictions in the chart of accounts.",
       field: "releaseAccountId",
     });
   }
@@ -305,7 +321,8 @@ function classPairRefusal(
   return refusal({
     message: `The ${framework} framework does not declare a release from class "${fromClass}" to class "${toClass}".`,
     code: "fund_release_class_pair_undeclared",
-    remedy: "Choose funds with a release class pair declared by the selected framework.",
+    remedy:
+      "Choose funds with a release class pair declared by the selected framework.",
   });
 }
 
@@ -313,7 +330,8 @@ function endowmentRefusal(fundCode: string, detail: string): NonprofitError {
   return refusal({
     message: `Endowment fund "${fundCode}" cannot be released without a posted board appropriation citing its resolution: ${detail}.`,
     code: "fund_release_endowment_appropriation_required",
-    remedy: "Post and approve a board appropriation journal entry carrying this fund and citing the resolution in its memo, then enter the resolution reference in Satisfaction reference.",
+    remedy:
+      "Post and approve a board appropriation journal entry carrying this fund and citing the resolution in its memo, then enter the resolution reference in Satisfaction reference.",
   });
 }
 
@@ -324,7 +342,8 @@ async function assertEndowmentAppropriation(
   reference: string,
 ): Promise<void> {
   if (fund.kind !== "endowment") return;
-  const entry = (await executor.execute<{ id: string }>(sql`
+  const entry = (
+    await executor.execute<{ id: string }>(sql`
     select je.id
       from journal_entries je
      where je.org_id = ${orgId}
@@ -339,7 +358,8 @@ async function assertEndowmentAppropriation(
             and jl.extra_dims->>'fund' = ${fund.id}
        )
      limit 1
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!entry) {
     throw endowmentRefusal(
       fund.code ?? fund.name,
@@ -370,11 +390,12 @@ async function releaseCapacity(
   fundId: string,
   asOf: string,
 ): Promise<ReleaseCapacity> {
-  const row = (await executor.execute<{
-    at_date: string;
-    later_low: string | null;
-    later_low_date: string | null;
-  }>(sql`
+  const row = (
+    await executor.execute<{
+      at_date: string;
+      later_low: string | null;
+      later_low_date: string | null;
+    }>(sql`
     with daily as (
       select je.posting_date as day, sum(jl.amount) as amount
         from journal_lines jl
@@ -401,7 +422,8 @@ async function releaseCapacity(
       coalesce((select sum(amount) from daily where day <= ${asOf}), 0)::text as at_date,
       (select balance::text from lowest_later) as later_low,
       (select day::text from lowest_later) as later_low_date
-  `)).rows[0];
+  `)
+  ).rows[0];
   const atReleaseDate = parseMoney(row?.at_date ?? "0");
   if (!row?.later_low || !row.later_low_date) {
     return { available: atReleaseDate, atReleaseDate, laterLow: null };
@@ -410,13 +432,15 @@ async function releaseCapacity(
   if (cmpMoney(laterBalance, atReleaseDate) >= 0) {
     return { available: atReleaseDate, atReleaseDate, laterLow: null };
   }
-  const releases = (await executor.execute<{ release_number: string }>(sql`
+  const releases = (
+    await executor.execute<{ release_number: string }>(sql`
     select release_number from fund_releases
      where org_id = ${orgId} and from_fund_id = ${fundId}
        and status = 'posted'
        and release_date > ${asOf} and release_date <= ${row.later_low_date}
      order by release_date, release_number
-  `)).rows;
+  `)
+  ).rows;
   return {
     available: laterBalance,
     atReleaseDate,
@@ -442,9 +466,10 @@ function overAvailableRefusal(
       remedy: `Create a new release for no more than the available amount shown, or ${supportRemedy}.`,
     });
   }
-  const consumers = later.releaseNumbers.length > 0
-    ? `later-dated posted release${later.releaseNumbers.length === 1 ? "" : "s"} ${later.releaseNumbers.join(", ")}`
-    : "later-dated activity on the fund";
+  const consumers =
+    later.releaseNumbers.length > 0
+      ? `later-dated posted release${later.releaseNumbers.length === 1 ? "" : "s"} ${later.releaseNumbers.join(", ")}`
+      : "later-dated activity on the fund";
   return refusal({
     message: `Fund "${fundLabel}" has ${capacity.atReleaseDate} of net assets on ${release.releaseDate}, but ${consumers} leave${later.releaseNumbers.length === 1 ? "s" : ""} only ${later.balance} on ${later.date}; this release requests ${release.amount} and at most ${capacity.available} can be released on ${release.releaseDate} without overdrawing the fund on a later date.`,
     code: "fund_release_over_available",
@@ -470,8 +495,18 @@ async function validateReadiness(
   options: { checkAvailability: boolean; lockAvailability: boolean },
 ): Promise<ReleaseReadiness> {
   const framework = await requireNonprofitFramework(release.orgId, executor);
-  const fromFund = await loadFund(executor, release.orgId, release.fromFundId, "fromFundId");
-  const toFund = await loadFund(executor, release.orgId, release.toFundId, "toFundId");
+  const fromFund = await loadFund(
+    executor,
+    release.orgId,
+    release.fromFundId,
+    "fromFundId",
+  );
+  const toFund = await loadFund(
+    executor,
+    release.orgId,
+    release.toFundId,
+    "toFundId",
+  );
   if (fromFund.id === toFund.id) {
     throw refusal({
       message: "A fund release must move value between two different funds.",
@@ -480,11 +515,13 @@ async function validateReadiness(
       field: "toFundId",
     });
   }
-  if (!frameworkDeclaresRelease(
-    framework.framework,
-    fromFund.restriction_class,
-    toFund.restriction_class,
-  )) {
+  if (
+    !frameworkDeclaresRelease(
+      framework.framework,
+      fromFund.restriction_class,
+      toFund.restriction_class,
+    )
+  ) {
     throw classPairRefusal(
       fromFund.restriction_class,
       toFund.restriction_class,
@@ -512,7 +549,11 @@ async function validateReadiness(
     );
     available = capacity.available;
     if (cmpMoney(release.amount, available) > 0) {
-      throw overAvailableRefusal(fromFund.code ?? fromFund.name, release, capacity);
+      throw overAvailableRefusal(
+        fromFund.code ?? fromFund.name,
+        release,
+        capacity,
+      );
     }
   }
   return {
@@ -534,11 +575,13 @@ async function nextFundReleaseNumber(
       RELEASE_NUMBER_KIND,
       RELEASE_NUMBER_PREFIX,
     );
-    const taken = (await executor.execute<{ id: string }>(sql`
+    const taken = (
+      await executor.execute<{ id: string }>(sql`
       select id from fund_releases
        where org_id = ${orgId} and release_number = ${number}
        limit 1
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!taken) return number;
   }
   throw refusal({
@@ -625,7 +668,8 @@ export async function createFundRelease(input: {
         lockAvailability: false,
       });
       const releaseNumber = await nextFundReleaseNumber(tx, input.orgId);
-      const inserted = (await tx.execute<FundReleaseRow>(sql`
+      const inserted = (
+        await tx.execute<FundReleaseRow>(sql`
         insert into fund_releases
           (org_id, release_number, from_fund_id, to_fund_id, release_account_id,
            release_date, amount, purpose, satisfaction_ref, status, custom,
@@ -640,12 +684,14 @@ export async function createFundRelease(input: {
                   satisfaction_ref, status, submitted_by::text, submitted_at::text,
                   flow_run_id::text, posted_entry_id::text, void_entry_id::text,
                   created_by::text, updated_by::text
-      `)).rows[0];
+      `)
+      ).rows[0];
       if (!inserted) {
         throw refusal({
           message: `Fund release ${releaseNumber} was not created.`,
           code: "fund_release_write_missing",
-          remedy: "Retry release creation after checking the nonprofit release records.",
+          remedy:
+            "Retry release creation after checking the nonprofit release records.",
           status: 409,
         });
       }
@@ -702,7 +748,10 @@ async function postingReadiness(
   });
 }
 
-function postingRefusal(error: unknown, releaseNumber: string): NonprofitPostingError | null {
+function postingRefusal(
+  error: unknown,
+  releaseNumber: string,
+): NonprofitPostingError | null {
   if (error instanceof NonprofitError) return null;
   if (!(error instanceof PostingError)) return null;
   return new NonprofitPostingError({
@@ -720,11 +769,12 @@ async function selectedPostingContext(
   executor: SqlExecutor,
   orgId: string,
 ): Promise<{ bookId: string; subsidiaryId: string; currency: string }> {
-  const row = (await executor.execute<{
-    book_id: string;
-    subsidiary_id: string;
-    currency: string;
-  }>(sql`
+  const row = (
+    await executor.execute<{
+      book_id: string;
+      subsidiary_id: string;
+      currency: string;
+    }>(sql`
     select b.id as book_id, s.id as subsidiary_id, s.base_currency as currency
       from accounting_books b
       join subsidiaries s on s.org_id = b.org_id
@@ -734,12 +784,15 @@ async function selectedPostingContext(
      order by b.created_at, b.id, s.created_at, s.id
      limit 1
      for share of b, s
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!row) {
     throw refusal({
-      message: "No active primary accounting book and root subsidiary are available for the release.",
+      message:
+        "No active primary accounting book and root subsidiary are available for the release.",
       code: "fund_release_posting_context_missing",
-      remedy: "Set an active primary book and root subsidiary in Company Settings → Accounting.",
+      remedy:
+        "Set an active primary book and root subsidiary in Company Settings → Accounting.",
       status: 409,
     });
   }
@@ -759,7 +812,11 @@ async function postRelease(
 ): Promise<FundRelease> {
   await lockFundReleaseBalance(executor, release.orgId, release.fromFundId);
   await postingReadiness(executor, release);
-  const period = await resolveCoveringPeriod(executor, release.orgId, release.releaseDate);
+  const period = await resolveCoveringPeriod(
+    executor,
+    release.orgId,
+    release.releaseDate,
+  );
   if (!period) {
     throw refusal({
       message: `No active accounting period covers ${release.releaseDate} for fund release ${release.releaseNumber}.`,
@@ -818,7 +875,8 @@ async function postRelease(
     throw error;
   }
 
-  const updated = (await executor.execute<FundReleaseRow>(sql`
+  const updated = (
+    await executor.execute<FundReleaseRow>(sql`
     update fund_releases
        set status = 'posted', posted_entry_id = ${postedEntryId},
            submitted_by = coalesce(submitted_by, ${actorId}),
@@ -831,7 +889,8 @@ async function postRelease(
                satisfaction_ref, status, submitted_by::text, submitted_at::text,
                flow_run_id::text, posted_entry_id::text, void_entry_id::text,
                created_by::text, updated_by::text
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!updated) {
     throw refusal({
       message: `Fund release ${release.releaseNumber} changed before its posting was recorded.`,
@@ -887,13 +946,15 @@ export async function submitFundRelease(input: {
       });
       const beforeSubmitter = release.submittedBy;
 
-      const markedForSubmission = (await tx.execute<{ id: string }>(sql`
+      const markedForSubmission = (
+        await tx.execute<{ id: string }>(sql`
         update fund_releases
            set submitted_by = ${input.actorId}, submitted_at = now(),
                updated_at = now(), updated_by = ${input.actorId}
          where org_id = ${input.orgId} and id = ${release.id} and status = 'draft'
          returning id
-      `)).rows[0];
+      `)
+      ).rows[0];
       if (!markedForSubmission) {
         throw refusal({
           message: `Fund release ${release.releaseNumber} changed before submission began.`,
@@ -903,46 +964,71 @@ export async function submitFundRelease(input: {
         });
       }
 
-      const dispatched = await runRecordFlows(
-        { kind: "on_submit", source: "api" },
-        FUND_RELEASE_SUBJECT_KIND,
-        release.id,
-        { orgId: input.orgId, userId: input.actorId },
-      );
-      if (dispatched.failed) {
-        await cancelDispatchRuns(input.orgId, dispatched.runs.map((item) => item.runId), {
+      const dispatched = (
+        await routeSubjectSubmission({
+          orgId: input.orgId,
           actorId: input.actorId,
-        });
-        const cause = dispatchFailureReason(dispatched) ?? "approval routing failed";
+          subjectKind: FUND_RELEASE_SUBJECT_KIND,
+          subjectId: release.id,
+          source: "api",
+        })
+      ).dispatch;
+      if (dispatched.failed) {
+        await cancelDispatchRuns(
+          input.orgId,
+          dispatched.runs.map((item) => item.runId),
+          {
+            actorId: input.actorId,
+          },
+        );
+        const cause =
+          dispatchFailureReason(dispatched) ?? "approval routing failed";
         throw refusal({
           message: `Fund release approval routing failed: ${cause}.`,
           code: "fund_release_approval_routing_failed",
-          remedy: "Fix or disable the named flow, then submit the release again.",
+          remedy:
+            "Fix or disable the named flow, then submit the release again.",
           status: 409,
         });
       }
 
       const gatingRun = findGatingRun(dispatched);
       if (dispatched.gatesCreated > 0 && !gatingRun) {
-        await cancelDispatchRuns(input.orgId, dispatched.runs.map((item) => item.runId), {
-          actorId: input.actorId,
-        });
+        await cancelDispatchRuns(
+          input.orgId,
+          dispatched.runs.map((item) => item.runId),
+          {
+            actorId: input.actorId,
+          },
+        );
         throw refusal({
-          message: "Fund release approval routing created gates without a resolvable approval run.",
+          message:
+            "Fund release approval routing created gates without a resolvable approval run.",
           code: "fund_release_approval_run_missing",
-          remedy: "Review the configured fund release approval flows and submit again.",
+          remedy:
+            "Review the configured fund release approval flows and submit again.",
           status: 409,
         });
       }
 
       if (!gatingRun) {
         try {
-          return await postRelease(tx, release, input.actorId, "draft", release.purpose);
+          return await postRelease(
+            tx,
+            release,
+            input.actorId,
+            "draft",
+            release.purpose,
+          );
         } catch (error) {
           if (dispatched.runs.length > 0) {
-            await cancelDispatchRuns(input.orgId, dispatched.runs.map((item) => item.runId), {
-              actorId: input.actorId,
-            });
+            await cancelDispatchRuns(
+              input.orgId,
+              dispatched.runs.map((item) => item.runId),
+              {
+                actorId: input.actorId,
+              },
+            );
           }
           throw error;
         }
@@ -955,12 +1041,17 @@ export async function submitFundRelease(input: {
           lockAvailability: false,
         });
       } catch (error) {
-        await cancelDispatchRuns(input.orgId, dispatched.runs.map((item) => item.runId), {
-          actorId: input.actorId,
-        });
+        await cancelDispatchRuns(
+          input.orgId,
+          dispatched.runs.map((item) => item.runId),
+          {
+            actorId: input.actorId,
+          },
+        );
         throw error;
       }
-      const pending = (await tx.execute<FundReleaseRow>(sql`
+      const pending = (
+        await tx.execute<FundReleaseRow>(sql`
         update fund_releases
            set status = 'pending_approval', submitted_by = ${input.actorId},
                submitted_at = now(), flow_run_id = ${gatingRun.runId},
@@ -971,11 +1062,16 @@ export async function submitFundRelease(input: {
                    satisfaction_ref, status, submitted_by::text, submitted_at::text,
                    flow_run_id::text, posted_entry_id::text, void_entry_id::text,
                    created_by::text, updated_by::text
-      `)).rows[0];
+      `)
+      ).rows[0];
       if (!pending) {
-        await cancelDispatchRuns(input.orgId, dispatched.runs.map((item) => item.runId), {
-          actorId: input.actorId,
-        });
+        await cancelDispatchRuns(
+          input.orgId,
+          dispatched.runs.map((item) => item.runId),
+          {
+            actorId: input.actorId,
+          },
+        );
         throw refusal({
           message: `Fund release ${release.releaseNumber} changed before approval was requested.`,
           code: "fund_release_submit_state_changed",
@@ -1017,7 +1113,8 @@ export async function releaseFundReleaseApproval(input: {
         throw refusal({
           message: `Fund release ${release.releaseNumber} is ${release.status} and cannot receive an approval decision.`,
           code: "fund_release_state_conflict",
-          remedy: "Approve or reject a release only while it is pending approval in Flows.",
+          remedy:
+            "Approve or reject a release only while it is pending approval in Flows.",
           status: 409,
         });
       }
@@ -1025,20 +1122,23 @@ export async function releaseFundReleaseApproval(input: {
         throw refusal({
           message: "A signed-in approver is required to decide a fund release.",
           code: "fund_release_approver_required",
-          remedy: "Have an authorized approver decide the release through Flows.",
+          remedy:
+            "Have an authorized approver decide the release through Flows.",
           status: 409,
         });
       }
       if (input.outcome === "rejected") {
         const comment = input.comment?.trim() || "Approval was rejected.";
-        const rejected = (await tx.execute<{ id: string }>(sql`
+        const rejected = (
+          await tx.execute<{ id: string }>(sql`
           update fund_releases
              set status = 'draft', submitted_by = null, submitted_at = null,
                  flow_run_id = null, updated_at = now(), updated_by = ${input.ctx.userId}
            where org_id = ${input.ctx.orgId} and id = ${release.id}
              and status = 'pending_approval'
            returning id
-        `)).rows[0];
+        `)
+        ).rows[0];
         if (!rejected) {
           throw refusal({
             message: `Fund release ${release.releaseNumber} could not be returned to draft after rejection.`,
@@ -1097,32 +1197,37 @@ export async function voidFundRelease(input: {
         throw refusal({
           message: `Fund release ${release.releaseNumber} is ${release.status} and cannot be voided.`,
           code: "fund_release_state_conflict",
-          remedy: "Void a posted release; submit a draft through its approval lifecycle first.",
+          remedy:
+            "Void a posted release; submit a draft through its approval lifecycle first.",
           status: 409,
         });
       }
-      const original = (await tx.execute<{
-        id: string;
-        entry_number: string;
-        status: string;
-        book_id: string;
-        subsidiary_id: string;
-        period_id: string;
-      }>(sql`
+      const original = (
+        await tx.execute<{
+          id: string;
+          entry_number: string;
+          status: string;
+          book_id: string;
+          subsidiary_id: string;
+          period_id: string;
+        }>(sql`
         select id, entry_number, status, book_id, subsidiary_id, period_id
           from journal_entries
          where org_id = ${input.orgId} and id = ${release.postedEntryId}
          for update
-      `)).rows[0];
+      `)
+      ).rows[0];
       if (!original || original.status !== "posted") {
         throw refusal({
           message: `Fund release ${release.releaseNumber} does not reference a posted journal entry that can be reversed.`,
           code: "fund_release_posted_entry_invalid",
-          remedy: "Review the linked journal entry before changing the release.",
+          remedy:
+            "Review the linked journal entry before changing the release.",
           status: 409,
         });
       }
-      const lines = (await tx.execute<ReversalLine>(sql`
+      const lines = (
+        await tx.execute<ReversalLine>(sql`
         select line_number as "lineNumber", account_id as "accountId", amount::text as amount,
                subsidiary_id as "subsidiaryId", currency, txn_amount::text as "txnAmount",
                fx_rate::text as "fxRate", memo, party_id as "partyId",
@@ -1134,12 +1239,14 @@ export async function voidFundRelease(input: {
           from journal_lines
          where org_id = ${input.orgId} and entry_id = ${original.id}
          order by line_number
-      `)).rows;
+      `)
+      ).rows;
       if (lines.length === 0) {
         throw refusal({
           message: `Posted journal entry ${original.entry_number} has no lines to reverse.`,
           code: "fund_release_posted_entry_lines_missing",
-          remedy: "Have an administrator investigate the journal entry before voiding this release.",
+          remedy:
+            "Have an administrator investigate the journal entry before voiding this release.",
           status: 409,
         });
       }
@@ -1177,7 +1284,10 @@ export async function voidFundRelease(input: {
             reversesEntryId: original.id,
             reason,
           },
-          lines: reversalJournalLines(lines, { entryId: "", orgId: input.orgId }).map((line, index) => ({
+          lines: reversalJournalLines(lines, {
+            entryId: "",
+            orgId: input.orgId,
+          }).map((line, index) => ({
             accountId: line.accountId!,
             amount: String(line.amount),
             subsidiaryId: line.subsidiaryId,
@@ -1214,7 +1324,8 @@ export async function voidFundRelease(input: {
         throw error;
       }
 
-      const updated = (await tx.execute<FundReleaseRow>(sql`
+      const updated = (
+        await tx.execute<FundReleaseRow>(sql`
         update fund_releases
            set status = 'void', void_entry_id = ${reversalEntryId},
                updated_at = now(), updated_by = ${input.actorId}
@@ -1224,7 +1335,8 @@ export async function voidFundRelease(input: {
                    satisfaction_ref, status, submitted_by::text, submitted_at::text,
                    flow_run_id::text, posted_entry_id::text, void_entry_id::text,
                    created_by::text, updated_by::text
-      `)).rows[0];
+      `)
+      ).rows[0];
       if (!updated) {
         throw refusal({
           message: `Fund release ${release.releaseNumber} changed before its void was recorded.`,
@@ -1325,15 +1437,22 @@ function mapFundReleaseRead(row: FundReleaseReadRow): FundReleaseReadRecord {
   };
 }
 
-const RELEASE_STATUSES: readonly FundReleaseStatus[] = ["draft", "pending_approval", "posted", "void"];
+const RELEASE_STATUSES: readonly FundReleaseStatus[] = [
+  "draft",
+  "pending_approval",
+  "posted",
+  "void",
+];
 
 function releaseReadLimit(limit: number | undefined): number {
   const value = limit ?? 25;
   if (!Number.isInteger(value) || value < 1) {
     throw refusal({
-      message: "The fund release list limit must be a whole number of at least 1.",
+      message:
+        "The fund release list limit must be a whole number of at least 1.",
       code: "fund_release_list_limit_invalid",
-      remedy: "Request a fund release list limit of 1 or more; values above 100 read the first 100 releases.",
+      remedy:
+        "Request a fund release list limit of 1 or more; values above 100 read the first 100 releases.",
       field: "limit",
     });
   }
@@ -1344,7 +1463,8 @@ function releaseReadOffset(offset: number | undefined): number {
   const value = offset ?? 0;
   if (!Number.isInteger(value) || value < 0) {
     throw refusal({
-      message: "The fund release list offset must be a whole number starting at 0.",
+      message:
+        "The fund release list offset must be a whole number starting at 0.",
       code: "fund_release_list_offset_invalid",
       remedy: "Request a fund release list offset of 0 or more.",
       field: "offset",
@@ -1365,7 +1485,8 @@ export async function listFundReleases(
   executor?: SqlExecutor,
 ): Promise<FundReleaseReadPage> {
   const runner = executor ?? db;
-  if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner))) throw fundFeatureOff();
+  if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner)))
+    throw fundFeatureOff();
   const limit = releaseReadLimit(input.limit);
   const offset = releaseReadOffset(input.offset);
   if (input.status !== undefined && !RELEASE_STATUSES.includes(input.status)) {
@@ -1380,7 +1501,9 @@ export async function listFundReleases(
   if (input.status !== undefined) conds.push(sql`r.status = ${input.status}`);
   const search = input.search?.trim();
   if (search) {
-    conds.push(sql`(r.release_number ilike ${`%${search}%`} or r.purpose ilike ${`%${search}%`} or r.satisfaction_ref ilike ${`%${search}%`})`);
+    conds.push(
+      sql`(r.release_number ilike ${`%${search}%`} or r.purpose ilike ${`%${search}%`} or r.satisfaction_ref ilike ${`%${search}%`})`,
+    );
   }
   const where = sql.join(conds, sql` and `);
   const rows = await runner.execute<FundReleaseReadRow>(sql`
@@ -1404,7 +1527,10 @@ export async function listFundReleases(
   const counted = await runner.execute<{ n: string }>(sql`
     select count(*) as n from fund_releases r where ${where}
   `);
-  return { releases: rows.rows.map(mapFundReleaseRead), total: Number(counted.rows[0]?.n ?? 0) };
+  return {
+    releases: rows.rows.map(mapFundReleaseRead),
+    total: Number(counted.rows[0]?.n ?? 0),
+  };
 }
 
 /**
@@ -1417,9 +1543,11 @@ export async function getFundRelease(
   executor?: SqlExecutor,
 ): Promise<FundReleaseReadRecord | null> {
   const runner = executor ?? db;
-  if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner))) throw fundFeatureOff();
+  if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner)))
+    throw fundFeatureOff();
   if (!isUuid(input.releaseId)) return null;
-  const row = (await runner.execute<FundReleaseReadRow>(sql`
+  const row = (
+    await runner.execute<FundReleaseReadRow>(sql`
     select r.id::text as id, r.release_number, r.release_date::text as release_date,
            r.amount::text as amount, r.purpose, r.satisfaction_ref, r.status,
            r.from_fund_id::text as from_fund_id, r.to_fund_id::text as to_fund_id,
@@ -1434,6 +1562,7 @@ export async function getFundRelease(
       join segment_values ff on ff.org_id = r.org_id and ff.id = r.from_fund_id
       join segment_values tf on tf.org_id = r.org_id and tf.id = r.to_fund_id
      where r.org_id = ${input.orgId} and r.id = ${input.releaseId}
-  `)).rows[0];
+  `)
+  ).rows[0];
   return row ? mapFundReleaseRead(row) : null;
 }

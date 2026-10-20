@@ -1,6 +1,15 @@
 import { toChartNumber } from '../../../../lib/chart-number'
 import Link from 'next/link'
-import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import {
+  Badge,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@openbooks/ui'
 import { DirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
 import {
   CompensationSettingsForm,
@@ -44,27 +53,61 @@ export function PlacementBar({
   label: string
 }) {
   if (min === null || target === null || max === null || rate === null) {
-    return <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>
+    return (
+      <span className="text-sm text-slate-500 dark:text-slate-400">
+        {label}
+      </span>
+    )
   }
   const lo = toChartNumber(min)
   const hi = toChartNumber(max)
   const at = toChartNumber(rate)
   const span = hi - lo > 0 ? hi - lo : 1
   const pct = Math.min(100, Math.max(0, ((at - lo) / span) * 100))
-  const targetPct = Math.min(100, Math.max(0, ((toChartNumber(target) - lo) / span) * 100))
+  const targetPct = Math.min(
+    100,
+    Math.max(0, ((toChartNumber(target) - lo) / span) * 100),
+  )
   return (
-    <span className="flex min-w-28 flex-col gap-1" role="img" aria-label={label}>
+    <span
+      className="flex min-w-28 flex-col gap-1"
+      role="img"
+      aria-label={label}
+    >
       <span className="relative h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700">
-        <span className="absolute top-[-3px] h-3 w-0.5 bg-slate-400 dark:bg-slate-500" style={{ left: `${targetPct}%` }} />
-        <span className="absolute top-[-2px] h-2.5 w-2.5 rounded-full bg-blue-600" style={{ left: `calc(${pct}% - 5px)` }} />
+        <span
+          className="absolute top-[-3px] h-3 w-0.5 bg-slate-400 dark:bg-slate-500"
+          style={{ left: `${targetPct}%` }}
+        />
+        <span
+          className="absolute top-[-2px] h-2.5 w-2.5 rounded-full bg-blue-600"
+          style={{ left: `calc(${pct}% - 5px)` }}
+        />
       </span>
-      <span className="text-xs text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="text-xs text-slate-500 dark:text-slate-400">
+        {label}
+      </span>
     </span>
   )
 }
 
-export function PacingBar({ pct, note, over = false }: { pct: number | null; note: string; over?: boolean }) {
-  if (pct === null) return <span className={`text-sm ${over ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}>{note}</span>
+export function PacingBar({
+  pct,
+  note,
+  over = false,
+}: {
+  pct: number | null
+  note: string
+  over?: boolean
+}) {
+  if (pct === null)
+    return (
+      <span
+        className={`text-sm ${over ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400'}`}
+      >
+        {note}
+      </span>
+    )
   const width = Math.min(100, Math.max(0, pct))
   return (
     <span className="flex min-w-40 flex-col gap-1" role="img" aria-label={note}>
@@ -101,7 +144,12 @@ export interface LineDrawerData {
   closeHref: string
   title: string
   line: CompLineRow | null
-  history: { kind: string; actor: string | null; reason: string | null; at: string }[]
+  history: {
+    kind: string
+    actor: string | null
+    reason: string | null
+    at: string
+  }[]
   labels: CompDrawerLabels
   cycleId: string
   canDecide: boolean
@@ -121,11 +169,17 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
       <div className="flex flex-col gap-6">
         {drawer.canPropose ? (
           <div>
-            <h3 className="mb-2 text-sm font-semibold">{drawer.labels.proposeTitle}</h3>
+            <h3 className="mb-2 text-sm font-semibold">
+              {drawer.labels.proposeTitle}
+            </h3>
             <LineProposeForm
               cycleId={drawer.cycleId}
               lineId={line.id}
-              labels={{ failed: drawer.labels.failed, submit: drawer.labels.submit, cancel: drawer.labels.cancel }}
+              labels={{
+                failed: drawer.labels.failed,
+                submit: drawer.labels.submit,
+                cancel: drawer.labels.cancel,
+              }}
               pctLabel={drawer.labels.pctLabel}
               rateLabel={drawer.labels.rateLabel}
               reasonLabel={drawer.labels.reasonLabel}
@@ -136,22 +190,30 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
         ) : null}
         {drawer.canDecide && drawer.canDecideLine ? (
           <div>
-            <h3 className="mb-2 text-sm font-semibold">{drawer.labels.decideTitle}</h3>
+            <h3 className="mb-2 text-sm font-semibold">
+              {drawer.labels.decideTitle}
+            </h3>
             <LineDecideButtons
               cycleId={drawer.cycleId}
               lineId={line.id}
-              labels={{ failed: drawer.labels.failed, submit: drawer.labels.submit, cancel: drawer.labels.cancel }}
+              labels={{
+                failed: drawer.labels.failed,
+                submit: drawer.labels.submit,
+                cancel: drawer.labels.cancel,
+              }}
               reasonLabel={drawer.labels.decideReasonLabel}
-              approveLabel={drawer.labels.approve}
-              rejectLabel={drawer.labels.reject}
               reopenLabel={drawer.labels.reopen}
             />
           </div>
         ) : null}
         <div>
-          <h3 className="mb-2 text-sm font-semibold">{drawer.labels.historyTitle}</h3>
+          <h3 className="mb-2 text-sm font-semibold">
+            {drawer.labels.historyTitle}
+          </h3>
           {drawer.history.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.emptyHistory}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {drawer.emptyHistory}
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -207,7 +269,9 @@ export function DialogRefusal({
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold">{refusal.title}</h3>
-      <p className="text-sm text-slate-500 dark:text-slate-400">{refusal.message}</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {refusal.message}
+      </p>
       {remedyHref && remedyLabel ? (
         <div>
           <Button asChild>
@@ -224,10 +288,18 @@ export function CompCycleDialog({ dialog }: { dialog: CompDialogData }) {
   return (
     <DirtyUrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
       {dialog.refusal ? (
-        <DialogRefusal refusal={dialog.refusal} remedyHref={dialog.remedyHref} remedyLabel={dialog.remedyLabel} />
+        <DialogRefusal
+          refusal={dialog.refusal}
+          remedyHref={dialog.remedyHref}
+          remedyLabel={dialog.remedyLabel}
+        />
       ) : (
         <CycleCreateForm
-          labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
+          labels={{
+            failed: dialog.failed,
+            submit: dialog.submit,
+            cancel: dialog.cancel,
+          }}
           defaultCurrency={dialog.defaultCurrency}
           currencyOptions={dialog.currencyOptions}
           employerOptions={dialog.employerOptions}
@@ -254,10 +326,18 @@ export function CompPlanDialog({ dialog }: { dialog: PlanDialogData }) {
   return (
     <DirtyUrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
       {dialog.refusal ? (
-        <DialogRefusal refusal={dialog.refusal} remedyHref={dialog.remedyHref} remedyLabel={dialog.remedyLabel} />
+        <DialogRefusal
+          refusal={dialog.refusal}
+          remedyHref={dialog.remedyHref}
+          remedyLabel={dialog.remedyLabel}
+        />
       ) : (
         <PlanCreateForm
-          labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
+          labels={{
+            failed: dialog.failed,
+            submit: dialog.submit,
+            cancel: dialog.cancel,
+          }}
           nameLabel={dialog.nameLabel}
           fromLabel={dialog.fromLabel}
           toLabel={dialog.toLabel}
@@ -272,10 +352,18 @@ export function CompEquityDialog({ dialog }: { dialog: EquityDialogData }) {
   return (
     <DirtyUrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
       {dialog.refusal ? (
-        <DialogRefusal refusal={dialog.refusal} remedyHref={dialog.remedyHref} remedyLabel={dialog.remedyLabel} />
+        <DialogRefusal
+          refusal={dialog.refusal}
+          remedyHref={dialog.remedyHref}
+          remedyLabel={dialog.remedyLabel}
+        />
       ) : (
         <EquityGenerateForm
-          labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
+          labels={{
+            failed: dialog.failed,
+            submit: dialog.submit,
+            cancel: dialog.cancel,
+          }}
           asOfLabel={dialog.asOfLabel}
           groupALabel={dialog.groupALabel}
           groupBLabel={dialog.groupBLabel}
@@ -294,12 +382,30 @@ export {
 }
 
 /** Placement summary line on the Me surface: loader-resolved strings, no chart. */
-export function PlacementSummary({ placement, compaRatio, bandRange }: { placement: string; compaRatio: string | null; bandRange: string | null }) {
+export function PlacementSummary({
+  placement,
+  compaRatio,
+  bandRange,
+}: {
+  placement: string
+  compaRatio: string | null
+  bandRange: string | null
+}) {
   return (
     <p className="text-sm">
       {placement}
-      {compaRatio ? <span className="text-slate-500 dark:text-slate-400"> · {compaRatio}</span> : null}
-      {bandRange ? <span className="text-slate-500 dark:text-slate-400"> · {bandRange}</span> : null}
+      {compaRatio ? (
+        <span className="text-slate-500 dark:text-slate-400">
+          {' '}
+          · {compaRatio}
+        </span>
+      ) : null}
+      {bandRange ? (
+        <span className="text-slate-500 dark:text-slate-400">
+          {' '}
+          · {bandRange}
+        </span>
+      ) : null}
     </p>
   )
 }
@@ -322,8 +428,16 @@ export function PayInfoRequest({
 }) {
   return (
     <div className="flex flex-col gap-2">
-      <PayInfoRequestButton employmentId={employmentId} labels={{ failed, submit, cancel }} requestLabel={requestLabel} />
-      {requestStatus ? <p className="text-sm text-slate-500 dark:text-slate-400">{requestStatus}</p> : null}
+      <PayInfoRequestButton
+        employmentId={employmentId}
+        labels={{ failed, submit, cancel }}
+        requestLabel={requestLabel}
+      />
+      {requestStatus ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {requestStatus}
+        </p>
+      ) : null}
     </div>
   )
 }

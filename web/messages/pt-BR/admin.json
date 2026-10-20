@@ -1116,14 +1116,8 @@
     },
     "approvals": {
       "title": "Aprovações",
-      "description": "Controle quando as faturas de fornecedores são liberadas após o envio.",
-      "requireVendorBillApproval": "Exigir aprovação antes de liberar faturas de fornecedores",
-      "requireVendorBillApprovalHint": "Quando ativado, uma fatura de fornecedor só é liberada por meio de um fluxo de aprovação. Uma fatura sem fluxo correspondente permanece enviada, e o remetente é orientado a configurar um fluxo ou desativar esta opção.",
-      "requireStockCountReview": "Exigir outro usuário para lançar contagens",
-      "requireStockCountReviewHint": "Quando ativado, o usuário que registrou ou enviou uma contagem não pode lançá-la — outro usuário com permissão deve fazê-lo. Quando desativado, qualquer usuário com permissão pode lançar a própria contagem.",
-      "noFlowTitle": "Sem fluxo de aprovação para faturas de fornecedores",
-      "noFlowWarningAuto": "Nenhum fluxo de aprovação está configurado para faturas de fornecedores. <flows>Configure um em Fluxos</flows> — até lá, as faturas enviadas são liberadas automaticamente sem aprovador.",
-      "noFlowWarningRequired": "Nenhum fluxo de aprovação está configurado para faturas de fornecedores. <flows>Configure um em Fluxos</flows> — até lá, cada envio de fatura de fornecedor será recusado."
+      "description": "Os fluxos definem se um envio exige aprovação, quem o aprova e quantas decisões são necessárias. Sem etapas de aprovação aplicáveis, o envio prossegue sem aprovador.",
+      "manageFlows": "Gerenciar fluxos de aprovação"
     },
     "documentKinds": {
       "vendorBill": "Conta a pagar",
@@ -1924,7 +1918,10 @@
       "keyRemoved": "Chave do provedor de documentos removida.",
       "model": "Modelo de fatura",
       "provider": "Leitor de documentos",
-      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "Modelo de IA ({provider})"},
+      "providers": {
+        "azure_document_intelligence": "Azure Document Intelligence",
+        "llm_vision": "Modelo de IA ({provider})"
+      },
       "azureHint": "Lê faturas e recibos com o seu recurso e chave do Azure Document Intelligence.",
       "llmHint": "Lê faturas e recibos com o provedor de IA, a chave e os modelos configurados abaixo ({provider}). Cada campo traz a confiança do modelo; campos abaixo do limite ficam em branco para revisão.",
       "llmNoVision": "{provider} não lê imagens. Escolha abaixo um provedor com modelos de visão ou use o Azure Document Intelligence.",
@@ -2935,14 +2932,14 @@
       "saveFailed": "Não foi possível salvar a configuração."
     },
     "usFilingLineage": {
-          "stateAccount": "Conta de declaração estadual",
-          "employer": "Empregador legal original",
-          "federalAccount": "EIN federal original",
-          "federalHelp": "EINs desativados permanecem disponíveis para qualificar fontes históricas.",
-          "datesHelp": "Datas inclusivas da inscrição original. O encerramento deve preservar a última folha contabilizada.",
-          "sourceReference": "Referência da evidência de inscrição original",
-          "sourceHelp": "Identifique a carta de inscrição ou o documento preservado que comprova este EIN e o período.",
-          "reason": "Motivo da alteração"
+      "stateAccount": "Conta de declaração estadual",
+      "employer": "Empregador legal original",
+      "federalAccount": "EIN federal original",
+      "federalHelp": "EINs desativados permanecem disponíveis para qualificar fontes históricas.",
+      "datesHelp": "Datas inclusivas da inscrição original. O encerramento deve preservar a última folha contabilizada.",
+      "sourceReference": "Referência da evidência de inscrição original",
+      "sourceHelp": "Identifique a carta de inscrição ou o documento preservado que comprova este EIN e o período.",
+      "reason": "Motivo da alteração"
     },
     "entities": {
       "schedule-patterns": {
@@ -3435,9 +3432,9 @@
         "description": "Alíquotas promulgadas por jurisdição, com vigência — alimentam a provisão ASC 740."
       },
       "payroll-us-filing-account-employer-lineage": {
-              "title": "Histórico do EIN do empregador",
-              "singularTitle": "Vínculo ao EIN do empregador",
-              "description": "Titularidade original da conta estadual, com datas inclusivas e evidências preservadas."
+        "title": "Histórico do EIN do empregador",
+        "singularTitle": "Vínculo ao EIN do empregador",
+        "description": "Titularidade original da conta estadual, com datas inclusivas e evidências preservadas."
       },
       "payroll-filing-accounts": {
         "title": "Contas de recolhimento",
@@ -4007,8 +4004,14 @@
         "title": "Políticas de renovação de assinaturas",
         "description": "Condições de renovação com vigência, responsável e lembretes antes do vencimento."
       },
-      "project-loss-policies": {"title": "Políticas de projetos deficitários", "description": "Se projetos que preveem perda são sinalizados no fechamento e se o fechamento aguarda a avaliação de perda."},
-      "expense-fx-policies": {"title": "Políticas de câmbio de despesas", "description": "Se uma linha de despesa em moeda estrangeira pode ser convertida por uma taxa de câmbio explícita com justificativa em vez da taxa datada."},
+      "project-loss-policies": {
+        "title": "Políticas de projetos deficitários",
+        "description": "Se projetos que preveem perda são sinalizados no fechamento e se o fechamento aguarda a avaliação de perda."
+      },
+      "expense-fx-policies": {
+        "title": "Políticas de câmbio de despesas",
+        "description": "Se uma linha de despesa em moeda estrangeira pode ser convertida por uma taxa de câmbio explícita com justificativa em vez da taxa datada."
+      },
       "service-dispatch-policies": {
         "title": "Política de despacho de serviço",
         "singularTitle": "Versão da política de despacho",
@@ -5863,7 +5866,11 @@
         "fiscal_year": "Por exercício",
         "never": "Nunca"
       },
-      "projectLossPolicy": {"off": "Desativada", "warn": "Avisar no fechamento", "require": "Exigir avaliação antes do fechamento"}
+      "projectLossPolicy": {
+        "off": "Desativada",
+        "warn": "Avisar no fechamento",
+        "require": "Exigir avaliação antes do fechamento"
+      }
     },
     "payroll": {
       "navTitle": "Folha de pagamento"
@@ -7410,7 +7417,7 @@
       "chooseApprovedVersion": "Versão aprovada da política",
       "chooseVersionHint": "Escolha uma versão aprovada antes de atribuir funcionários. Cada atribuição mantém essa versão e suas datas de vigência.",
       "review": "Revisão e decisão",
-      "reviewHint": "Os termos enviados exigem aprovação de uma pessoa vinculada independente. Os termos aprovados são preservados; alterações exigem uma nova versão ou atribuição sucessora.",
+      "reviewHint": "Os Flows do locatário determinam as etapas de aprovação. Sem etapas, os envios válidos são liberados imediatamente. Os termos aprovados são preservados; alterações usam uma nova versão ou atribuição sucessora.",
       "noActions": "Nenhuma transição está disponível para suas permissões e a situação atual deste registro.",
       "actions": {
         "submit": "Enviar para aprovação",
@@ -7490,7 +7497,7 @@
       "reason": "Motivo",
       "reasonHint": "Informe o motivo da alteração de política, sessão ou resultado.",
       "review": "Revisão e ações",
-      "reviewHint": "As ações usam a revisão atual. O aprovador deve ser diferente do autor.",
+      "reviewHint": "As ações usam a revisão atual do registro. Os Flows do locatário determinam as etapas de aprovação e quem pode decidir.",
       "history": "Histórico",
       "result": "Presença e avaliação",
       "resultHint": "Registre presença e avaliação reais. A verificação é separada; anular preserva o resultado original.",
@@ -8096,10 +8103,7 @@
         "connectAction": "Conectar",
         "connectPlaceholder": "Escolha uma etapa…",
         "connectEmpty": "Ainda não há outra etapa — adicione um nó primeiro."
-      },
-      "ungatedOutcomeLabel": "Quando nenhuma etapa de aprovação se aplica",
-      "ungatedApply": "Aplicar imediatamente",
-      "ungatedRequireApproval": "Exigir uma etapa de aprovação"
+      }
     },
     "node": {
       "trigger": "Gatilho",
@@ -9482,7 +9486,7 @@
     "changeSetDefaultName": "Alterações do sandbox",
     "captureChanges": "Capturar alterações",
     "captureFailed": "A captura não foi concluída. Confira a lista de conjuntos de alterações antes de tentar novamente.",
-    "captureTitle": "Capturar alterações de configuração para revisão e aprovação independentes"
+    "captureTitle": "Capturar alterações de configuração para envio pelos Flows"
   },
   "sandboxes": {
     "changeSets": {
@@ -9512,7 +9516,7 @@
       "capturedFrom": "Capturado de {name}",
       "retained": "Conjunto de alterações de configuração retido",
       "listTitle": "Conjuntos de alterações",
-      "listDescription": "Inspecione as alterações de configuração capturadas, registre revisão e aprovação independentes e aplique as alterações aprovadas em produção.",
+      "listDescription": "Inspecione as alterações de configuração capturadas, envie-as pelos Flows do locatário e aplique as alterações liberadas em produção.",
       "listBack": "Ambientes",
       "requestFailed": "A solicitação não foi concluída. Atualize para verificar o status registrado antes de tentar novamente.",
       "working": "Processando…",
@@ -9549,8 +9553,7 @@
       "reasons": {
         "incomplete": "Esta captura está incompleta. Capture um novo conjunto de alterações do ambiente.",
         "noSnapshot": "Esta captura antiga não tem instantâneo de produção. Capture e revise um novo conjunto de alterações antes de aplicá-lo.",
-        "empty": "Nenhuma alteração de configuração foi capturada.",
-        "segregation": "O criador, o revisor, o aprovador e o aplicador devem ser quatro usuários diferentes. Outro usuário autorizado deve executar a próxima etapa."
+        "empty": "Nenhuma alteração de configuração foi capturada."
       }
     }
   }

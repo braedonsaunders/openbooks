@@ -1116,14 +1116,8 @@
     },
     "approvals": {
       "title": "Genehmigungen",
-      "description": "Steuern, wann Lieferantenrechnungen nach dem Einreichen freigegeben werden.",
-      "requireVendorBillApproval": "Freigabe für Lieferantenrechnungen erforderlich",
-      "requireVendorBillApprovalHint": "Wenn aktiviert, wird eine Lieferantenrechnung nur über einen Genehmigungs-Workflow freigegeben. Eine Rechnung ohne passenden Workflow bleibt eingereicht, und der Einreicher wird aufgefordert, einen Workflow einzurichten oder diese Option zu deaktivieren.",
-      "requireStockCountReview": "Andere Person für die Buchung von Inventuren erforderlich",
-      "requireStockCountReviewHint": "Wenn aktiviert, kann die Person, die eine Inventur erfasst oder eingereicht hat, sie nicht buchen — eine andere Person mit Buchungsrecht muss dies tun. Wenn deaktiviert, kann jede Person mit Buchungsrecht ihre eigene Inventur buchen.",
-      "noFlowTitle": "Kein Genehmigungs-Workflow für Lieferantenrechnungen",
-      "noFlowWarningAuto": "Für Lieferantenrechnungen ist kein Genehmigungs-Workflow konfiguriert. <flows>Richten Sie einen unter Flows ein</flows> — bis dahin werden eingereichte Rechnungen automatisch ohne Genehmiger freigegeben.",
-      "noFlowWarningRequired": "Für Lieferantenrechnungen ist kein Genehmigungs-Workflow konfiguriert. <flows>Richten Sie einen unter Flows ein</flows> — bis dahin wird jede Einreichung einer Lieferantenrechnung abgelehnt."
+      "description": "Flows legen fest, ob eine Einreichung genehmigt werden muss, wer sie genehmigt und wie viele Entscheidungen erforderlich sind. Ohne anwendbare Genehmigungsschritte wird sie ohne Genehmiger freigegeben.",
+      "manageFlows": "Genehmigungsflows verwalten"
     },
     "documentKinds": {
       "vendorBill": "Eingangsrechnung",
@@ -1921,7 +1915,10 @@
       "keyRemoved": "Schlüssel des Dokumentenanbieters entfernt.",
       "model": "Rechnungsmodell",
       "provider": "Dokumentleser",
-      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "KI-Modell ({provider})"},
+      "providers": {
+        "azure_document_intelligence": "Azure Document Intelligence",
+        "llm_vision": "KI-Modell ({provider})"
+      },
       "azureHint": "Liest Rechnungen und Belege mit Ihrer Azure-Document-Intelligence-Ressource und Ihrem Schlüssel.",
       "llmHint": "Liest Rechnungen und Belege mit dem unten konfigurierten KI-Anbieter, Schlüssel und Modellen ({provider}). Jedes Feld trägt die Konfidenz des Modells; Felder unter dem Schwellenwert bleiben zur Prüfung leer.",
       "llmNoVision": "{provider} liest keine Bilder. Wählen Sie unten einen Anbieter mit Bildmodellen oder verwenden Sie Azure Document Intelligence.",
@@ -3022,14 +3019,14 @@
       "saveFailed": "Die Konfiguration konnte nicht gespeichert werden."
     },
     "usFilingLineage": {
-          "stateAccount": "Staatliches Meldekonto",
-          "employer": "Ursprünglicher rechtlicher Arbeitgeber",
-          "federalAccount": "Ursprüngliche Bundes-EIN",
-          "federalHelp": "Stillgelegte EIN-Registrierungen bleiben für historische Nachweise verfügbar.",
-          "datesHelp": "Inklusive ursprüngliche Registrierungsdaten. Das Ende darf nicht vor der letzten gebuchten Abrechnung liegen.",
-          "sourceReference": "Referenz des ursprünglichen Registrierungsnachweises",
-          "sourceHelp": "Geben Sie das Registrierungsschreiben oder einen aufbewahrten Beleg für diese EIN und den Zeitraum an.",
-          "reason": "Änderungsgrund"
+      "stateAccount": "Staatliches Meldekonto",
+      "employer": "Ursprünglicher rechtlicher Arbeitgeber",
+      "federalAccount": "Ursprüngliche Bundes-EIN",
+      "federalHelp": "Stillgelegte EIN-Registrierungen bleiben für historische Nachweise verfügbar.",
+      "datesHelp": "Inklusive ursprüngliche Registrierungsdaten. Das Ende darf nicht vor der letzten gebuchten Abrechnung liegen.",
+      "sourceReference": "Referenz des ursprünglichen Registrierungsnachweises",
+      "sourceHelp": "Geben Sie das Registrierungsschreiben oder einen aufbewahrten Beleg für diese EIN und den Zeitraum an.",
+      "reason": "Änderungsgrund"
     },
     "entities": {
       "schedule-patterns": {
@@ -3522,9 +3519,9 @@
         "singular": "Kästchenregel"
       },
       "payroll-us-filing-account-employer-lineage": {
-              "title": "EIN-Verlauf des Arbeitgebers",
-              "singularTitle": "EIN-Zuordnung des Arbeitgebers",
-              "description": "Ursprünglicher Inhaber des Staatskontos mit einschließlich geltenden Daten und aufbewahrten Nachweisen."
+        "title": "EIN-Verlauf des Arbeitgebers",
+        "singularTitle": "EIN-Zuordnung des Arbeitgebers",
+        "description": "Ursprünglicher Inhaber des Staatskontos mit einschließlich geltenden Daten und aufbewahrten Nachweisen."
       },
       "payroll-filing-accounts": {
         "title": "Anmeldekonten",
@@ -4094,8 +4091,14 @@
         "title": "Richtlinien für Abonnementverlängerungen",
         "description": "Zeitlich gültige Verlängerungsbedingungen, Verantwortliche und Erinnerungen vor Ablauf."
       },
-      "project-loss-policies": {"title": "Richtlinien für Verlustprojekte", "description": "Ob Projekte mit erwartetem Verlust beim Abschluss gemeldet werden und ob der Abschluss auf ihre Verlustbewertung wartet."},
-      "expense-fx-policies": {"title": "Währungsrichtlinien für Spesen", "description": "Ob eine Spesenposition in Fremdwährung statt zum datierten Kurs zu einem expliziten, begründeten Wechselkurs umgerechnet werden darf."},
+      "project-loss-policies": {
+        "title": "Richtlinien für Verlustprojekte",
+        "description": "Ob Projekte mit erwartetem Verlust beim Abschluss gemeldet werden und ob der Abschluss auf ihre Verlustbewertung wartet."
+      },
+      "expense-fx-policies": {
+        "title": "Währungsrichtlinien für Spesen",
+        "description": "Ob eine Spesenposition in Fremdwährung statt zum datierten Kurs zu einem expliziten, begründeten Wechselkurs umgerechnet werden darf."
+      },
       "service-dispatch-policies": {
         "title": "Service-Dispositionsrichtlinie",
         "singularTitle": "Version der Dispositionsrichtlinie",
@@ -5950,7 +5953,11 @@
         "fiscal_year": "Je Geschäftsjahr",
         "never": "Nie"
       },
-      "projectLossPolicy": {"off": "Aus", "warn": "Beim Abschluss warnen", "require": "Bewertung vor dem Abschluss verlangen"}
+      "projectLossPolicy": {
+        "off": "Aus",
+        "warn": "Beim Abschluss warnen",
+        "require": "Bewertung vor dem Abschluss verlangen"
+      }
     },
     "bankFeeds": {
       "navTitle": "Bankfeeds"
@@ -7410,7 +7417,7 @@
       "chooseApprovedVersion": "Genehmigte Richtlinienversion",
       "chooseVersionHint": "Wählen Sie vor der Mitarbeiterzuweisung eine genehmigte Version. Jede Zuweisung behält diese Version und ihre Gültigkeitsdaten.",
       "review": "Prüfung und Entscheidung",
-      "reviewHint": "Eingereichte Bedingungen müssen von einer unabhängigen verknüpften Person genehmigt werden. Genehmigte Bedingungen bleiben erhalten; Änderungen erfordern eine neue Version oder eine Nachfolgezuweisung.",
+      "reviewHint": "Die Genehmigungsstufen werden in den Mandanten-Flows festgelegt. Ohne Freigabestufen werden gültige Einreichungen sofort freigegeben. Genehmigte Bedingungen bleiben erhalten; Änderungen erfolgen über eine neue Version oder eine Nachfolgezuweisung.",
       "noActions": "Für Ihre Berechtigungen und den aktuellen Zustand dieses Datensatzes ist kein Übergang verfügbar.",
       "actions": {
         "submit": "Zur Genehmigung einreichen",
@@ -7490,7 +7497,7 @@
       "reason": "Begründung",
       "reasonHint": "Begründung für diese Regel-, Termin- oder Ergebnisänderung angeben.",
       "review": "Prüfung und Aktionen",
-      "reviewHint": "Aktionen verwenden den aktuellen Stand. Der Genehmigende muss vom Autor unabhängig sein.",
+      "reviewHint": "Aktionen verwenden die aktuelle Datensatzversion. Mandanten-Flows bestimmen die Genehmigungsstufen und wer darüber entscheiden darf.",
       "history": "Historie",
       "result": "Anwesenheit und Prüfung",
       "resultHint": "Tatsächliche Anwesenheit und Prüfung erfassen. Nachweisprüfung bleibt separat; Aufhebung erhält das Original.",
@@ -8096,10 +8103,7 @@
         "connectAction": "Verbinden",
         "connectPlaceholder": "Schritt wählen…",
         "connectEmpty": "Es gibt noch keinen anderen Schritt — füge zuerst einen Knoten hinzu."
-      },
-      "ungatedOutcomeLabel": "Wenn kein Genehmigungsschritt gilt",
-      "ungatedApply": "Sofort anwenden",
-      "ungatedRequireApproval": "Genehmigungsschritt erforderlich"
+      }
     },
     "node": {
       "trigger": "Auslöser",
@@ -9482,7 +9486,7 @@
     "changeSetDefaultName": "Sandbox-Änderungen",
     "captureChanges": "Änderungen erfassen",
     "captureFailed": "Die Erfassung wurde nicht abgeschlossen. Prüfen Sie die Änderungssatzliste, bevor Sie es erneut versuchen.",
-    "captureTitle": "Konfigurationsänderungen zur unabhängigen Prüfung und Genehmigung erfassen"
+    "captureTitle": "Konfigurationsänderungen zur Einreichung über Flows erfassen"
   },
   "sandboxes": {
     "changeSets": {
@@ -9512,7 +9516,7 @@
       "capturedFrom": "Erfasst aus {name}",
       "retained": "Aufbewahrter Konfigurations-Änderungssatz",
       "listTitle": "Änderungssätze",
-      "listDescription": "Erfasste Konfigurationsänderungen prüfen, unabhängige Prüfung und Genehmigung erfassen und die genehmigten Änderungen dann in Produktion übernehmen.",
+      "listDescription": "Erfasste Konfigurationsänderungen prüfen, über Mandanten-Flows einreichen und anschließend freigegebene Änderungen in der Produktion anwenden.",
       "listBack": "Umgebungen",
       "requestFailed": "Die Anfrage wurde nicht abgeschlossen. Aktualisieren Sie die Ansicht, um den erfassten Status zu prüfen, bevor Sie es erneut versuchen.",
       "working": "Wird ausgeführt…",
@@ -9549,8 +9553,7 @@
       "reasons": {
         "incomplete": "Diese Erfassung ist unvollständig. Erfassen Sie einen neuen Änderungssatz aus der Umgebung.",
         "noSnapshot": "Diese ältere Erfassung hat keinen Produktions-Snapshot. Erfassen und prüfen Sie einen neuen Änderungssatz, bevor Sie ihn anwenden.",
-        "empty": "Es wurden keine Konfigurationsänderungen erfasst.",
-        "segregation": "Ersteller, Prüfer, Genehmiger und Anwender müssen vier verschiedene Benutzer sein. Ein anderer berechtigter Benutzer muss den nächsten Schritt ausführen."
+        "empty": "Es wurden keine Konfigurationsänderungen erfasst."
       }
     }
   }

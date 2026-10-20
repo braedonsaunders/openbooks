@@ -1,3 +1,4 @@
+import { apiErrorResponse, typedRefusal } from '@/lib/api/error-response';
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
@@ -9,7 +10,7 @@ import {
 } from '@openbooks/engine/flows/subject-scope'
 import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
-import { canReadFlowSubject } from '../../../lib/flow-subject-authz'
+import { canReadFlowSubject,canReadSubjectRecord } from '../../../lib/flow-subject-authz'
 import { notFound } from "@/lib/api/responses";
 
 /** Session + Flows feature gate for /api/flows/* (pages already 404 when off). */
@@ -135,9 +136,8 @@ export async function filterFlowRunSubjectsToScope<
   subjects: readonly T[],
   authz?: Authz,
 ): Promise<T[]> {
-  const readableSubjects = authz
-    ? subjects.filter((subject) => canReadFlowSubject(authz, subject.kind))
-    : [...subjects];
+  const visibility=authz ? await Promise.all(subjects.map(subject=>canReadSubjectRecord(authz,subject.kind,subject.id))) : null;
+  const readableSubjects=visibility ? subjects.filter((_,index)=>visibility[index]) : [...subjects];
   if (allowedSubsidiaryIds === null) return readableSubjects;
   if (readableSubjects.length === 0) return [];
   const idsByKind = new Map<string, string[]>();
@@ -170,7 +170,7 @@ export async function filterFlowRunSubjectsToScope<
  * cases (404 missing, 409 already decided) so this mapping only has to cover
  * races, authorization, and atomic decision failures.
  */
-export function gateErrorResponse(e: unknown): NextResponse {
+export async function gateErrorResponse(e: unknown): Promise<NextResponse> {
   // An atomic decision failure (any post-flip stage, including release)
   // records NOTHING — the gate stays pending — so it is never a success
   // and never a bare 'internal error'. The failure carries its cause's
@@ -184,6 +184,7 @@ export function gateErrorResponse(e: unknown): NextResponse {
   // non-retryable failure is a defect in the decide path, and only that
   // stays a 500. Every non-422 path logs.
   if (e instanceof DecisionFailedError) {
+    if(e.retryable && typedRefusal(e.cause))return apiErrorResponse(e.cause,{details:{decisionRecorded:false}});
     if (e.retryable && e.causeKind === "infrastructure") {
       console.error("[flows] approval decision hit infrastructure:", e);
       return NextResponse.json(

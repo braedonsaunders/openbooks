@@ -7,7 +7,10 @@ import { foldWholeNumber } from './whole-number'
 
 export const BENEFIT_PLANS_ENTITY: SetupEntity = {
   key: 'benefit-plans',
-  createDestination: { rowParam: 'program', tabKey: 'benefit-contribution-rules' },
+  createDestination: {
+    rowParam: 'program',
+    tabKey: 'benefit-contribution-rules',
+  },
   rehomed: true,
   table: 'hrm_benefit_plans',
   groupKey: 'workforce',
@@ -32,22 +35,79 @@ export const BENEFIT_PLANS_ENTITY: SetupEntity = {
     { key: 'name', kind: 'text', required: true },
     // Org-declared kind (health, dental, vision, life, ...): free text,
     // never a closed list — no pack declares plan kinds.
-    { key: 'kind', kind: 'text', required: true, helpTextKey: 'fieldHelp.benefitKind' },
-    { key: 'providerPartyId', kind: 'ref', ref: 'vendors', helpTextKey: 'fieldHelp.benefitProvider' },
-    { key: 'employerSubsidiaryId', kind: 'ref', ref: 'subsidiaries', legalEmployer: true, labelKey: 'fields.legalEmployer', helpTextKey: 'fieldHelp.benefitSubsidiary' },
-    { key: 'currency', kind: 'ref', ref: 'benefit-currencies', refScopeField: 'employerSubsidiaryId', required: true, helpTextKey: 'fieldHelp.benefitCurrency' },
-    { key: 'waitingPeriodDays', kind: 'integer', min: 0, defaultValue: 0, keepDefault: true, helpTextKey: 'fieldHelp.benefitWaitingPeriod' },
-    { key: 'waitingPeriodMonths', kind: 'integer', min: 0, defaultValue: 0, keepDefault: true, helpTextKey: 'benefitContributions.waitingMonthsHint' },
-    { key: 'approvalMode', kind: 'select', required: true, defaultValue: 'none', options: [{ value: 'none', labelKey: 'benefitContributions.noApproval' }, { value: 'flows', labelKey: 'benefitContributions.flowsApproval' }], helpTextKey: 'benefitContributions.approvalHint' },
+    {
+      key: 'kind',
+      kind: 'text',
+      required: true,
+      helpTextKey: 'fieldHelp.benefitKind',
+    },
+    {
+      key: 'providerPartyId',
+      kind: 'ref',
+      ref: 'vendors',
+      helpTextKey: 'fieldHelp.benefitProvider',
+    },
+    {
+      key: 'employerSubsidiaryId',
+      kind: 'ref',
+      ref: 'subsidiaries',
+      legalEmployer: true,
+      labelKey: 'fields.legalEmployer',
+      helpTextKey: 'fieldHelp.benefitSubsidiary',
+    },
+    {
+      key: 'currency',
+      kind: 'ref',
+      ref: 'benefit-currencies',
+      refScopeField: 'employerSubsidiaryId',
+      required: true,
+      helpTextKey: 'fieldHelp.benefitCurrency',
+    },
+    {
+      key: 'waitingPeriodDays',
+      kind: 'integer',
+      min: 0,
+      defaultValue: 0,
+      keepDefault: true,
+      helpTextKey: 'fieldHelp.benefitWaitingPeriod',
+    },
+    {
+      key: 'waitingPeriodMonths',
+      kind: 'integer',
+      min: 0,
+      defaultValue: 0,
+      keepDefault: true,
+      helpTextKey: 'benefitContributions.waitingMonthsHint',
+    },
     { key: 'effectiveFrom', kind: 'date', required: true },
     { key: 'effectiveTo', kind: 'date' },
-    { key: 'isActive', kind: 'boolean', defaultValue: false, helpTextKey: 'benefitContributions.activationHint' },
+    {
+      key: 'isActive',
+      kind: 'boolean',
+      defaultValue: false,
+      helpTextKey: 'benefitContributions.activationHint',
+    },
   ],
 }
 
 /** Validate the offer identity; pricing is declared by contribution rules. */
-export function benefitPlanShapeProblem(body: Record<string, unknown>): string | null {
-  if (['employeeCostBasis', 'employeeCost', 'employerCostBasis', 'employerCost', 'employeePayComponentId', 'employerPayComponentId', 'prorationBasis', 'pretax', 'requiresApproval'].some((key) => Object.hasOwn(body, key))) return 'Configure pricing in Contributions and enrollment review in Approval policy'
+export function benefitPlanShapeProblem(
+  body: Record<string, unknown>,
+): string | null {
+  if (
+    [
+      'employeeCostBasis',
+      'employeeCost',
+      'employerCostBasis',
+      'employerCost',
+      'employeePayComponentId',
+      'employerPayComponentId',
+      'prorationBasis',
+      'pretax',
+      'requiresApproval',
+    ].some((key) => Object.hasOwn(body, key))
+  )
+    return 'Configure pricing in Contributions and approvals in Flows'
 
   const currency = (body.currency ?? null) as string | null
   if (currency !== null && !/^[A-Z]{3}$/.test(currency)) {
@@ -58,12 +118,20 @@ export function benefitPlanShapeProblem(body: Record<string, unknown>): string |
   // spelling. Blank means no waiting period; malformed values remain
   // visible to validation rather than becoming a different period.
   const waiting = foldWholeNumber(body.waitingPeriodDays)
-  if (waiting !== undefined && (!Number.isInteger(waiting) || (waiting as number) < 0)) {
+  if (
+    waiting !== undefined &&
+    (!Number.isInteger(waiting) || (waiting as number) < 0)
+  ) {
     return 'The waiting period is a non-negative whole number of days'
   }
   const months = foldWholeNumber(body.waitingPeriodMonths)
-  if (months !== undefined && (!Number.isSafeInteger(months) || (months as number) < 0)) return 'The waiting period is a non-negative whole number of calendar months'
-  if ((months as number ?? 0) > 0 && (waiting as number ?? 0) > 0) return 'Choose a waiting period in calendar months or days, not both'
+  if (
+    months !== undefined &&
+    (!Number.isSafeInteger(months) || (months as number) < 0)
+  )
+    return 'The waiting period is a non-negative whole number of calendar months'
+  if (((months as number) ?? 0) > 0 && ((waiting as number) ?? 0) > 0)
+    return 'Choose a waiting period in calendar months or days, not both'
   return null
 }
 
@@ -90,38 +158,116 @@ export function normalizeHrmBenefitPlanInput(
 }
 
 /** Guided coverage and savings forms share the authoritative plan fields. */
-export function benefitPlanPresentation(kind: 'health' | 'retirement', creating = true): SetupEntity {
+export function benefitPlanPresentation(
+  kind: 'health' | 'retirement',
+  creating = true,
+): SetupEntity {
   const retirement = kind === 'retirement'
-  const identity = ['code', 'name', 'kind', 'providerPartyId', 'employerSubsidiaryId', 'currency']
-  const eligibility = ['waitingPeriodDays', 'waitingPeriodMonths', 'approvalMode', 'effectiveFrom', 'effectiveTo', 'isActive']
+  const identity = [
+    'code',
+    'name',
+    'kind',
+    'providerPartyId',
+    'employerSubsidiaryId',
+    'currency',
+  ]
+  const eligibility = [
+    'waitingPeriodDays',
+    'waitingPeriodMonths',
+    'effectiveFrom',
+    'effectiveTo',
+    'isActive',
+  ]
   return {
     ...BENEFIT_PLANS_ENTITY,
     formDescriptionKey: `benefitBuilder.${kind}.offer`,
-    formSections: creating ? undefined : [
-      { titleKey: 'benefitBuilder.offer', fields: identity },
-      { titleKey: 'benefitBuilder.eligibility', descriptionKey: 'benefitBuilder.eligibilityHint', fields: eligibility },
-    ],
-    recordChildren: BENEFIT_CONTRIBUTION_ENTITIES.filter((child) => child.parentRecords?.some((owner) => owner.entityKey === 'benefit-plans') && (retirement || child.key !== 'benefit-contribution-tiers'))
-      .sort((left, right) => Number(left.key === 'benefit-recovery-sources') - Number(right.key === 'benefit-recovery-sources')).map((child) => ({
-      ...child,
-      titleKey: child.key === 'benefit-contribution-rules' ? `benefitBuilder.${kind}.contribution` : !retirement && child.key === 'benefit-contribution-classes' ? 'benefitBuilder.health.classes' : undefined,
-      singularTitleKey: child.key === 'benefit-contribution-rules' ? `benefitBuilder.${kind}.contributionSingular` : undefined,
-      fields: child.fields.map((field) => child.key === 'benefit-contribution-rules' && field.key === 'rate'
-        ? { ...field, labelKey: `benefitBuilder.${kind}.rate` }
-        : !retirement && ['rateFormula', 'matchRuleId', 'requiresMatchEligibility', 'enforcePolicyCap'].includes(field.key)
-          ? { ...field, sectionKey: 'sections.benefitAdvanced' } : field)
-        .sort((left, right) => Number(left.sectionKey === 'sections.benefitAdvanced') - Number(right.sectionKey === 'sections.benefitAdvanced')),
-    })),
+    formSections: creating
+      ? undefined
+      : [
+          { titleKey: 'benefitBuilder.offer', fields: identity },
+          {
+            titleKey: 'benefitBuilder.eligibility',
+            descriptionKey: 'benefitBuilder.eligibilityHint',
+            fields: eligibility,
+          },
+        ],
+    recordChildren: BENEFIT_CONTRIBUTION_ENTITIES.filter(
+      (child) =>
+        child.parentRecords?.some(
+          (owner) => owner.entityKey === 'benefit-plans',
+        ) &&
+        (retirement || child.key !== 'benefit-contribution-tiers'),
+    )
+      .sort(
+        (left, right) =>
+          Number(left.key === 'benefit-recovery-sources') -
+          Number(right.key === 'benefit-recovery-sources'),
+      )
+      .map((child) => ({
+        ...child,
+        titleKey:
+          child.key === 'benefit-contribution-rules'
+            ? `benefitBuilder.${kind}.contribution`
+            : !retirement && child.key === 'benefit-contribution-classes'
+              ? 'benefitBuilder.health.classes'
+              : undefined,
+        singularTitleKey:
+          child.key === 'benefit-contribution-rules'
+            ? `benefitBuilder.${kind}.contributionSingular`
+            : undefined,
+        fields: child.fields
+          .map((field) =>
+            child.key === 'benefit-contribution-rules' && field.key === 'rate'
+              ? { ...field, labelKey: `benefitBuilder.${kind}.rate` }
+              : !retirement &&
+                  [
+                    'rateFormula',
+                    'matchRuleId',
+                    'requiresMatchEligibility',
+                    'enforcePolicyCap',
+                  ].includes(field.key)
+                ? { ...field, sectionKey: 'sections.benefitAdvanced' }
+                : field,
+          )
+          .sort(
+            (left, right) =>
+              Number(left.sectionKey === 'sections.benefitAdvanced') -
+              Number(right.sectionKey === 'sections.benefitAdvanced'),
+          ),
+      })),
     singularTitleKey: `benefitBuilder.${kind}.title`,
     creationSteps: [
-      { key: 'offer', titleKey: 'benefitBuilder.offer', descriptionKey: `benefitBuilder.${kind}.offer`, fields: identity },
-      { key: 'eligibility', titleKey: 'benefitBuilder.eligibility', descriptionKey: 'benefitBuilder.eligibilityHint', fields: eligibility },
+      {
+        key: 'offer',
+        titleKey: 'benefitBuilder.offer',
+        descriptionKey: `benefitBuilder.${kind}.offer`,
+        fields: identity,
+      },
+      {
+        key: 'eligibility',
+        titleKey: 'benefitBuilder.eligibility',
+        descriptionKey: 'benefitBuilder.eligibilityHint',
+        fields: eligibility,
+      },
     ],
     fields: BENEFIT_PLANS_ENTITY.fields.map((field) => {
       if (field.key === 'isActive') return { ...field, hidden: creating }
-      if (field.key === 'kind') return { ...field, defaultValue: kind, ...(retirement ? { hidden: true } : { labelKey: 'benefitBuilder.coverageType' }) }
-      if (field.key === 'providerPartyId') return { ...field, labelKey: `benefitBuilder.${kind}.provider` }
-      if (field.key === 'currency') return { ...field, ref: 'benefit-currencies', refScopeField: 'employerSubsidiaryId' }
+      if (field.key === 'kind')
+        return {
+          ...field,
+          defaultValue: kind,
+          ...(retirement
+            ? { hidden: true }
+            : { labelKey: 'benefitBuilder.coverageType' }),
+        }
+      if (field.key === 'providerPartyId')
+        return { ...field, labelKey: `benefitBuilder.${kind}.provider` }
+      if (field.key === 'currency')
+        return {
+          ...field,
+          ref: 'benefit-currencies',
+          refScopeField: 'employerSubsidiaryId',
+        }
       return { ...field, sectionKey: undefined }
     }),
   }

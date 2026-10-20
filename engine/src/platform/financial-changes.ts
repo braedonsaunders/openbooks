@@ -17,18 +17,47 @@ export {
 /** Workflow evidence only. Financial calculations and subject authorization
  * stay in their owning modules; the existing Flows engine owns decisions. */
 export type FinancialChangeDomain =
-  "lease" | "revenue" | "asset" | "consolidation" | "manufacturing" | "provision" | "sales" | "payroll" | "ledger";
+  | "lease"
+  | "revenue"
+  | "asset"
+  | "consolidation"
+  | "manufacturing"
+  | "provision"
+  | "sales"
+  | "payroll"
+  | "ledger";
+
+/** Submission authority is shared by native services and API boundaries. */
+export const FINANCIAL_CHANGE_AUTHORITY = {
+  manufacturing: {
+    permission: "manufacturing.manage",
+    feature: "manufacturing",
+  },
+  payroll: { permission: "payroll.run", feature: "payroll" },
+  sales: { permission: "ar.post", feature: "dropShipping" },
+  provision: {
+    permission: "gl.manage",
+    applyPermission: "gl.post",
+    feature: null,
+  },
+  lease: { permission: "assets.manage", feature: "fixedAssets" },
+  asset: { permission: "assets.manage", feature: "fixedAssets" },
+  revenue: { permission: "ar.post", feature: "revenueRecognition" },
+  consolidation: { permission: "close.run", feature: "multiSubsidiary" },
+  ledger: { permission: "gl.manage", feature: "accountMerges" },
+} as const;
 
 /** Merging one account into a surviving account (ledger domain). */
 export const ACCOUNT_MERGE_OPERATION = "account_merge";
 
 export const ADJUDICATED_HOLIDAY_HOURS_OPERATION = "adjudicated_holiday_hours";
 
-export const HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION = "historical_translation_contribution";
+export const HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION =
+  "historical_translation_contribution";
 
 export class FinancialChangeFeatureError extends Error {
   readonly status = 422;
-  readonly name = 'FinancialChangeFeatureError';
+  readonly name = "FinancialChangeFeatureError";
 }
 
 export class FinancialChangeConflictError extends Error {
@@ -37,10 +66,12 @@ export class FinancialChangeConflictError extends Error {
 }
 
 /** Manufacturing events use the shared immutable proposal and approval ledger. */
-export const MANUFACTURING_LOSS_DISPOSITION_OPERATION = "work_order_loss_disposition";
+export const MANUFACTURING_LOSS_DISPOSITION_OPERATION =
+  "work_order_loss_disposition";
 export const MANUFACTURING_STANDARD_ROLLUP_OPERATION = "standard_cost_rollup";
 export const MANUFACTURING_BOM_APPROVAL_OPERATION = "bom_revision_activation";
-export const MANUFACTURING_ROUTING_APPROVAL_OPERATION = "routing_revision_activation";
+export const MANUFACTURING_ROUTING_APPROVAL_OPERATION =
+  "routing_revision_activation";
 export const MANUFACTURING_SCRAP_RESTATEMENT_OPERATION =
   "scrap_snapshot_restatement";
 
@@ -83,6 +114,12 @@ export type FinancialChange = {
   approved_by: string | null;
   /** Native decided gates and their retained policy authorize a self decision. */
   self_approval_authorized?: boolean;
+  submission_policy?: {
+    version: 1;
+    kind: "gated" | "ungated";
+    flowIds: string[];
+    runIds: string[];
+  } | null;
   result: Record<string, unknown> | null;
 };
 export async function loadFinancialChange(
@@ -143,12 +180,6 @@ export async function existingFinancialChange(
   }
   return existing.id;
 }
-/** Approval is an optional tenant Flow: true when an enabled Accounting-event
- * Flow can govern a financial change, so a revision may need its gates. */
-export async function financialChangeFlowConfigured(tx: SqlExecutor, orgId: string): Promise<boolean> {
-  const enabled = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from flows where org_id=${orgId} and subject_kind='financial_change' and enabled`)).rows[0]?.n ?? 0;
-  return enabled > 0;
-}
 export async function proposeFinancialChange(
   tx: SqlExecutor,
   args: FinancialChangeProposal,
@@ -186,11 +217,14 @@ export function assertFinancialChangeApproved(
   },
 ): void {
   if (change.domain !== args.domain || change.subject_id !== args.subjectId)
-    throw new FinancialChangeConflictError("approval belongs to another financial record");
+    throw new FinancialChangeConflictError(
+      "approval belongs to another financial record",
+    );
   if (
     change.status !== "approved" ||
     !change.approved_by ||
-    (change.approved_by === change.submitted_by && change.self_approval_authorized !== true)
+    (change.approved_by === change.submitted_by &&
+      change.self_approval_authorized !== true)
   ) {
     throw new FinancialChangeConflictError(
       "Submit this change through Flows and obtain a decision permitted by its approval policy before applying it.",
@@ -207,16 +241,34 @@ export async function loadFinancialChangeSubjectLabel(
   orgId: string,
   domain: FinancialChangeDomain,
   subjectId: string,
-  operation?:string,
+  operation?: string,
 ): Promise<string | null> {
   if (domain === "payroll") {
-    return (await tx.execute<{ label: string }>(sql`select display_name as label from parties where org_id=${orgId} and id=${subjectId}`)).rows[0]?.label ?? null;
+    return (
+      (
+        await tx.execute<{ label: string }>(
+          sql`select display_name as label from parties where org_id=${orgId} and id=${subjectId}`,
+        )
+      ).rows[0]?.label ?? null
+    );
   }
   if (domain === "ledger") {
-    return (await tx.execute<{ label: string }>(sql`select concat_ws(' · ', number, name) as label from accounts where org_id=${orgId} and id=${subjectId}`)).rows[0]?.label ?? null;
+    return (
+      (
+        await tx.execute<{ label: string }>(
+          sql`select concat_ws(' · ', number, name) as label from accounts where org_id=${orgId} and id=${subjectId}`,
+        )
+      ).rows[0]?.label ?? null
+    );
   }
   if (domain === "sales") {
-    return (await tx.execute<{label:string}>(sql`select document.document_number || ' — line ' || line.line_number as label from document_lines line join documents document on document.org_id=line.org_id and document.id=line.document_id where line.org_id=${orgId} and line.id=${subjectId}`)).rows[0]?.label ?? null;
+    return (
+      (
+        await tx.execute<{ label: string }>(
+          sql`select document.document_number || ' — line ' || line.line_number as label from document_lines line join documents document on document.org_id=line.org_id and document.id=line.document_id where line.org_id=${orgId} and line.id=${subjectId}`,
+        )
+      ).rows[0]?.label ?? null
+    );
   }
   if (domain === "lease") {
     const row = (
@@ -249,24 +301,68 @@ export async function loadFinancialChangeSubjectLabel(
     return row?.label ?? null;
   }
   if (domain === "provision") {
-    return (await tx.execute<{ label: string }>(sql`
+    return (
+      (
+        await tx.execute<{ label: string }>(sql`
       select name as label from provision_obligations where org_id=${orgId} and id=${subjectId}
-    `)).rows[0]?.label ?? null;
+    `)
+      ).rows[0]?.label ?? null
+    );
   }
   if (domain === "manufacturing") {
-    if([MANUFACTURING_STANDARD_ROLLUP_OPERATION,MANUFACTURING_BOM_APPROVAL_OPERATION].includes(operation??''))return (await tx.execute<{label:string}>(sql`select concat_ws(' — ',code,name) as label from items where org_id=${orgId} and id=${subjectId}`)).rows[0]?.label??null;
-    if(operation===MANUFACTURING_ROUTING_APPROVAL_OPERATION)return (await tx.execute<{label:string}>(sql`select concat_ws(' — ',code,name) as label from mfg_routings where org_id=${orgId} and id=${subjectId}`)).rows[0]?.label??null;
-    if(operation===MANUFACTURING_LOSS_DISPOSITION_OPERATION)return (await tx.execute<{label:string}>(sql`select number as label from mfg_work_orders where org_id=${orgId} and id=${subjectId}`)).rows[0]?.label??null;
-    if(operation===MANUFACTURING_SCRAP_RESTATEMENT_OPERATION)return (await tx.execute<{label:string}>(sql`select work.number || ' — scrap' as label from mfg_scrap_events event join mfg_work_orders work on work.org_id=event.org_id and work.id=event.work_order_id where event.org_id=${orgId} and event.id=${subjectId}`)).rows[0]?.label??null;
+    if (
+      [
+        MANUFACTURING_STANDARD_ROLLUP_OPERATION,
+        MANUFACTURING_BOM_APPROVAL_OPERATION,
+      ].includes(operation ?? "")
+    )
+      return (
+        (
+          await tx.execute<{ label: string }>(
+            sql`select concat_ws(' — ',code,name) as label from items where org_id=${orgId} and id=${subjectId}`,
+          )
+        ).rows[0]?.label ?? null
+      );
+    if (operation === MANUFACTURING_ROUTING_APPROVAL_OPERATION)
+      return (
+        (
+          await tx.execute<{ label: string }>(
+            sql`select concat_ws(' — ',code,name) as label from mfg_routings where org_id=${orgId} and id=${subjectId}`,
+          )
+        ).rows[0]?.label ?? null
+      );
+    if (operation === MANUFACTURING_LOSS_DISPOSITION_OPERATION)
+      return (
+        (
+          await tx.execute<{ label: string }>(
+            sql`select number as label from mfg_work_orders where org_id=${orgId} and id=${subjectId}`,
+          )
+        ).rows[0]?.label ?? null
+      );
+    if (operation === MANUFACTURING_SCRAP_RESTATEMENT_OPERATION)
+      return (
+        (
+          await tx.execute<{ label: string }>(
+            sql`select work.number || ' — scrap' as label from mfg_scrap_events event join mfg_work_orders work on work.org_id=event.org_id and work.id=event.work_order_id where event.org_id=${orgId} and event.id=${subjectId}`,
+          )
+        ).rows[0]?.label ?? null
+      );
     return null;
   }
-  if (domain === "consolidation" && operation === HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION) {
-    return (await tx.execute<{ label: string }>(sql`
+  if (
+    domain === "consolidation" &&
+    operation === HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION
+  ) {
+    return (
+      (
+        await tx.execute<{ label: string }>(sql`
       select entry.entry_number || ' — line ' || line.line_number as label
         from journal_lines line
         join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
        where line.org_id=${orgId} and line.id=${subjectId}
-    `)).rows[0]?.label ?? null;
+    `)
+      ).rows[0]?.label ?? null
+    );
   }
   const row = (
     await tx.execute<{ label: string }>(sql`
@@ -294,4 +390,29 @@ export async function completeFinancialChange(
   `);
   if (updated.rows.length !== 1)
     throw new Error("approved financial change could not be completed");
+}
+
+/** Module writers submit through the installed Flow engine without reversing
+ * the dependency graph or implementing another approval policy. */
+type FinancialChangeSubmission = (
+  orgId: string,
+  changeId: string,
+  actorId: string,
+) => Promise<void>;
+let financialChangeSubmission: FinancialChangeSubmission | null = null;
+export function registerFinancialChangeSubmission(
+  handler: FinancialChangeSubmission,
+): void {
+  financialChangeSubmission = handler;
+}
+export async function submitNativeFinancialChange(
+  orgId: string,
+  changeId: string,
+  actorId: string,
+): Promise<void> {
+  if (!financialChangeSubmission)
+    throw new FinancialChangeConflictError(
+      "Native Flow submission is unavailable; retry after the application starts.",
+    );
+  await financialChangeSubmission(orgId, changeId, actorId);
 }

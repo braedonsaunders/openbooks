@@ -24,7 +24,8 @@ export type FlowNode = Node<NodeData>
 export type OrgUser = { id: string; name: string; email: string }
 export type OrgRole = { key: string; name: string }
 
-export const newId = (prefix: string) => `${prefix}_${globalThis.crypto.randomUUID()}`
+export const newId = (prefix: string) =>
+  `${prefix}_${globalThis.crypto.randomUUID()}`
 
 /** Branch-handle → visible edge label ('next' stays unlabeled). */
 export function edgeLabel(
@@ -72,7 +73,10 @@ export function connectHandles(kind: NodeKind): string[] {
  * target Handle (triggers render none, so wiring into one would be a dead
  * edge the pointer path cannot even draw), minus the source itself.
  */
-export function connectTargets(sourceId: string, nodes: FlowNode[]): FlowNode[] {
+export function connectTargets(
+  sourceId: string,
+  nodes: FlowNode[],
+): FlowNode[] {
   return nodes.filter((n) => n.id !== sourceId && n.data.kind !== 'trigger')
 }
 
@@ -161,7 +165,6 @@ export function toFlow(
 export function fromFlow(
   nodes: FlowNode[],
   edges: Edge[],
-  ungatedOutcome?: 'apply',
   subsidiaryIds?: readonly string[],
 ): AutomationGraph {
   // Saving converges too: canvas state that somehow holds two nodes with one
@@ -172,11 +175,14 @@ export function fromFlow(
     seen.add(n.id)
     return true
   })
-  const scopeIds = [...new Set((subsidiaryIds ?? []).map((id) => id.toLowerCase()))]
+  const scopeIds = [
+    ...new Set((subsidiaryIds ?? []).map((id) => id.toLowerCase())),
+  ]
   return {
     schemaVersion: 1,
-    ...(ungatedOutcome ? { ungatedOutcome } : {}),
-    ...(scopeIds.length > 0 ? { subjectScope: { subsidiaryIds: scopeIds } } : {}),
+    ...(scopeIds.length > 0
+      ? { subjectScope: { subsidiaryIds: scopeIds } }
+      : {}),
     nodes: unique.map((n) => ({
       id: n.id,
       position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },
@@ -186,7 +192,9 @@ export function fromFlow(
       id: e.id,
       source: e.source,
       target: e.target,
-      sourceHandle: (e.sourceHandle as AutomationGraph['edges'][number]['sourceHandle']) ?? 'next',
+      sourceHandle:
+        (e.sourceHandle as AutomationGraph['edges'][number]['sourceHandle']) ??
+        'next',
     })),
   }
 }
@@ -195,20 +203,26 @@ export function fromFlow(
  * Fresh TriggerData for a trigger kind. Defaults are chosen to pass the zod
  * graph schema so a just-added node can be saved immediately.
  */
-export function buildTrigger(kind: TriggerKind, profile: FlowSubjectProfile): TriggerData {
+export function buildTrigger(
+  kind: TriggerKind,
+  profile: FlowSubjectProfile,
+): TriggerData {
   switch (kind) {
     case 'on_field_value':
-      return { trigger: 'on_field_value', rule: { op: 'isSet', field: firstFieldKey(profile) } }
+      return {
+        trigger: 'on_field_value',
+        rule: { op: 'isSet', field: firstFieldKey(profile) },
+      }
     case 'status_change':
       return { trigger: 'status_change' } // no from/to = every transition
     case 'scheduled':
       return {
-        trigger: "scheduled",
-        cron: "0 8 * * 1",
-        ...(profile.subjectKind === "schedule_board"
+        trigger: 'scheduled',
+        cron: '0 8 * * 1',
+        ...(profile.subjectKind === 'schedule_board'
           ? { select: { limit: 200 } }
           : {}),
-      };
+      }
     case 'manual':
       return { trigger: 'manual', buttonId: newId('btn'), label: 'Run flow' }
     default:
@@ -217,11 +231,15 @@ export function buildTrigger(kind: TriggerKind, profile: FlowSubjectProfile): Tr
 }
 
 /** Fresh ActionData for an action kind, again schema-valid out of the box. */
-export function buildAction(kind: ActionKind, profile: FlowSubjectProfile): ActionData {
+export function buildAction(
+  kind: ActionKind,
+  profile: FlowSubjectProfile,
+): ActionData {
   switch (kind) {
-    case "send_board_schedule":
-      return { action: "send_board_schedule" };
-    case 'distribute_schedule': return {action:'distribute_schedule'}
+    case 'send_board_schedule':
+      return { action: 'send_board_schedule' }
+    case 'distribute_schedule':
+      return { action: 'distribute_schedule' }
     case 'send_email':
       return {
         action: 'send_email',
@@ -230,7 +248,11 @@ export function buildAction(kind: ActionKind, profile: FlowSubjectProfile): Acti
         body: '',
       }
     case 'notify':
-      return { action: 'notify', to: [{ type: 'submitter' }], title: 'Update on {{documentNumber}}' }
+      return {
+        action: 'notify',
+        to: [{ type: 'submitter' }],
+        title: 'Update on {{documentNumber}}',
+      }
     case 'set_field':
       return {
         action: 'set_field',
@@ -238,7 +260,10 @@ export function buildAction(kind: ActionKind, profile: FlowSubjectProfile): Acti
         value: { kind: 'literal', value: '' },
       }
     case 'change_status':
-      return { action: 'change_status', to: profile.statuses[0]?.value ?? 'draft' }
+      return {
+        action: 'change_status',
+        to: profile.statuses[0]?.value ?? 'draft',
+      }
     case 'post_document':
       return { action: 'post_document' }
     case 'lock_record':
@@ -261,14 +286,26 @@ export function defaultGateRole(profile: FlowSubjectProfile): string {
 }
 
 /** Default payload for a node freshly dropped from the palette. */
-export function defaultNodeData(kind: NodeKind, profile: FlowSubjectProfile): NodeData {
+export function defaultNodeData(
+  kind: NodeKind,
+  profile: FlowSubjectProfile,
+): NodeData {
   switch (kind) {
     case 'trigger':
-      return { kind: 'trigger', trigger: buildTrigger(profile.triggers[0] ?? 'on_submit', profile) }
+      return {
+        kind: 'trigger',
+        trigger: buildTrigger(profile.triggers[0] ?? 'on_submit', profile),
+      }
     case 'condition':
-      return { kind: 'condition', rule: { op: 'isSet', field: firstFieldKey(profile) } }
+      return {
+        kind: 'condition',
+        rule: { op: 'isSet', field: firstFieldKey(profile) },
+      }
     case 'action':
-      return { kind: 'action', action: buildAction(profile.actions[0] ?? 'notify', profile) }
+      return {
+        kind: 'action',
+        action: buildAction(profile.actions[0] ?? 'notify', profile),
+      }
     case 'gate':
       return {
         kind: 'gate',
@@ -300,15 +337,22 @@ export function autoWireEdge(
   const fresh = nodes.find((n) => n.id === newId)
   if (!fresh || fresh.data.kind === 'trigger') return null
   const anchor =
-    nodes.find((n) => n.id === anchorId && n.id !== newId) ?? tailNode(newId, nodes, edges)
+    nodes.find((n) => n.id === anchorId && n.id !== newId) ??
+    tailNode(newId, nodes, edges)
   if (!anchor) return null
   const used = new Set(
-    edges.filter((e) => e.source === anchor.id).map((e) => e.sourceHandle ?? 'next'),
+    edges
+      .filter((e) => e.source === anchor.id)
+      .map((e) => e.sourceHandle ?? 'next'),
   )
   const handles = connectHandles(anchor.data.kind)
   const handle = handles.find((h) => !used.has(h)) ?? handles[0]
   if (!handle) return null
-  return buildConnectEdge({ source: anchor.id, sourceHandle: handle, target: newId }, nodes, labels)
+  return buildConnectEdge(
+    { source: anchor.id, sourceHandle: handle, target: newId },
+    nodes,
+    labels,
+  )
 }
 
 /**
@@ -316,7 +360,11 @@ export function autoWireEdge(
  * ties. A linear graph has exactly one, so palette adds extend the chain;
  * a branched graph extends its rightmost open end.
  */
-function tailNode(excludeId: string, nodes: FlowNode[], edges: Edge[]): FlowNode | null {
+function tailNode(
+  excludeId: string,
+  nodes: FlowNode[],
+  edges: Edge[],
+): FlowNode | null {
   const open = nodes.filter(
     (n) => n.id !== excludeId && !edges.some((e) => e.source === n.id),
   )
@@ -352,14 +400,22 @@ export function firstWritableFieldKey(profile: FlowSubjectProfile): string {
  * lightly staggered vertically so stacks of adds stay readable. Triggers
  * start a column of their own on the left edge.
  */
-export function nextPosition(kind: NodeKind, nodes: FlowNode[]): { x: number; y: number } {
+export function nextPosition(
+  kind: NodeKind,
+  nodes: FlowNode[],
+): { x: number; y: number } {
   if (nodes.length === 0) return { x: 60, y: 120 }
   if (kind === 'trigger') {
     const triggers = nodes.filter((n) => n.data.kind === 'trigger')
-    const maxY = triggers.length ? Math.max(...triggers.map((n) => n.position.y)) : -60
+    const maxY = triggers.length
+      ? Math.max(...triggers.map((n) => n.position.y))
+      : -60
     return { x: 60, y: maxY + 160 }
   }
   const maxX = Math.max(...nodes.map((n) => n.position.x))
   const atFrontier = nodes.filter((n) => n.position.x === maxX)
-  return { x: maxX + 260, y: (atFrontier[0]?.position.y ?? 120) + (atFrontier.length - 1) * 40 }
+  return {
+    x: maxX + 260,
+    y: (atFrontier[0]?.position.y ?? 120) + (atFrontier.length - 1) * 40,
+  }
 }

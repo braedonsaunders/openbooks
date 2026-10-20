@@ -60,7 +60,8 @@ export interface InboxAdapter {
 export class InboxError extends Error {
   readonly name = "InboxError";
   constructor(
-    readonly code: "NOT_FOUND" | "REFUSED" | "REASON_REQUIRED" | "UNKNOWN_ACTION",
+    readonly code:
+      "NOT_FOUND" | "REFUSED" | "REASON_REQUIRED" | "UNKNOWN_ACTION",
     message: string,
   ) {
     super(message);
@@ -107,7 +108,11 @@ export interface InboxSourceNotice {
  * permission keys or setup routes at the person it refused. Anything
  * unexpected logs the way the house does.
  */
-function recordSourceFailure(kind: InboxKind, error: unknown, notices?: InboxSourceNotice[]): void {
+function recordSourceFailure(
+  kind: InboxKind,
+  error: unknown,
+  notices?: InboxSourceNotice[],
+): void {
   if (error instanceof HrmAuthorizationError) return;
   // A source whose module is switched off has no work to show either.
   if ((error as { code?: unknown } | null)?.code === "FEATURE_OFF") return;
@@ -116,7 +121,11 @@ function recordSourceFailure(kind: InboxKind, error: unknown, notices?: InboxSou
     return;
   }
   console.error(`[inbox] ${kind} list failed:`, error);
-  notices?.push({ kind, code: "failed", message: "the inbox source could not be read" });
+  notices?.push({
+    kind,
+    code: "failed",
+    message: "the inbox source could not be read",
+  });
 }
 
 /**
@@ -129,30 +138,54 @@ function recordSourceFailure(kind: InboxKind, error: unknown, notices?: InboxSou
  */
 export async function listInbox(
   ctx: InboxListContext,
-  opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]>; page?: InboxPage; notices?: InboxSourceNotice[] },
+  opts?: {
+    kinds?: InboxKind[];
+    cache?: Map<string, InboxItem[]>;
+    page?: InboxPage;
+    notices?: InboxSourceNotice[];
+  },
 ): Promise<InboxItem[]> {
   const read = beginInboxRead(ctx);
-  const legs = await readSources(read, opts?.kinds, opts?.page ? undefined : opts?.cache, async (adapter, cacheKey) => {
-    if (opts?.page) return adapter.list(read, opts.page);
-    const items = await adapter.list(read);
-    opts?.cache?.set(cacheKey, items);
-    return items;
-  }, opts?.notices);
+  const legs = await readSources(
+    read,
+    opts?.kinds,
+    opts?.page ? undefined : opts?.cache,
+    async (adapter, cacheKey) => {
+      if (opts?.page) return adapter.list(read, opts.page);
+      const items = await adapter.list(read);
+      opts?.cache?.set(cacheKey, items);
+      return items;
+    },
+    opts?.notices,
+  );
   return legs.flat().sort(compareInboxItems);
 }
 
 export async function countInbox(
   ctx: InboxListContext,
-  opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]>; notices?: InboxSourceNotice[] },
+  opts?: {
+    kinds?: InboxKind[];
+    cache?: Map<string, InboxItem[]>;
+    notices?: InboxSourceNotice[];
+  },
 ): Promise<number> {
   const read = beginInboxRead(ctx);
-  const legs = await readSources(read, opts?.kinds, opts?.cache, async (adapter, cacheKey) => {
-    if (adapter.count) return adapter.count(read);
-    const items = await adapter.list(read);
-    opts?.cache?.set(cacheKey, items);
-    return items.length;
-  }, opts?.notices);
-  return legs.reduce<number>((total, leg) => total + (typeof leg === "number" ? leg : leg.length), 0);
+  const legs = await readSources(
+    read,
+    opts?.kinds,
+    opts?.cache,
+    async (adapter, cacheKey) => {
+      if (adapter.count) return adapter.count(read);
+      const items = await adapter.list(read);
+      opts?.cache?.set(cacheKey, items);
+      return items.length;
+    },
+    opts?.notices,
+  );
+  return legs.reduce<number>(
+    (total, leg) => total + (typeof leg === "number" ? leg : leg.length),
+    0,
+  );
 }
 
 /**
@@ -171,27 +204,38 @@ async function readSources<T>(
   notices: InboxSourceNotice[] | undefined,
 ): Promise<(T | InboxItem[])[]> {
   const kinds = requested ?? inboxAdapterKinds();
-  const settled = await Promise.all(kinds.map(async (kind): Promise<{ value: T | InboxItem[] } | { kind: InboxKind; error: unknown } | null> => {
-    const adapter = adapterFor(kind);
-    if (!adapter) return null;
-    const cacheKey = JSON.stringify({
-      orgId: ctx.orgId, actorId: ctx.actorId, asOf: ctx.asOf, kind,
-      // Missing scope asks the native reader to resolve authority; explicit
-      // null means unrestricted. Object fields preserve that distinction.
-      scope: {
-        roles: ctx.scope?.roles,
-        allowedSubsidiaryIds: ctx.scope?.allowedSubsidiaryIds,
-        includeBudgets: ctx.scope?.includeBudgets,
+  const settled = await Promise.all(
+    kinds.map(
+      async (
+        kind,
+      ): Promise<
+        { value: T | InboxItem[] } | { kind: InboxKind; error: unknown } | null
+      > => {
+        const adapter = adapterFor(kind);
+        if (!adapter) return null;
+        const cacheKey = JSON.stringify({
+          orgId: ctx.orgId,
+          actorId: ctx.actorId,
+          asOf: ctx.asOf,
+          approvalWorklistOwnsGates: ctx.approvalWorklistOwnsGates,
+          kind,
+          // Missing scope asks the native reader to resolve authority; explicit
+          // null means unrestricted. Object fields preserve that distinction.
+          scope: {
+            roles: ctx.scope?.roles,
+            allowedSubsidiaryIds: ctx.scope?.allowedSubsidiaryIds,
+          },
+        });
+        const cached = cache?.get(cacheKey);
+        if (cached) return { value: cached as T | InboxItem[] };
+        try {
+          return { value: (await read(adapter, cacheKey)) as T | InboxItem[] };
+        } catch (error) {
+          return { kind, error };
+        }
       },
-    });
-    const cached = cache?.get(cacheKey);
-    if (cached) return { value: cached as T | InboxItem[] };
-    try {
-      return { value: await read(adapter, cacheKey) as T | InboxItem[] };
-    } catch (error) {
-      return { kind, error };
-    }
-  }));
+    ),
+  );
   const values: (T | InboxItem[])[] = [];
   for (const leg of settled) {
     if (!leg) continue;
@@ -219,7 +263,8 @@ export async function actOnInboxItem(
   if (sep < 0) throw new InboxError("NOT_FOUND", "inbox item not found");
   const kind = itemId.slice(0, sep);
   const sourceId = itemId.slice(sep + 1);
-  if (!kind || !sourceId) throw new InboxError("NOT_FOUND", "inbox item not found");
+  if (!kind || !sourceId)
+    throw new InboxError("NOT_FOUND", "inbox item not found");
   const adapter = adapterFor(kind);
   if (!adapter) throw new InboxError("NOT_FOUND", "inbox item not found");
   // Re-resolve the item through the source's own gate: an item the actor
@@ -229,8 +274,13 @@ export async function actOnInboxItem(
   // window stays actionable; without one the first window arbitrates.
   const item = adapter.lookup
     ? await adapter.lookup(ctx, sourceId)
-    : (await adapter.list(ctx)).find((candidate) => candidate.id === itemId) ?? null;
-  if (!item) throw new InboxError("NOT_FOUND", "inbox item not found — it may already be decided or outside your scope");
+    : ((await adapter.list(ctx)).find((candidate) => candidate.id === itemId) ??
+      null);
+  if (!item)
+    throw new InboxError(
+      "NOT_FOUND",
+      "inbox item not found — it may already be decided or outside your scope",
+    );
   if (!item.actions.some((action) => action.key === actionKey)) {
     throw new InboxError(
       "UNKNOWN_ACTION",

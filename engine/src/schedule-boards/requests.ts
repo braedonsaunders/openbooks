@@ -1,3 +1,7 @@
+import {
+  lockApprovalSubject,
+  readNativeApprovalDecision,
+} from "../platform/approval-routing.ts";
 /**
  * Shift requests: an employee asks to release, change or swap their own
  * published future booking from My schedule.
@@ -127,7 +131,11 @@ async function readRequest(orgId: string, id: string): Promise<ShiftRequest> {
 
 /** Self-service needs Scheduling, the request permission and a login linked to the person. */
 async function selfServiceParty(actor: ScheduleActor): Promise<string> {
-  if (!await lockAndCheckOrgFeature(db, actor.orgId, "hrm") || !await lockAndCheckOrgFeature(db, actor.orgId, "hrmShiftPlanning")) throw new ScopeNotFoundError();
+  if (
+    !(await lockAndCheckOrgFeature(db, actor.orgId, "hrm")) ||
+    !(await lockAndCheckOrgFeature(db, actor.orgId, "hrmShiftPlanning"))
+  )
+    throw new ScopeNotFoundError();
   await lockActorCommandAuthority(db, actor.orgId, actor.actorId, null, "hrm.self.request");
   const party = (await db.execute<{ partyId: string | null }>(sql`select party_id as "partyId" from users where org_id = ${actor.orgId} and id = ${actor.actorId} and is_active for share`)).rows[0];
   if (!party?.partyId) {
@@ -150,9 +158,14 @@ function requestable(row: StoredEntry, party: string, revision: unknown, label: 
   if (row.started || row.closed) throw new ScheduleError(`${label} has already started.`, { code: "schedule_request_started", remedy: "Ask your scheduler directly about shifts in progress." });
 }
 
-async function openRequestFor(orgId: string, entryId: string): Promise<boolean> {
-  return (await db.execute(sql`select 1 from schedule_entry_requests where org_id = ${orgId} and status in ('awaiting_counterpart', 'pending')
-    and ${entryId} in (entry_id, counterpart_entry_id) limit 1`)).rows.length > 0;
+async function openRequestFor(
+  orgId: string,
+  entryId: string,
+): Promise<boolean> {
+  return (
+    (await db.execute(sql`select 1 from schedule_entry_requests where org_id = ${orgId} and status in ('awaiting_counterpart', 'pending')
+    and ${entryId} in (entry_id, counterpart_entry_id) limit 1`)).rows.length > 0
+  );
 }
 
 export interface ShiftRequestInput {
@@ -313,21 +326,55 @@ export interface ShiftRequestDecision {
 }
 
 /** A Flow's approval gates resolved: apply the decision as the gate's decider. */
-export async function releaseShiftRequestApproval(input: { orgId: string; actorId: string; requestId: string; outcome: "approved" | "rejected"; comment?: string | null }): Promise<void> {
+export async function releaseShiftRequestApproval(input: {
+  orgId: string;
+  actorId: string;
+  requestId: string;
+  outcome: "approved" | "rejected";
+  comment?: string | null;
+  approvalRunId?: string;
+}): Promise<void> {
   const actor = { orgId: input.orgId, actorId: input.actorId };
-  const request = await lockRequest(actor.orgId, input.requestId);
-  if (request.status !== "pending") {
+  await withOrgTransaction(input.orgId, async () => {
+    await lockApprovalSubject(
+      input.orgId,
+      SHIFT_REQUEST_SUBJECT_KIND,
+      input.requestId,
+    );
+    const proof = await readNativeApprovalDecision({
+      orgId: input.orgId,
+      actorId: input.actorId,
+      subjectKind: SHIFT_REQUEST_SUBJECT_KIND,
+      subjectId: input.requestId,
+      outcome: input.outcome,
+      approvalRunId: input.approvalRunId,
+    });
+    if (!proof)
+      throw new ScheduleError(
+        "Complete the configured shift request Flow gates before releasing this request.",
+      );
+    const request = await lockRequest(actor.orgId, input.requestId);
+    if (request.status !== "pending") {
     throw new ScheduleError("The shift request no longer awaits a decision.", { status: 409, code: "schedule_stale", remedy: "Review the request's current state in Scheduling." });
   }
-  const board = await getBoard(actor, request.boardId);
-  const reason = input.comment?.trim() || (input.outcome === "approved" ? "Approved through the shift request Flow" : "Declined through the shift request Flow");
-  const result = await decide(actor, board, request, input.outcome === "approved" ? "approve" : "decline", reason, "flow");
-  if (input.outcome === "approved") {
+    const board = await getBoard(actor, request.boardId);
+    await boardAuthority(actor, board, "publish");
+    const reason = input.comment?.trim() || (input.outcome === "approved" ? "Approved through the shift request Flow" : "Declined through the shift request Flow");
+    const result = await decide(actor, board, request, input.outcome === "approved" ? "approve" : "decline", reason, "flow");
+    if (input.outcome === "approved") {
     await deliverScheduleNotice({ orgId: actor.orgId, actorId: actor.actorId, boardName: result.boardName, notices: result.notices });
   }
+  });
 }
 
-async function decide(actor: ScheduleActor, board: ScheduleBoard, request: ShiftRequest, decision: "approve" | "decline", reason: string, mode: "flow" | "released"): Promise<ShiftRequestDecision> {
+async function decide(
+  actor: ScheduleActor,
+  board: ScheduleBoard,
+  request: ShiftRequest,
+  decision: "approve" | "decline",
+  reason: string,
+  mode: "flow" | "released",
+): Promise<ShiftRequestDecision> {
   if (request.status !== "pending") throw new ScheduleError("This request is not waiting for a decision.", { status: 409, code: "schedule_stale", remedy: "Reload the requests." });
   if (decision !== "approve" && decision !== "decline") throw new ScheduleError("Choose to approve or decline the request.", { code: "schedule_invalid" });
   const notices: ScheduleNotice[] = [];
@@ -344,7 +391,12 @@ async function decide(actor: ScheduleActor, board: ScheduleBoard, request: Shift
       changedDates.add(counterpart.startsOn);
       changedDates.add(counterpart.endsOn);
     }
-    for (const [row, revision] of [[entry, request.entryRevision], ...(counterpart ? [[counterpart, request.counterpartEntryRevision]] as const : [])] as const) {
+    for (const [row, revision] of [
+      [entry, request.entryRevision],
+      ...(counterpart
+        ? ([[counterpart, request.counterpartEntryRevision]] as const)
+        : []),
+    ] as const) {
       if (row.status !== "published" || row.revision !== revision) {
         throw new ScheduleError("The shift changed after the request was made.", { status: 409, code: "schedule_request_stale", remedy: "Decline this request; the employee can make a new one." });
       }
@@ -436,9 +488,15 @@ export function listBoardShiftRequests(actor: ScheduleActor & { boardId: string;
 }
 
 /** The caller's own requests and the swaps colleagues asked them to take. */
-export function listOwnShiftRequests(actor: ScheduleActor): Promise<ShiftRequest[]> {
+export function listOwnShiftRequests(
+  actor: ScheduleActor,
+): Promise<ShiftRequest[]> {
   return withOrgTransaction(actor.orgId, async () => {
-    if (!await lockAndCheckOrgFeature(db, actor.orgId, "hrm") || !await lockAndCheckOrgFeature(db, actor.orgId, "hrmShiftPlanning")) throw new ScopeNotFoundError();
+    if (
+      !(await lockAndCheckOrgFeature(db, actor.orgId, "hrm")) ||
+      !(await lockAndCheckOrgFeature(db, actor.orgId, "hrmShiftPlanning"))
+    )
+      throw new ScopeNotFoundError();
     const party = (await db.execute<{ partyId: string | null }>(sql`select party_id as "partyId" from users where org_id = ${actor.orgId} and id = ${actor.actorId} and is_active`)).rows[0]?.partyId;
     if (!party) return [];
     return (await db.execute<ShiftRequest>(sql`select ${REQUEST_COLUMNS} ${REQUEST_JOINS}

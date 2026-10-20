@@ -1486,7 +1486,7 @@
         "discard": "セッション破棄",
         "confirm_opening": "開始残高確定",
         "session_adjustment": "セッション調整",
-        "revalidate_sign_off": "独立した承認確認"
+        "revalidate_sign_off": "確定内容の確認"
       },
       "signOffStatement": "明細残高 {balance} · {date} まで · 仕訳行 {matched} 件を確定 · 明細行 {excluded} 件を除外",
       "signOffSource": "ソースデータ · 残高 {balance} · {date} まで · 消込済み仕訳行 {matched} 件",
@@ -1502,12 +1502,12 @@
   },
   "revalidation": {
     "action": "残高に影響しない口座履歴を確認",
-    "title": "この承認を独立して確認",
+    "title": "この確定を確認",
     "reason": "確認理由（10〜500文字）",
     "confirm": "確認を記録",
     "preview": "{date}までの署名済み残高は{balance}のままです。保存された証拠と{entries}件の遅延仕訳（{lines}行）を照合してください。明細、対応関係、署名、消込状態は変更されません。",
     "failed": "承認の確認を完了できませんでした。証憑を再読み込みして再試行してください。",
-    "recorded": "独立した承認確認を記録しました",
+    "recorded": "確定内容の確認を記録しました",
     "reasonRequired": "確認理由を10〜500文字で入力してください。",
     "reviewedBadge": "残高に影響しない履歴を確認済み",
     "reviewedBasis": "{date}までの確認証拠",

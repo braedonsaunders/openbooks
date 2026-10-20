@@ -137,6 +137,6 @@ test('cash and external delivery offer only matching native payroll representati
 
 test('every employer program defaults to no approvals without workflow configuration', () => {
   for (const family of ['reward', 'allowance', 'incentive', 'custom'] as const) {
-    assert.equal(emptyProgramDraft(family).approvalMode, 'none')
+    assert.ok(!Object.hasOwn(emptyProgramDraft(family),'approvalMode'))
   }
 })

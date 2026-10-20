@@ -1,3 +1,5 @@
+import { lockApprovalSubject } from "../platform/approval-routing.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { quoteSignatureReminderEmail } from "@openbooks/emails";
@@ -14,7 +16,7 @@ import {
   mintPossessionToken,
   verifyPossessionToken,
 } from "../platform/signing-tokens.ts";
-import { submitForApproval, SubmitError } from "../flows/submit.ts";
+import { submitAndReleaseIfUngated, SubmitError } from "../flows/submit.ts";
 import { ensureScopedContract, revenueContractsEnabled } from "../revenue/contract-scope.ts";
 import {
   activateLifecycle,
@@ -31,8 +33,8 @@ import { SYSTEM_ACTOR_ID as SYSTEM_ACTOR_ID_VALUE } from "../banking/banking.ts"
  * Quote-to-cash: a SaaS deal is quoted, approved, signed and activated
  * without re-keying. Subscription terms and ramp steps priced on a quote
  * resolve to a deterministic per-period schedule (total contract value and
- * annualized value at every step); an over-threshold discount or a
- * below-floor line routes the quote through Flows approval; the customer
+ * annualized value at every step). Discount and below-catalog facts are
+ * available to the tenant's Flow conditions; the customer
  * signs on a hosted possession-token link; activation creates the billed
  * subscription (with the ramp as scheduled amendments) and, when scoped
  * revenue contracts are on, the subscription's contract — all idempotent
@@ -68,8 +70,6 @@ export type QuoteStartRule = "quote_date" | "first_of_next_month" | "custom";
 export type QuoteBillingTiming = "advance" | "arrears";
 
 export interface QuoteToCashSettings {
-  /** Discount percent above which the quote must be Flows-approved. */
-  maxDiscountPercent: string;
   /** Activate automatically when the signature lands instead of waiting. */
   autoActivateOnSign: boolean;
   /** Billing timing for terms that do not name one. */
@@ -81,7 +81,6 @@ export interface QuoteToCashSettings {
 }
 
 const SETTINGS_DEFAULTS: QuoteToCashSettings = {
-  maxDiscountPercent: "10",
   autoActivateOnSign: false,
   defaultBillingTiming: "advance",
   defaultStartRule: "quote_date",
@@ -100,19 +99,17 @@ export async function getQuoteToCashSettings(
 ): Promise<QuoteToCashSettings> {
   const row = (
     await (runner as SqlExecutor).execute<{
-      max_discount_percent: string;
       auto_activate_on_sign: boolean;
       default_billing_timing: string;
       default_start_rule: string;
       signature_expiry_days: number;
     }>(sql`
-      select max_discount_percent::text as max_discount_percent, auto_activate_on_sign,
+      select auto_activate_on_sign,
              default_billing_timing, default_start_rule, signature_expiry_days
         from quote_to_cash_settings where org_id = ${orgId}`)
   ).rows[0];
   if (!row) return { ...SETTINGS_DEFAULTS };
   return {
-    maxDiscountPercent: row.max_discount_percent,
     autoActivateOnSign: row.auto_activate_on_sign,
     defaultBillingTiming: row.default_billing_timing as QuoteBillingTiming,
     defaultStartRule: row.default_start_rule as QuoteStartRule,
@@ -532,66 +529,29 @@ export async function latestSignatureRequest(
   };
 }
 
-/**
- * Route an over-threshold discount (or a below-floor line) through Flows.
- * Under-threshold quotes need no approval and pass through. An approved
- * quote passes; a pending one refuses by name. Otherwise the quote is
- * submitted — the single Flows entry point — and a gated quote refuses as
- * pending while an ungated one refuses naming the missing approval flow,
- * because an over-threshold discount must never self-approve.
- */
-export async function ensureQuoteDiscountApproved(
-  runner: SqlExecutor,
-  orgId: string,
+/** Every quote is released by its submitted tenant Flow policy before customer issuance. */
+export async function ensureQuoteSubmissionReleased(
   quote: QuoteRow,
-  valuation: { discountPct: string; floorBreached: boolean },
-  settings: QuoteToCashSettings,
   actorId: string | null,
-): Promise<void> {
-  const overThreshold = cmp(valuation.discountPct, settings.maxDiscountPercent) > 0;
-  if (!overThreshold && !valuation.floorBreached) return;
-  const reason = overThreshold
-    ? `quote discount ${valuation.discountPct}% is over the ${settings.maxDiscountPercent}% approval threshold`
-    : "a ramp line is priced below its plan's catalog price (floor)";
-  if (quote.status === "approved") return;
-  if (quote.status === "pending_approval") {
+): Promise<boolean> {
+  if (quote.status === "approved") return true;
+  if (quote.status === "pending_approval") return false;
+  if (quote.status !== "draft")
     throw new QuoteToCashError(
-      `This quote cannot be sent while its discount approval is pending (${reason}) — approve it in Flows first`,
+      `This quote is ${quote.status}. Submit a draft quote before sending it for signature.`,
     );
-  }
-  if (quote.status !== "draft") {
-    throw new QuoteToCashError(
-      `This quote is ${quote.status} — only draft or approved quotes go for signature (${reason})`,
-    );
-  }
-  let gated: boolean;
-  let flowError: string | null;
   try {
-    ({ gated, flowError } = await submitForApproval("quote", quote.id, actorId));
-  } catch (error) {
-    if (error instanceof SubmitError) {
+    const result = await submitAndReleaseIfUngated("quote", quote.id, actorId);
+    if (result.flowError)
       throw new QuoteToCashError(
-        `Discount approval could not be requested: ${error.message} — resolve it and send again`,
+        `Quote submission could not be routed: ${result.flowError}`,
       );
-    }
+    return !result.gated;
+  } catch (error) {
+    if (error instanceof SubmitError)
+      throw new QuoteToCashError(`Quote submission refused: ${error.message}`);
     throw error;
   }
-  // A matched-but-errored flow must fail closed: the quote is neither gated
-  // nor approved, so sending it would let an over-threshold discount skip
-  // review entirely.
-  if (flowError) {
-    throw new QuoteToCashError(
-      `Discount approval could not be routed: ${flowError} — fix the quote approval flow in Flows and send again`,
-    );
-  }
-  if (gated) {
-    throw new QuoteToCashError(
-      `This quote was routed for discount approval (${reason}) — it can be sent once Flows approves it`,
-    );
-  }
-  throw new QuoteToCashError(
-    `${reason}, and no approval flow is configured for quotes — set one up in Flows or bring the discount within ${settings.maxDiscountPercent}%`,
-  );
 }
 
 export interface RequestSignatureInput {
@@ -604,7 +564,8 @@ export interface RequestSignatureInput {
   expiresInDays?: number | null;
 }
 
-export interface RequestSignatureResult {
+export interface SentQuoteSignatureResult {
+  status: "sent";
   requestId: string;
   /** The raw link token — returned once for the delivery email, never stored. */
   token: string;
@@ -612,9 +573,12 @@ export interface RequestSignatureResult {
   documentHash: string;
 }
 
+export type RequestSignatureResult =
+  SentQuoteSignatureResult | { status: "pending_approval" };
+
 /**
- * Send a quote for signature: discount-gate first (which may route the
- * quote into Flows and refuse), then mint the signer's possession token and
+ * Send a quote for signature after its native Flow submission releases,
+ * then mint the signer's possession token and
  * persist only its hash with the exact presentation hash. A second send
  * while one is open refuses — void the open request and re-send instead.
  * The caller delivers `token` to the signer out of band.
@@ -629,6 +593,7 @@ export async function requestQuoteSignature(
     throw new QuoteToCashError("A valid signer email is required to send for signature");
   }
   return withOrgTransaction(input.orgId, async () => {
+    await lockApprovalSubject(input.orgId, "quote", input.quoteId);
     await assertQuoteToCashEnabled(db, input.orgId);
     const quote = await loadQuote(db, input.orgId, input.quoteId, input.allowedSubsidiaryIds);
     if (quote.status !== "draft" && quote.status !== "approved" && quote.status !== "pending_approval") {
@@ -636,6 +601,19 @@ export async function requestQuoteSignature(
         `This quote is ${quote.status} — only draft or approved quotes go for signature`,
       );
     }
+    const placement = (
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`select subsidiary_id from documents where org_id=${input.orgId} and id=${input.quoteId}`,
+      )
+    ).rows[0];
+    if (!placement) throw new QuoteToCashError("Quote not found", 404);
+    await lockActorCommandAuthority(
+      db,
+      input.orgId,
+      input.actorId,
+      placement.subsidiary_id,
+      "estimates.create",
+    );
     const settings = await getQuoteToCashSettings(input.orgId, db);
     const terms = await loadQuoteTerms(db, input.orgId, input.quoteId);
     if (!terms.length) {
@@ -643,19 +621,20 @@ export async function requestQuoteSignature(
         "This quote has no subscription lines — add a plan, quantity and term before sending for signature",
       );
     }
-    const valuation = valueQuoteTerms(terms);
-    await ensureQuoteDiscountApproved(db, input.orgId, quote, valuation, settings, input.actorId);
+    valueQuoteTerms(terms);
     const expiresInDays =
       input.expiresInDays ?? settings.signatureExpiryDays;
     if (!Number.isSafeInteger(expiresInDays) || expiresInDays < 1 || expiresInDays > 90) {
       throw new QuoteToCashError("Signature expiry must be between 1 and 90 days");
     }
+    if (!(await ensureQuoteSubmissionReleased(quote, input.actorId)))
+      return { status: "pending_approval" as const };
     const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
     const documentHash = await quotePresentationHash(db, input.orgId, input.quoteId, input.allowedSubsidiaryIds);
     const requestId = randomUUID();
     const token = mintPossessionToken(QUOTE_SIGN_DOMAIN, input.orgId, requestId, expiresAt);
     try {
-      const inserted = await (db).execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(sql`
         insert into signature_requests
           (id, org_id, subject_table, subject_id, signer_name, signer_email, token_hash,
            status, expires_at, sent_at, document_hash, consent_text, created_by, updated_by)
@@ -675,12 +654,18 @@ export async function requestQuoteSignature(
       }
       throw error;
     }
-    await (db).execute(sql`
+    await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${input.orgId}, 'signature_requests', ${requestId}, 'insert',
               ${JSON.stringify({ after: { subject: input.quoteId, signerEmail, documentHash } })}::jsonb,
               ${input.actorId})`);
-    return { requestId, token, expiresAt, documentHash };
+    return {
+      status: "sent" as const,
+      requestId,
+      token,
+      expiresAt,
+      documentHash,
+    };
   });
 }
 
@@ -1197,7 +1182,6 @@ export async function deleteQuoteTerm(
 }
 
 export interface SaveQuoteToCashSettingsInput {
-  maxDiscountPercent: string;
   autoActivateOnSign: boolean;
   defaultBillingTiming: QuoteBillingTiming;
   defaultStartRule: QuoteStartRule;
@@ -1207,7 +1191,6 @@ export interface SaveQuoteToCashSettingsInput {
 
 type QuoteToCashPolicyRow = {
   id: string;
-  max_discount_percent: string;
   auto_activate_on_sign: boolean;
   default_billing_timing: string;
   default_start_rule: string;
@@ -1217,7 +1200,6 @@ type QuoteToCashPolicyRow = {
 
 function policyEvidence(row: QuoteToCashPolicyRow) {
   return {
-    maxDiscountPercent: row.max_discount_percent,
     autoActivateOnSign: row.auto_activate_on_sign,
     defaultBillingTiming: row.default_billing_timing,
     defaultStartRule: row.default_start_rule,
@@ -1241,9 +1223,6 @@ export async function saveQuoteToCashSettings(
   actorId: string,
   input: SaveQuoteToCashSettingsInput,
 ): Promise<QuoteToCashSettings> {
-  if (!/^\d+(\.\d+)?$/.test(input.maxDiscountPercent.trim()) || Number(input.maxDiscountPercent) < 0 || Number(input.maxDiscountPercent) > 100) {
-    throw new QuoteToCashError("The discount threshold must be a percent between 0 and 100");
-  }
   if (!Number.isSafeInteger(input.signatureExpiryDays) || input.signatureExpiryDays < 1 || input.signatureExpiryDays > 90) {
     throw new QuoteToCashError("Signature expiry must be between 1 and 90 days");
   }
@@ -1265,28 +1244,29 @@ export async function saveQuoteToCashSettings(
         throw new QuoteToCashError("That order-form template is not an active template of this organization — pick one in the PDF template designer");
       }
     }
-    const before = (await db.execute<QuoteToCashPolicyRow>(sql`
-      select id, max_discount_percent::text as max_discount_percent, auto_activate_on_sign,
+    const before = (
+      await db.execute<QuoteToCashPolicyRow>(sql`
+      select id, auto_activate_on_sign,
              default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id
-        from quote_to_cash_settings where org_id = ${orgId} for update`)).rows[0];
+        from quote_to_cash_settings where org_id = ${orgId} for update`)
+    ).rows[0];
     const row = (
       await db.execute<QuoteToCashPolicyRow>(sql`
         insert into quote_to_cash_settings
-          (org_id, max_discount_percent, auto_activate_on_sign, default_billing_timing,
+          (org_id, auto_activate_on_sign, default_billing_timing,
            default_start_rule, signature_expiry_days, order_form_template_id, created_by, updated_by)
-        values (${orgId}, ${input.maxDiscountPercent.trim()}, ${input.autoActivateOnSign},
+        values (${orgId}, ${input.autoActivateOnSign},
                 ${input.defaultBillingTiming}, ${input.defaultStartRule}, ${input.signatureExpiryDays},
                 ${input.orderFormTemplateId ?? null}, ${actorId}, ${actorId})
         -- Singleton policy row: a twin save converges on one row per org.
         on conflict (org_id) do update
-           set max_discount_percent = excluded.max_discount_percent,
-               auto_activate_on_sign = excluded.auto_activate_on_sign,
+           set auto_activate_on_sign = excluded.auto_activate_on_sign,
                default_billing_timing = excluded.default_billing_timing,
                default_start_rule = excluded.default_start_rule,
                signature_expiry_days = excluded.signature_expiry_days,
                order_form_template_id = excluded.order_form_template_id,
                updated_at = now(), updated_by = excluded.updated_by
-        returning id, max_discount_percent::text as max_discount_percent, auto_activate_on_sign,
+        returning id, auto_activate_on_sign,
                   default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id`)
     ).rows[0];
     // The org-scoped upsert always writes exactly one row; zero rows is raised.
@@ -1296,7 +1276,6 @@ export async function saveQuoteToCashSettings(
       values (${orgId}, 'quote_to_cash_settings', ${row.id},
               ${before ? 'update' : 'insert'}, ${JSON.stringify({ before: before ? policyEvidence(before) : null, after: policyEvidence(row) })}::jsonb, ${actorId}, clock_timestamp())`);
     return {
-      maxDiscountPercent: row.max_discount_percent,
       autoActivateOnSign: row.auto_activate_on_sign,
       defaultBillingTiming: row.default_billing_timing as QuoteBillingTiming,
       defaultStartRule: row.default_start_rule as QuoteStartRule,
@@ -1310,14 +1289,17 @@ export async function saveQuoteToCashSettings(
  * must exist — resetting defaults that already apply is a caller error, not
  * a second success.
  */
-export async function clearQuoteToCashSettings(orgId: string, actorId: string): Promise<{ cleared: boolean }> {
+export async function clearQuoteToCashSettings(
+  orgId: string,
+  actorId: string,
+): Promise<{ cleared: boolean }> {
   return withOrgTransaction(orgId, async () => {
     await lockQuoteToCashPolicy(orgId);
     await assertQuoteToCashEnabled(db, orgId);
     const deleted = (
       await db.execute<QuoteToCashPolicyRow>(sql`
         delete from quote_to_cash_settings where org_id = ${orgId}
-        returning id, max_discount_percent::text as max_discount_percent, auto_activate_on_sign,
+        returning id, auto_activate_on_sign,
                   default_billing_timing, default_start_rule, signature_expiry_days, order_form_template_id`)
     ).rows;
     if (deleted.length !== 1) {
@@ -1611,14 +1593,11 @@ async function activateQuoteLocked(
       "The quote changed after it was signed — void the signature request, re-send it, and activate once it is signed again",
     );
   }
-  const settings = await getQuoteToCashSettings(orgId, runner);
-  const valuation = valueQuoteTerms(terms);
-  const overThreshold = cmp(valuation.discountPct, settings.maxDiscountPercent) > 0;
-  if ((overThreshold || valuation.floorBreached) && quote.status !== "approved") {
+  valueQuoteTerms(terms);
+  if (quote.status !== "approved")
     throw new QuoteToCashError(
-      "This quote's discount still needs Flows approval — approve it there before activating it",
+      "Submit this quote through Flows and complete its configured gates before activation.",
     );
-  }
   const advanced = await orgFeatureEnabled(orgId, "advancedSubscriptions", runner);
   for (const term of terms) {
     if (term.planCurrency && quote.currency && term.planCurrency !== quote.currency) {

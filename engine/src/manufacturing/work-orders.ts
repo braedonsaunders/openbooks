@@ -1,3 +1,7 @@
+import {
+  routeNativeApproval,
+  readNativeApprovalDecision,
+} from "../platform/approval-routing.ts";
 import {loadReceiptRework} from "./receipt-rework.ts";
 import { lockManufacturingManageAuthority, lockManufacturingOrderManageAuthority, lockManufacturingOrderExecutionAuthority, lockManufacturingRoutingAuthority, assertManufacturingStockLocationScope } from "./authority.ts";
 import { resolveInspectionPlan } from "../inventory/inspections.ts";
@@ -174,22 +178,16 @@ async function validateSource(
   }
 }
 
-async function hasWorkOrderSubmitFlow(tx: SqlExecutor, orgId: string): Promise<boolean> {
-  return (await tx.execute(sql`
-    select 1 from flows flow_row
-     where flow_row.org_id=${orgId} and flow_row.subject_kind='work_order' and flow_row.enabled
-       and exists (
-         select 1 from jsonb_array_elements(coalesce(flow_row.graph->'nodes', '[]'::jsonb)) node
-          where node->'data'->>'kind'='trigger'
-            and node->'data'->'trigger'->>'trigger'='on_submit'
-       )
-     limit 1`)).rows.length > 0;
-}
-
-async function hasPendingApproval(tx: SqlExecutor, orgId: string, id: string): Promise<boolean> {
-  return (await tx.execute(sql`
+async function hasPendingApproval(
+  tx: SqlExecutor,
+  orgId: string,
+  id: string,
+): Promise<boolean> {
+  return (
+    (await tx.execute(sql`
     select 1 from flow_gates where org_id=${orgId} and subject_kind='work_order'
-      and subject_id=${id} and status in ('pending','escalated') limit 1`)).rows.length > 0;
+      and subject_id=${id} and status in ('pending','escalated') limit 1`)).rows.length > 0
+  );
 }
 
 type PendingWorkOrderGate = { id: string; run_id: string; status: string };
@@ -325,11 +323,17 @@ export async function createWorkOrder(
   if (source === "manual" && input.sourceRefId) {
     refuse("A manual work order cannot reference a sales order.", "invalid_source_reference", "Choose manual source or link a sales order.");
   }
-  return insertDraft(tx, orgId, actorId, {
-    ...input,
-    source,
-    sourceRefId: source === "manual" ? null : input.sourceRefId ?? null,
-  }, { id: idempotency?.id, requestId: idempotency?.requestId });
+  return insertDraft(
+    tx,
+    orgId,
+    actorId,
+    {
+      ...input,
+      source,
+      sourceRefId: source === "manual" ? null : (input.sourceRefId ?? null),
+    },
+    { id: idempotency?.id, requestId: idempotency?.requestId },
+  );
 }
 
 export async function getWorkOrder(tx: SqlExecutor, orgId: string, id: string, lock = false): Promise<WorkOrderRead | null> {
@@ -1008,7 +1012,8 @@ async function releaseOne(
   // the release snapshots): the order's planned start, falling back to
   // today's business date in the org's time zone. A back-dated order
   // releases against the rates and versions effective then, never today.
-  const releaseDate = order.plannedStart ?? await releaseBusinessDate(tx, orgId);
+  const releaseDate =
+    order.plannedStart ?? (await releaseBusinessDate(tx, orgId));
   const produced = await itemDetails(tx, orgId, order.producedItemId);
   const routing = await activeRouting(tx, orgId, order.producedItemId, produced.code?.trim() || produced.name, releaseDate, order.routingId);
   const releaseScope = await lockManufacturingRoutingAuthority(tx,orgId,actorId,routing.id);
@@ -1246,7 +1251,7 @@ export async function readWorkOrderReleaseReadiness(
   id: string,
 ): Promise<{ status: "not_draft" | "ready" | "blocked"; findings: ReleaseReadinessFinding[] }> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  await lockManufacturingOrderManageAuthority(tx, orgId, actorId, id);
+  await lockManufacturingOrderManageAuthority(tx,orgId,actorId,id);
   const order = await loadOrder(tx, orgId, id);
   if (order.status !== "draft") return { status: "not_draft", findings: [] };
   const findings: ReleaseReadinessFinding[] = [];
@@ -1282,7 +1287,8 @@ export async function readWorkOrderReleaseReadiness(
   if (!subsidiaryId) {
     await attempt(orderHref, async () => refuse(`Work order ${order.number} has no subsidiary.`, "work_order_subsidiary_required", "Choose an operating subsidiary before release."));
   }
-  const releaseDate = order.plannedStart ?? await releaseBusinessDate(tx, orgId);
+  const releaseDate =
+    order.plannedStart ?? (await releaseBusinessDate(tx, orgId));
   const produced = await itemDetails(tx, orgId, order.producedItemId);
   const routing = await attempt("/manufacturing/routings", () =>
     activeRouting(tx, orgId, order.producedItemId, produced.code?.trim() || produced.name, releaseDate, order.routingId));
@@ -1343,15 +1349,43 @@ export async function releaseWorkOrder(
   orgId: string,
   actorId: string,
   id: string,
-  options: { reason?: string | null; fromApproval?: boolean } = {},
+  options: { reason?: string | null; approvalRunId?: string } = {},
 ): Promise<WorkOrderRead> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingOrderManageAuthority(tx,orgId,actorId,id);
-  if (!options.fromApproval && await hasWorkOrderSubmitFlow(tx, orgId)) {
-    refuse("A configured work-order flow must handle this release request.", "work_order_approval_required", "Use the work-order Release action and configure an approval gate in Flows.", 409);
+  const order = await loadOrder(tx, orgId, id, true);
+  if (order.status !== "draft")
+    return releaseOne(tx, orgId, actorId, id, { reason: options.reason });
+  const decision = await readNativeApprovalDecision({
+    orgId,
+    actorId,
+    subjectKind: "work_order",
+    subjectId: id,
+    outcome: "approved",
+    approvalRunId: options.approvalRunId,
+  });
+  if (!decision) {
+    if (options.approvalRunId)
+      refuse(
+        "The work-order Flow decision is incomplete.",
+        "work_order_approval_required",
+        "Complete every configured work-order approval gate.",
+        409,
+      );
+    if (await hasPendingApproval(tx, orgId, id))
+      return { ...order, pendingApproval: true };
+    const routing = await routeNativeApproval({
+      orgId,
+      actorId,
+      subjectKind: "work_order",
+      subjectId: id,
+    });
+    if (routing.policy.kind === "gated")
+      return { ...order, pendingApproval: true };
   }
   return releaseOne(tx, orgId, actorId, id, {
-    reason: options.reason, fromApproval: options.fromApproval,
+    reason: options.reason,
+    fromApproval: Boolean(decision),
   });
 }
 

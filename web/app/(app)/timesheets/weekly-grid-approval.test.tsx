@@ -97,7 +97,8 @@ async function mountGrid(approveBlockedReason: string | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if (url.startsWith("/api/timesheets/approve") && init?.method === "POST") {
+    if(url.startsWith('/api/flows/record-state'))return Response.json({approvalState:{status:'pending',pendingWith:[{name:'Assigned reviewer',since:'2026-07-14T00:00:00.000Z'}],myActions:approveBlockedReason?null:{gateId:'gate-1',signatureRequired:false},awaitingAnotherApprover:!!approveBlockedReason},history:[],failedRun:null,canRetry:false});
+    if (url==='/api/flows/gates/decide' && init?.method === "POST") {
       script.posts.push({ url, body: JSON.parse(String(init.body)) });
       return new Response(JSON.stringify(script.approveBody), {
         status: script.approveStatus,
@@ -122,7 +123,6 @@ async function mountGrid(approveBlockedReason: string | null) {
               canManage: true,
               canApprove: true,
               canReopen: false,
-              approveBlockedReason,
             })}
           </MoneyProvider>
         </NextIntlClientProvider>
@@ -153,9 +153,8 @@ test("a gate-owned week renders Approve disabled with its reason", async (t) => 
   const { cleanup } = await mountGrid("This week is owned by a pending approval flow — decide it there.");
   t.after(cleanup);
   const button = approveButton();
-  assert.ok(button, "Approve still renders so the state is visible");
-  assert.equal(button.disabled, true, "a gate-owned week cannot approve from the drawer");
-  assert.match(document.body.textContent ?? "", /pending approval flow/);
+  assert.equal(button,undefined,"an unassigned viewer receives no alternate Approve action");
+  assert.match(document.body.textContent ?? "", /another approver|Assigned reviewer/);
   assert.equal(script.posts.length, 0, "a disabled button posts nothing");
 });
 

@@ -776,7 +776,9 @@ export async function syncNetSuiteFixedAssets(
                where correction.org_id=local.org_id and correction.source='reversal'
                  and correction.schedule_id=local.schedule_id and original.schedule_id=local.schedule_id
                  and correction.period_id=original.period_id and correction.posted_amount=-original.posted_amount
-                 and reversal.reverses_entry_id=source.id and source.status='reversed' and reversal.status='posted'
+                 and reversal.reverses_entry_id=source.id and source.status='reversed'
+                 -- Live entries only: a reversed correction cannot authorize replacing the local depreciation schedule.
+                 and reversal.status='posted'
                  and (local.id=original.id or local.id=correction.id)
              )
         `));

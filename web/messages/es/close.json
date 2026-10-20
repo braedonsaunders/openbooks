@@ -300,8 +300,8 @@
     "description": "Los sublibros operativos se bloquean antes del LM. La base de datos rechaza contabilizaciones posteriores.",
     "blockedTitle": "La aprobación está bloqueada",
     "blockedDescription": "{count, plural, one {Queda # tarea con control estricto} other {Quedan # tareas con control estricto}}.",
-    "approvalTitle": "Aprobación independiente y bloqueo",
-    "approvalDescription": "Quien inició la ejecución no puede dar la aprobación final. Cualquier cambio en el libro reabre la revisión.",
+    "approvalTitle": "Aprobación y bloqueo",
+    "approvalDescription": "Los Flows de la organización definen las decisiones necesarias. Cualquier cambio en el libro mayor después de la aprobación vuelve a abrir la revisión.",
     "ownerTitle": "Constancia del responsable y bloqueo",
     "ownerDescription": "Para un cierre a cargo del responsable, revise los estados e indique por qué el período está listo. La constancia queda vinculada a este estado exacto del libro.",
     "attestationLabel": "¿Por qué estos libros están listos para cerrar?",
@@ -335,6 +335,7 @@
       "started": "Ejecución iniciada",
       "data_changed": "Un cambio contable invalidó trabajo previo",
       "approval_requested": "Aprobación de cierre solicitada",
+      "approval_withdrawn": "Aprobación del cierre retirada",
       "owner_attested": "El responsable certificó que los libros están listos",
       "approval_rejected": "Aprobación de cierre rechazada",
       "approved": "Cierre con aprobación final",
@@ -381,7 +382,7 @@
       },
       "controlledReopen": {
         "name": "Reapertura controlada",
-        "description": "Las reaperturas requieren motivo, aprobación independiente y vencimiento."
+        "description": "Las reaperturas requieren un motivo, el enrutamiento mediante los Flows de la organización y una fecha de vencimiento."
       },
       "sourceReconciliationEvidence": {
         "name": "Evidencia de conciliación del sistema fuente",
@@ -444,11 +445,11 @@
     },
     "controller-approval": {
       "title": "Aprobación del contralor",
-      "description": "Revise de forma independiente preparación, excepciones, evidencia e informes."
+      "description": "Revise la preparación del cierre, las excepciones, las evidencias y los informes."
     },
     "financial-review": {
       "title": "Revisar los estados financieros",
-      "description": "Revise el balance de comprobación, el balance general y el estado de resultados antes de certificar: integridad y saldos inesperados."
+      "description": "Compruebe que el balance de comprobación, el balance general y la cuenta de resultados estén completos y no contengan saldos inesperados antes de finalizar la revisión."
     },
     "lock-subledgers": {
       "title": "Bloquear sublibros operativos",
@@ -494,7 +495,7 @@
   "setup": {
     "title": "Períodos y cierre",
     "description": "Diseñe calendarios fiscales, genere períodos, gestione bloqueos y reaperturas, versione plantillas y configure controles, automatización e informes.",
-    "simpleMode": "El cierre a cargo del responsable está activo. Calendarios, períodos, bloqueos, constancias y publicación inmutable siguen disponibles sin la carga de los flujos empresariales.",
+    "simpleMode": "Los calendarios, períodos, bloqueos y publicaciones inmutables siguen disponibles. Configure las aprobaciones en Flows.",
     "enableAdvanced": "Ver el cierre avanzado",
     "tabs": {
       "calendars": "Calendarios",
@@ -782,7 +783,8 @@
       "lock": "Bloqueo",
       "review": "Revisión",
       "segregation": "Segregación de funciones",
-      "exception": "Excepción"
+      "exception": "Excepción",
+      "evidence": "Evidencias"
     },
     "automationTriggers": {
       "run_started": "Ejecución iniciada",

@@ -340,7 +340,14 @@ export async function loadClose(
   await requireFeatureEnabled(orgId, 'continuousClose')
   const t = await getTranslations('close')
   const format = await getFormatter()
-  const runId = pickString(sp.run)
+  let runId = pickString(sp.run)
+  const taskId=pickString(sp.task)
+  if(taskId){
+    if(!isUuid(taskId))notFound()
+    const task=(await db.execute<{run_id:string}>(sql`select run_id from close_run_tasks where org_id=${orgId} and id=${taskId}`)).rows[0]
+    if(!task || (runId && runId!==task.run_id))notFound()
+    runId=task.run_id
+  }
   // The native page renders the wizard only for a UUID run id that names a
   // row; anything else falls through to the list.
   // The wizard's data is loaded HERE rather than probed for existence and

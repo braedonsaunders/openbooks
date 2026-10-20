@@ -138,7 +138,7 @@
     "discard": "Descartar alterações",
     "submit": "Enviar para publicação",
     "submitted": "{count, plural, one {Uma alteração enviada para publicação.} other {# alterações enviadas para publicação.}}",
-    "governedExplain": "Quadro controlado: publicar registra uma publicação. Quando um fluxo de aprovação se aplica, as alterações são publicadas após a aprovação.",
+    "flowExplain": "A publicação envia estas alterações aos Flows da sua organização. Sem etapas de aprovação, elas são publicadas imediatamente.",
     "awaiting": "{count, plural, one {# alteração aguarda} other {# alterações aguardam}} a decisão sobre a publicação.",
     "awaitingFlow": "Um fluxo de aprovação decide esta publicação em Aprovações. Até lá, as alterações enviadas ficam bloqueadas.",
     "openApprovals": "Abrir Aprovações"

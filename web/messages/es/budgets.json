@@ -21,7 +21,10 @@
     "total": "Total presupuestado",
     "updated": "Actualizado"
   },
-  "kind": { "budget": "Presupuesto", "forecast": "Pronóstico" },
+  "kind": {
+    "budget": "Presupuesto",
+    "forecast": "Pronóstico"
+  },
   "status": {
     "draft": "Borrador",
     "pending_approval": "Pendiente de aprobación",
@@ -97,7 +100,8 @@
     "reject": "Rechazar",
     "openReport": "Presupuesto vs. real",
     "exportCsv": "Exportar CSV",
-    "exportXlsx": "Exportar Excel"
+    "exportXlsx": "Exportar Excel",
+    "withdraw": "Retirar envío"
   },
   "confirm": {
     "archive": "¿Archivar este presupuesto?",
@@ -137,7 +141,8 @@
     "revisionConflict": "Este presupuesto se modificó en otro lugar. Recargue para continuar.",
     "selfApprovalForbidden": "No puede aprobar un presupuesto que usted ha enviado. Pida a otra persona aprobadora que lo revise.",
     "created": "Borrador de presupuesto creado.",
-    "savedWithLineFailure": "Se creó el borrador del presupuesto, pero no se pudieron guardar sus líneas ({reason}). Ya está abierto; revise las líneas antes de volver a intentarlo."
+    "savedWithLineFailure": "Se creó el borrador del presupuesto, pero no se pudieron guardar sus líneas ({reason}). Ya está abierto; revise las líneas antes de volver a intentarlo.",
+    "withdrawn": "Envío retirado"
   },
   "import": {
     "button": "Importar",

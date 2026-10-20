@@ -3320,15 +3320,11 @@
       "title": "审批控制",
       "openFlows": "打开Flows",
       "hint": "Flows 根据此计划配置的审批阶段和条件执行审批。",
-      "unconfigured": "尚未配置福利审批策略。提交奖励前请配置Flows。",
+      "unconfigured": "未启用福利Flow。有效的奖励提交会立即获准执行，无需审批人。",
       "policiesHint": "提交奖励时会评估已启用的策略。",
       "openApprovals": "打开审批",
       "administratorRemedy": "请联系公司的工作流管理员配置或修改审批策略。",
-      "unconfiguredStatus": "尚未配置福利审批策略。",
-      "modes": {
-        "none": "无需审批",
-        "flows": "使用 Flows 审批"
-      },
+      "unconfiguredStatus": "未启用福利Flow。有效的奖励提交会立即获准执行，无需审批人。",
       "noneHint": "经授权提交后即可进入工资处理，无需配置工作流或指定审批人。"
     },
     "externalPayrollProcessed": "已在工资单中处理 · 等待履行",

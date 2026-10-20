@@ -1,5 +1,6 @@
 "use client";
 
+import { ApprovalActions } from "../../../components/approval-actions";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -325,7 +326,7 @@ export function CloseWizard(props: Props) {
         {visibleStages.map((stage, index) => (
           <Link
             key={stage}
-            href={(`/close?run=${props.run.id}&stage=${stage}`)}
+            href={`/close?run=${props.run.id}&stage=${stage}`}
             className={cn(
               "flex min-w-28 flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
               selected === stage
@@ -341,7 +342,7 @@ export function CloseWizard(props: Props) {
         ))}
       </nav>
     </div>
-  );
+  )
 
   return (
     <WizardLayout wide header={header}>
@@ -396,8 +397,8 @@ function taskText(
   t: ReturnType<typeof useTranslations>,
   value: string | null | undefined,
 ): string {
-  if (!value) return "";
-  return value.startsWith("close.") ? t((value.slice(6))) : value;
+  if (!value) return ''
+  return value.startsWith('close.') ? t(value.slice(6)) : value
 }
 
 function Metric({
@@ -423,8 +424,8 @@ function Metric({
 }
 
 function ScopeStage(props: Props) {
-  const t = useTranslations("close");
-  const locale = useLocale();
+  const t = useTranslations('close')
+  const locale = useLocale()
   const subsidiaryIds = props.run.scope?.subsidiaryIds ?? [];
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_.8fr]">
@@ -473,9 +474,7 @@ function ScopeStage(props: Props) {
         </CardHeader>
         <CardContent>
           <Link
-            href={
-              (`/admin/sandboxes?new=1&mode=as_of&periodId=${props.run.period_id}`)
-            }
+            href={`/admin/sandboxes?new=1&mode=as_of&periodId=${props.run.period_id}`}
           >
             <Button variant="outline">
               <Play size={15} />
@@ -486,7 +485,7 @@ function ScopeStage(props: Props) {
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
@@ -562,7 +561,7 @@ function ReadinessStage(
 }
 
 function ExceptionRow({ item, run, canRun }: { item: CloseExceptionRow; run: Props["run"]; canRun: boolean }) {
-  const t = useTranslations("close");
+  const t = useTranslations('close')
   const critical = ["critical", "error"].includes(item.severity);
   // Posting periods are maintained by close operators: a viewer without the
   // close run permission is told who can act instead of being sent to a
@@ -570,12 +569,12 @@ function ExceptionRow({ item, run, canRun }: { item: CloseExceptionRow; run: Pro
   const periodRemedyWithheld = item.code === "posting-period-missing" && !canRun;
   const actionHref = periodRemedyWithheld ? null : closeExceptionActionHref(item.code, run);
   const values = { count: Number(item.details?.count ?? 0) };
-  const title = item.title?.startsWith("close.")
-    ? t((item.title.slice(6)), values)
-    : item.title;
-  const message = item.message?.startsWith("close.")
-    ? t((item.message.slice(6)), values)
-    : item.message;
+  const title = item.title?.startsWith('close.')
+    ? t(item.title.slice(6), values)
+    : item.title
+  const message = item.message?.startsWith('close.')
+    ? t(item.message.slice(6), values)
+    : item.message
   return (
     <div
       className={cn(
@@ -614,7 +613,7 @@ function ExceptionRow({ item, run, canRun }: { item: CloseExceptionRow; run: Pro
           </p>
         ) : null}
         {actionHref ? (
-          <Link href={(actionHref)} className="mt-3 inline-flex">
+          <Link href={actionHref} className="mt-3 inline-flex">
             <Button size="sm" variant="outline">
               {t("actions.resolveException")}
               <ExternalLink size={13} />
@@ -623,7 +622,7 @@ function ExceptionRow({ item, run, canRun }: { item: CloseExceptionRow; run: Pro
         ) : null}
       </div>
     </div>
-  );
+  )
 }
 
 function closeExceptionActionHref(code: string, run: CloseRunRow): string | null {
@@ -657,7 +656,7 @@ function closeExceptionActionHref(code: string, run: CloseRunRow): string | null
 }
 
 function TaskStage(props: Props & { tasks: CloseTaskRow[] }) {
-  const t = useTranslations("close");
+  const t = useTranslations('close')
   const groups = useMemo(
     () => Array.from(new Set(props.tasks.map((task) => task.workstream))),
     [props.tasks],
@@ -669,7 +668,7 @@ function TaskStage(props: Props & { tasks: CloseTaskRow[] }) {
           <div className="flex items-center gap-2">
             <GitBranch size={16} className="text-teal-600" />
             <h3 className="font-semibold text-slate-900 dark:text-slate-100">
-              {t((`workstreams.${group}`))}
+              {t(`workstreams.${group}`)}
             </h3>
           </div>
           <div className="space-y-3">
@@ -682,14 +681,14 @@ function TaskStage(props: Props & { tasks: CloseTaskRow[] }) {
         </section>
       ))}
     </div>
-  );
+  )
 }
 
 function TaskCard(props: Props & { task: CloseTaskRow }) {
-  const t = useTranslations("close");
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState("");
+  const t = useTranslations('close')
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
   const taskEvidence = props.evidence.filter(
     (item) => item.task_id === props.task.id,
   );
@@ -894,7 +893,9 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
             })}
           </p>
         ) : null}
-        {openException ? <ExceptionRow item={openException} run={props.run} canRun={props.canRun} /> : null}
+        {openException ? (
+          <ExceptionRow item={openException} run={props.run} canRun={props.canRun} />
+        ) : null}
         {props.task.status === "invalidated" && invalidatedBecause.length > 0 ? (
           <div className="space-y-1">
             {invalidatedBecause.map((bucket) => (
@@ -960,9 +961,9 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
         !["complete", "waived"].includes(props.task.status) &&
         !["fx-revalued", "consolidation", "unbilled-revenue-accrued", "period-end-journals"].includes(props.task.key) ? (
           <Button variant="outline" size="sm" asChild>
-            <Link href={(actionHref)}>
+            <Link href={actionHref}>
               <ExternalLink size={14} />
-              {t("actions.takeAction")}
+              {t('actions.takeAction')}
             </Link>
           </Button>
         ) : null}
@@ -981,7 +982,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
         ) : null}
         {props.canRun &&
         !["complete", "waived"].includes(props.task.status) &&
-        props.task.completion_mode === "manual" ? (
+        props.task.completion_mode === "manual" && props.task.task_type !== "approval" ? (
           <div className="flex flex-wrap items-center gap-2">
             <Input
               className="min-w-52 flex-1"
@@ -1012,46 +1013,25 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
               <Button
                 size="sm"
                 disabled={busy}
-                onClick={() =>
-                  action(props.task.reviewer_id ? "submit" : "complete")
-                }
+                onClick={() => action("complete")}
               >
                 <Send size={14} />
-                {props.task.reviewer_id
-                  ? t("actions.submitReview")
-                  : t("actions.complete")}
+                {t("actions.complete")}
               </Button>
             ) : null}
-            {props.task.status === "submitted" && props.canApprove ? (
-              <>
-                <Button
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => action("approve")}
-                >
-                  <Check size={14} />
-                  {t("actions.approve")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => action("request_changes")}
-                >
-                  <RotateCcw size={14} />
-                  {t("actions.requestChanges")}
-                </Button>
-              </>
-            ) : null}
+
           </div>
+        ) : null}
+        {props.task.completion_mode === "manual" && props.task.task_type !== "approval" && props.task.status === "submitted" ? (
+          <ApprovalActions subjectKind="close_task" subjectId={props.task.id} />
         ) : null}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function closeTaskActionHref(task: CloseTaskRow, run: CloseRunRow): string | null {
-  if (task.task_type === "approval") return "/inbox";
+  if (task.task_type === "approval") return `/close?run=${run.id}&stage=lock`;
   const exact: Record<string, string> = {
     "drafts-cleared": "/journal",
     "bank-reconciled": "/banking/reconciliations",
@@ -1121,9 +1101,8 @@ function LockStage(
     onAction: (action: string, comment?: string) => void;
   },
 ) {
-  const t = useTranslations("close");
+  const t = useTranslations('close')
   const rootLocks = props.locks.filter((lock) => !lock.subsidiary_id);
-  const [attestation, setAttestation] = useState("");
   const blockers = props.tasks.filter(
     (task) =>
       task.gate_type === "hard" &&
@@ -1179,76 +1158,60 @@ function LockStage(
       ) : null}
       <Card>
         <CardHeader>
-          <CardTitle>{t(props.advancedClose ? "lock.approvalTitle" : "lock.ownerTitle")}</CardTitle>
-          <CardDescription>{t(props.advancedClose ? "lock.approvalDescription" : "lock.ownerDescription")}</CardDescription>
+          <CardTitle>{t('lock.approvalTitle')}</CardTitle>
+          <CardDescription>{t('lock.approvalDescription')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {!props.advancedClose && props.run.status === "in_progress" ? (
-            <div className="space-y-2">
-              <label htmlFor="close-owner-attestation" className="text-sm font-medium text-slate-800 dark:text-slate-100">{t("lock.attestationLabel")}</label>
-              <Textarea id="close-owner-attestation" value={attestation} onChange={(event) => setAttestation(event.target.value)}
-                placeholder={t("lock.attestationPlaceholder")} maxLength={1000} />
-              <Button disabled={props.busy || blockers.length > 0 || !props.canApprove || attestation.trim().length < 10}
-                onClick={() => props.onAction("attest", attestation.trim())}>
-                <ShieldCheck size={15} />{t("actions.attest")}
-              </Button>
-            </div>
-          ) : null}
           <div className="flex flex-wrap gap-2">
-          {props.advancedClose && props.run.status === "in_progress" ? (
-            <Button
+            {props.run.status === 'in_progress' ? (
+              <Button
               disabled={props.busy || blockers.length > 0 || !props.canRun}
               onClick={() => props.onAction("request_approval")}
             >
-              <ShieldCheck size={15} />
-              {t("actions.requestApproval")}
-            </Button>
-          ) : null}
-          {props.run.status === "review" ? (
-            <Button variant="outline" asChild>
-              <Link href="/inbox">
                 <ShieldCheck size={15} />
-                {t("actions.reviewApprovals")}
-              </Link>
-            </Button>
-          ) : null}
-          {props.run.status === "approved" ? (
-            <Button
+                {t('actions.requestApproval')}
+              </Button>
+            ) : null}
+            {props.run.status === 'review' ? (
+              <ApprovalActions subjectKind="close_run" subjectId={props.run.id} />
+            ) : null}
+            {props.run.status === 'approved' ? (
+              <Button
               disabled={props.busy || !props.canApprove}
               onClick={async () => {
                 if (!(await confirmDialog(t("lock.confirmLock")))) return
                 props.onAction("close")
               }}
             >
-              <LockKeyhole size={15} />
-              {t("actions.lockPeriod")}
-            </Button>
-          ) : null}
-          {props.run.status === "closed" || props.run.status === "published" ? (
-            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
-              <CheckCircle2 size={18} />
-              {t("lock.complete", { name: props.run.closer_name ?? "" })}
-            </div>
-          ) : null}
-          {props.advancedClose && props.canManageFlows ? (
+                <LockKeyhole size={15} />
+                {t('actions.lockPeriod')}
+              </Button>
+            ) : null}
+            {props.run.status === "closed" || props.run.status === "published" ? (
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 size={18} />
+                {t("lock.complete", { name: props.run.closer_name ?? "" })}
+              </div>
+            ) : null}
+            {props.canManageFlows ? (
+              <Button variant="ghost" asChild>
+                <Link href="/admin/flows?subject=close_run">
+                  <GitBranch size={15} />
+                  {t('actions.configureApprovalFlow')}
+                </Link>
+              </Button>
+            ) : null}
             <Button variant="ghost" asChild>
-              <Link href="/admin/flows?subject=close_run">
-                <GitBranch size={15} />
-                {t("actions.configureApprovalFlow")}
+              <Link href="/docs/period-close">
+                <FileCheck2 size={15} />
+                {t('actions.documentation')}
               </Link>
             </Button>
-          ) : null}
-          <Button variant="ghost" asChild>
-            <Link href="/docs/period-close">
-              <FileCheck2 size={15} />
-              {t("actions.documentation")}
-            </Link>
-          </Button>
           </div>
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }
 
 export function PublishStage(
@@ -1257,8 +1220,8 @@ export function PublishStage(
     onAction: (action: string, comment?: string) => void;
   },
 ) {
-  const t = useTranslations("close");
-  const [note, setNote] = useState("");
+  const t = useTranslations('close')
+  const [note, setNote] = useState('')
   // A re-publication after a controlled reopen is a restatement: the engine
   // refuses it without a note, so the button stays disabled until the
   // operator writes one. First publications keep the note optional.
@@ -1292,18 +1255,18 @@ export function PublishStage(
               return (
                 <Link
                   key={code || JSON.stringify(report)}
-                  href={((reportHref[code] ?? "/reports"))}
+                  href={reportHref[code] ?? '/reports'}
                   className="flex items-center justify-between rounded-lg border border-slate-200 p-3 text-sm font-medium hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
                 >
                   <span className="flex items-center gap-2">
                     <FileCheck2 size={15} className="text-teal-600" />
                     {code && t.has(`reports.${code}`)
-                      ? t((`reports.${code}`))
+                      ? t(`reports.${code}`)
                       : code}
                   </span>
                   <ExternalLink size={13} />
                 </Link>
-              );
+              )
             })}
           </CardContent>
         </Card>
@@ -1381,7 +1344,7 @@ export function PublishStage(
                 <span className="absolute -left-1.5 top-1 h-3 w-3 rounded-full border-2 border-white bg-teal-500 dark:border-slate-900" />
                 <p className="font-medium text-slate-900 dark:text-slate-100">
                   {t.has(`events.${event.event_type}`)
-                    ? t((`events.${event.event_type}`))
+                    ? t(`events.${event.event_type}`)
                     : event.event_type}
                 </p>
                 <p className="text-xs text-slate-500">
@@ -1394,7 +1357,7 @@ export function PublishStage(
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }
 
 function formatCloseTimestamp(value: string): string {

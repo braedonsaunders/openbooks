@@ -1,3 +1,5 @@
+import { lockApprovalSubject } from "../../platform/approval-routing.ts";
+import { requestNativeCommandApproval } from "../../platform/approval-routing.ts";
 import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
@@ -132,7 +134,6 @@ function toLineDTO(row: PlanLineRow): PlanLineDTO {
     revision: row.revision,
   };
 }
-
 
 /** Planned FTE rounded per the org's declared rounding. Requisition headcount is whole people (ceil of the rounded FTE); the line keeps the precise FTE for costing. */
 export function roundFteForHeadcount(plannedFte: string, rounding: FteRounding): number {
@@ -571,6 +572,7 @@ export async function createPlanLine(query: CreatePlanLineQuery): Promise<PlanLi
 
 /** Approve a line: create/backfill lines open a requisition through the recruiting service. */
 export async function approvePlanLine(query: {
+  approvalRunId?: string;
   orgId: string;
   actorId: string;
   lineId: string;
@@ -580,6 +582,7 @@ export async function approvePlanLine(query: {
   const actorId = requireActorId(query.actorId);
   const lineId = requireId(query.lineId, "lineId");
   return withOrgTransaction(orgId, async () => {
+    await lockApprovalSubject(orgId, "headcount_plan_line", lineId);
     await requireHrmCompensationManage(db, orgId, actorId);
     const line = (await db.execute<PlanLineRow>(sql`
       select ${LINE_COLUMNS} from hrm_headcount_plan_lines
@@ -610,6 +613,17 @@ export async function approvePlanLine(query: {
         `a ${line.status} line cannot be approved — only proposed lines approve`,
       );
     }
+    if (
+      await requestNativeCommandApproval({
+        orgId,
+        actorId,
+        subjectKind: "headcount_plan_line",
+        subjectId: lineId,
+        command: { reason: query.reason?.trim().slice(0, 2000) ?? null },
+        approvalRunId: query.approvalRunId,
+      })
+    )
+      return toLineDTO(line);
     const settings = await compensationSettings(orgId);
     let requisitionId: string | null = null;
     if (line.kind === "create" || line.kind === "backfill") {
@@ -694,6 +708,8 @@ async function assertPlanWriteScope(
   const allowed = await loadCompensationLens(db, orgId, actorId);
   if (allowed === null) return;
   const subsidiary = planScope?.employer_subsidiary_id ?? null;
+  if (subsidiary === null && lineEmployerIds.length === 0)
+    throw new CompensationError("NOT_FOUND", `${what} is not visible in this organization`);
   if (subsidiary !== null && !allowed.has(subsidiary)) {
     throw new CompensationError("NOT_FOUND", `${what} is not visible in this organization`);
   }
@@ -768,12 +784,32 @@ export async function listPlanLinesForPlans(query: {
   return rows.map(toLineDTO);
 }
 
-export async function submitPlan(query: { orgId: string; actorId: string; planId: string }): Promise<HeadcountPlanDTO> {
-  return transitionPlan(query.orgId, query.actorId, query.planId, "draft", "submitted", "submitted_at");
+export async function submitPlan(query: {
+  orgId: string;
+  actorId: string;
+  planId: string;
+}): Promise<HeadcountPlanDTO> {
+  return withOrgTransaction(query.orgId, async () => {
+    await transitionPlan(query.orgId, query.actorId, query.planId, "draft", "submitted", "submitted_at");
+    return approvePlan(query);
+  });
 }
 
-export async function approvePlan(query: { orgId: string; actorId: string; planId: string }): Promise<HeadcountPlanDTO> {
-  return transitionPlan(query.orgId, query.actorId, query.planId, "submitted", "approved", "approved_at");
+export async function approvePlan(query: {
+  orgId: string;
+  actorId: string;
+  planId: string;
+  approvalRunId?: string;
+}): Promise<HeadcountPlanDTO> {
+  return transitionPlan(
+    query.orgId,
+    query.actorId,
+    query.planId,
+    "submitted",
+    "approved",
+    "approved_at",
+    query.approvalRunId,
+  );
 }
 
 export async function closePlan(query: { orgId: string; actorId: string; planId: string }): Promise<HeadcountPlanDTO> {
@@ -787,11 +823,13 @@ async function transitionPlan(
   from: PlanStatus,
   to: PlanStatus,
   stamp: "submitted_at" | "approved_at" | "closed_at",
+  approvalRunId?: string,
 ): Promise<HeadcountPlanDTO> {
   const orgId = requireOrgId(rawOrgId);
   const actorId = requireActorId(rawActorId);
   const planId = requireId(rawPlanId, "planId");
   return withOrgTransaction(orgId, async () => {
+    await lockApprovalSubject(orgId, "headcount_plan", planId);
     await requireHrmCompensationManage(db, orgId, actorId);
     // Moving a plan moves every line with it: the plan row is locked,
     // then its scope plus every line's employer are rechecked in-
@@ -804,6 +842,26 @@ async function transitionPlan(
       throw new CompensationError("NOT_FOUND", "headcount plan is not visible in this organization");
     }
     await assertPlanWriteScope(orgId, actorId, locked.scope, await planLineEmployerIds(orgId, planId), "headcount plan");
+    if (
+      to === "approved" &&
+      (await requestNativeCommandApproval({
+        orgId,
+        actorId,
+        subjectKind: "headcount_plan",
+        subjectId: planId,
+        command: {},
+        approvalRunId,
+      }))
+    ) {
+      const current = (
+        await db.execute<PlanRow>(
+          sql`select id,name,fiscal_period_from::text,fiscal_period_to::text,status,revision from hrm_headcount_plans where org_id=${orgId} and id=${planId}`,
+        )
+      ).rows[0];
+      if (!current)
+        throw new CompensationError("NOT_FOUND", "Headcount plan not found.");
+      return toPlanDTO(current);
+    }
     const updated = (await db.execute<PlanRow>(sql`
       update hrm_headcount_plans
          set status = ${to}, ${sql.raw(stamp)} = now(), revision = revision + 1,

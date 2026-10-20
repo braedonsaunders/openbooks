@@ -342,51 +342,59 @@ export async function ensureCloseDefaults(
   // transaction — clearing its SET LOCAL RLS GUCs and breaking later inserts.
   return inDbTransaction(async (tx) => {
     const closeFeatures = await defaultCloseFeatureContext(tx, orgId);
-    const org = (await tx.execute<{ start_month: number; time_zone: string }>(sql`
+    const org = await tx.execute<{
+      start_month: number;
+      time_zone: string;
+    }>(sql`
       select coalesce((settings->>'fiscalYearStartMonth')::integer, 1) as start_month,
              coalesce(settings->>'timeZone', 'UTC') as time_zone
-        from orgs where id = ${orgId}`));
+        from orgs where id = ${orgId}`);
     if (!org.rows[0]) throw new CloseError("organization not found");
 
-    const existingCalendar = (await tx.execute<{ id: string }>(sql`
+    const existingCalendar = await tx.execute<{ id: string }>(sql`
       select id from fiscal_calendars where org_id = ${orgId} and is_active
-       order by is_default desc, created_at limit 1`));
+       order by is_default desc, created_at limit 1`);
     let calendarId = existingCalendar.rows[0]?.id;
     if (!calendarId) {
-      const createdCalendar = (await tx.execute<{ id: string }>(sql`
+      const createdCalendar = await tx.execute<{ id: string }>(sql`
         insert into fiscal_calendars
           (org_id, name, cadence, year_start_month, time_zone, is_default, is_active, created_by, updated_by)
         values (${orgId}, 'close.defaultData.calendar.name', 'monthly', ${org.rows[0].start_month},
                 ${org.rows[0].time_zone}, true, true, ${actorId ?? null}, ${actorId ?? null})
-        returning id`));
+        returning id`);
       calendarId = createdCalendar.rows[0]?.id;
     }
     if (!calendarId)
       throw new CloseError("could not initialize fiscal calendar");
 
-    const existingBlueprint = (await tx.execute<{ id: string; name: string }>(sql`
+    const existingBlueprint = await tx.execute<{
+      id: string;
+      name: string;
+    }>(sql`
       select id, name from close_blueprints where org_id = ${orgId} and is_active
-       order by is_default desc, version desc, created_at limit 1`));
+       order by is_default desc, version desc, created_at limit 1`);
     let blueprintId = existingBlueprint.rows[0]?.id;
     let createdBlueprint = false;
     if (!blueprintId) {
-      const blueprintRes = (await tx.execute<{ id: string }>(sql`
+      const blueprintRes = await tx.execute<{ id: string }>(sql`
         insert into close_blueprints
           (org_id, name, description, period_type, is_default, is_active, created_by, updated_by)
         values (${orgId}, 'close.defaultData.blueprint.name', 'close.defaultData.blueprint.description',
                 'any', true, true, ${actorId ?? null}, ${actorId ?? null})
-        returning id`));
+        returning id`);
       blueprintId = blueprintRes.rows[0]?.id;
       createdBlueprint = true;
     }
     if (!blueprintId)
       throw new CloseError("could not initialize close blueprint");
 
-    const systemBlueprint = createdBlueprint || existingBlueprint.rows[0]?.name === "close.defaultData.blueprint.name";
+    const systemBlueprint =
+      createdBlueprint ||
+      existingBlueprint.rows[0]?.name === "close.defaultData.blueprint.name";
     if (systemBlueprint) {
       const stepIds = new Map<string, string>();
       for (const [index, step] of DEFAULT_STEPS.entries()) {
-        const inserted = (await tx.execute<{ id: string }>(sql`
+        const inserted = await tx.execute<{ id: string }>(sql`
         insert into close_blueprint_steps
           (org_id, blueprint_id, key, title, description, workstream, task_type,
            completion_mode, gate_type, due_offset_business_days, evidence_required,
@@ -405,7 +413,7 @@ export async function ensureCloseDefaults(
                                then close_blueprint_steps.applicability else excluded.applicability end,
           updated_at = now()
         where close_blueprint_steps.org_id = ${orgId}
-        returning id`));
+        returning id`);
         stepIds.set(step.key, inserted.rows[0]!.id);
       }
       for (const [stepKey, dependencyKey] of DEFAULT_DEPENDENCIES) {
@@ -423,7 +431,7 @@ export async function ensureCloseDefaults(
       insert into close_policies (org_id, code, name, description, policy_type, rules, is_active, created_by, updated_by)
       values
         (${orgId}, 'controlled-reopen', 'close.defaultData.policies.controlledReopen.name', 'close.defaultData.policies.controlledReopen.description',
-         'lock', ${JSON.stringify({ approvalRequired: true, defaultHours: 24 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
+         'lock', ${JSON.stringify({ defaultHours: 24 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
       -- Default provisioning preserves an existing organization policy and its operator edits.
       on conflict (org_id, code) do nothing`);
 
@@ -446,15 +454,14 @@ export async function ensureCloseDefaults(
            'materiality', ${JSON.stringify({ amount: "10000.0000", percent: 20 })}::jsonb, true, ${actorId ?? null}, ${actorId ?? null})
         -- Repeated provisioning preserves existing materiality settings.
         on conflict (org_id, code) do nothing`);
-
     }
 
-    const existingPackage = (await tx.execute<{ id: string }>(sql`
+    const existingPackage = await tx.execute<{ id: string }>(sql`
       select id from close_reporting_packages where org_id = ${orgId} and is_active
-       order by is_default desc, created_at limit 1`));
+       order by is_default desc, created_at limit 1`);
     let reportingPackageId = existingPackage.rows[0]?.id;
     if (!reportingPackageId) {
-      const createdPackage = (await tx.execute<{ id: string }>(sql`
+      const createdPackage = await tx.execute<{ id: string }>(sql`
         insert into close_reporting_packages
           (org_id, name, description, reports, is_default, is_active, created_by, updated_by)
         values (${orgId}, 'close.defaultData.package.name', 'close.defaultData.package.description',
@@ -466,7 +473,7 @@ export async function ensureCloseDefaults(
                   { slug: "general-ledger" },
                 ])}::jsonb,
                 true, true, ${actorId ?? null}, ${actorId ?? null})
-        returning id`));
+        returning id`);
       reportingPackageId = createdPackage.rows[0]?.id;
     }
     if (!reportingPackageId)

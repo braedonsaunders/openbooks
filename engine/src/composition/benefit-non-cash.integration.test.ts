@@ -36,7 +36,10 @@ function databaseRefusal(pattern: RegExp): (error: unknown) => true {
   };
 }
 
-async function fixture(value = "100.0000", clearingType = "asset_current_other") {
+async function fixture(
+  value = "100.0000",
+  clearingType = "asset_current_other",
+) {
   const fx = await seedAdoption();
   try {
     installEngineSeams();
@@ -58,9 +61,12 @@ async function fixture(value = "100.0000", clearingType = "asset_current_other")
       periodFrom: "2026-07-05", periodTo: "2026-07-18", value, currency: "CAD", evidence: { kind: "provider-gift-card" } });
     const ready = await submitBenefitAward({ orgId: fx.orgId, actorId: fx.actorId, awardId: award.id });
     assert.equal(ready.status, "approved");
-    assert.equal(program.approvalMode, "none", "no approvals is the program default");
     assert.equal(ready.approvedBy, null, "a program with no approvals does not invent a human approver");
-    assert.equal((await db.execute(sql`select id from flows where org_id = ${fx.orgId} and subject_kind = 'hrm_benefit_award'`)).rows.length, 0, "native payroll processing needs no Flow graph when program approvals are disabled");
+    assert.equal(
+      (await db.execute(sql`select id from flows where org_id = ${fx.orgId} and subject_kind = 'hrm_benefit_award'`)).rows.length,
+      0,
+      "native payroll processing needs no Flow graph when no tenant Flow gates its submission",
+    );
     const { input, entryId } = await calculatedRun(fx);
     return { fx, input, entryId, clearing, component, program, award };
   } catch (error) { await dropScratchOrgReporting(fx.orgId); throw error; }
@@ -130,6 +136,12 @@ test("gift-card valuation feeds configured tax bases without adding cash; provid
     assert.equal((await db.execute<{ non_cash_account_id: string }>(sql`select non_cash_account_id from pay_stub_lines where org_id = ${fx.orgId} and id = ${storedLine.id}`)).rows[0]!.non_cash_account_id, clearing);
     await assert.rejects(withOrgTransaction(fx.orgId, () => db.execute(sql`update pay_stub_lines set non_cash_account_id = ${replacement} where org_id = ${fx.orgId} and id = ${storedLine.id}`)), databaseRefusal(/clearing account of a committed payroll line are immutable; use a correcting payroll run/));
     await assert.rejects(withOrgTransaction(fx.orgId, () => db.execute(sql`update pay_components set payment_kind = 'cash', non_cash_account_id = null where org_id = ${fx.orgId} and id = ${component}`)), databaseRefusal(/active benefit program or approved benefit obligation.*create a new program and component/));
+    const futureComponent=(await db.execute<{id:string}>(sql`insert into pay_components
+      (org_id,code,name,kind,country,basis,taxable,pensionable,insurable,vacationable,payment_kind,non_cash_account_id)
+      select org_id,'FUTURE_GIFT_VALUE','Future gift-card value',kind,country,basis,taxable,pensionable,insurable,vacationable,payment_kind,non_cash_account_id
+        from pay_components where org_id=${fx.orgId} and id=${component} returning id`)).rows[0]!.id;
+    await updateBenefitProgram({orgId:fx.orgId,actorId:fx.actorId,programId:award.programId,payComponentId:futureComponent,
+      changeEffectiveFrom:"2026-08-01",reason:"Future provider delivery policy"});
     const fulfilled = await recordExternalDelivery({ orgId: fx.orgId, actorId: fx.actorId, awardId: award.id, externalRef: "ISSUED-100" });
     assert.equal(fulfilled.externalRef, "ISSUED-100");
     assert.equal((await recordExternalDelivery({ orgId: fx.orgId, actorId: fx.actorId, awardId: award.id, externalRef: "ISSUED-100" })).id, award.id);
@@ -197,7 +209,6 @@ test("queued benefits cannot flip into cash during recalculation and clearing ch
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
-
 test("a retired queued non-cash component raises its usable remedy and reactivation preserves the original payroll input", { skip: !DB }, async () => {
   const { fx, input, component, award, clearing } = await fixture();
   try {
@@ -221,7 +232,6 @@ test("a retired queued non-cash component raises its usable remedy and reactivat
     assert.equal((await db.execute(sql`select id from pay_run_adjustments where org_id = ${fx.orgId} and pay_run_document_id = ${input.documentId} and component_id = ${component}`)).rows.length, 1);
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
-
 
 test("zero-value rewards refuse creation and payroll queueing without recording a zero obligation", { skip: !DB }, async () => {
   const { fx, input, program } = await fixture();
@@ -248,7 +258,6 @@ test("zero-value rewards refuse creation and payroll queueing without recording 
     assert.equal((await createBenefitAward({ ...query, value: "100.0000" })).status, "draft");
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
-
 
 test("a fixed program refuses a zero denomination on creation, editing and activation", { skip: !DB }, async () => {
   const { fx, component } = await fixture();

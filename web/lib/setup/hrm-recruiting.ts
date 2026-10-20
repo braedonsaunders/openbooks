@@ -41,12 +41,25 @@ export const RECRUITING_KITS_ENTITY: SetupEntity = {
   ],
   fields: [
     { key: 'name', kind: 'text', required: true },
-    { key: 'pipelineStageId', kind: 'ref', ref: 'hrm-pipeline-stages', helpTextKey: 'fieldHelp.hrmKitStage' },
-    { key: 'instructions', kind: 'textarea', helpTextKey: 'fieldHelp.hrmKitInstructions' },
+    {
+      key: 'pipelineStageId',
+      kind: 'ref',
+      ref: 'hrm-pipeline-stages',
+      helpTextKey: 'fieldHelp.hrmKitStage',
+    },
+    {
+      key: 'instructions',
+      kind: 'textarea',
+      helpTextKey: 'fieldHelp.hrmKitInstructions',
+    },
     // Canonical rating keys, subset of the four the engine knows. The
     // write path refuses unknown keys by name (storage CHECKs the same
     // vocabulary, but its error names no field).
-    { key: 'ratingScale', kind: 'stringArray', helpTextKey: 'fieldHelp.hrmKitScale' },
+    {
+      key: 'ratingScale',
+      kind: 'stringArray',
+      helpTextKey: 'fieldHelp.hrmKitScale',
+    },
     { key: 'isActive', kind: 'boolean' },
   ],
 }
@@ -76,7 +89,11 @@ export const RECRUITING_KIT_ATTRIBUTES_ENTITY: SetupEntity = {
     { key: 'attribute', kind: 'text', required: true },
     { key: 'description', kind: 'textarea' },
     { key: 'position', kind: 'integer', required: true },
-    { key: 'isFocusDefault', kind: 'boolean', helpTextKey: 'fieldHelp.hrmAttributeFocus' },
+    {
+      key: 'isFocusDefault',
+      kind: 'boolean',
+      helpTextKey: 'fieldHelp.hrmAttributeFocus',
+    },
   ],
 }
 
@@ -101,7 +118,12 @@ export const RECRUITING_KIT_QUESTIONS_ENTITY: SetupEntity = {
     { key: 'kitId', kind: 'ref', ref: 'hrm-interview-kits', required: true },
     { key: 'question', kind: 'textarea', required: true },
     { key: 'position', kind: 'integer', required: true },
-    { key: 'attributeId', kind: 'ref', ref: 'hrm-kit-attributes', helpTextKey: 'fieldHelp.hrmQuestionAttribute' },
+    {
+      key: 'attributeId',
+      kind: 'ref',
+      ref: 'hrm-kit-attributes',
+      helpTextKey: 'fieldHelp.hrmQuestionAttribute',
+    },
   ],
 }
 
@@ -123,12 +145,37 @@ export const RECRUITING_INTERVIEWER_POOLS_ENTITY: SetupEntity = {
   ],
   fields: [
     { key: 'name', kind: 'text', required: true },
-    { key: 'kitId', kind: 'ref', ref: 'hrm-interview-kits', helpTextKey: 'fieldHelp.hrmPoolKit' },
-    { key: 'availability', kind: 'objectArray', helpTextKey: 'fieldHelp.hrmPoolAvailability', fields: [
-      { key: 'startsAt', kind: 'zonedDateTime', required: true, helpTextKey: 'fieldHelp.zonedDateTime' },
-      { key: 'endsAt', kind: 'zonedDateTime', required: true, helpTextKey: 'fieldHelp.zonedDateTime' },
-      { key: 'timezone', kind: 'text', required: true, helpTextKey: 'fieldHelp.ianaTimezone' },
-    ] },
+    {
+      key: 'kitId',
+      kind: 'ref',
+      ref: 'hrm-interview-kits',
+      helpTextKey: 'fieldHelp.hrmPoolKit',
+    },
+    {
+      key: 'availability',
+      kind: 'objectArray',
+      helpTextKey: 'fieldHelp.hrmPoolAvailability',
+      fields: [
+        {
+          key: 'startsAt',
+          kind: 'zonedDateTime',
+          required: true,
+          helpTextKey: 'fieldHelp.zonedDateTime',
+        },
+        {
+          key: 'endsAt',
+          kind: 'zonedDateTime',
+          required: true,
+          helpTextKey: 'fieldHelp.zonedDateTime',
+        },
+        {
+          key: 'timezone',
+          kind: 'text',
+          required: true,
+          helpTextKey: 'fieldHelp.ianaTimezone',
+        },
+      ],
+    },
     { key: 'isActive', kind: 'boolean' },
   ],
 }
@@ -146,19 +193,27 @@ export const RECRUITING_OFFER_TEMPLATES_ENTITY: SetupEntity = {
   docSlug: 'structured-interviews-offers-job-boards',
   columns: [
     { key: 'name', kind: 'text' },
-    { key: 'approvalRequired', kind: 'badge-active' },
     { key: 'isActive', kind: 'badge-active' },
   ],
   fields: [
     { key: 'name', kind: 'text', required: true },
-    { key: 'bodyTemplate', kind: 'textarea', required: true, helpTextKey: 'fieldHelp.hrmTemplateBody' },
-    { key: 'clauses', kind: 'objectArray', helpTextKey: 'fieldHelp.hrmTemplateClauses', fields: [
-      { key: 'key', kind: 'text', required: true },
-      { key: 'label', kind: 'text' },
-      { key: 'body', kind: 'textarea', required: true },
-      { key: 'default_on', kind: 'boolean', defaultValue: false },
-    ] },
-    { key: 'approvalRequired', kind: 'boolean' },
+    {
+      key: 'bodyTemplate',
+      kind: 'textarea',
+      required: true,
+      helpTextKey: 'fieldHelp.hrmTemplateBody',
+    },
+    {
+      key: 'clauses',
+      kind: 'objectArray',
+      helpTextKey: 'fieldHelp.hrmTemplateClauses',
+      fields: [
+        { key: 'key', kind: 'text', required: true },
+        { key: 'label', kind: 'text' },
+        { key: 'body', kind: 'textarea', required: true },
+        { key: 'default_on', kind: 'boolean', defaultValue: false },
+      ],
+    },
     { key: 'isActive', kind: 'boolean' },
   ],
 }
@@ -189,15 +244,40 @@ export const RECRUITING_JOB_DESCRIPTIONS_ENTITY: SetupEntity = {
     { key: 'isActive', kind: 'badge-active' },
   ],
   fields: [
-    { key: 'name', kind: 'text', required: true, helpTextKey: 'fieldHelp.hrmJobDescriptionName' },
-    { key: 'title', kind: 'text', required: true, helpTextKey: 'fieldHelp.hrmJobDescriptionTitle' },
-    { key: 'employmentKind', kind: 'text', helpTextKey: 'fieldHelp.hrmJobDescriptionKind' },
+    {
+      key: 'name',
+      kind: 'text',
+      required: true,
+      helpTextKey: 'fieldHelp.hrmJobDescriptionName',
+    },
+    {
+      key: 'title',
+      kind: 'text',
+      required: true,
+      helpTextKey: 'fieldHelp.hrmJobDescriptionTitle',
+    },
+    {
+      key: 'employmentKind',
+      kind: 'text',
+      helpTextKey: 'fieldHelp.hrmJobDescriptionKind',
+    },
     // All four or none: the write path refuses a partial range by name.
-    { key: 'compensationMin', kind: 'decimal', decimalScale: 4, helpTextKey: 'fieldHelp.hrmJobDescriptionPay' },
+    {
+      key: 'compensationMin',
+      kind: 'decimal',
+      decimalScale: 4,
+      helpTextKey: 'fieldHelp.hrmJobDescriptionPay',
+    },
     { key: 'compensationMax', kind: 'decimal', decimalScale: 4 },
     { key: 'compensationCurrency', kind: 'ref', ref: 'currencies' },
     { key: 'compensationBasis', kind: 'select', options: COMPENSATION_BASES },
-    { key: 'description', kind: 'textarea', required: true, fullWidth: true, helpTextKey: 'fieldHelp.hrmJobDescriptionBody' },
+    {
+      key: 'description',
+      kind: 'textarea',
+      required: true,
+      fullWidth: true,
+      helpTextKey: 'fieldHelp.hrmJobDescriptionBody',
+    },
     { key: 'isActive', kind: 'boolean' },
   ],
 }
@@ -223,17 +303,46 @@ export const RECRUITING_RETENTION_RULES_ENTITY: SetupEntity = {
   filters: [{ key: 'basis', options: RETENTION_BASES }],
   fields: [
     { key: 'name', kind: 'text', required: true },
-    { key: 'regionScope', kind: 'object', defaultValue: { applies_to: 'all' }, helpTextKey: 'fieldHelp.hrmRetentionScope', fields: [
-      { key: 'applies_to', kind: 'select', required: true, options: [
-        { value: 'all', labelKey: 'options.retentionRegions.all' },
-        { value: 'countries', labelKey: 'options.retentionRegions.countries' },
-      ] },
-      { key: 'countries', kind: 'stringArray', required: true, ref: 'countries', showWhen: { field: 'applies_to', in: ['countries'] } },
-    ] },
+    {
+      key: 'regionScope',
+      kind: 'object',
+      defaultValue: { applies_to: 'all' },
+      helpTextKey: 'fieldHelp.hrmRetentionScope',
+      fields: [
+        {
+          key: 'applies_to',
+          kind: 'select',
+          required: true,
+          options: [
+            { value: 'all', labelKey: 'options.retentionRegions.all' },
+            {
+              value: 'countries',
+              labelKey: 'options.retentionRegions.countries',
+            },
+          ],
+        },
+        {
+          key: 'countries',
+          kind: 'stringArray',
+          required: true,
+          ref: 'countries',
+          showWhen: { field: 'applies_to', in: ['countries'] },
+        },
+      ],
+    },
     { key: 'basis', kind: 'select', required: true, options: RETENTION_BASES },
     { key: 'retainMonths', kind: 'integer', required: true },
-    { key: 'action', kind: 'select', required: true, options: RETENTION_ACTIONS },
-    { key: 'consentExtensionLeadDays', kind: 'integer', helpTextKey: 'fieldHelp.hrmRetentionLeadDays' },
+    {
+      key: 'action',
+      kind: 'select',
+      required: true,
+      options: RETENTION_ACTIONS,
+    },
+    {
+      key: 'consentExtensionLeadDays',
+      kind: 'integer',
+      helpTextKey: 'fieldHelp.hrmRetentionLeadDays',
+    },
     { key: 'isActive', kind: 'boolean' },
   ],
 }

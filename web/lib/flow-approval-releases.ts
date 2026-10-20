@@ -23,73 +23,86 @@ export async function registerFlowApprovalReleaseHandlers(): Promise<void> {
   // that atomically materializes ticket-owned project charges, provenance,
   // status, and audit evidence when the gate resolves. Time-entry approval and
   // payroll posting remain an independent lifecycle.
-  registerFlowApprovalReleaseHandler('field_ticket', async ({
-    subjectId,
-    outcome,
-    comment,
-    ctx,
-  }) => {
-    if (!ctx.userId) throw new Error('field-ticket approval needs an acting user')
-    const { releaseFieldTicketApproval } = await import('./field-tickets')
-    await releaseFieldTicketApproval(
-      ctx.orgId,
-      ctx.userId,
-      subjectId,
-      outcome,
-      comment,
-    )
-  })
+  registerFlowApprovalReleaseHandler(
+    'field_ticket',
+    async ({ subjectId, outcome, comment, approvalRunId, ctx }) => {
+      if (!ctx.userId)
+        throw new Error('field-ticket approval needs an acting user')
+      const { releaseFieldTicketApproval } = await import('./field-tickets')
+      await releaseFieldTicketApproval(
+        ctx.orgId,
+        ctx.userId,
+        subjectId,
+        outcome,
+        comment,
+        approvalRunId,
+      )
+    },
+  )
 
   // Timesheet approval routing is tenant-authored in Flows too. The engine
   // decides WHO approves and when the gates resolve; this supplies what
   // approval means for hours — stamping the approver across the week, or
   // returning it with the approver's reason attached.
-  registerFlowApprovalReleaseHandler('timesheet_week', async ({
-    subjectId,
-    outcome,
-    comment,
-    ctx,
-  }) => {
-    if (!ctx.userId) throw new Error('timesheet approval needs an acting user')
-    const { releaseTimesheetWeekApproval } = await import('./timesheet-approval-release')
-    await releaseTimesheetWeekApproval(
-      ctx.orgId,
-      ctx.userId,
-      subjectId,
-      outcome,
-      ctx.allowedSubsidiaryIds ?? null,
-      comment,
-    )
-  })
+  registerFlowApprovalReleaseHandler(
+    'timesheet_week',
+    async ({ subjectId, outcome, comment, approvalRunId, ctx }) => {
+      if (!ctx.userId)
+        throw new Error('timesheet approval needs an acting user')
+      const { releaseTimesheetWeekApproval } =
+        await import('./timesheet-approval-release')
+      await releaseTimesheetWeekApproval(
+        ctx.orgId,
+        ctx.userId,
+        subjectId,
+        outcome,
+        ctx.allowedSubsidiaryIds ?? null,
+        comment,
+        approvalRunId,
+      )
+    },
+  )
 
   // Crew batch approval routing is tenant-authored in Flows as well. The
   // engine decides WHO approves and when the gates resolve; this supplies
   // what approval means for a batch — approving it through the crew
   // service, or bouncing it to the foreman with the approver's reason
   // attached.
-  registerFlowApprovalReleaseHandler('crew_time_batch', async ({
-    subjectId,
-    outcome,
-    comment,
-    ctx,
-  }) => {
-    if (!ctx.userId) throw new Error('crew batch approval needs an acting user')
-    const { releaseCrewTimeBatchApproval } = await import('./crew-batch-approval-release')
-    await releaseCrewTimeBatchApproval(ctx.orgId, ctx.userId, subjectId, outcome, comment)
-  })
+  registerFlowApprovalReleaseHandler(
+    'crew_time_batch',
+    async ({ subjectId, outcome, comment, approvalRunId, ctx }) => {
+      if (!ctx.userId)
+        throw new Error('crew batch approval needs an acting user')
+      const { releaseCrewTimeBatchApproval } =
+        await import('./crew-batch-approval-release')
+      await releaseCrewTimeBatchApproval(
+        ctx.orgId,
+        ctx.userId,
+        subjectId,
+        outcome,
+        comment,
+        approvalRunId,
+      )
+    },
+  )
 
   // Pre-billing worksheet approval is tenant-authored in Flows. The engine
   // decides who approves; this supplies what approval means for a worksheet —
   // freezing its lines as approved, or returning it to draft with the
   // approver's reason attached.
-  registerFlowApprovalReleaseHandler('prebill', async ({
-    subjectId,
-    outcome,
-    comment,
-    ctx,
-  }) => {
-    if (!ctx.userId) throw new Error('pre-billing approval needs an acting user')
-    const { releasePrebillApproval } = await import('./pre-billing')
-    await releasePrebillApproval(ctx.orgId, ctx.userId, subjectId, outcome, comment)
-  })
+  registerFlowApprovalReleaseHandler(
+    'prebill',
+    async ({ subjectId, outcome, comment, ctx }) => {
+      if (!ctx.userId)
+        throw new Error('pre-billing approval needs an acting user')
+      const { releasePrebillApproval } = await import('./pre-billing')
+      await releasePrebillApproval(
+        ctx.orgId,
+        ctx.userId,
+        subjectId,
+        outcome,
+        comment,
+      )
+    },
+  )
 }

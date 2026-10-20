@@ -192,7 +192,6 @@ export function recordCommands(
   options: ManufacturingOptions,
   canPost: boolean,
   canBuy: boolean,
-  flags?: { routingDirectApply?: boolean },
 ): Command[] {
   const r = data.record,
     base = "/api/manufacturing/" + view + "/" + r.id,
@@ -202,7 +201,7 @@ export function recordCommands(
     fields: Field[] = [],
     extra: Partial<Command> = {},
   ) => commands.push({ key, path: base + "/" + key, fields, ...extra });
-  if (view === "work-orders") {
+  if (view === 'work-orders') {
     if (r.status === "draft") {
       if (!r.pendingApproval) {
         commands.push(headerCommand(view, options, r));
@@ -285,7 +284,7 @@ export function recordCommands(
         ])
       ],{create:true,note:'lossDispositionNote'});
     }
-  } else if (view === "work-centers") {
+  } else if (view === 'work-centers') {
     commands.push(headerCommand(view, options, r));
     push(r.isActive ? "deactivate" : "reactivate", [], {
       path: base,
@@ -301,12 +300,11 @@ export function recordCommands(
       ],
       { path: base + "/rates", create: true },
     );
-  } else if (view === "routings") {
-    if (r.status === "draft") {
+  } else if (view === 'routings') {
+    if (r.status === 'draft') {
       commands.push(headerCommand(view, options, r));
       commands.push(operationCommand(String(r.id), options));
-      if (flags?.routingDirectApply) push("activateDirect", [select("subsidiaryId",options.subsidiaries,options.subsidiaries.length===1?options.subsidiaries[0]!.value:undefined,true),reason("reason",true,8)], { path: base + "/activate-direct", note: "activateDirectNote",create:true });
-      else push("activate", [select("subsidiaryId",options.subsidiaries,options.subsidiaries.length===1?options.subsidiaries[0]!.value:undefined,true),reason("reason",true,8)], { note: "activateNote",create:true });
+      push("activate", [select("subsidiaryId",options.subsidiaries,options.subsidiaries.length===1?options.subsidiaries[0]!.value:undefined,true),reason("reason",true,8)], { note: "activateNote",create:true });
     }
     if (r.status === "active") push("archive");
     push("newVersion", [], {
@@ -316,7 +314,7 @@ export function recordCommands(
       note: "versionNote",
     });
   }
-  return commands;
+  return commands
 }
 export function operationCommand(
   routingId: string,

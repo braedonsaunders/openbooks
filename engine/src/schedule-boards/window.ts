@@ -247,10 +247,8 @@ async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: s
   const dates = datesBetween(from, through);
   const orgId = actor.orgId;
 
-  const [canManage, canPublish] = await Promise.all([
-    boardAuthority(actor, board, "manage").then(() => true, () => false),
-    boardAuthority(actor, board, "publish").then(() => true, () => false),
-  ]);
+  const canManage=await boardAuthority(actor,board,"manage").then(()=>true,()=>false);
+  const canPublish=canManage;
 
   const rows = board.rowKind === "resources" ? await resourceRows(board, orgId, allowed, from, through) : (await db.execute<BoardRow>(sql`
     select p.id as "subjectId", 'person' as "subjectKind", p.display_name as name, p.short_code as "shortCode", er.job_title as "jobTitle",
@@ -320,8 +318,8 @@ async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: s
   });
 
   const sourceRecords = board.rowKind === 'people' ? await readBoardSourceHistory(actor, board.id, from, through) : [];
-  const pending = board.publishPolicy === "governed" ? (await db.execute<NonNullable<BoardWindow["pendingPublication"]>>(sql`select id,
+  const pending = (await db.execute<NonNullable<BoardWindow["pendingPublication"]>>(sql`select id,
       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt", flow_run_id is not null as "flowGated", entry_ids::text[] as "entryIds"
-    from schedule_publications where org_id = ${orgId} and board_id = ${board.id} and status = 'pending'`)).rows[0] ?? null : null;
+    from schedule_publications where org_id = ${orgId} and board_id = ${board.id} and status = 'pending'`)).rows[0] ?? null;
   return { board, from, through, days, calendarNotice, rows, entries, sourceRecords, replaced, absences, codes, pendingPublication: pending, canManage, canPublish };
 }

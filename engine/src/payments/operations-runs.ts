@@ -1,6 +1,10 @@
+import { routeSubjectSubmission } from "../flows/submission-policy.ts";
 import { sql } from "drizzle-orm";
 import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
-import { cancelDispatchRuns, dispatchFailureReason } from "../flows/dispatch-result.ts";
+import {
+  cancelDispatchRuns,
+  dispatchFailureReason,
+} from "../flows/dispatch-result.ts";
 import { paymentRunSubjectKind } from "../flows/payment-runs-adapter.ts";
 import { runRecordFlows } from "../flows/run.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
@@ -17,8 +21,8 @@ import { reversePaymentForReturn } from "./payment-return.ts";
  *
  * `userId` is the gate user for an interactive submission, or null for the
  * payment scheduler: a scheduled submission is system provenance and never
- * impersonates the schedule's author. The run's maker stays excluded from
- * deciding its gate either way (the subject forbids self-approval).
+ * impersonates the schedule's author. The submitted tenant Flow determines
+ * whether the run's maker may decide an assigned gate.
  *
  * A flow that matched but failed refuses the submission by name and leaves the
  * run in draft; whatever the dispatch opened is cancelled, and the failed flow
@@ -30,28 +34,43 @@ export async function submitPaymentRun(
   userId: string | null,
 ): Promise<{ status: "pending_approval" | "approved"; gated: boolean }> {
   const outcome = await withOrgTransaction(orgId, async () => {
-    const run = (await db.execute<{ direction: string }>(sql`
+    const run = (
+      await db.execute<{ direction: string }>(sql`
       select r.direction from payment_runs r
         join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
        where r.id = ${runId} and r.org_id = ${orgId} and r.status = 'draft'
          and p.is_active and r.payment_count > 0 and r.total_amount > 0
        for update of r
-    `)).rows[0];
-    if (!run) throw new PaymentError("only a non-empty draft run with an active profile can be submitted");
+    `)
+    ).rows[0];
+    if (!run)
+      throw new PaymentError(
+        "only a non-empty draft run with an active profile can be submitted",
+      );
     const subjectKind = paymentRunSubjectKind(run.direction);
-    const dispatch = await runRecordFlows(
-      { kind: "on_submit", source: userId === null ? "schedule" : "ui" },
-      subjectKind,
-      runId,
-      { orgId, userId },
-    );
+    const dispatch = (
+      await routeSubjectSubmission({
+        orgId,
+        actorId: userId,
+        subjectKind,
+        subjectId: runId,
+        source: userId === null ? "schedule" : "ui",
+      })
+    ).dispatch;
     if (dispatch.failed) {
-      await cancelDispatchRuns(orgId, dispatch.runs.map((item) => item.runId), { actorId: userId });
-      return { refusal: `payment run approval routing failed: ${dispatchFailureReason(dispatch)}` } as const;
+      await cancelDispatchRuns(
+        orgId,
+        dispatch.runs.map((item) => item.runId),
+        { actorId: userId },
+      );
+      return {
+        refusal: `payment run approval routing failed: ${dispatchFailureReason(dispatch)}`,
+      } as const;
     }
     const gated = dispatch.gatesCreated > 0;
     const status = gated ? "pending_approval" : "approved";
-    const submitted = (await db.execute<{ id: string }>(sql`
+    const submitted = (
+      await db.execute<{ id: string }>(sql`
       update payment_runs set
         status = ${status},
         submitted_at = now(), submitted_by = ${userId},
@@ -60,8 +79,12 @@ export async function submitPaymentRun(
         updated_at = now(), updated_by = ${userId}
       where id = ${runId} and org_id = ${orgId} and status = 'draft'
       returning id
-    `)).rows[0];
-    if (!submitted) throw new PaymentError("the payment run changed while it was being submitted");
+    `)
+    ).rows[0];
+    if (!submitted)
+      throw new PaymentError(
+        "the payment run changed while it was being submitted",
+      );
     await event({
       orgId,
       runId,
@@ -72,7 +95,13 @@ export async function submitPaymentRun(
       details: {
         source: userId === null ? "system" : "user",
         approval: gated ? "flow" : "not_required",
-        ...(gated ? { flowRuns: dispatch.runs.filter((item) => item.gatesCreated > 0).map((item) => item.runId) } : {}),
+        ...(gated
+          ? {
+              flowRuns: dispatch.runs
+                .filter((item) => item.gatesCreated > 0)
+                .map((item) => item.runId),
+            }
+          : {}),
       },
     });
     return { status, gated } as const;
@@ -100,26 +129,50 @@ export async function releasePaymentRunApproval(args: {
   approvalRunId?: string;
 }): Promise<void> {
   const { orgId, runId, actorId, outcome } = args;
-  if (!actorId) throw new PaymentError("a payment run approval must be decided by a signed-in user");
-  const run = (await db.execute<{ status: string; direction: string; created_by: string | null; submitted_by: string | null }>(sql`
+  if (!actorId)
+    throw new PaymentError(
+      "a payment run approval must be decided by a signed-in user",
+    );
+  const run = (
+    await db.execute<{
+      status: string;
+      direction: string;
+      created_by: string | null;
+      submitted_by: string | null;
+    }>(sql`
     select status, direction, created_by, submitted_by from payment_runs
      where id = ${runId} and org_id = ${orgId}
      for update
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!run) throw new PaymentError("payment run not found");
   if (run.status !== "pending_approval") {
-    throw new PaymentError(`the payment run is ${run.status}, not awaiting approval`);
+    throw new PaymentError(
+      `the payment run is ${run.status}, not awaiting approval`,
+    );
   }
   if (actorId === run.submitted_by || actorId === run.created_by) {
-    if (!await completedGateAllowsSelfApproval(db, { orgId, subjectKind: paymentRunSubjectKind(run.direction),
-      subjectId: runId, approvalRunId: args.approvalRunId, actorId, outcome })) {
-      throw new PaymentError("The payment run author or submitter cannot decide its approval without an explicit frozen self-approval policy and completed gate decision — use the configured approval gate.");
+    if (
+      !(await completedGateAllowsSelfApproval(db, {
+        orgId,
+        subjectKind: paymentRunSubjectKind(run.direction),
+        subjectId: runId,
+        approvalRunId: args.approvalRunId,
+        actorId,
+        outcome,
+      }))
+    ) {
+      throw new PaymentError(
+        "The payment run author or submitter cannot decide its approval without an explicit frozen self-approval policy and completed gate decision — use the configured approval gate.",
+      );
     }
   }
   const reason = args.comment?.trim() || null;
-  if (outcome === "rejected" && !reason) throw new PaymentError("a rejection reason is required");
+  if (outcome === "rejected" && !reason)
+    throw new PaymentError("a rejection reason is required");
   const next = outcome === "approved" ? "approved" : "rejected";
-  const released = (await db.execute<{ id: string }>(sql`
+  const released = (
+    await db.execute<{ id: string }>(sql`
     update payment_runs set
       status = ${next},
       approved_at = ${outcome === "approved" ? sql`now()` : null},
@@ -130,8 +183,12 @@ export async function releasePaymentRunApproval(args: {
       updated_at = now(), updated_by = ${actorId}
     where id = ${runId} and org_id = ${orgId} and status = 'pending_approval'
     returning id
-  `)).rows[0];
-  if (!released) throw new PaymentError("the payment run changed while its approval was being released");
+  `)
+  ).rows[0];
+  if (!released)
+    throw new PaymentError(
+      "the payment run changed while its approval was being released",
+    );
   await event({
     orgId,
     runId,
@@ -152,18 +209,26 @@ export async function rollbackPaymentRun(
 ): Promise<void> {
   if (!reason.trim()) throw new PaymentError("a rollback reason is required");
   await withOrgTransaction(orgId, async () => {
-    const locked = (await db.execute<{ run_number: string; status: string }>(sql`
+    const locked = (
+      await db.execute<{ run_number: string; status: string }>(sql`
       select run_number::text as run_number, status from payment_runs
        where id = ${runId} and org_id = ${orgId}
        for update
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!locked) throw new PaymentError("payment run not found");
     // Rolling back releases every bill the run reserved, so another run (or an
     // ad-hoc payment) can pay them. Once a file has reached the bank that is a
     // double payment unless the bank did not process it — knowledge only the
     // operator has. Require it as an explicit, recorded attestation: the run
     // number typed back, so a reason alone can never release delivered bills.
-    const deliveries = (await db.execute<{ file_id: string; channel: string; status: string; delivered_at: string | null }>(sql`
+    const deliveries = (
+      await db.execute<{
+        file_id: string;
+        channel: string;
+        status: string;
+        delivered_at: string | null;
+      }>(sql`
       select delivery.payment_file_id as file_id, delivery.channel, delivery.status,
              delivery.delivered_at::text as delivered_at
         from payment_file_deliveries delivery
@@ -171,64 +236,81 @@ export async function rollbackPaymentRun(
        where file.payment_run_id = ${runId} and file.org_id = ${orgId}
          and delivery.status in ('delivered', 'acknowledged')
        order by delivery.created_at, delivery.id
-    `)).rows;
+    `)
+    ).rows;
     const attestation = opts.bankNotProcessedAttestation?.trim() ?? "";
     if (deliveries.length > 0 && attestation !== locked.run_number) {
       throw new PaymentError(
         `payment run ${locked.run_number} has a file delivered to the bank; rolling it back releases its bills for payment again. ` +
-        `Confirm with the bank that the delivered file was not and will not be processed, then type ${locked.run_number} to attest it — ` +
-        `otherwise keep the run and record the bank's settlement, return or rejection of each payment instead`,
+          `Confirm with the bank that the delivered file was not and will not be processed, then type ${locked.run_number} to attest it — ` +
+          `otherwise keep the run and record the bank's settlement, return or rejection of each payment instead`,
       );
     }
-    const result = (await db.execute<{ status: string }>(sql`
+    const result = await db.execute<{ status: string }>(sql`
       update payment_runs r set status = 'rolled_back', updated_at = now(), updated_by = ${userId}
        where r.id = ${runId} and r.org_id = ${orgId} and r.status in ('approved', 'generated', 'delivered', 'partially_failed')
          and not exists (select 1 from payment_instructions i where i.payment_run_id = r.id and i.org_id = r.org_id and i.status in ('sent', 'settled', 'returned', 'reversed'))
        returning r.status
-    `));
-    if (!result.rows[0]) throw new PaymentError("a run can only be rolled back before any payment is posted or settled");
+    `);
+    if (!result.rows[0])
+      throw new PaymentError(
+        "a run can only be rolled back before any payment is posted or settled",
+      );
     // Lock every file of the run: a delivery claimed (or parked uncertain)
     // while its bytes may be at the bank must refuse the void — voiding
     // would destroy the only evidence of what the bank may hold. Already
     // delivered files keep their existing void semantics: their delivery is
     // confirmed and recorded, so the evidence survives the void.
-    const files = (await db.execute<{ id: string; status: string }>(sql`
+    const files = await db.execute<{ id: string; status: string }>(sql`
       select id, status from payment_files
        where payment_run_id = ${runId} and org_id = ${orgId}
        for update
-    `));
-    const inFlight = files.rows.filter((f) => f.status === "delivering" || f.status === "delivery_uncertain");
+    `);
+    const inFlight = files.rows.filter(
+      (f) => f.status === "delivering" || f.status === "delivery_uncertain",
+    );
     if (inFlight.length > 0) {
       throw new PaymentError(
         `cannot roll back the run while file ${inFlight[0]!.id} has an in-flight SFTP delivery (${inFlight[0]!.status}); wait for the delivery to complete or expire, or resolve the uncertain delivery first`,
       );
     }
-    const voidable = files.rows.filter((f) => f.status !== "superseded" && f.status !== "voided");
+    const voidable = files.rows.filter(
+      (f) => f.status !== "superseded" && f.status !== "voided",
+    );
     if (voidable.length > 0) {
-      const voided = (await db.execute<{ id: string }>(sql`
+      const voided = await db.execute<{ id: string }>(sql`
         update payment_files set status = 'voided', updated_at = now(), updated_by = ${userId}
          where payment_run_id = ${runId} and org_id = ${orgId} and status not in ('superseded', 'voided')
         returning id
-      `));
+      `);
       // Locked above, so every voidable row must move: a short count means
       // a concurrent lifecycle transition raced the rollback — fail closed.
       if (voided.rows.length !== voidable.length) {
-        throw new PaymentError("cannot roll back the run: a payment file moved while it was locked; reload and retry");
+        throw new PaymentError(
+          "cannot roll back the run: a payment file moved while it was locked; reload and retry",
+        );
       }
     }
     await event({
-      orgId, runId, actorId: userId, eventType: "run_rolled_back", fromStatus: locked.status, toStatus: "rolled_back",
-      details: deliveries.length > 0
-        ? {
-            reason,
-            bankNotProcessedAttestation: {
-              attestedBy: userId,
-              typedConfirmation: attestation,
-              statement: "The bank did not process the delivered payment file and will not process it.",
-              deliveries,
-            },
-          }
-        : { reason },
+      orgId,
+      runId,
+      actorId: userId,
+      eventType: "run_rolled_back",
+      fromStatus: locked.status,
+      toStatus: "rolled_back",
+      details:
+        deliveries.length > 0
+          ? {
+              reason,
+              bankNotProcessedAttestation: {
+                attestedBy: userId,
+                typedConfirmation: attestation,
+                statement:
+                  "The bank did not process the delivered payment file and will not process it.",
+                deliveries,
+              },
+            }
+          : { reason },
     });
   });
 }
@@ -258,14 +340,17 @@ export async function recordPaymentSettlement(opts: {
     // instruction, then the payment document/reversal work. Opposite ordering
     // lets a return and a poster deadlock while each holds the row the other
     // needs to establish the terminal boundary.
-    const lockedRun = await db.execute<{ status: string; bank_account_id: string }>(sql`
+    const lockedRun = await db.execute<{
+      status: string;
+      bank_account_id: string;
+    }>(sql`
       select status, bank_account_id
         from payment_runs
        where id = ${paymentRunId} and org_id = ${opts.orgId}
        for update
     `);
     if (!lockedRun.rows[0]) throw new PaymentError("payment run not found");
-    const row = (await db.execute<{
+    const row = await db.execute<{
       payment_run_id: string;
       payment_document_id: string | null;
       amount: string;
@@ -277,11 +362,16 @@ export async function recordPaymentSettlement(opts: {
        where i.id = ${opts.instructionId} and i.org_id = ${opts.orgId}
          and i.payment_run_id = ${paymentRunId}
        for update of i
-    `));
+    `);
     const instruction = row.rows[0];
     if (!instruction) throw new PaymentError("payment instruction not found");
-    if (["returned", "reversed"].includes(instruction.status) && opts.status === "settled") {
-      throw new PaymentError("a returned or reversed payment instruction cannot be settled");
+    if (
+      ["returned", "reversed"].includes(instruction.status) &&
+      opts.status === "settled"
+    ) {
+      throw new PaymentError(
+        "a returned or reversed payment instruction cannot be settled",
+      );
     }
     if (!["sent", "settled", "returned"].includes(instruction.status)) {
       throw new PaymentError("only a sent payment can be settled or returned");
@@ -295,12 +385,18 @@ export async function recordPaymentSettlement(opts: {
            and account_id = ${lockedRun.rows[0]!.bank_account_id}
       `);
       if (!bankLine.rows[0]) {
-        throw new PaymentError("bank statement line does not belong to the payment run's bank account");
+        throw new PaymentError(
+          "bank statement line does not belong to the payment run's bank account",
+        );
       }
     }
     let reversalEntryId: string | null = null;
-    if ((opts.status === "returned" || opts.status === "rejected") && instruction.status !== "returned") {
-      if (!instruction.payment_document_id) throw new PaymentError("returned instruction has no payment document");
+    if (
+      (opts.status === "returned" || opts.status === "rejected") &&
+      instruction.status !== "returned"
+    ) {
+      if (!instruction.payment_document_id)
+        throw new PaymentError("returned instruction has no payment document");
       reversalEntryId = await reversePaymentForReturn(
         instruction.payment_document_id,
         opts.orgId,
@@ -324,9 +420,13 @@ export async function recordPaymentSettlement(opts: {
         updated_at = now(), updated_by = excluded.updated_by
       where payment_settlements.org_id = ${opts.orgId}
     `);
-    await db.execute(sql`update payment_instructions set status = ${opts.status}, updated_at = now(), updated_by = ${opts.userId} where id = ${opts.instructionId} and org_id = ${opts.orgId}`);
+    await db.execute(
+      sql`update payment_instructions set status = ${opts.status}, updated_at = now(), updated_by = ${opts.userId} where id = ${opts.instructionId} and org_id = ${opts.orgId}`,
+    );
     if (opts.status === "returned") {
-      await db.execute(sql`update payment_run_items set status = 'returned', updated_at = now(), updated_by = ${opts.userId} where payment_instruction_id = ${opts.instructionId} and org_id = ${opts.orgId}`);
+      await db.execute(
+        sql`update payment_run_items set status = 'returned', updated_at = now(), updated_by = ${opts.userId} where payment_instruction_id = ${opts.instructionId} and org_id = ${opts.orgId}`,
+      );
     }
     await db.execute(sql`
       update payment_runs r set

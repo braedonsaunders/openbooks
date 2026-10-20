@@ -36,12 +36,6 @@ export {
   type WithdrawSubmissionResult,
 } from "./submit.ts";
 export {
-  hasVendorBillApprovalFlow,
-  isVendorBillApprovalRequired,
-  VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE,
-  VENDOR_BILL_KIND,
-} from "./vendor-bill-approval.ts";
-export {
   decideGate,
   delegateGate,
   processGateTimers,
@@ -73,8 +67,16 @@ export {
   EMAIL_TOKEN_TTL_MS,
   type EmailActionClaims,
 } from "./email-tokens.ts";
-export { runDueScheduledFlows, lastCronOccurrenceBetween } from "./scheduled.ts";
-export { flowSubjectProfileForOrg, getFlowAdapter, listFlowSubjectProfiles, handlerReleasedSubjectKinds } from "./registry.ts";
+export {
+  runDueScheduledFlows,
+  lastCronOccurrenceBetween,
+} from "./scheduled.ts";
+export {
+  flowSubjectProfileForOrg,
+  getFlowAdapter,
+  listFlowSubjectProfiles,
+  handlerReleasedSubjectKinds,
+} from "./registry.ts";
 export {
   checkFlowLock,
   getFlowLock,
@@ -161,5 +163,13 @@ export {
   DOCUMENT_STATUSES,
   documentSubjectProfile,
 } from "./subject-profiles.ts";
-export { resolveQuorumOutcome, type QuorumOutcome, type SiblingGate } from "./quorum.ts";
-export type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
+export {
+  resolveQuorumOutcome,
+  type QuorumOutcome,
+  type SiblingGate,
+} from "./quorum.ts";
+export type {
+  FlowExecCtx,
+  FlowSubjectAdapter,
+  FlowSubjectContext,
+} from "./types.ts";

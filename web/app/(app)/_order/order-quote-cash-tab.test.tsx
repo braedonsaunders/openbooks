@@ -15,7 +15,10 @@ import type { OrderPayload } from './OrderDrawer'
 // harness above evaluates, so only imports that resolve after that point see
 // the jsdom shims.
 const { OrderDrawer } = await import('./OrderDrawer')
-const messages = (await import('../../../messages/en')).default as Record<string, unknown>
+const messages = (await import('../../../messages/en')).default as Record<
+  string,
+  unknown
+>
 
 const QUOTE_ID = '77777777-7777-4777-8777-777777777777'
 
@@ -105,7 +108,15 @@ function termFixture(id: string, planName: string, amount: string) {
       steps: [],
     },
     schedule: {
-      periods: [{ periodIndex: 0, unitPrice: amount, quantity: '1', periodAmount: amount, arr: amount }],
+      periods: [
+        {
+          periodIndex: 0,
+          unitPrice: amount,
+          quantity: '1',
+          periodAmount: amount,
+          arr: amount,
+        },
+      ],
       tcv: amount,
     },
     listTcv: amount,
@@ -115,14 +126,22 @@ function termFixture(id: string, planName: string, amount: string) {
 
 function twoTermPreview() {
   return {
-    quote: { id: QUOTE_ID, documentNumber: 'Q-1001', status: 'draft', currency: 'USD' },
-    terms: [termFixture('term-a', 'Alpha plan', '110.00'), termFixture('term-b', 'Beta plan', '220.00')],
+    quote: {
+      id: QUOTE_ID,
+      documentNumber: 'Q-1001',
+      status: 'draft',
+      currency: 'USD',
+    },
+    terms: [
+      termFixture('term-a', 'Alpha plan', '110.00'),
+      termFixture('term-b', 'Beta plan', '220.00'),
+    ],
     tcv: '330.00',
     listTcv: '330.00',
     discountPct: '0.00',
     floorBreached: false,
     signature: null,
-    settings: { maxDiscountPercent: '10', autoActivateOnSign: false },
+    settings: { autoActivateOnSign: false },
     advancedSubscriptions: false,
     revenueContracts: false,
   }
@@ -158,7 +177,9 @@ function monthsInput(): HTMLInputElement {
  */
 test('a multi-term quote focuses one term schedule and keeps the editing draft', async (t) => {
   const restoreFetch = scriptFetch((url) =>
-    url.includes(`/api/estimates/${QUOTE_ID}/terms`) ? Response.json(twoTermPreview()) : null,
+    url.includes(`/api/estimates/${QUOTE_ID}/terms`)
+      ? Response.json(twoTermPreview())
+      : null,
   )
   t.after(restoreFetch)
   const { unmount } = await mountDashboard(
@@ -185,7 +206,10 @@ test('a multi-term quote focuses one term schedule and keeps the editing draft',
   t.after(unmount)
 
   const subscriptionTab = buttonsNamed('Subscription')[0]
-  assert.ok(subscriptionTab, 'the Subscription tab must render before terms load')
+  assert.ok(
+    subscriptionTab,
+    'the Subscription tab must render before terms load',
+  )
   await click(subscriptionTab)
   await tick()
   await tick()
@@ -194,7 +218,11 @@ test('a multi-term quote focuses one term schedule and keeps the editing draft',
   // schedule amount renders only inside the focused term card.
   assert.ok(termTab('Alpha plan'), 'the strip names the first term')
   assert.ok(termTab('Beta plan'), 'the strip names the second term')
-  assert.match(document.body.textContent ?? '', /\$110\.00/, 'the first term focuses by default')
+  assert.match(
+    document.body.textContent ?? '',
+    /\$110\.00/,
+    'the first term focuses by default',
+  )
   assert.doesNotMatch(
     document.body.textContent ?? '',
     /\$220\.00/,
@@ -202,7 +230,11 @@ test('a multi-term quote focuses one term schedule and keeps the editing draft',
   )
 
   await click(termTab('Beta plan'))
-  assert.match(document.body.textContent ?? '', /\$220\.00/, 'selecting focuses the second schedule')
+  assert.match(
+    document.body.textContent ?? '',
+    /\$220\.00/,
+    'selecting focuses the second schedule',
+  )
   assert.doesNotMatch(
     document.body.textContent ?? '',
     /\$110\.00/,
@@ -219,9 +251,16 @@ test('a multi-term quote focuses one term schedule and keeps the editing draft',
   )
   assert.ok(editButton, 'the focused term must offer editing in context')
   await click(editButton as HTMLButtonElement)
-  assert.equal(buttonsNamed('Save term').length, 1, 'editing opens its draft panel')
+  assert.equal(
+    buttonsNamed('Save term').length,
+    1,
+    'editing opens its draft panel',
+  )
   await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value',
+    )?.set
     assert.ok(setter, 'the months field must accept typed input')
     setter.call(monthsInput(), '24')
     monthsInput().dispatchEvent(new window.Event('input', { bubbles: true }))
@@ -230,8 +269,16 @@ test('a multi-term quote focuses one term schedule and keeps the editing draft',
   assert.equal(monthsInput().value, '24', 'the draft records the typed months')
 
   await click(termTab('Beta plan'))
-  assert.equal(buttonsNamed('Save term').length, 1, 'the draft panel survives switching terms')
-  assert.equal(monthsInput().value, '24', 'the draft keeps its values through the switch')
+  assert.equal(
+    buttonsNamed('Save term').length,
+    1,
+    'the draft panel survives switching terms',
+  )
+  assert.equal(
+    monthsInput().value,
+    '24',
+    'the draft keeps its values through the switch',
+  )
   assert.match(
     document.body.textContent ?? '',
     /\$220\.00/,
@@ -246,7 +293,11 @@ test('a multi-term quote focuses one term schedule and keeps the editing draft',
   )
 
   await click(termTab('Alpha plan'))
-  assert.equal(monthsInput().value, '24', 'returning restores the same draft values')
+  assert.equal(
+    monthsInput().value,
+    '24',
+    'returning restores the same draft values',
+  )
   assert.equal(
     buttonsNamed('Save term')[0]?.closest('div[hidden]') ?? null,
     null,

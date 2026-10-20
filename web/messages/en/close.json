@@ -300,8 +300,8 @@
     "description": "Operational subledgers lock before GL. Soft close and hard lock both reject postings at the database. Hard lock additionally requires an approved reopen request; soft close can be unlocked from Setup.",
     "blockedTitle": "Approval is blocked",
     "blockedDescription": "{count, plural, one {# hard-gated task remains} other {# hard-gated tasks remain}}.",
-    "approvalTitle": "Independent approval and lock",
-    "approvalDescription": "The run initiator cannot provide final approval. Any ledger change after approval reopens review.",
+    "approvalTitle": "Approval and lock",
+    "approvalDescription": "The tenant’s Flows define the required decisions. Any ledger change after approval reopens review.",
     "ownerTitle": "Owner attestation and lock",
     "ownerDescription": "For an owner-managed close, review the statements and record why the period is ready. The attestation is fingerprinted to this exact ledger state.",
     "attestationLabel": "Why are these books ready to close?",
@@ -335,6 +335,7 @@
       "started": "Close run started",
       "data_changed": "Ledger change invalidated prior work",
       "approval_requested": "Close approval requested",
+      "approval_withdrawn": "Close approval recalled",
       "owner_attested": "Owner attested that the books are ready",
       "approval_rejected": "Close approval rejected",
       "approved": "Close received final approval",
@@ -381,7 +382,7 @@
       },
       "controlledReopen": {
         "name": "Controlled reopening",
-        "description": "Reopens require a reason, independent approval, and an expiry."
+        "description": "Reopens require a reason, routing through tenant Flows, and an expiry."
       },
       "sourceReconciliationEvidence": {
         "name": "Source-system reconciliation evidence",
@@ -444,11 +445,11 @@
     },
     "controller-approval": {
       "title": "Controller sign-off",
-      "description": "Independently review readiness, exceptions, evidence, and reporting outputs."
+      "description": "Review readiness, exceptions, evidence, and reporting outputs."
     },
     "financial-review": {
       "title": "Review the financial statements",
-      "description": "Review the trial balance, balance sheet, and income statement for completeness and unexpected balances before attesting."
+      "description": "Review the trial balance, balance sheet, and income statement for completeness and unexpected balances before completing the review."
     },
     "lock-subledgers": {
       "title": "Lock operational subledgers",
@@ -494,7 +495,7 @@
   "setup": {
     "title": "Periods & Close",
     "description": "Design fiscal calendars, generate periods, govern locks and reopenings, version close blueprints, and configure controls, automation, and reporting packages.",
-    "simpleMode": "Owner-managed close is active. Calendars, periods, locks, attestations, and immutable publication remain available without enterprise workflow overhead.",
+    "simpleMode": "Calendars, periods, locks, and immutable publication remain available. Configure approvals in Flows.",
     "enableAdvanced": "Review Advanced Close",
     "tabs": {
       "calendars": "Calendars",
@@ -782,7 +783,8 @@
       "lock": "Lock",
       "review": "Review",
       "segregation": "Segregation of duties",
-      "exception": "Exception"
+      "exception": "Exception",
+      "evidence": "Evidence"
     },
     "automationTriggers": {
       "run_started": "Run started",

@@ -114,7 +114,6 @@ export function emptyStep(index: number): BlueprintStepDraft {
     dueOffsetBusinessDays: 0,
     evidenceRequired: false,
     defaultOwnerRoleKey: "",
-    defaultReviewerRoleKey: "",
     applicabilityText: "{}",
     dependsOn: [],
   };
@@ -149,7 +148,6 @@ export function BlueprintDrawer({
             dueOffsetBusinessDays: step.due_offset_business_days,
             evidenceRequired: step.evidence_required,
             defaultOwnerRoleKey: step.default_owner_role_key ?? "",
-            defaultReviewerRoleKey: step.default_reviewer_role_key ?? "",
             applicabilityText: JSON.stringify(
               step.applicability ?? {},
               null,
@@ -397,16 +395,6 @@ export function BlueprintDrawer({
                     value={step.defaultOwnerRoleKey}
                     onChange={(e) =>
                       updateStep(index, { defaultOwnerRoleKey: e.target.value })
-                    }
-                  />
-                </Field>
-                <Field label={t("fields.reviewerRole")}>
-                  <Input
-                    value={step.defaultReviewerRoleKey}
-                    onChange={(e) =>
-                      updateStep(index, {
-                        defaultReviewerRoleKey: e.target.value,
-                      })
                     }
                   />
                 </Field>

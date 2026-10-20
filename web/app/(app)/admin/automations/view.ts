@@ -20,7 +20,6 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { listAutomations } from '@openbooks/engine/automations/services'
-import { loadApprovalSettings } from '@openbooks/engine/automations/approvals'
 
 /**
  * The automations list, split into a loader and a spec.
@@ -34,7 +33,10 @@ import { loadApprovalSettings } from '@openbooks/engine/automations/approvals'
 
 const BASE = '/admin/automations'
 
-const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'destructive' | 'secondary' | 'outline'> = {
+const STATUS_VARIANT: Record<
+  string,
+  'success' | 'warning' | 'destructive' | 'secondary' | 'outline'
+> = {
   enabled: 'success',
   draft: 'secondary',
   disabled: 'outline',
@@ -81,26 +83,7 @@ export interface AutomationsData {
   enableLabel: string
   disableLabel: string
   actionFailed: string
-  approvalTitle: string
-  approvalHelp: string
-  approvalException: string
-  approvalThresholds: string
-  approvalAuto: string
-  approvalDelegate: string
-  approvalExclude: string
-  approvalYes: string
-  approvalNo: string
-  approvalSave: string
-  approvalSaved: string
-  approvalFailed: string
-  approvalSettings: {
-    subjectKind: string
-    exceptionOnly: boolean
-    thresholds: Record<string, unknown>
-    autoApproveWhenNoRule: boolean
-    delegateAfterDays: number | null
-    excludeInitiator: boolean
-  }[]
+  manageFlowsLabel: string
 }
 
 export async function loadAutomations(
@@ -112,24 +95,10 @@ export async function loadAutomations(
   const status = pickString(searchParams.status)
 
   const automations = await listAutomations(authz.user.orgId, authz.user.id)
-  // Exception-only approval tuning per subject kind (a setting over Flows
-  // gates, rehomed off setup onto this page): defaults when never saved.
-  const subjectKinds = ['timesheet_week', 'leave_request', 'expense_report']
-  const approvalSettings = await Promise.all(
-    subjectKinds.map(async (subjectKind) => {
-      const saved = await loadApprovalSettings(authz.user.orgId, subjectKind)
-      return {
-        subjectKind,
-        exceptionOnly: saved?.exceptionOnly ?? false,
-        thresholds: (saved?.thresholds ?? {}) as Record<string, unknown>,
-        autoApproveWhenNoRule: saved?.autoApproveWhenNoRule ?? false,
-        delegateAfterDays: saved?.delegateAfterDays ?? null,
-        excludeInitiator: saved?.excludeInitiator ?? true,
-      }
-    }),
-  )
+  const approvals = await getTranslations('admin.settings.approvals')
   const counts = new Map<string, number>()
-  for (const a of automations) counts.set(a.status, (counts.get(a.status) ?? 0) + 1)
+  for (const a of automations)
+    counts.set(a.status, (counts.get(a.status) ?? 0) + 1)
   const statuses = ['enabled', 'draft', 'disabled', 'error']
   const rows: AutomationListRow[] = automations
     .filter((a) => !status || a.status === status)
@@ -177,19 +146,7 @@ export async function loadAutomations(
     enableLabel: t('list.enable'),
     disableLabel: t('list.disable'),
     actionFailed: t('list.actionFailed'),
-    approvalTitle: t('builder.approvalTitle'),
-    approvalHelp: t('builder.approvalHelp'),
-    approvalException: t('builder.approvalException'),
-    approvalThresholds: t('builder.approvalThresholds'),
-    approvalAuto: t('builder.approvalAuto'),
-    approvalDelegate: t('builder.approvalDelegate'),
-    approvalExclude: t('builder.approvalExclude'),
-    approvalYes: t('builder.approvalYes'),
-    approvalNo: t('builder.approvalNo'),
-    approvalSave: t('builder.approvalSave'),
-    approvalSaved: t('builder.saved'),
-    approvalFailed: t('builder.saveFailed'),
-    approvalSettings,
+    manageFlowsLabel: approvals('manageFlows'),
   }
 }
 
@@ -203,7 +160,14 @@ export function automationsSpec(data: AutomationsData): PageSpec {
         back: { href: f('backHref'), label: f('backLabel') },
         title: f('title'),
         description: f('description'),
-        actions: [widget('new-automation', { label: f('newLabel') })],
+        actions: [
+          widget('link-button', {
+            href: '/admin/flows',
+            label: f('manageFlowsLabel'),
+            variant: 'outline',
+          }),
+          widget('new-automation', { label: f('newLabel') }),
+        ],
       }),
       widgetBlock('filter-chips', {
         basePath: BASE,
@@ -265,21 +229,6 @@ export function automationsSpec(data: AutomationsData): PageSpec {
         }),
         when: f('hasRows'),
       },
-      widgetBlock('automation-approval-settings', {
-        settings: f('approvalSettings'),
-        saveFailed: f('approvalFailed'),
-        savedLabel: f('approvalSaved'),
-        saveLabel: f('approvalSave'),
-        titleLabel: f('approvalTitle'),
-        helpLabel: f('approvalHelp'),
-        exceptionLabel: f('approvalException'),
-        thresholdsLabel: f('approvalThresholds'),
-        autoApproveLabel: f('approvalAuto'),
-        delegateLabel: f('approvalDelegate'),
-        excludeLabel: f('approvalExclude'),
-        yesLabel: f('approvalYes'),
-        noLabel: f('approvalNo'),
-      }),
     ],
   })
 }

@@ -8,9 +8,7 @@ import type {
   FlowSubjectContext,
 } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
-import {
-  EVENT_SOURCE_OPTIONS,
-} from "./subject-profiles.ts";
+import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { tableScope } from "./subject-scope.ts";
@@ -62,7 +60,11 @@ export const hrmChangeRequestSubjectProfile: FlowSubjectProfile = {
     { key: "departmentId", label: "Proposed department", type: "text" },
     { key: "managerEmploymentId", label: "Proposed manager", type: "text" },
     { key: "effectiveFrom", label: "Effective date", type: "date" },
-    { key: "expectedEmploymentRevision", label: "Expected employment revision", type: "number" },
+    {
+      key: "expectedEmploymentRevision",
+      label: "Expected employment revision",
+      type: "number",
+    },
     { key: "payloadDigest", label: "Payload digest", type: "text" },
     { key: "submittedBy", label: "Submitted by", type: "user" },
     { key: "reason", label: "Submission reason", type: "text" },
@@ -93,106 +95,128 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
   // the submitter outside withOrg, and every caller scopes the subject
   // through its own org-scoped gate row. findCandidateIds below is the
   // tenant-bounded entry point and keeps the explicit boundary.
-  const result = (await db.execute<RequestRow>(sql`
+  const result = await db.execute<RequestRow>(sql`
     select org_id, employment_id, expected_employment_revision, payload,
            payload_digest, reason, status, submitted_by
       from hrm_employment_change_requests
      where id = ${subjectId}
-  `));
+  `);
   return result.rows[0] ?? null;
 }
 
-export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
-  subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
-  // A request belongs to the employer entity of the employment it changes.
-  permissions: { read: "hrm.employment.read", edit: "hrm.employment.manage", approve: "hrm.employment.manage" },
-  scope: tableScope("employment", "hrm_employment_change_requests", "employment_id"),
-  profile: hrmChangeRequestSubjectProfile,
-  // releaseApproval below delegates to the registered engine handler.
-  releaseViaHandler: true,
-  // A flow must not rewrite the proposal it is approving: the payload
-  // freezes on submit, so no header field is flow-writable.
-  selfApprovalPolicy: "configurable",
+export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter =
+  defineTableSubjectAdapter({
+    subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
+    // A request belongs to the employer entity of the employment it changes.
+    permissions: {
+      read: "hrm.employment.read",
+      edit: "hrm.employment.manage",
+      approve: "hrm.employment.approve",
+    },
+    scope: tableScope(
+      "employment",
+      "hrm_employment_change_requests",
+      "employment_id",
+    ),
+    profile: hrmChangeRequestSubjectProfile,
+    // releaseApproval below delegates to the registered engine handler.
+    releaseViaHandler: true,
+    // A flow must not rewrite the proposal it is approving: the payload
+    // freezes on submit, so no header field is flow-writable.
 
-  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-    const request = await loadRequest(subjectId);
-    if (!request) return null;
-    const payload = request.payload as { kind?: unknown } & Record<string, unknown>;
-    return {
-      values: {
-        id: subjectId,
-        requestId: subjectId,
-        employmentId: request.employment_id,
-        changeKind: typeof payload.kind === "string" ? payload.kind : null,
-        status: request.status,
-        expectedEmploymentRevision: request.expected_employment_revision,
-        payloadDigest: request.payload_digest,
-        submittedBy: request.submitted_by,
-        reason: request.reason,
-        changedFields: Object.keys(payload).filter((key) => !['kind', 'assignmentKey', 'effectiveFrom', 'effectiveTo'].includes(key)),
-        departmentId: payload.departmentId ?? null,
-        managerEmploymentId: payload.managerEmploymentId ?? null,
-        effectiveFrom: payload.effectiveFrom ?? payload.effectiveDate ?? null,
-        payload,
-      },
-      submitterUserId: request.submitted_by,
-    };
-  },
+    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+      const request = await loadRequest(subjectId);
+      if (!request) return null;
+      const payload = request.payload as { kind?: unknown } & Record<
+        string,
+        unknown
+      >;
+      return {
+        values: {
+          id: subjectId,
+          requestId: subjectId,
+          employmentId: request.employment_id,
+          changeKind: typeof payload.kind === "string" ? payload.kind : null,
+          status: request.status,
+          expectedEmploymentRevision: request.expected_employment_revision,
+          payloadDigest: request.payload_digest,
+          submittedBy: request.submitted_by,
+          reason: request.reason,
+          changedFields: Object.keys(payload).filter(
+            (key) =>
+              ![
+                "kind",
+                "assignmentKey",
+                "effectiveFrom",
+                "effectiveTo",
+              ].includes(key),
+          ),
+          departmentId: payload.departmentId ?? null,
+          managerEmploymentId: payload.managerEmploymentId ?? null,
+          effectiveFrom: payload.effectiveFrom ?? payload.effectiveDate ?? null,
+          payload,
+        },
+        submitterUserId: request.submitted_by,
+      };
+    },
 
-  label(subjectId: string, values: Record<string, unknown>): string {
-    const kind = typeof values.changeKind === "string" ? values.changeKind : "change";
-    return `Employment ${kind} ${subjectId.slice(0, 8)}`;
-  },
+    label(subjectId: string, values: Record<string, unknown>): string {
+      const kind =
+        typeof values.changeKind === "string" ? values.changeKind : "change";
+      return `Employment ${kind} ${subjectId.slice(0, 8)}`;
+    },
 
-  deepLink(subjectId: string): string {
-    return `/hrm/change-requests?request=${subjectId}`;
-  },
+    deepLink(subjectId: string): string {
+      return `/hrm/change-requests?request=${subjectId}`;
+    },
 
-  async getStatus(subjectId: string): Promise<string | null> {
-    return (await loadRequest(subjectId))?.status ?? null;
-  },
+    async getStatus(subjectId: string): Promise<string | null> {
+      return (await loadRequest(subjectId))?.status ?? null;
+    },
 
-  async changeStatus(): Promise<void> {
-    throw new Error(
-      "change-request status is released by the approval engine, not a flow action",
-    );
-  },
-
-  async releaseApproval(
-    subjectId: string,
-    outcome: "approved" | "rejected",
-    ctx: FlowExecCtx,
-    detail?: { comment?: string | null },
-    run?: { id: string; dispatchValues: Record<string, unknown> | null },
-  ): Promise<void> {
-    await releaseFlowApproval({
-      subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
-      subjectId,
-      outcome,
-      comment: detail?.comment,
-      ctx,
-      approvalRunId: run?.id,
-    });
-  },
-
-  async setField(): Promise<void> {
-    throw new Error("change-request payloads are frozen on submit; file a new request");
-  },
-
-  /** Recent non-terminal requests, for scheduled fan-out (reminders). */
-  async findCandidateIds(limit: number): Promise<string[]> {
-    const orgId = ambientTenantOrgId();
-    if (!orgId) {
+    async changeStatus(): Promise<void> {
       throw new Error(
-        `findCandidateIds for "${HRM_CHANGE_REQUEST_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
+        "change-request status is released by the approval engine, not a flow action",
       );
-    }
-    const result = (await db.execute<{ id: string }>(sql`
+    },
+
+    async releaseApproval(
+      subjectId: string,
+      outcome: "approved" | "rejected",
+      ctx: FlowExecCtx,
+      detail?: { comment?: string | null },
+      run?: { id: string; dispatchValues: Record<string, unknown> | null },
+    ): Promise<void> {
+      await releaseFlowApproval({
+        subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
+        subjectId,
+        outcome,
+        comment: detail?.comment,
+        ctx,
+        approvalRunId: run?.id,
+      });
+    },
+
+    async setField(): Promise<void> {
+      throw new Error(
+        "change-request payloads are frozen on submit; file a new request",
+      );
+    },
+
+    /** Recent non-terminal requests, for scheduled fan-out (reminders). */
+    async findCandidateIds(limit: number): Promise<string[]> {
+      const orgId = ambientTenantOrgId();
+      if (!orgId) {
+        throw new Error(
+          `findCandidateIds for "${HRM_CHANGE_REQUEST_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
+        );
+      }
+      const result = await db.execute<{ id: string }>(sql`
       select id::text as id from hrm_employment_change_requests
        where org_id = ${orgId} and status in ('draft', 'pending_approval')
        order by created_at desc
        limit ${limit}
-    `));
-    return result.rows.map((row) => row.id);
-  },
-});
+    `);
+      return result.rows.map((row) => row.id);
+    },
+  });

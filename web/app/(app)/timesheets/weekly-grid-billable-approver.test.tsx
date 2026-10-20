@@ -129,7 +129,6 @@ async function mountGrid(status: React.ComponentProps<typeof WeeklyGrid>["payloa
               canManage: false,
               canApprove: true,
               canReopen: false,
-              approveBlockedReason: null,
             })}
           </MoneyProvider>
         </NextIntlClientProvider>

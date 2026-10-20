@@ -1,13 +1,13 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
+import assert from "node:assert/strict";
+import test from "node:test";
 import { randomUUID } from 'node:crypto';
-import { sql } from 'drizzle-orm';
-import { db } from '../platform/db.ts';
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
 import { DB, gateOf, mkSecondSubsidiary, seedEmployment, seedFlow, seedPlan, seedWindow, seededContributionTerms, setupHarness, withHarness } from '../testing/hrm-harness.ts';
 import { createChangeRequestDraft, getChangeRequest, submitChangeRequest } from './change-requests.ts';
 import { electEnrollment } from './benefits/enrollments.ts';
 import { decideGate } from '../flows/gates.ts';
-import { correctEmploymentChange } from '../automations/event-verbs.ts';
+import { correctEmploymentChange } from "./change-event-actions.ts";
 import { installEngineSeams } from '../composition/install.ts';
 
 installEngineSeams();

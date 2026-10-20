@@ -53,7 +53,8 @@ const STEPS = ['offer', 'value', 'timing', 'controls', 'delivery', 'review'] as 
 type Step = (typeof STEPS)[number]
 
 
-function seedDraft(family: ProgramFamily, seed: ProgramEditSeed | null): ProgramDraft {
+function seedDraft(family: ProgramFamily, seed: ProgramEditSeed | null,
+): ProgramDraft {
   if (!seed) return emptyProgramDraft(family)
   const text = (value: string | null): string => value ?? ''
   return {
@@ -67,7 +68,6 @@ function seedDraft(family: ProgramFamily, seed: ProgramEditSeed | null): Program
     effectiveTo: text(seed.effectiveTo),
     payComponentId: text(seed.payComponentId),
     deliveryMethod: seed.deliveryMethod,
-    approvalMode: seed.approvalMode,
     valuation: seed.valuation,
     metric: seed.metric,
     metricScope: seed.metricScope,
@@ -105,7 +105,7 @@ function stepFields(step: Step): (keyof ProgramDraft)[] {
     case 'timing':
       return ['effectiveFrom', 'effectiveTo', 'frequency', 'periodBasis', 'paymentDelayDays']
     case 'controls':
-      return ['approvalMode', 'allocation', 'sourceAccountIds']
+      return ['allocation', 'sourceAccountIds']
     case 'delivery':
       return ['deliveryMethod', 'payComponentId']
     case 'review':
@@ -156,7 +156,9 @@ function OptionMultiPicker({
       />
       <div role="group" aria-labelledby={`${id}-label`} className="mt-2 max-h-44 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-700">
         {visible.length === 0 ? (
-          <p className="px-1 py-1 text-xs text-slate-500 dark:text-slate-400">{emptyLabel}</p>
+          <p className="px-1 py-1 text-xs text-slate-500 dark:text-slate-400">
+            {emptyLabel}
+          </p>
         ) : (
           visible.map((o) => (
             <label key={o.value} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50 dark:hover:bg-slate-800/60">
@@ -167,14 +169,17 @@ function OptionMultiPicker({
                 onChange={() => toggle(o.value)}
                 aria-label={o.label}
               />
-              <span className="min-w-0 truncate text-slate-700 dark:text-slate-200">{o.label}</span>
+              <span className="min-w-0 truncate text-slate-700 dark:text-slate-200">
+                {o.label}
+              </span>
             </label>
           ))
         )}
       </div>
       {selected.length > 0 ? (
         <p className="mt-1 text-xs tabular-nums text-slate-500 dark:text-slate-400">
-          {selected.length} · {options.filter((o) => chosen.has(o.value)).map((o) => o.label).slice(0, 3).join(' · ')}
+          {selected.length} ·{' '}
+          {options.filter((o) => chosen.has(o.value)).map((o) => o.label).slice(0, 3).join(' · ')}
           {selected.length > 3 ? ' …' : ''}
         </p>
       ) : null}
@@ -187,8 +192,14 @@ function OptionMultiPicker({
   )
 }
 
-function buildPayload(draft: ProgramDraft, mode: 'create' | 'edit', reason: string, changeEffectiveFrom: string | null): Record<string, unknown> {
-  const optional = (value: string): string | null => (value.trim() === '' ? null : value.trim())
+function buildPayload(
+  draft: ProgramDraft,
+  mode: 'create' | 'edit',
+  reason: string,
+  changeEffectiveFrom: string | null,
+): Record<string, unknown> {
+  const optional = (value: string): string | null =>
+    value.trim() === '' ? null : value.trim()
   const shared = {
     name: draft.name.trim(),
     description: optional(draft.description),
@@ -198,7 +209,6 @@ function buildPayload(draft: ProgramDraft, mode: 'create' | 'edit', reason: stri
     effectiveTo: optional(draft.effectiveTo),
     payComponentId: draft.payComponentId === '' ? null : draft.payComponentId,
     deliveryMethod: draft.deliveryMethod,
-    approvalMode: draft.approvalMode,
     valuation: draft.valuation,
     metric: draft.family === 'incentive' && draft.metric !== '' ? draft.metric : null,
     metricScope: draft.family === 'incentive' ? draft.metricScope : null,
@@ -297,7 +307,7 @@ export function ProgramBuilderDrawer({
   const [reason, setReason] = useState('')
   // An active program revises forward from a named date; drafts have no history to protect.
   const activeEdit = mode === 'edit' && editSeed?.status === 'active'
-  const initialChangeFrom = activeEdit ? editSeed?.businessToday ?? '' : ''
+  const initialChangeFrom = activeEdit ? (editSeed?.businessToday ?? '') : ''
   const [changeFrom, setChangeFrom] = useState(initialChangeFrom)
   const [changeFromError, setChangeFromError] = useState<string | undefined>(undefined)
   const [refusal, setRefusal] = useState<string | null>(null)
@@ -481,7 +491,6 @@ export function ProgramBuilderDrawer({
   addSummary(t('portfolio.builder.fields.frequency'), t(`portfolio.frequencies.${draft.frequency}`))
   if (draft.periodBasis) addSummary(t('portfolio.builder.fields.periodBasis'), t(`portfolio.periodBasis.${draft.periodBasis}`))
   addSummary(t('portfolio.builder.fields.paymentDelayDays'), draft.paymentDelayDays)
-  addSummary(t('portfolio.approvalControls.title'), t(`portfolio.approvalControls.modes.${draft.approvalMode}`))
   addSummary(t('portfolio.builder.fields.deliveryMethod'), t(`portfolio.delivery.${draft.deliveryMethod}`))
   addSummary(t('portfolio.builder.fields.payComponent'), payComponentOptions.find((option) => option.value === draft.payComponentId)?.label ?? '')
 
@@ -494,8 +503,14 @@ export function ProgramBuilderDrawer({
     >
       <div className="flex flex-col gap-4 p-4">
         <div className="space-y-3">
-          <div className="flex items-center gap-2"><Badge variant="secondary">{t(`portfolio.cards.${draft.family}.title`)}</Badge></div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t(`portfolio.programPurpose.${draft.family}`)}</p>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">
+              {t(`portfolio.cards.${draft.family}.title`)}
+            </Badge>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {t(`portfolio.programPurpose.${draft.family}`)}
+          </p>
           <FormSteps steps={STEPS.map((key) => ({ key, label: t(`portfolio.builder.familySteps.${draft.family}.${key}`) }))} current={stepIndex} onChange={(index) => setStep(STEPS[index]!)} label={t('portfolio.builder.stepsLabel')} />
         </div>
 
@@ -505,7 +520,9 @@ export function ProgramBuilderDrawer({
               {t('portfolio.builder.steps.offer')}
             </legend>
             <div>
-              <Label htmlFor="program-builder-code">{t('portfolio.builder.fields.code')}</Label>
+              <Label htmlFor="program-builder-code">
+                {t('portfolio.builder.fields.code')}
+              </Label>
               <Input
                 id="program-builder-code"
                 value={draft.code}
@@ -517,7 +534,9 @@ export function ProgramBuilderDrawer({
               <FieldError id="program-builder-code-error" message={errors.code} />
             </div>
             <div>
-              <Label htmlFor="program-builder-name">{t('portfolio.builder.fields.name')}</Label>
+              <Label htmlFor="program-builder-name">
+                {t('portfolio.builder.fields.name')}
+              </Label>
               <Input
                 id="program-builder-name"
                 value={draft.name}
@@ -528,12 +547,16 @@ export function ProgramBuilderDrawer({
               <FieldError id="program-builder-name-error" message={errors.name} />
             </div>
             <div>
-              <Label htmlFor="program-builder-description">{t('portfolio.builder.fields.description')}</Label>
+              <Label htmlFor="program-builder-description">
+                {t('portfolio.builder.fields.description')}
+              </Label>
               <Textarea id="program-builder-description" value={draft.description} onChange={(e) => set('description', e.target.value)} />
             </div>
             <div>
               <FieldError id="program-builder-legalEntityId-error" message={errors.legalEntityId} />
-              <Label htmlFor="program-builder-entity">{t('portfolio.builder.fields.legalEntity')}</Label>
+              <Label htmlFor="program-builder-entity">
+                {t('portfolio.builder.fields.legalEntity')}
+              </Label>
               <Select id="program-builder-entity" value={draft.legalEntityId} onChange={(e) => set('legalEntityId', e.target.value)}>
                 <option value="">{t('portfolio.builder.allEntities')}</option>
                 {subsidiaryOptions.map((o) => (
@@ -542,7 +565,9 @@ export function ProgramBuilderDrawer({
                   </option>
                 ))}
               </Select>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.entityHint')}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {t('portfolio.builder.entityHint')}
+              </p>
             </div>
             {employmentsTruncated ? (
               <Alert variant="default" className="flex items-start gap-2">
@@ -559,7 +584,9 @@ export function ProgramBuilderDrawer({
               {t(`portfolio.builder.familySteps.${draft.family}.value`)}
             </legend>
             <div>
-              <Label htmlFor="program-builder-currency">{t('portfolio.builder.fields.currency')}</Label>
+              <Label htmlFor="program-builder-currency">
+                {t('portfolio.builder.fields.currency')}
+              </Label>
               <SearchSelect
                 id="program-builder-currency"
                 value={draft.currency}
@@ -571,25 +598,47 @@ export function ProgramBuilderDrawer({
                 clearable={false}
                 invalid={errors.currency !== undefined}
               />
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.currencyHint')}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {t('portfolio.builder.currencyHint')}
+              </p>
               <FieldError id="program-builder-currency-error" message={errors.currency} />
             </div>
             <div>
-              <Label htmlFor="program-builder-valuation">{t('portfolio.builder.fields.valuation')}</Label>
+              <Label htmlFor="program-builder-valuation">
+                {t('portfolio.builder.fields.valuation')}
+              </Label>
               <Select
                 id="program-builder-valuation"
                 value={draft.valuation}
                 onChange={(e) => set('valuation', e.target.value as ProgramDraft['valuation'])}
               >
-                <option value="fixed" disabled={draft.metric === 'transactions'}>{t('portfolio.valuations.fixed')}</option>
-                {draft.metric === 'transactions' || draft.metric === 'approved_hours' ? <option value="per_unit">{t(draft.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : 'portfolio.valuations.per_unit')}</option> : null}
-                {draft.family === 'incentive' || mode === 'edit' && draft.valuation === 'percent' ? <option value="percent">{t('portfolio.valuations.percent')}</option> : null}
-                {draft.family === 'incentive' || mode === 'edit' && draft.valuation === 'pool' ? <option value="pool" disabled={draft.metric === 'transactions'}>{t('portfolio.valuations.pool')}</option> : null}
+                <option value="fixed" disabled={draft.metric === 'transactions'}>
+                  {t('portfolio.valuations.fixed')}
+                </option>
+                {draft.metric === 'transactions' || draft.metric === 'approved_hours' ? (
+                  <option value="per_unit">
+                    {t(draft.metric === 'approved_hours' ? 'portfolio.valuations.per_hour' : 'portfolio.valuations.per_unit')}
+                  </option>
+                ) : null}
+                {draft.family === 'incentive' ||
+                (mode === 'edit' && draft.valuation === 'percent') ? (
+                  <option value="percent">
+                    {t('portfolio.valuations.percent')}
+                  </option>
+                ) : null}
+                {draft.family === 'incentive' ||
+                (mode === 'edit' && draft.valuation === 'pool') ? (
+                  <option value="pool" disabled={draft.metric === 'transactions'}>
+                    {t('portfolio.valuations.pool')}
+                  </option>
+                ) : null}
               </Select>
             </div>
             {draft.valuation === 'fixed' || draft.valuation === 'per_unit' ? (
               <div>
-                <Label htmlFor="program-builder-fixed">{t(amountFieldKey)}</Label>
+                <Label htmlFor="program-builder-fixed">
+                  {t(amountFieldKey)}
+                </Label>
                 <Input
                   id="program-builder-fixed"
                   inputMode="decimal"
@@ -603,7 +652,9 @@ export function ProgramBuilderDrawer({
             ) : null}
             {draft.valuation === 'percent' ? (
               <div>
-                <Label htmlFor="program-builder-percent">{t('portfolio.builder.fields.percentRate')}</Label>
+                <Label htmlFor="program-builder-percent">
+                  {t('portfolio.builder.fields.percentRate')}
+                </Label>
                 <Input
                   id="program-builder-percent"
                   inputMode="decimal"
@@ -617,7 +668,9 @@ export function ProgramBuilderDrawer({
             ) : null}
             {draft.valuation === 'pool' || draft.family !== 'incentive' ? (
               <div>
-                <Label htmlFor="program-builder-budget">{t('portfolio.builder.fields.budgetAmount')}</Label>
+                <Label htmlFor="program-builder-budget">
+                  {t('portfolio.builder.fields.budgetAmount')}
+                </Label>
                 <Input
                   id="program-builder-budget"
                   inputMode="decimal"
@@ -632,32 +685,54 @@ export function ProgramBuilderDrawer({
             {draft.family === 'incentive' ? (
               <>
                 <div>
-                  <Label htmlFor="program-builder-metric">{t('portfolio.builder.fields.metric')}</Label>
+                  <Label htmlFor="program-builder-metric">
+                    {t('portfolio.builder.fields.metric')}
+                  </Label>
                   <Select
                     id="program-builder-metric"
                     value={draft.metric}
                     onChange={(e) => set('metric', e.target.value as ProgramDraft['metric'])}
                   >
-                    <option value="revenue">{t('portfolio.metrics.revenue')}</option>
-                    <option value="gross_profit">{t('portfolio.metrics.gross_profit')}</option>
-                    <option value="net_profit">{t('portfolio.metrics.net_profit')}</option>
-                    <option value="approved_hours">{t('portfolio.metrics.approved_hours')}</option>
-                    <option value="transactions">{t('portfolio.metrics.transactions')}</option>
-                    <option value="project_margin">{t('portfolio.metrics.project_margin')}</option>
+                    <option value="revenue">
+                      {t('portfolio.metrics.revenue')}
+                    </option>
+                    <option value="gross_profit">
+                      {t('portfolio.metrics.gross_profit')}
+                    </option>
+                    <option value="net_profit">
+                      {t('portfolio.metrics.net_profit')}
+                    </option>
+                    <option value="approved_hours">
+                      {t('portfolio.metrics.approved_hours')}
+                    </option>
+                    <option value="transactions">
+                      {t('portfolio.metrics.transactions')}
+                    </option>
+                    <option value="project_margin">
+                      {t('portfolio.metrics.project_margin')}
+                    </option>
                   </Select>
                   <FieldError id="program-builder-metric-error" message={errors.metric} />
                 </div>
                 <div>
-                  <Label htmlFor="program-builder-scope">{t('portfolio.builder.fields.metricScope')}</Label>
+                  <Label htmlFor="program-builder-scope">
+                    {t('portfolio.builder.fields.metricScope')}
+                  </Label>
                   <Select
                     id="program-builder-scope"
                     disabled={draft.metric === 'transactions' || draft.metric === 'project_margin'}
                     value={draft.metricScope}
                     onChange={(e) => { set('metricScope', e.target.value as ProgramDraft['metricScope']); set('scopeIds', []); set('scopeCustomerIds', []); set('scopeDepartmentIds', []); if (e.target.value === 'company') set('unassignedTime', 'refuse') }}
                   >
-                    <option value="company">{t('portfolio.scopes.company')}</option>
-                    <option value="department">{t('portfolio.scopes.department')}</option>
-                    <option value="project">{t('portfolio.scopes.project')}</option>
+                    <option value="company">
+                      {t('portfolio.scopes.company')}
+                    </option>
+                    <option value="department">
+                      {t('portfolio.scopes.department')}
+                    </option>
+                    <option value="project">
+                      {t('portfolio.scopes.project')}
+                    </option>
                   </Select>
                 </div>
                 {draft.metricScope === 'department' ? (
@@ -712,14 +787,20 @@ export function ProgramBuilderDrawer({
                 ) : null}
                 {draft.metricScope !== 'company' ? (
                   <div>
-                    <Label htmlFor="program-builder-unassigned-time">{t('portfolio.builder.fields.unassignedTime')}</Label>
+                    <Label htmlFor="program-builder-unassigned-time">
+                      {t('portfolio.builder.fields.unassignedTime')}
+                    </Label>
                     <Select
                       id="program-builder-unassigned-time"
                       value={draft.unassignedTime}
                       onChange={(e) => set('unassignedTime', e.target.value as ProgramDraft['unassignedTime'])}
                     >
-                      <option value="refuse">{t('portfolio.unassignedTime.refuse')}</option>
-                      <option value="exclude">{t('portfolio.unassignedTime.exclude')}</option>
+                      <option value="refuse">
+                        {t('portfolio.unassignedTime.refuse')}
+                      </option>
+                      <option value="exclude">
+                        {t('portfolio.unassignedTime.exclude')}
+                      </option>
                     </Select>
                   </div>
                 ) : null}
@@ -740,22 +821,34 @@ export function ProgramBuilderDrawer({
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label htmlFor="program-builder-loss-rate">{t('portfolio.builder.fields.lossPercentRate')}</Label>
+                    <Label htmlFor="program-builder-loss-rate">
+                      {t('portfolio.builder.fields.lossPercentRate')}
+                    </Label>
                     <Input id="program-builder-loss-rate" inputMode="decimal" value={draft.lossPercentRate} onChange={(e) => set('lossPercentRate', e.target.value)} />
                   </div>
                   <div>
-                    <Label htmlFor="program-builder-pool-rounding">{t('portfolio.builder.fields.poolRounding')}</Label>
+                    <Label htmlFor="program-builder-pool-rounding">
+                      {t('portfolio.builder.fields.poolRounding')}
+                    </Label>
                     <Select id="program-builder-pool-rounding" value={draft.poolRounding} onChange={(e) => set('poolRounding', e.target.value as ProgramDraft['poolRounding'])}>
-                      <option value="share">{t('portfolio.poolRounding.share')}</option>
-                      <option value="pool">{t('portfolio.poolRounding.pool')}</option>
+                      <option value="share">
+                        {t('portfolio.poolRounding.share')}
+                      </option>
+                      <option value="pool">
+                        {t('portfolio.poolRounding.pool')}
+                      </option>
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="program-builder-profit-cap">{t('portfolio.builder.fields.projectProfitCap')}</Label>
+                    <Label htmlFor="program-builder-profit-cap">
+                      {t('portfolio.builder.fields.projectProfitCap')}
+                    </Label>
                     <Input id="program-builder-profit-cap" inputMode="decimal" value={draft.projectProfitCap} onChange={(e) => set('projectProfitCap', e.target.value)} />
                   </div>
                   <div>
-                    <Label htmlFor="program-builder-loss-cap">{t('portfolio.builder.fields.projectLossCap')}</Label>
+                    <Label htmlFor="program-builder-loss-cap">
+                      {t('portfolio.builder.fields.projectLossCap')}
+                    </Label>
                     <Input id="program-builder-loss-cap" inputMode="decimal" value={draft.projectLossCap} onChange={(e) => set('projectLossCap', e.target.value)} />
                   </div>
                 </div>
@@ -774,16 +867,22 @@ export function ProgramBuilderDrawer({
                 />
               </>
             ) : null}
-            {draft.metric !== 'transactions' && draft.metric !== 'project_margin' ? <>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="program-builder-cap">{t('portfolio.builder.fields.capAmount')}</Label>
-                <Input id="program-builder-cap" inputMode="decimal" value={draft.capAmount} onChange={(e) => set('capAmount', e.target.value)} aria-describedby={errors.capAmount ? 'program-builder-capAmount-error' : undefined} aria-invalid={errors.capAmount !== undefined} />
-                <FieldError id="program-builder-capAmount-error" message={errors.capAmount} />
-              </div>
-              {draft.family === 'incentive' ? <div>
-                <Label htmlFor="program-builder-threshold">{t('portfolio.builder.fields.thresholdAmount')}</Label>
-                <Input
+            {draft.metric !== 'transactions' && draft.metric !== 'project_margin' ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="program-builder-cap">
+                      {t('portfolio.builder.fields.capAmount')}
+                    </Label>
+                    <Input id="program-builder-cap" inputMode="decimal" value={draft.capAmount} onChange={(e) => set('capAmount', e.target.value)} aria-describedby={errors.capAmount ? 'program-builder-capAmount-error' : undefined} aria-invalid={errors.capAmount !== undefined} />
+                    <FieldError id="program-builder-capAmount-error" message={errors.capAmount} />
+                  </div>
+                  {draft.family === 'incentive' ? (
+                    <div>
+                      <Label htmlFor="program-builder-threshold">
+                        {t('portfolio.builder.fields.thresholdAmount')}
+                      </Label>
+                      <Input
                   id="program-builder-threshold"
                   inputMode="decimal"
                   value={draft.thresholdAmount}
@@ -791,10 +890,12 @@ export function ProgramBuilderDrawer({
                   aria-describedby={errors.thresholdAmount ? 'program-builder-thresholdAmount-error' : undefined}
                   aria-invalid={errors.thresholdAmount !== undefined}
                 />
-                <FieldError id="program-builder-thresholdAmount-error" message={errors.thresholdAmount} />
-              </div> : null}
-            </div>
-            </> : null}
+                      <FieldError id="program-builder-thresholdAmount-error" message={errors.thresholdAmount} />
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
           </fieldset>
         ) : null}
 
@@ -805,7 +906,9 @@ export function ProgramBuilderDrawer({
             </legend>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="program-builder-from">{t('portfolio.builder.fields.effectiveFrom')}</Label>
+                <Label htmlFor="program-builder-from">
+                  {t('portfolio.builder.fields.effectiveFrom')}
+                </Label>
                 <DateField
                   id="program-builder-from"
                   value={draft.effectiveFrom}
@@ -816,7 +919,9 @@ export function ProgramBuilderDrawer({
                 <FieldError id="program-builder-effectiveFrom-error" message={errors.effectiveFrom} />
               </div>
               <div>
-                <Label htmlFor="program-builder-to">{t('portfolio.builder.fields.effectiveTo')}</Label>
+                <Label htmlFor="program-builder-to">
+                  {t('portfolio.builder.fields.effectiveTo')}
+                </Label>
                 <DateField
                   id="program-builder-to"
                   value={draft.effectiveTo}
@@ -827,24 +932,42 @@ export function ProgramBuilderDrawer({
                 <FieldError id="program-builder-effectiveTo-error" message={errors.effectiveTo} />
               </div>
             </div>
-            {draft.family === 'incentive' ? <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="program-builder-frequency">{t('portfolio.builder.fields.frequency')}</Label>
-                <Select
+            {draft.family === 'incentive' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="program-builder-frequency">
+                    {t('portfolio.builder.fields.frequency')}
+                  </Label>
+                  <Select
                   id="program-builder-frequency"
                   value={draft.frequency}
                   onChange={(e) => set('frequency', e.target.value as ProgramDraft['frequency'])}
                 >
-                  <option value="monthly">{t('portfolio.frequencies.monthly')}</option>
-                  <option value="quarterly">{t('portfolio.frequencies.quarterly')}</option>
-                  <option value="annual">{t('portfolio.frequencies.annual')}</option>
-                  {draft.family === 'incentive' && draft.metricScope === 'project' || draft.frequency === 'project_complete' ? <option value="project_complete" disabled={draft.family !== 'incentive' || draft.metricScope !== 'project'}>{t('portfolio.frequencies.project_complete')}</option> : null}
-                  <option value="manual">{t('portfolio.frequencies.manual')}</option>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="program-builder-delay">{t('portfolio.builder.fields.paymentDelayDays')}</Label>
-                <Input
+                    <option value="monthly">
+                      {t('portfolio.frequencies.monthly')}
+                    </option>
+                    <option value="quarterly">
+                      {t('portfolio.frequencies.quarterly')}
+                    </option>
+                    <option value="annual">
+                      {t('portfolio.frequencies.annual')}
+                    </option>
+                    {(draft.family === 'incentive' && draft.metricScope === 'project') ||
+                    draft.frequency === 'project_complete' ? (
+                      <option value="project_complete" disabled={draft.family !== 'incentive' || draft.metricScope !== 'project'}>
+                        {t('portfolio.frequencies.project_complete')}
+                      </option>
+                    ) : null}
+                    <option value="manual">
+                      {t('portfolio.frequencies.manual')}
+                    </option>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="program-builder-delay">
+                    {t('portfolio.builder.fields.paymentDelayDays')}
+                  </Label>
+                  <Input
                   id="program-builder-delay"
                   inputMode="numeric"
                   value={draft.paymentDelayDays}
@@ -852,21 +975,34 @@ export function ProgramBuilderDrawer({
                   aria-describedby={errors.paymentDelayDays ? 'program-builder-paymentDelayDays-error' : undefined}
                   aria-invalid={errors.paymentDelayDays !== undefined}
                 />
-                <FieldError id="program-builder-paymentDelayDays-error" message={errors.paymentDelayDays} />
+                  <FieldError id="program-builder-paymentDelayDays-error" message={errors.paymentDelayDays} />
+                </div>
               </div>
-            </div> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.builder.manualGrantHint')}</p>}
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t('portfolio.builder.manualGrantHint')}
+              </p>
+            )}
             {draft.family === 'incentive' ? (
               <div>
-                <Label htmlFor="program-builder-eligibility">{t('portfolio.builder.fields.eligibility')}</Label>
+                <Label htmlFor="program-builder-eligibility">
+                  {t('portfolio.builder.fields.eligibility')}
+                </Label>
                 <Select id="program-builder-eligibility" value={draft.eligibility} onChange={(e) => set('eligibility', e.target.value as ProgramDraft['eligibility'])}>
-                  <option value="all_employees">{t('portfolio.eligibility.all_employees')}</option>
-                  <option value="members">{t('portfolio.eligibility.members')}</option>
+                  <option value="all_employees">
+                    {t('portfolio.eligibility.all_employees')}
+                  </option>
+                  <option value="members">
+                    {t('portfolio.eligibility.members')}
+                  </option>
                 </Select>
               </div>
             ) : null}
             {draft.family === 'incentive' && (draft.frequency === 'quarterly' || draft.frequency === 'annual') ? (
               <div>
-                <Label htmlFor="program-builder-basis">{t('portfolio.builder.fields.periodBasis')}</Label>
+                <Label htmlFor="program-builder-basis">
+                  {t('portfolio.builder.fields.periodBasis')}
+                </Label>
                 <Select
                   id="program-builder-basis"
                   value={draft.periodBasis}
@@ -875,10 +1011,16 @@ export function ProgramBuilderDrawer({
                   aria-invalid={errors.periodBasis !== undefined}
                 >
                   <option value="">{t('portfolio.builder.chooseBasis')}</option>
-                  <option value="calendar">{t('portfolio.periodBasis.calendar')}</option>
-                  <option value="fiscal">{t('portfolio.periodBasis.fiscal')}</option>
+                  <option value="calendar">
+                    {t('portfolio.periodBasis.calendar')}
+                  </option>
+                  <option value="fiscal">
+                    {t('portfolio.periodBasis.fiscal')}
+                  </option>
                 </Select>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.basisHint')}</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {t('portfolio.builder.basisHint')}
+                </p>
                 <FieldError id="program-builder-periodBasis-error" message={errors.periodBasis} />
               </div>
             ) : null}
@@ -891,30 +1033,52 @@ export function ProgramBuilderDrawer({
               {t(`portfolio.builder.familySteps.${draft.family}.controls`)}
             </legend>
             <div className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-              <Label htmlFor="program-builder-approvalMode">{t('portfolio.approvalControls.title')}</Label>
-              <Select id="program-builder-approvalMode" value={draft.approvalMode} onChange={(event) => set('approvalMode', event.target.value as ProgramDraft['approvalMode'])}>
-                <option value="none">{t('portfolio.approvalControls.modes.none')}</option>
-                <option value="flows">{t('portfolio.approvalControls.modes.flows')}</option>
-              </Select>
-              {draft.approvalMode === 'flows' ? <>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.hint')}</p>
-                {canConfigureApprovalPolicies ? <div><Button asChild variant="outline" size="sm"><Link href="/admin/flows" target="_blank" rel="noopener noreferrer">{t('portfolio.approvalControls.openFlows')}</Link></Button></div> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.administratorRemedy')}</p>}
-              </> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.noneHint')}</p>}
+              <Label>{t('portfolio.approvalControls.title')}</Label>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t('portfolio.approvalControls.hint')}
+              </p>
+              {canConfigureApprovalPolicies ? (
+                <div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/admin/flows" target="_blank" rel="noopener noreferrer">
+                      {t('portfolio.approvalControls.openFlows')}
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {t('portfolio.approvalControls.administratorRemedy')}
+                </p>
+              )}
             </div>
-            {draft.family === 'incentive' ? <div>
-              <Label htmlFor="program-builder-allocation">{t('portfolio.builder.fields.allocation')}</Label>
-              <Select
+            {draft.family === 'incentive' ? (
+              <div>
+                <Label htmlFor="program-builder-allocation">
+                  {t('portfolio.builder.fields.allocation')}
+                </Label>
+                <Select
                 id="program-builder-allocation"
                 disabled={draft.metric === 'transactions' || draft.valuation === 'per_unit'}
                 value={draft.allocation}
                 onChange={(e) => set('allocation', e.target.value as ProgramDraft['allocation'])}
               >
-                <option value="equal">{t('portfolio.allocations.equal')}</option>
-                <option value="hours">{t('portfolio.allocations.hours')}</option>
-                <option value="role">{t('portfolio.allocations.role')}</option>
-                {draft.metric === 'transactions' ? <option value="responsibility">{t('portfolio.allocations.responsibility')}</option> : null}
-              </Select>
-            </div> : null}
+                  <option value="equal">
+                    {t('portfolio.allocations.equal')}
+                  </option>
+                  <option value="hours">
+                    {t('portfolio.allocations.hours')}
+                  </option>
+                  <option value="role">
+                    {t('portfolio.allocations.role')}
+                  </option>
+                  {draft.metric === 'transactions' ? (
+                    <option value="responsibility">
+                      {t('portfolio.allocations.responsibility')}
+                    </option>
+                  ) : null}
+                </Select>
+              </div>
+            ) : null}
             {draft.family === 'incentive' && draft.metric !== '' && draft.metric !== 'approved_hours' && draft.metric !== 'transactions' ? (
               <>
                 <OptionMultiPicker
@@ -928,15 +1092,27 @@ export function ProgramBuilderDrawer({
                   errorId="program-builder-sourceAccountIds-error"
                   error={errors.sourceAccountIds}
                 />
-                <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.measuredHint')}</p>
-                {accountOptions.length === 0 ? <Alert className="flex flex-col gap-2">
-                  <p>{t('portfolio.builder.accountsPrerequisite')}</p>
-                  <Button asChild variant="outline" size="sm" className="self-start"><Link href="/accounts" target="_blank" rel="noopener noreferrer">{t('portfolio.builder.openAccounts')}</Link></Button>
-                  <Button variant="outline" size="sm" className="self-start" onClick={() => router.refresh()}>{t('portfolio.builder.refreshOptions')}</Button>
-                </Alert> : null}
+                <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  {t('portfolio.builder.measuredHint')}
+                </p>
+                {accountOptions.length === 0 ? (
+                  <Alert className="flex flex-col gap-2">
+                    <p>{t('portfolio.builder.accountsPrerequisite')}</p>
+                    <Button asChild variant="outline" size="sm" className="self-start">
+                      <Link href="/accounts" target="_blank" rel="noopener noreferrer">
+                        {t('portfolio.builder.openAccounts')}
+                      </Link>
+                    </Button>
+                    <Button variant="outline" size="sm" className="self-start" onClick={() => router.refresh()}>
+                      {t('portfolio.builder.refreshOptions')}
+                    </Button>
+                  </Alert>
+                ) : null}
               </>
             ) : (
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.payComponentMapsValue')}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t('portfolio.builder.payComponentMapsValue')}
+              </p>
             )}
           </fieldset>
         ) : null}
@@ -946,51 +1122,79 @@ export function ProgramBuilderDrawer({
             <legend className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               {t(`portfolio.builder.familySteps.${draft.family}.delivery`)}
             </legend>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.scopeHint')}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {t('portfolio.scopeHint')}
+            </p>
             <div>
-              <Label htmlFor="program-builder-delivery">{t('portfolio.builder.fields.deliveryMethod')}</Label>
+              <Label htmlFor="program-builder-delivery">
+                {t('portfolio.builder.fields.deliveryMethod')}
+              </Label>
               <Select
                 id="program-builder-delivery"
                 value={draft.deliveryMethod}
                 onChange={(e) => { set('deliveryMethod', e.target.value as ProgramDraft['deliveryMethod']); set('payComponentId', '') }}
               >
-                <option value="payroll">{t('portfolio.delivery.payroll')}</option>
-                <option value="external" disabled={draft.family === 'incentive'}>{t('portfolio.delivery.external')}</option>
+                <option value="payroll">
+                  {t('portfolio.delivery.payroll')}
+                </option>
+                <option value="external" disabled={draft.family === 'incentive'}>
+                  {t('portfolio.delivery.external')}
+                </option>
               </Select>
               <FieldError id="program-builder-payComponentId-error" message={errors.payComponentId} />
             </div>
             <div>
-                <Label htmlFor="program-builder-component">{t('portfolio.builder.fields.payComponent')}</Label>
-                <Select
+              <Label htmlFor="program-builder-component">
+                {t('portfolio.builder.fields.payComponent')}
+              </Label>
+              <Select
                   id="program-builder-component"
                   value={draft.payComponentId}
                   onChange={(e) => set('payComponentId', e.target.value)}
                   aria-describedby={errors.payComponentId ? 'program-builder-payComponentId-error2' : undefined}
                   aria-invalid={errors.payComponentId !== undefined}
                 >
-                  <option value="">{t('portfolio.builder.chooseComponent')}</option>
-                  {deliveryComponents.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-                <FieldError id="program-builder-payComponentId-error2" message={errors.payComponentId} />
-                {deliveryComponents.length === 0 ? <Alert className="mt-2 flex flex-col gap-2">
+                <option value="">
+                  {t('portfolio.builder.chooseComponent')}
+                </option>
+                {deliveryComponents.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+              <FieldError id="program-builder-payComponentId-error2" message={errors.payComponentId} />
+              {deliveryComponents.length === 0 ? (
+                <Alert className="mt-2 flex flex-col gap-2">
                   <p>{t('portfolio.builder.componentPrerequisite')}</p>
-                  <Button asChild variant="outline" size="sm" className="self-start"><Link href={'/admin/setup/payroll?tab=components' as never} target="_blank" rel="noopener noreferrer">{t('portfolio.builder.openPayrollSetup')}</Link></Button>
-                  <Button variant="outline" size="sm" className="self-start" onClick={() => router.refresh()}>{t('portfolio.builder.refreshOptions')}</Button>
-                </Alert> : null}
-              </div>
-            {draft.deliveryMethod === 'external' ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.externalHint')}</p> : null}
+                  <Button asChild variant="outline" size="sm" className="self-start">
+                    <Link href={'/admin/setup/payroll?tab=components' as never} target="_blank" rel="noopener noreferrer">
+                      {t('portfolio.builder.openPayrollSetup')}
+                    </Link>
+                  </Button>
+                  <Button variant="outline" size="sm" className="self-start" onClick={() => router.refresh()}>
+                    {t('portfolio.builder.refreshOptions')}
+                  </Button>
+                </Alert>
+              ) : null}
+            </div>
+            {draft.deliveryMethod === 'external' ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t('portfolio.builder.externalHint')}
+              </p>
+            ) : null}
           </fieldset>
         ) : null}
 
         {step === 'review' ? (
           <div className="flex flex-col gap-3">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.builder.reviewTitle')}</h3>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t('portfolio.builder.reviewTitle')}
+            </h3>
             {summaryLines.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.builder.reviewEmpty')}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t('portfolio.builder.reviewEmpty')}
+              </p>
             ) : (
               <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
                 {summaryLines.map((line) => (
@@ -1000,10 +1204,16 @@ export function ProgramBuilderDrawer({
                 ))}
               </ul>
             )}
-            {mode === 'create' ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.reviewHint')}</p> : null}
+            {mode === 'create' ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {t('portfolio.builder.reviewHint')}
+              </p>
+            ) : null}
             {mode === 'edit' ? (
               <div>
-                <Label htmlFor="program-builder-reason">{t('portfolio.builder.fields.reason')}</Label>
+                <Label htmlFor="program-builder-reason">
+                  {t('portfolio.builder.fields.reason')}
+                </Label>
                 <Textarea
                   id="program-builder-reason"
                   value={reason}
@@ -1015,7 +1225,9 @@ export function ProgramBuilderDrawer({
             ) : null}
             {activeEdit ? (
               <div>
-                <Label htmlFor="program-builder-changeEffectiveFrom">{t('portfolio.builder.fields.changeEffectiveFrom')}</Label>
+                <Label htmlFor="program-builder-changeEffectiveFrom">
+                  {t('portfolio.builder.fields.changeEffectiveFrom')}
+                </Label>
                 <DateField
                   id="program-builder-changeEffectiveFrom"
                   className="w-44"
@@ -1025,7 +1237,9 @@ export function ProgramBuilderDrawer({
                   aria-invalid={changeFromError ? true : undefined}
                   required
                 />
-                <p id="program-builder-changeEffectiveFrom-hint" className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.builder.changeEffectiveFromHint')}</p>
+                <p id="program-builder-changeEffectiveFrom-hint" className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {t('portfolio.builder.changeEffectiveFromHint')}
+                </p>
                 <FieldError id="program-builder-changeEffectiveFrom-error" message={changeFromError} />
               </div>
             ) : null}

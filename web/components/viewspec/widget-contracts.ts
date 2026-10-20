@@ -88,7 +88,6 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'audit-docs-link': { props: ['href', 'label'] },
   'audit-event-drawer': { props: ['drawer'] },
   'audit-rows-table': { props: ['rows', 'selectedId'] },
-  'automation-approval-settings': { props: ['autoApproveLabel', 'delegateLabel', 'exceptionLabel', 'excludeLabel', 'helpLabel', 'noLabel', 'saveFailed', 'saveLabel', 'savedLabel', 'settings', 'thresholdsLabel', 'titleLabel', 'yesLabel'] },
   'automation-builder': { props: ['automation', 'backHref', 'backLabel', 'canManage', 'canSimulate', 'runs', 'saveFailed'] },
   'automation-last-run-cell': { props: ['at', 'fallback'] },
   'automation-name-cell': { props: ['href', 'name'] },

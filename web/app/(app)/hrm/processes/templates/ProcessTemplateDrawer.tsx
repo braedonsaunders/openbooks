@@ -47,10 +47,16 @@ import {
   BuilderIssues,
   useOutlineDrag,
 } from '../../../../../components/builder/builder-kit'
-import { DirtyUrlDrawer, useDirtyUrlDrawer } from '../../../../../components/dirty-url-drawer'
+import {
+  DirtyUrlDrawer,
+  useDirtyUrlDrawer,
+} from '../../../../../components/dirty-url-drawer'
 import { ChecklistStepContent } from '../../../../../components/checklist-step-content'
 import { LogicRuleBuilder } from '../../../admin/flows/_builder/LogicRuleBuilder'
-import { AddFieldButton, FieldRow } from '../../../records/types/TypeBuilderDrawer'
+import {
+  AddFieldButton,
+  FieldRow,
+} from '../../../records/types/TypeBuilderDrawer'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { promptDialog } from '../../../../../lib/prompt'
@@ -150,15 +156,25 @@ function ChecklistDesigner({
   const t = useTranslations('hrm.processes.designer')
   const router = useRouter()
   const [document, setDocument] = useState<ChecklistDocument>(
-    () => template?.document ?? { name: '', kind: 'onboarding', appliesTo: scope, steps: [] },
+    () =>
+      template?.document ?? {
+        name: '',
+        kind: 'onboarding',
+        appliesTo: scope,
+        steps: [],
+      },
   )
-  const [selection, setSelection] = useState<string>(template?.document.steps[0]?.id ?? 'settings')
+  const [selection, setSelection] = useState<string>(
+    template?.document.steps[0]?.id ?? 'settings',
+  )
   const [starter, setStarter] = useState(!template)
   const [preview, setPreview] = useState(false)
   const [busy, setBusy] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(template ? JSON.stringify(template.document) : '')
+  const [saved, setSaved] = useState(
+    template ? JSON.stringify(template.document) : '',
+  )
   const savedRef = useRef(saved)
   const [versions, setVersions] = useState(template?.versions ?? [])
   const [active, setActive] = useState(template?.isActive ?? false)
@@ -172,12 +188,18 @@ function ChecklistDesigner({
   const [coverage, setCoverage] = useState<{
     steps: { id: string; title: string; dueOn: string }[]
   } | null>(null)
-  const [previewValues, setPreviewValues] = useState<Record<string, unknown>>({})
+  const [previewValues, setPreviewValues] = useState<Record<string, unknown>>(
+    {},
+  )
   const id = useRef(template?.id ?? null)
   const revision = useRef(template?.revision ?? 0)
-  const [currentRevision, setCurrentRevision] = useState(template?.revision ?? 0)
+  const [currentRevision, setCurrentRevision] = useState(
+    template?.revision ?? 0,
+  )
   const documentRef = useRef(document)
-  useEffect(() => { documentRef.current = document }, [document])
+  useEffect(() => {
+    documentRef.current = document
+  }, [document])
   const pending = useRef<Promise<boolean> | null>(null)
   const mounted = useRef(true)
   const dirty = JSON.stringify(document) !== saved && !starter
@@ -224,65 +246,74 @@ function ChecklistDesigner({
       return { ...d, steps }
     })
   }
-  const request = useCallback(async (body: unknown) => {
-    const response = await fetch('/api/hrm/process-templates/designer', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!response.ok) throw new Error(await readApiErrorMessage(response, t('saveFailed')))
-    return response.json()
-  }, [t])
-  const save = useCallback(async function saveLatest(): Promise<boolean> {
-    if (pending.current) {
-      if (!(await pending.current)) return false
-      return saveLatest()
-    }
-    const next = documentRef.current,
-      fingerprint = JSON.stringify(next)
-    const parsed = checklistDocumentSchema.safeParse(next)
-    if (!parsed.success) {
-      setError(
-        checklistIssues(next).find((i) => /whole number/.test(i.message))?.message ??
-          t('invalidDraft', {
-            field: parsed.error.issues[0]?.path.join('.') ?? '',
-            message: parsed.error.issues[0]?.message ?? '',
-          }),
-      )
-      return false
-    }
-    if (!next.name.trim()) {
-      setError(t('nameRequired'))
-      return false
-    }
-    if (fingerprint === savedRef.current) return true
-    id.current ??= crypto.randomUUID()
-    setBusy(true)
-    setError(null)
-    const work = (async () => {
-      try {
-        const result = (await request({
-          action: 'save',
-          templateId: id.current,
-          revision: revision.current,
-          document: next,
-        })) as ChecklistDesignerValue
-        revision.current = result.revision
-        if (mounted.current) setCurrentRevision(result.revision)
-        savedRef.current = fingerprint
-        if (mounted.current) setSaved(fingerprint)
-        return true
-      } catch (e) {
-        if (mounted.current) setError(e instanceof Error ? e.message : t('saveFailed'))
-        return false
-      } finally {
-        pending.current = null
-        if (mounted.current) setBusy(false)
+  const request = useCallback(
+    async (body: unknown) => {
+      const response = await fetch('/api/hrm/process-templates/designer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!response.ok)
+        throw new Error(await readApiErrorMessage(response, t('saveFailed')))
+      return response.json()
+    },
+    [t],
+  )
+  const save = useCallback(
+    async function saveLatest(): Promise<boolean> {
+      if (pending.current) {
+        if (!(await pending.current)) return false
+        return saveLatest()
       }
-    })()
-    pending.current = work
-    return work
-  }, [request, t])
+      const next = documentRef.current,
+        fingerprint = JSON.stringify(next)
+      const parsed = checklistDocumentSchema.safeParse(next)
+      if (!parsed.success) {
+        setError(
+          checklistIssues(next).find((i) => /whole number/.test(i.message))
+            ?.message ??
+            t('invalidDraft', {
+              field: parsed.error.issues[0]?.path.join('.') ?? '',
+              message: parsed.error.issues[0]?.message ?? '',
+            }),
+        )
+        return false
+      }
+      if (!next.name.trim()) {
+        setError(t('nameRequired'))
+        return false
+      }
+      if (fingerprint === savedRef.current) return true
+      id.current ??= crypto.randomUUID()
+      setBusy(true)
+      setError(null)
+      const work = (async () => {
+        try {
+          const result = (await request({
+            action: 'save',
+            templateId: id.current,
+            revision: revision.current,
+            document: next,
+          })) as ChecklistDesignerValue
+          revision.current = result.revision
+          if (mounted.current) setCurrentRevision(result.revision)
+          savedRef.current = fingerprint
+          if (mounted.current) setSaved(fingerprint)
+          return true
+        } catch (e) {
+          if (mounted.current)
+            setError(e instanceof Error ? e.message : t('saveFailed'))
+          return false
+        } finally {
+          pending.current = null
+          if (mounted.current) setBusy(false)
+        }
+      })()
+      pending.current = work
+      return work
+    },
+    [request, t],
+  )
   useEffect(() => {
     if (!dirty || !document.name.trim() || busy || error) return
     const timer = setTimeout(() => {
@@ -319,7 +350,12 @@ function ChecklistDesigner({
       setVersions(
         result.versions ?? [
           ...versions,
-          { version: result.publishedVersion, publishedAt: '', publishedBy: '', reason },
+          {
+            version: result.publishedVersion,
+            publishedAt: '',
+            publishedBy: '',
+            reason,
+          },
         ],
       )
       router.refresh()
@@ -400,7 +436,10 @@ function ChecklistDesigner({
   async function restore(version: number) {
     if (
       !id.current ||
-      !(await confirmDialog({ message: t('restoreHelp'), confirmLabel: t('restore') }))
+      !(await confirmDialog({
+        message: t('restoreHelp'),
+        confirmLabel: t('restore'),
+      }))
     )
       return
     setBusy(true)
@@ -435,7 +474,10 @@ function ChecklistDesigner({
         .filter((s) => s.id !== step.id)
         .map((s) => ({
           ...s,
-          design: { ...s.design, dependencies: s.design.dependencies.filter((x) => x !== step.id) },
+          design: {
+            ...s.design,
+            dependencies: s.design.dependencies.filter((x) => x !== step.id),
+          },
         })),
     }))
     setSelection('settings')
@@ -477,8 +519,18 @@ function ChecklistDesigner({
     actions: [],
     statuses: [],
     fields: [
-      { key: 'employerSubsidiaryId', label: t('employer'), type: 'enum', options: subsidiaries },
-      { key: 'departmentId', label: t('department'), type: 'enum', options: departments },
+      {
+        key: 'employerSubsidiaryId',
+        label: t('employer'),
+        type: 'enum',
+        options: subsidiaries,
+      },
+      {
+        key: 'departmentId',
+        label: t('department'),
+        type: 'enum',
+        options: departments,
+      },
       {
         key: 'kind',
         label: t('kind'),
@@ -533,7 +585,11 @@ function ChecklistDesigner({
   }
   if (starter)
     return (
-      <InspectorPanel icon={<Sparkles size={20} />} eyebrow={t('start')} title={t('starterTitle')}>
+      <InspectorPanel
+        icon={<Sparkles size={20} />}
+        eyebrow={t('start')}
+        title={t('starterTitle')}
+      >
         <p className="text-sm text-slate-500">{t('starterHelp')}</p>
         <ChoiceCards
           value=""
@@ -549,17 +605,31 @@ function ChecklistDesigner({
             const s = STARTERS.find((s) => s.key === key)!
             const steps = s.sections.flatMap(([section, titles]) =>
               titles.map((title) => ({
-                ...freshStep(t(`starterSteps.${title}`), t(`starterSections.${section}`)),
+                ...freshStep(
+                  t(`starterSteps.${title}`),
+                  t(`starterSections.${section}`),
+                ),
                 description: t(`starterGuidance.${title}`),
                 ownerKind:
                   title === 'reviewPolicies'
                     ? ('employee' as const)
-                    : ['prepareAccounts', 'reviewAccess', 'updateAccess'].includes(title)
+                    : [
+                          'prepareAccounts',
+                          'reviewAccess',
+                          'updateAccess',
+                        ].includes(title)
                       ? ('hr' as const)
                       : ('manager' as const),
                 evidenceKind:
-                  title === 'reviewPolicies' ? ('acknowledgement' as const) : ('none' as const),
-                dueOffsetDays: section === 'beforeArrival' ? -3 : section === 'firstWeek' ? 7 : 0,
+                  title === 'reviewPolicies'
+                    ? ('acknowledgement' as const)
+                    : ('none' as const),
+                dueOffsetDays:
+                  section === 'beforeArrival'
+                    ? -3
+                    : section === 'firstWeek'
+                      ? 7
+                      : 0,
               })),
             )
             setDocument({
@@ -579,12 +649,18 @@ function ChecklistDesigner({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Badge variant="outline">
-            {version ? t('version', { version }) : active ? t('legacyActive') : t('draft')}
+            {version
+              ? t('version', { version })
+              : active
+                ? t('legacyActive')
+                : t('draft')}
           </Badge>
           {active && currentRevision > publishedRevision ? (
             <Badge variant="outline">{t('pendingChanges')}</Badge>
           ) : null}
-          {version > 0 && !active ? <Badge variant="outline">{t('retired')}</Badge> : null}
+          {version > 0 && !active ? (
+            <Badge variant="outline">{t('retired')}</Badge>
+          ) : null}
           <span role="status" className="text-xs text-slate-500">
             {busy ? t('saving') : dirty ? t('unsaved') : t('saved')}
           </span>
@@ -594,10 +670,17 @@ function ChecklistDesigner({
             <Eye size={15} />
             {preview ? t('edit') : t('preview')}
           </Button>
-          <Button variant="outline" disabled={busy || !dirty} onClick={() => void save()}>
+          <Button
+            variant="outline"
+            disabled={busy || !dirty}
+            onClick={() => void save()}
+          >
             {t('saveDraft')}
           </Button>
-          <Button disabled={busy || issues.length > 0} onClick={() => void publish()}>
+          <Button
+            disabled={busy || issues.length > 0}
+            onClick={() => void publish()}
+          >
             <ShieldCheck size={15} />
             {t('publish')}
           </Button>
@@ -623,7 +706,9 @@ function ChecklistDesigner({
             <div className="space-y-3">
               <OutlinePanel
                 title={t('steps')}
-                actions={<Badge variant="outline">{document.steps.length}</Badge>}
+                actions={
+                  <Badge variant="outline">{document.steps.length}</Badge>
+                }
                 footer={
                   <div className="flex flex-wrap gap-1">
                     <Button
@@ -635,7 +720,11 @@ function ChecklistDesigner({
                       <Plus size={14} />
                       {t('addStep')}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => void paste()}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void paste()}
+                    >
                       {t('paste')}
                     </Button>
                   </div>
@@ -650,17 +739,25 @@ function ChecklistDesigner({
                 {document.steps.map((s, i) => (
                   <div key={s.id}>
                     {s.design.section &&
-                    (i === 0 || document.steps[i - 1]?.design.section !== s.design.section) ? (
+                    (i === 0 ||
+                      document.steps[i - 1]?.design.section !==
+                        s.design.section) ? (
                       <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase text-slate-400">
                         {s.design.section}
                       </p>
                     ) : null}
                     <OutlineRow
                       selected={selection === s.id}
-                      icon={<span className="text-xs tabular-nums">{i + 1}</span>}
+                      icon={
+                        <span className="text-xs tabular-nums">{i + 1}</span>
+                      }
                       label={s.title}
                       placeholder={t('untitled')}
-                      meta={t(s.ownerKind) + ' · ' + t('offset', { days: s.dueOffsetDays })}
+                      meta={
+                        t(s.ownerKind) +
+                        ' · ' +
+                        t('offset', { days: s.dueOffsetDays })
+                      }
                       onSelect={() => setSelection(s.id)}
                       menuLabel={t('stepMenu')}
                       onMenu={(anchor) => {
@@ -699,9 +796,17 @@ function ChecklistDesigner({
                         {
                           canDrop: () => true,
                           onDrop: (from, place) => {
-                            const fromIndex = document.steps.findIndex((s) => s.id === from.key)
-                            const target = i + (place === 'after' ? 1 : 0) - (fromIndex < i ? 1 : 0)
-                            move(from.key, Math.min(document.steps.length - 1, target))
+                            const fromIndex = document.steps.findIndex(
+                              (s) => s.id === from.key,
+                            )
+                            const target =
+                              i +
+                              (place === 'after' ? 1 : 0) -
+                              (fromIndex < i ? 1 : 0)
+                            move(
+                              from.key,
+                              Math.min(document.steps.length - 1, target),
+                            )
                           },
                         },
                       )}
@@ -749,7 +854,9 @@ function ChecklistDesigner({
               </div>
               <Button
                 variant="outline"
-                disabled={busy || !sampleEmployment || !sampleDate || issues.length > 0}
+                disabled={
+                  busy || !sampleEmployment || !sampleDate || issues.length > 0
+                }
                 onClick={() => void testCoverage()}
               >
                 {t('testCoverage')}
@@ -760,7 +867,9 @@ function ChecklistDesigner({
                     <p key={s.id} className="text-sm">
                       <Check size={14} className="mr-2 inline text-teal-600" />
                       {s.title}
-                      <span className="float-right text-slate-500">{s.dueOn}</span>
+                      <span className="float-right text-slate-500">
+                        {s.dueOn}
+                      </span>
                     </p>
                   ))}
                 </div>
@@ -771,11 +880,17 @@ function ChecklistDesigner({
                   <ChecklistStepContent
                     step={selected}
                     values={previewValues}
-                    onChange={(key, value) => setPreviewValues((v) => ({ ...v, [key]: value }))}
+                    onChange={(key, value) =>
+                      setPreviewValues((v) => ({ ...v, [key]: value }))
+                    }
                     acknowledged={previewValues.__ack === true}
-                    onAcknowledge={(value) => setPreviewValues((v) => ({ ...v, __ack: value }))}
+                    onAcknowledge={(value) =>
+                      setPreviewValues((v) => ({ ...v, __ack: value }))
+                    }
                   />
-                  <p className="text-xs text-slate-500">{t('previewNoWrite')}</p>
+                  <p className="text-xs text-slate-500">
+                    {t('previewNoWrite')}
+                  </p>
                 </div>
               ) : null}
             </InspectorPanel>
@@ -799,7 +914,9 @@ function ChecklistDesigner({
                 <ChoiceCards
                   disabled={currentRevision > 0}
                   value={document.kind}
-                  options={(['onboarding', 'offboarding', 'transfer'] as const).map((value) => ({
+                  options={(
+                    ['onboarding', 'offboarding', 'transfer'] as const
+                  ).map((value) => ({
                     value,
                     label: t(value),
                     description: t(value + 'Help'),
@@ -816,7 +933,10 @@ function ChecklistDesigner({
                     value={document.appliesTo.employerSubsidiaryId ?? ''}
                     onChange={(value) =>
                       edit({
-                        appliesTo: { ...document.appliesTo, employerSubsidiaryId: value || null },
+                        appliesTo: {
+                          ...document.appliesTo,
+                          employerSubsidiaryId: value || null,
+                        },
                       })
                     }
                     options={subsidiaries}
@@ -830,7 +950,12 @@ function ChecklistDesigner({
                   <SearchSelect
                     value={document.appliesTo.departmentId ?? ''}
                     onChange={(value) =>
-                      edit({ appliesTo: { ...document.appliesTo, departmentId: value || null } })
+                      edit({
+                        appliesTo: {
+                          ...document.appliesTo,
+                          departmentId: value || null,
+                        },
+                      })
                     }
                     options={departments}
                     ariaLabel={t('department')}
@@ -841,7 +966,11 @@ function ChecklistDesigner({
               </div>
               <p className="text-xs text-slate-500">{t('publishHelp')}</p>
               {active ? (
-                <Button variant="outline" disabled={busy} onClick={() => void retire()}>
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void retire()}
+                >
                   {t('retire')}
                 </Button>
               ) : version ? (
@@ -852,9 +981,14 @@ function ChecklistDesigner({
                   {t('versionHistory')}
                 </summary>
                 {versions.map((v) => (
-                  <div key={v.version} className="rounded-lg border p-3 text-sm">
+                  <div
+                    key={v.version}
+                    className="rounded-lg border p-3 text-sm"
+                  >
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-medium">{t('version', { version: v.version })}</p>
+                      <p className="font-medium">
+                        {t('version', { version: v.version })}
+                      </p>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -875,7 +1009,9 @@ function ChecklistDesigner({
           ) : (
             <InspectorPanel
               icon={<ClipboardList size={18} />}
-              eyebrow={t('stepNumber', { number: document.steps.indexOf(selected) + 1 })}
+              eyebrow={t('stepNumber', {
+                number: document.steps.indexOf(selected) + 1,
+              })}
               title={selected.title || t('untitled')}
               actions={
                 <div className="flex gap-1">
@@ -922,7 +1058,9 @@ function ChecklistDesigner({
                   id="step-guide"
                   rows={6}
                   value={selected.description ?? ''}
-                  onChange={(e) => editStep({ description: e.target.value || null })}
+                  onChange={(e) =>
+                    editStep({ description: e.target.value || null })
+                  }
                   placeholder={t('guidanceHelp')}
                   maxLength={12000}
                 />
@@ -933,19 +1071,25 @@ function ChecklistDesigner({
                   columns={2}
                   value={selected.ownerKind}
                   ariaLabel={t('owner')}
-                  options={(['manager', 'hr', 'employee', 'named_party'] as const).map((value) => ({
+                  options={(
+                    ['manager', 'hr', 'employee', 'named_party'] as const
+                  ).map((value) => ({
                     value,
                     label: t(value),
                     description: t(value + 'Help'),
                     icon: <UserRound size={16} />,
                   }))}
-                  onChange={(ownerKind) => editStep({ ownerKind, ownerPartyId: null })}
+                  onChange={(ownerKind) =>
+                    editStep({ ownerKind, ownerPartyId: null })
+                  }
                 />
               </div>
               {selected.ownerKind === 'named_party' ? (
                 <SearchSelect
                   value={selected.ownerPartyId ?? ''}
-                  onChange={(ownerPartyId) => editStep({ ownerPartyId: ownerPartyId || null })}
+                  onChange={(ownerPartyId) =>
+                    editStep({ ownerPartyId: ownerPartyId || null })
+                  }
                   options={employees}
                   ariaLabel={t('named_party')}
                 />
@@ -959,7 +1103,9 @@ function ChecklistDesigner({
                     min={-3650}
                     max={3650}
                     value={selected.dueOffsetDays}
-                    onChange={(e) => editStep({ dueOffsetDays: Number(e.target.value) })}
+                    onChange={(e) =>
+                      editStep({ dueOffsetDays: Number(e.target.value) })
+                    }
                   />
                   <p className="mt-1 text-xs text-slate-500">{t('dueHelp')}</p>
                 </div>
@@ -973,12 +1119,15 @@ function ChecklistDesigner({
                     value={selected.design.reminderDays ?? ''}
                     onChange={(e) =>
                       editDesign({
-                        reminderDays: e.target.value === '' ? null : Number(e.target.value),
+                        reminderDays:
+                          e.target.value === '' ? null : Number(e.target.value),
                       })
                     }
                     placeholder={t('off')}
                   />
-                  <p className="mt-1 text-xs text-slate-500">{t('reminderHelp')}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {t('reminderHelp')}
+                  </p>
                 </div>
               </div>
               <div>
@@ -1017,14 +1166,6 @@ function ChecklistDesigner({
                 />
                 {t('required')}
               </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selected.design.approval}
-                  onChange={(e) => editDesign({ approval: e.target.checked })}
-                />
-                {t('approval')}
-              </label>
               <p className="text-xs text-slate-500">{t('approvalHelp')}</p>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1042,7 +1183,9 @@ function ChecklistDesigner({
                       ownerSectionId={section.id}
                       expanded={expandedField === field.id}
                       onToggle={() =>
-                        setExpandedField(expandedField === field.id ? null : field.id)
+                        setExpandedField(
+                          expandedField === field.id ? null : field.id,
+                        )
                       }
                       onChange={(patch) =>
                         editDesign({
@@ -1053,7 +1196,9 @@ function ChecklistDesigner({
                                 ? {
                                     ...s,
                                     fields: s.fields.map((f) =>
-                                      f.id === field.id ? { ...f, ...patch } : f,
+                                      f.id === field.id
+                                        ? { ...f, ...patch }
+                                        : f,
                                     ),
                                   }
                                 : s,
@@ -1077,10 +1222,16 @@ function ChecklistDesigner({
                         })
                       }}
                       onRemove={() => {
-                        const remaining = selected.design.form!.sections.map((s) =>
-                          s.id === section.id
-                            ? { ...s, fields: s.fields.filter((f) => f.id !== field.id) }
-                            : s,
+                        const remaining = selected.design.form!.sections.map(
+                          (s) =>
+                            s.id === section.id
+                              ? {
+                                  ...s,
+                                  fields: s.fields.filter(
+                                    (f) => f.id !== field.id,
+                                  ),
+                                }
+                              : s,
                         )
                         editDesign({
                           form: remaining.every((s) => !s.fields.length)
@@ -1093,7 +1244,9 @@ function ChecklistDesigner({
                 )}
               </div>
               <details className="space-y-3">
-                <summary className="cursor-pointer text-sm font-medium">{t('resources')}</summary>
+                <summary className="cursor-pointer text-sm font-medium">
+                  {t('resources')}
+                </summary>
                 {selected.design.resources.map((r, i) => (
                   <div key={i} className="flex flex-wrap gap-2 sm:flex-nowrap">
                     <Input
@@ -1126,7 +1279,9 @@ function ChecklistDesigner({
                       aria-label={t('delete')}
                       onClick={() =>
                         editDesign({
-                          resources: selected.design.resources.filter((_, j) => j !== i),
+                          resources: selected.design.resources.filter(
+                            (_, j) => j !== i,
+                          ),
                         })
                       }
                     >
@@ -1139,7 +1294,10 @@ function ChecklistDesigner({
                   size="sm"
                   onClick={() =>
                     editDesign({
-                      resources: [...selected.design.resources, { label: '', url: '' }],
+                      resources: [
+                        ...selected.design.resources,
+                        { label: '', url: '' },
+                      ],
                     })
                   }
                 >
@@ -1150,11 +1308,16 @@ function ChecklistDesigner({
                 <summary className="cursor-pointer text-sm font-medium">
                   {t('dependencies')}
                 </summary>
-                <p className="text-xs text-slate-500">{t('dependenciesHelp')}</p>
+                <p className="text-xs text-slate-500">
+                  {t('dependenciesHelp')}
+                </p>
                 {document.steps
                   .filter((s) => s.id !== selected.id)
                   .map((s) => (
-                    <label key={s.id} className="flex items-center gap-2 text-sm">
+                    <label
+                      key={s.id}
+                      className="flex items-center gap-2 text-sm"
+                    >
                       <input
                         type="checkbox"
                         checked={selected.design.dependencies.includes(s.id)}
@@ -1162,7 +1325,9 @@ function ChecklistDesigner({
                           editDesign({
                             dependencies: e.target.checked
                               ? [...selected.design.dependencies, s.id]
-                              : selected.design.dependencies.filter((x) => x !== s.id),
+                              : selected.design.dependencies.filter(
+                                  (x) => x !== s.id,
+                                ),
                           })
                         }
                       />
@@ -1171,14 +1336,20 @@ function ChecklistDesigner({
                   ))}
               </details>
               <details className="space-y-3">
-                <summary className="cursor-pointer text-sm font-medium">{t('conditions')}</summary>
+                <summary className="cursor-pointer text-sm font-medium">
+                  {t('conditions')}
+                </summary>
                 <p className="text-xs text-slate-500">{t('conditionsHelp')}</p>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
                     checked={selected.design.condition !== null}
                     onChange={(e) =>
-                      editDesign({ condition: e.target.checked ? { op: 'and', rules: [] } : null })
+                      editDesign({
+                        condition: e.target.checked
+                          ? { op: 'and', rules: [] }
+                          : null,
+                      })
                     }
                   />
                   {t('conditional')}

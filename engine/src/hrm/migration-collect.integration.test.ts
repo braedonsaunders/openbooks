@@ -479,61 +479,66 @@ test("a recorded terminated_on alone anchors a terminated observation that migra
   }
 });
 
-test("operator mappings attach as resolution evidence with provenance", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const scheduleId = await seedSchedule(org.orgId, "Mapped biweekly", org.subsidiaryId);
-    // No hire date on the role: the mapping supplies it.
-    const person = await seedEmployee(org, "Collector Mapped", { hiredOn: null }, { scheduleId });
-    await seedCommittedStub(org, actorId, scheduleId, person.partyId, "2026-09-10");
-    const mappings: OperatorEmploymentMapping[] = [
-      {
-        partyId: person.partyId,
-        employerSubsidiaryId: org.subsidiaryId,
-        hiredOn: "2021-06-01",
-        terminatedOn: null,
-        approvedBy: "operator-1",
-        approvedAt: "2026-09-01T10:00:00Z",
-        rationale: "offer letter on file",
-      },
-    ];
+test(
+  "operator mappings attach as resolution evidence with provenance",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const scheduleId = await seedSchedule(org.orgId, "Mapped biweekly", org.subsidiaryId);
+      // No hire date on the role: the mapping supplies it.
+      const person = await seedEmployee(org, "Collector Mapped", { hiredOn: null }, { scheduleId });
+      await seedCommittedStub(org, actorId, scheduleId, person.partyId, "2026-09-10");
+      const mappings: OperatorEmploymentMapping[] = [
+        {
+          partyId: person.partyId,
+          employerSubsidiaryId: org.subsidiaryId,
+          hiredOn: "2021-06-01",
+          terminatedOn: null,
 
-    const collected = await collectLegacyEmployments(org.orgId, { operatorMappings: mappings });
-    assert.equal(collected.rows.length, 1);
-    const row = collected.rows[0]!;
-    assert.equal(row.resolution?.kind, "operator-employer-date-mapping");
-    assert.equal(row.resolution?.hiredOn, "2021-06-01");
-    assert.equal(row.resolution?.approvedBy, "operator-1");
+          rationale: "offer letter on file",
+        },
+      ];
 
-    const preflight = preflightEmploymentMigration(collected.rows);
-    // Free text never authorizes: without a decided Flows gate over the
-    // mapping set the mapping is inapplicable, even when complete.
-    assert.ok(preflight.rows[0]?.issues.some((issue) => issue.code === "unapproved_mapping"));
-    assert.notEqual(preflight.rows[0]?.classification, "ready");
-    assert.equal(preflight.rows[0]?.candidate, null);
-  } finally {
+      const collected = await collectLegacyEmployments(org.orgId, { operatorMappings: mappings });
+      assert.equal(collected.rows.length, 1);
+      const row = collected.rows[0]!;
+      assert.equal(row.resolution?.kind, "operator-employer-date-mapping");
+      assert.equal(row.resolution?.hiredOn, "2021-06-01");
+      assert.equal(row.resolution?.rationale, "offer letter on file");
+
+      const preflight = preflightEmploymentMigration(collected.rows);
+      // Free text never authorizes: without a decided Flows gate over the
+      // mapping set the mapping is inapplicable, even when complete.
+      assert.ok(preflight.rows[0]?.issues.some((issue) => issue.code === "unapproved_mapping"));
+      assert.notEqual(preflight.rows[0]?.classification, "ready");
+      assert.equal(preflight.rows[0]?.candidate, null);
+    } finally {
     await dropScratchOrg(org.orgId);
   }
-});
+  },
+);
 
-test("an operator mapping for an uncollected party is refused, never dropped", { skip }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scheduleId = await seedSchedule(org.orgId, "Strict biweekly", org.subsidiaryId);
-    await seedEmployee(org, "Collector Strict", { hiredOn: "2022-01-01" }, { scheduleId });
-    const mappings: OperatorEmploymentMapping[] = [
-      {
-        partyId: randomUUID(),
-        employerSubsidiaryId: null,
-        hiredOn: null,
-        terminatedOn: null,
-        approvedBy: "operator-1",
-        approvedAt: "2026-09-01T10:00:00Z",
-        rationale: "stray override",
-      },
-    ];
-    await assert.rejects(
+test(
+  "an operator mapping for an uncollected party is refused, never dropped",
+  { skip },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const scheduleId = await seedSchedule(org.orgId, "Strict biweekly", org.subsidiaryId);
+      await seedEmployee(org, "Collector Strict", { hiredOn: "2022-01-01" }, { scheduleId });
+      const mappings: OperatorEmploymentMapping[] = [
+        {
+          partyId: randomUUID(),
+          employerSubsidiaryId: null,
+          hiredOn: null,
+          terminatedOn: null,
+
+          rationale: "stray override",
+        },
+      ];
+      await assert.rejects(
       collectLegacyEmployments(org.orgId, { operatorMappings: mappings }),
       (error: unknown) => {
         assert.ok(error instanceof EmploymentCollectionError);
@@ -541,10 +546,11 @@ test("an operator mapping for an uncollected party is refused, never dropped", {
         return true;
       },
     );
-  } finally {
+    } finally {
     await dropScratchOrg(org.orgId);
   }
-});
+  },
+);
 
 test("a second org's employees never appear in a collection", { skip }, async () => {
   const orgA = await createScratchOrg();
@@ -685,7 +691,6 @@ test("two collections of one org are byte-identical", { skip }, async () => {
     await dropScratchOrg(org.orgId);
   }
 });
-
 
 test('empty weeks and nil or reversed hours cannot invent employment after termination; actual later work still refuses', { skip }, async () => {
   const org = await createScratchOrg();

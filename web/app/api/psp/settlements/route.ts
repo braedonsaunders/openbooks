@@ -1,9 +1,9 @@
-import { z } from "zod";
+import { z } from 'zod'
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { sql } from 'drizzle-orm'
 import { db } from "@openbooks/engine/platform/db";
 import {
   PspSettlementError,
@@ -68,7 +68,6 @@ const configProvider = z.enum([
   "square",
 ]);
 const accountReference = uuidString().nullable().optional();
-const refundPolicy = z.enum(["automatic", "review"]);
 const subsidiaryReference = uuidString().nullable().optional();
 const calendarDateShape = isoDate("must be a valid calendar date");
 const providerCurrency = z.string().trim().regex(/^[A-Za-z]{3}$/, "must be a three-letter currency code");
@@ -284,9 +283,9 @@ const importBody = z.discriminatedUnion("provider", [
   }),
 ]);
 
-const postBodySchema0 = z.discriminatedUnion("action", [
+const postBodySchema0 = z.discriminatedUnion('action', [
   z.strictObject({
-    action: z.literal("saveConfig"),
+    action: z.literal('saveConfig'),
     provider: configProvider,
     displayName: z.string().trim().min(1).optional(),
     isEnabled: z.boolean({ error: "isEnabled must be a boolean" }).optional(),
@@ -298,7 +297,6 @@ const postBodySchema0 = z.discriminatedUnion("action", [
     defaultDisputedFundsAccountId: accountReference,
     defaultChargebackLossAccountId: accountReference,
     defaultDisputeFeeAccountId: accountReference,
-    refundPolicy: refundPolicy.optional(),
     pullEnabled: z.boolean({ error: "pullEnabled must be a boolean" }).optional(),
     apiKey: z.string().nullable().optional(),
   }),
@@ -364,9 +362,9 @@ const postBodySchema0 = z.discriminatedUnion("action", [
     reason: z.string().trim().min(1).max(500),
   }),
   z.strictObject({ action: z.literal("accrue"), accrualDate: calendarDateShape }),
-]);
+])
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs'
 
 /**
  * Provider exports use explicit nulls where the engine's parser inputs use
@@ -397,10 +395,10 @@ function nullsToUndefined<T>(value: T): NullsToUndefined<T> {
 }
 
 export const GET = defineRoute({
-  permission: "banking.read",
-  feature: "banking",
+  permission: 'banking.read',
+  feature: 'banking',
   handler: async ({ request: req, authz: gate }) => {
-    const orgId = gate.user.orgId;
+    const orgId = gate.user.orgId
     // Settlement detail for the reconciliation drawer: one batch with its
     // evidence lines and the linked receipt numbers, under the same scope as
     // the list. A malformed id is a tenant-opaque 404, never a uuid cast 500.
@@ -496,13 +494,14 @@ export const GET = defineRoute({
          limit 1
       `);
       const row = batch.rows[0] as Record<string, unknown> | undefined;
-      if (!row) return notFound("record");
+      if (!row) return notFound('record')
       // Drafts use the same entity and primary-book resolution as posting;
       // posted history keeps the actual journal identity even if Setup changes.
       const context = await loadSubsidiaryContext(db, orgId);
-      const postingEntityId = row.status === "draft"
-        ? row.subsidiaryId ?? (context.multi ? null : context.rootId)
-        : row.recordedSubsidiaryId;
+      const postingEntityId =
+        row.status === 'draft'
+          ? (row.subsidiaryId ?? (context.multi ? null : context.rootId))
+          : row.recordedSubsidiaryId
       let postingBookId = row.recordedBookId ?? null;
       if (row.status === "draft") {
         try {
@@ -518,12 +517,14 @@ export const GET = defineRoute({
         : undefined;
       const review = {
         postingEntityId: postingEntityId ?? null,
-        postingEntityName: typeof postingEntityId === "string"
-          ? context.byId.get(postingEntityId)?.name ?? null : null,
+        postingEntityName:
+          typeof postingEntityId === 'string'
+            ? (context.byId.get(postingEntityId)?.name ?? null)
+            : null,
         postingBookId,
         postingBookName: book?.name ?? null,
         postingBasis: row.status === "draft" ? "current" : "recorded",
-      };
+      }
       const lines = await db.execute(sql`
         select l.id, l.line_number as "lineNumber", l.kind, l.external_ref as "externalRef",
                l.description, l.amount, l.currency, l.document_id as "documentId",
@@ -591,7 +592,6 @@ export const GET = defineRoute({
         ? Promise.resolve({ rows: [] })
         : db.execute(sql`
       select id, provider, display_name as "displayName", is_enabled as "isEnabled",
-             refund_policy as "refundPolicy", pull_enabled as "pullEnabled",
              default_bank_account_id as "defaultBankAccountId",
              default_fee_account_id as "defaultFeeAccountId",
              default_dispute_account_id as "defaultDisputeAccountId",
@@ -602,17 +602,17 @@ export const GET = defineRoute({
              default_dispute_fee_account_id as "defaultDisputeFeeAccountId"
         from psp_provider_configs where org_id = ${orgId}
     `),
-    ]);
+    ])
     return NextResponse.json({
       batches: batches.rows,
       configs: configs.rows,
       subsidiaries: subsidiaries.rows,
     });
   },
-});
+})
 
 export const POST = defineRoute({
-  public: "session",
+  public: 'session',
   body: postBodySchema0,
   handler: async ({ authz, body }) => {
     if (!authz)
@@ -629,14 +629,14 @@ export const POST = defineRoute({
         { status: 403 },
       );
     }
-    const orgId = authz.user.orgId;
-    const userId = authz.user.id;
+    const orgId = authz.user.orgId
+    const userId = authz.user.id
 
     try {
       switch (body.action) {
-        case "saveConfig": {
+        case 'saveConfig': {
           const scopeDenied = guardUnrestrictedScope(authz);
-          if (scopeDenied) return scopeDenied;
+          if (scopeDenied) return scopeDenied
           await savePspProviderConfig(
             orgId,
             {
@@ -651,14 +651,13 @@ export const POST = defineRoute({
               defaultDisputedFundsAccountId: body.defaultDisputedFundsAccountId ?? null,
               defaultChargebackLossAccountId: body.defaultChargebackLossAccountId ?? null,
               defaultDisputeFeeAccountId: body.defaultDisputeFeeAccountId ?? null,
-              refundPolicy: body.refundPolicy ?? undefined,
               pullEnabled: body.pullEnabled ?? undefined,
               apiKey: body.apiKey ?? null,
             },
             userId,
             authz.allowedSubsidiaryIds,
-          );
-          return NextResponse.json({ ok: true });
+          )
+          return NextResponse.json({ ok: true })
         }
         case "import": {
           const denied = guardSubsidiaryScope(authz, body.subsidiaryId ?? null);
@@ -935,4 +934,4 @@ export const POST = defineRoute({
       return apiErrorResponse(e);
     }
   },
-});
+})

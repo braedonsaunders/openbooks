@@ -4,14 +4,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { SessionUser } from '../../../../lib/auth'
 
-/**
- * Vendor-bill release policy (owner decision: auto-release stays the default,
- * made explicit). With the org switch OFF (the default) a vendor bill with
- * no approval flow auto-releases on submit and the audit trail says why.
- * With the switch ON and no matching flow, the release is refused by name
- * and the bill stays submitted — never released. A matching flow gates
- * normally, and already-released history is untouched.
- */
+/** Vendor bills use the same tenant Flow routing as every financial record. */
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __vendorBillApprovalUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
@@ -28,10 +21,13 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { seedApprovalFlow } = await import('@openbooks/engine/testing/fixtures')
-const { VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } = await import('@openbooks/engine/flows/module')
+const { decideGate } = await import('@openbooks/engine/flows/module')
+const { grantScratchPermissions } = await import('@openbooks/engine/testing/fixtures')
+const { installEngineSeams } = await import('@openbooks/engine/composition/install')
+installEngineSeams()
 const { POST } = await import('./route')
 
-const AUTO_RELEASE_REASON = 'released without approval: no approval flow configured'
+const AUTO_RELEASE_REASON = 'released without approval: no applicable Flow approval gates'
 
 const request = (body: unknown) => new Request('http://vendor-bill.local/api/documents/actions', { method: 'POST', body: JSON.stringify(body) })
 
@@ -57,17 +53,6 @@ async function seedDraftBill(orgId: string, actor: string, subsidiaryId: string,
   return id
 }
 
-/** Pooled scratch orgs can carry settings from an earlier lease: pin the switch. */
-async function setRequirement(orgId: string, required: boolean): Promise<void> {
-  await withBypassContext(() => db.execute(sql`
-    update orgs
-       set settings = jsonb_set(
-         coalesce(settings, '{}'::jsonb), '{approvals}',
-         coalesce(settings->'approvals', '{}'::jsonb) || jsonb_build_object('requireVendorBillApproval', ${required}::boolean),
-         true)
-     where id = ${orgId}`))
-}
-
 async function docState(orgId: string, id: string) {
   return withBypassContext(async () =>
     (await db.execute<{ status: string; submittedBy: string | null }>(sql`
@@ -82,116 +67,53 @@ async function auditTrail(orgId: string, id: string) {
   )
 }
 
-test('vendor-bill submit with the requirement OFF auto-releases and evidences why', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    await setRequirement(org.orgId, false)
-    const actor = await seedClerk(org.orgId, ['ap.read', 'ap.create'])
-    const billId = await seedDraftBill(org.orgId, actor, org.subsidiaryId, org.vendorId, org.date)
-    state.user = actorFor(actor, org.orgId)
+async function fixture(work:(org:Awaited<ReturnType<typeof createScratchOrg>>,actor:string)=>Promise<void>){
+ const org=await withBypassContext(()=>createScratchOrg());try{
+  const actor=await seedClerk(org.orgId,['ap.read','ap.create','ap.post']);state.user=actorFor(actor,org.orgId);await work(org,actor);
+ }finally{state.user=null;await withBypassContext(()=>dropScratchOrg(org.orgId));}
+}
+const DB={skip:!process.env.OPENBOOKS_DB_URL};
+test('zero-gate vendor-bill submission releases immediately and retains the exact tenant policy',DB,async()=>fixture(async(org,actor)=>{
+ const id=await seedDraftBill(org.orgId,actor,org.subsidiaryId,org.vendorId,org.date);
+ const response=await withOrgContext(org.orgId,()=>POST(request({action:'submit',documentId:id})));
+ assert.equal(response.status,200,await response.clone().text());assert.equal((await response.json()).autoApproved,true);
+ assert.equal((await docState(org.orgId,id)).status,'approved');
+ const audits=await auditTrail(org.orgId,id),approvals=audits.filter(row=>row.action==='approve');
+ assert.equal(approvals.length,1);assert.equal(approvals[0]?.changes.reason,AUTO_RELEASE_REASON);
+ const receipt=(await withBypassContext(()=>db.execute<{kind:string;actor_id:string}>(sql`select policy->>'kind' as kind,actor_id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`))).rows;
+ assert.deepEqual(receipt,[{kind:'ungated',actor_id:actor}]);
+}));
 
-    const submitted = await withOrgContext(org.orgId, () => POST(request({ action: 'submit', documentId: billId })))
-    assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()))
-    assert.equal((await submitted.json() as { autoApproved?: boolean }).autoApproved, true)
-    assert.equal((await docState(org.orgId, billId)).status, 'approved')
+test('ten configured vendor-bill Flows all decide before the document releases',DB,async()=>fixture(async(org,actor)=>{
+ const reviewer=await withBypassContext(()=>createScratchUser(org.orgId,'Bill reviewer','bill_reviewer'));
+ await withBypassContext(()=>grantScratchPermissions(org.orgId,reviewer,['ap.approve']));
+ for(let i=0;i<10;i++)await withBypassContext(()=>seedApprovalFlow(org.orgId,{subjectKind:'vendor_bill',assignees:[{type:'user',userId:reviewer}],mode:'all'}));
+ const id=await seedDraftBill(org.orgId,actor,org.subsidiaryId,org.vendorId,org.date);
+ const response=await withOrgContext(org.orgId,()=>POST(request({action:'submit',documentId:id})));
+ assert.equal(response.status,200,await response.clone().text());assert.equal((await docState(org.orgId,id)).status,'pending_approval');
+ const gates=(await withBypassContext(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} order by id`))).rows;
+ assert.equal(gates.length,10);
+ for(const[index,gate]of gates.entries()){
+  await decideGate({gateId:gate.id,userId:reviewer,decision:'approved'});
+  assert.equal((await docState(org.orgId,id)).status,index===9?'approved':'pending_approval');
+ }
+}));
 
-    const trail = await auditTrail(org.orgId, billId)
-    const approvals = trail.filter((row) => row.action === 'approve')
-    assert.equal(approvals.length, 1, `one auto-approval evidences the release, got ${JSON.stringify(trail)}`)
-    assert.equal(approvals[0]!.changes.reason, AUTO_RELEASE_REASON)
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
+test('posting a draft bill routes its configured gates and posts no journal while review remains',DB,async()=>fixture(async(org,actor)=>{
+ const reviewer=await withBypassContext(()=>createScratchUser(org.orgId,'Bill reviewer','bill_reviewer'));
+ await withBypassContext(()=>grantScratchPermissions(org.orgId,reviewer,['ap.approve']));
+ await withBypassContext(()=>seedApprovalFlow(org.orgId,{subjectKind:'vendor_bill',assignees:[{type:'user',userId:reviewer}],mode:'all'}));
+ const id=await seedDraftBill(org.orgId,actor,org.subsidiaryId,org.vendorId,org.date);
+ const response=await withOrgContext(org.orgId,()=>POST(request({action:'post',documentId:id})));
+ assert.equal(response.status,202,await response.clone().text());assert.equal((await docState(org.orgId,id)).status,'pending_approval');
+ assert.equal((await withBypassContext(()=>db.execute(sql`select id from journal_entries where org_id=${org.orgId}`))).rows.length,0);
+}));
 
-test('vendor-bill submit with the requirement ON and no flow is refused by name', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    await setRequirement(org.orgId, true)
-    const actor = await seedClerk(org.orgId, ['ap.read', 'ap.create'])
-    const billId = await seedDraftBill(org.orgId, actor, org.subsidiaryId, org.vendorId, org.date)
-    state.user = actorFor(actor, org.orgId)
-
-    const refused = await withOrgContext(org.orgId, () => POST(request({ action: 'submit', documentId: billId })))
-    assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()))
-    assert.equal((await refused.json() as { error?: string }).error, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE)
-
-    // Stays submitted (the submitter is recorded), never released.
-    const after = await docState(org.orgId, billId)
-    assert.equal(after.status, 'draft')
-    assert.equal(after.submittedBy, actor)
-
-    const trail = await auditTrail(org.orgId, billId)
-    assert.ok(!trail.some((row) => row.action === 'approve'), `nothing released, got ${JSON.stringify(trail)}`)
-    const submits = trail.filter((row) => row.action === 'submit')
-    assert.equal(submits.length, 1)
-    assert.equal(submits[0]!.changes.approval_required, true)
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('vendor-bill submit with the requirement ON and a matching flow gates normally', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    await setRequirement(org.orgId, true)
-    const actor = await seedClerk(org.orgId, ['ap.read', 'ap.create'])
-    const approver = await withBypassContext(() => createScratchUser(org.orgId, 'Approver', 'approver'))
-    await withBypassContext(() => seedApprovalFlow(org.orgId, {
-      subjectKind: 'vendor_bill',
-      assignees: [{ type: 'user', userId: approver }],
-      mode: 'any',
-    }))
-    const billId = await seedDraftBill(org.orgId, actor, org.subsidiaryId, org.vendorId, org.date)
-    state.user = actorFor(actor, org.orgId)
-
-    const gated = await withOrgContext(org.orgId, () => POST(request({ action: 'submit', documentId: billId })))
-    assert.equal(gated.status, 200, JSON.stringify(await gated.clone().json()))
-    const body = await gated.json() as { requestId?: string | null }
-    assert.ok(body.requestId, `gated submit returns the flow run id, got ${JSON.stringify(body)}`)
-    assert.equal((await docState(org.orgId, billId)).status, 'pending_approval')
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('vendor-bill direct post with the requirement ON and no flow refuses before posting', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    await setRequirement(org.orgId, true)
-    const actor = await seedClerk(org.orgId, ['ap.read', 'ap.create', 'ap.post'])
-    const billId = await seedDraftBill(org.orgId, actor, org.subsidiaryId, org.vendorId, org.date)
-    state.user = actorFor(actor, org.orgId)
-
-    const refused = await withOrgContext(org.orgId, () => POST(request({ action: 'post', documentId: billId })))
-    assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()))
-    assert.equal((await refused.json() as { error?: string }).error, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE)
-    assert.equal((await docState(org.orgId, billId)).status, 'draft')
-    const journals = await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`))
-    assert.equal(journals.rows[0]?.n, 0, 'a refused release posts nothing')
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('turning the requirement ON leaves already-released bills untouched', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    await setRequirement(org.orgId, false)
-    const actor = await seedClerk(org.orgId, ['ap.read', 'ap.create'])
-    const billId = await seedDraftBill(org.orgId, actor, org.subsidiaryId, org.vendorId, org.date)
-    state.user = actorFor(actor, org.orgId)
-    await withOrgContext(org.orgId, () => POST(request({ action: 'submit', documentId: billId })))
-    assert.equal((await docState(org.orgId, billId)).status, 'approved')
-
-    // The switch flips after the release: history is not reinterpreted.
-    await setRequirement(org.orgId, true)
-    const again = await withOrgContext(org.orgId, () => POST(request({ action: 'submit', documentId: billId })))
-    assert.equal(again.status, 422)
-    assert.match((await again.json() as { error?: string }).error ?? '', /not draft/)
-    assert.equal((await docState(org.orgId, billId)).status, 'approved')
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
+test('a later tenant policy never reinterprets an already released bill',DB,async()=>fixture(async(org,actor)=>{
+ const id=await seedDraftBill(org.orgId,actor,org.subsidiaryId,org.vendorId,org.date);
+ assert.equal((await withOrgContext(org.orgId,()=>POST(request({action:'submit',documentId:id})))).status,200);
+ const before=await auditTrail(org.orgId,id);
+ await withBypassContext(()=>seedApprovalFlow(org.orgId,{subjectKind:'vendor_bill',assignees:[{type:'user',userId:actor}],mode:'all',preventSelfApproval:true}));
+ const again=await withOrgContext(org.orgId,()=>POST(request({action:'submit',documentId:id})));
+ assert.equal(again.status,422);assert.equal((await docState(org.orgId,id)).status,'approved');assert.deepEqual(await auditTrail(org.orgId,id),before);
+}));

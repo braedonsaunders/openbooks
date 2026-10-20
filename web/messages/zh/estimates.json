@@ -52,7 +52,7 @@
     "timingAdvance": "预付",
     "timingArrears": "后付",
     "singlePeriodNote": "多期阶梯需要高级订阅——否则此行按单期计费。",
-    "approvalHint": "超过 {threshold}% 的折扣或低于目录价格的行，需经 Flows 审批后方可发送。",
+    "approvalHint": "报价审批由组织的 Flows 配置决定。",
     "sendForSignature": "发送签署",
     "signerName": "签署人姓名",
     "signerEmail": "签署人邮箱",

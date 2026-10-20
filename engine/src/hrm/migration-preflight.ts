@@ -66,18 +66,11 @@
  * coverage. The precise known service start and its provenance are reported
  * separately and never conflate the two.
  *
- * Operator mapping evidence (resolution) authorizes nothing by itself.
- * A mapping is applicable only under a verified Flows approval: the
- * resolution must name the deciding gate (approvalGateId) and carry the
- * snapshot the collector/executor re-resolved from flow_gates inside their
- * transaction (status approved, human decider, migration-mapping subject,
- * subject digest equal to this mapping set's digest), and the applying
- * actor (preflight options.appliedBy) must differ from the decider unless
- * the verified submission policy explicitly permits self-approval.
- * approvedBy/approvedAt/rationale are untrusted operator context: presence
- * and format are checked, authority is NEVER derived from them. Remedies
- * name the missing evidence precisely: request Flows approval for the
- * mapping set, then re-run with the gate id and the applying actor.
+ * Operator mapping evidence authorizes nothing by itself. The native collector
+ * resolves the exact mapping set's immutable Flow submission receipt. Zero-gate
+ * submissions release without a human decision; gated submissions release only
+ * after every configured gate finishes. The applying actor retains native
+ * employment permissions and organization scope.
  *
  * Primary-code priority (deterministic; every issue is still retained):
  * binding_conflict > already_migrated > unknown_employer > invalid_employer
@@ -103,13 +96,7 @@ export type PreflightCode = (typeof PREFLIGHT_CODES)[number];
 
 /** Canonical current-state vocabulary. No employed=>active guessing. */
 export type CanonicalEmploymentStatus =
-  | "offered"
-  | "active"
-  | "on_leave"
-  | "suspended"
-  | "terminated"
-  | "unknown";
-
+  "offered" | "active" | "on_leave" | "suspended" | "terminated" | "unknown";
 
 export interface SubsidiaryFact {
   readonly id: string;
@@ -199,7 +186,9 @@ export function postTerminationConflictOf(
   const match = PROVENANCE_CONFLICT.exec(observation.provenance);
   if (match === null) return null;
   const activityAnchor = match[2]!;
-  const dates = [...activityAnchor.matchAll(/@(\d{4}-\d{2}-\d{2})/g)].map((hit) => hit[1]!).sort();
+  const dates = [...activityAnchor.matchAll(/@(\d{4}-\d{2}-\d{2})/g)]
+    .map((hit) => hit[1]!)
+    .sort();
   const activityDate = dates.length > 0 ? dates[dates.length - 1]! : "";
   return { terminatedOn: match[1]!, activityAnchor, activityDate };
 }
@@ -214,17 +203,9 @@ export function postTerminationConflictOf(
  * refuses the mapping when any of it fails.
  */
 export interface MappingApprovalSnapshot {
-  /** Missing policy retains independent approval for existing gates. */
-  readonly requireIndependentActor?: boolean;
-  /** The flow_gates row this mapping claims as its authority. */
-  readonly gateId: string;
-  /** Gate status as read (only "approved" authorizes). */
+  readonly submissionId: string;
   readonly status: string;
-  /** flow_gates.decided_by: the human decider. Null (system decisions) never authorizes. */
-  readonly decidedBy: string | null;
-  /** The gate's subject kind; must be the migration-mapping kind. */
   readonly subjectKind: string;
-  /** mapping_digest from the gate's approval subject row. */
   readonly subjectDigest: string;
 }
 
@@ -237,14 +218,12 @@ export interface ResolutionEvidence {
    * Untrusted operator metadata: checked for presence/shape as record
    * context, never authority. Authority is the Flows approval below.
    */
-  readonly approvedBy: string;
-  readonly approvedAt: string;
   readonly rationale: string;
   /**
-   * The Flows gate id authorizing this mapping set. Absent or blank means
+   * The native Flow submission authorizing this mapping set. Absent or blank means
    * unapproved: the mapping contributes nothing and the candidate refuses.
    */
-  readonly approvalGateId?: string;
+  readonly approvalSubmissionId?: string;
   /**
    * Verified approval snapshot, re-resolved from the database by the
    * collector/executor. Missing means unverified: the mapping refuses even
@@ -374,8 +353,10 @@ function isRecordedInstant(value: unknown): value is string {
  * Operator evidence (observation, resolution) is excluded: later assertions
  * must not read as source drift. Evidence handles are excluded likewise.
  */
-const FINGERPRINT_VERSION = "openbooks/hrm-migration-preflight/source-fingerprint/v1";
-const ROW_IDENTITY_VERSION = "openbooks/hrm-migration-preflight/row-identity/v1";
+const FINGERPRINT_VERSION =
+  "openbooks/hrm-migration-preflight/source-fingerprint/v1";
+const ROW_IDENTITY_VERSION =
+  "openbooks/hrm-migration-preflight/row-identity/v1";
 
 /** Stable canonical encoding: object keys sorted recursively, arrays ordered. */
 function canonicalEncode(value: unknown): string {
@@ -391,26 +372,30 @@ function canonicalEncode(value: unknown): string {
 }
 
 function sha256Hex(version: string, encoded: string): string {
-  return createHash("sha256").update(`${version}\n${encoded}`, "utf8").digest("hex");
+  return createHash("sha256")
+    .update(`${version}\n${encoded}`, "utf8")
+    .digest("hex");
 }
 
 export function fingerprintSourceRow(row: SourcePersonRow): string {
-  const role = row.role !== null && row.role.present
-    ? {
-      isActive: row.role.isActive,
-      hiredOn: row.role.hiredOn,
-      terminatedOn: row.role.terminatedOn,
-      dateProvenance: row.role.dateProvenance,
-      countryContext: row.role.countryContext,
-    }
-    : null;
-  const payroll = row.payroll !== null && row.payroll.present
-    ? {
-      isActive: row.payroll.isActive,
-      subsidiaryId: row.payroll.subsidiaryId,
-      countryContext: row.payroll.countryContext,
-    }
-    : null;
+  const role =
+    row.role !== null && row.role.present
+      ? {
+          isActive: row.role.isActive,
+          hiredOn: row.role.hiredOn,
+          terminatedOn: row.role.terminatedOn,
+          dateProvenance: row.role.dateProvenance,
+          countryContext: row.role.countryContext,
+        }
+      : null;
+  const payroll =
+    row.payroll !== null && row.payroll.present
+      ? {
+          isActive: row.payroll.isActive,
+          subsidiaryId: row.payroll.subsidiaryId,
+          countryContext: row.payroll.countryContext,
+        }
+      : null;
   return sha256Hex(
     FINGERPRINT_VERSION,
     canonicalEncode({
@@ -461,7 +446,9 @@ const MAPPING_SET_DIGEST_VERSION =
  * so the collector, the approval requester, and the verifier pin the same
  * digest the classifier recomputes.
  */
-export function hashOperatorMappingSet(entries: readonly MappingSetEntry[]): string {
+export function hashOperatorMappingSet(
+  entries: readonly MappingSetEntry[],
+): string {
   const sorted = [...entries].sort((left, right) =>
     left.partyId < right.partyId ? -1 : left.partyId > right.partyId ? 1 : 0,
   );
@@ -490,9 +477,13 @@ interface RowContext {
   provenance: string[];
 }
 
-function addProvenance(ctx: RowContext, values: readonly (string | null)[]): void {
+function addProvenance(
+  ctx: RowContext,
+  values: readonly (string | null)[],
+): void {
   for (const value of values) {
-    if (isNonBlank(value) && !ctx.provenance.includes(value)) ctx.provenance.push(value);
+    if (isNonBlank(value) && !ctx.provenance.includes(value))
+      ctx.provenance.push(value);
   }
 }
 
@@ -505,25 +496,37 @@ function checkBinding(
   const binding = row.existingBinding;
   if (binding === null) return false;
   const mismatches: string[] = [];
-  if (binding.canonicalOrgId !== row.orgId) mismatches.push("canonical org differs from row org");
+  if (binding.canonicalOrgId !== row.orgId)
+    mismatches.push("canonical org differs from row org");
   if (binding.canonicalWorkerPartyId !== row.nativePartyId) {
     mismatches.push("canonical worker differs from row native party");
   }
   if (binding.canonicalEmployerSubsidiaryId !== effectiveEmployer) {
-    mismatches.push("canonical employer differs from the row effective employer");
+    mismatches.push(
+      "canonical employer differs from the row effective employer",
+    );
   }
-  if (!isNonBlank(binding.canonicalEmploymentId)) mismatches.push("canonical employment id is missing");
+  if (!isNonBlank(binding.canonicalEmploymentId))
+    mismatches.push("canonical employment id is missing");
   if (binding.sourceVersion !== row.sourceVersion) {
-    mismatches.push(`source version drifted (bound ${binding.sourceVersion}, row ${row.sourceVersion})`);
+    mismatches.push(
+      `source version drifted (bound ${binding.sourceVersion}, row ${row.sourceVersion})`,
+    );
   }
   if (!isNonBlank(binding.sourceVersion) || !isNonBlank(row.sourceVersion)) {
-    mismatches.push("source version is missing or blank and cannot prove consistency");
+    mismatches.push(
+      "source version is missing or blank and cannot prove consistency",
+    );
   }
   if (binding.sourceFingerprint !== fingerprint) {
-    mismatches.push("source fingerprint differs: the source changed since binding");
+    mismatches.push(
+      "source fingerprint differs: the source changed since binding",
+    );
   }
-  if (!isRecordedInstant(binding.boundAt)) mismatches.push("boundAt is not a valid UTC instant");
-  if (!isNonBlank(binding.provenance)) mismatches.push("binding provenance is missing");
+  if (!isRecordedInstant(binding.boundAt))
+    mismatches.push("boundAt is not a valid UTC instant");
+  if (!isNonBlank(binding.provenance))
+    mismatches.push("binding provenance is missing");
   if (mismatches.length > 0) {
     ctx.issues.push({
       code: "binding_conflict",
@@ -548,7 +551,11 @@ function checkEmployer(
   assertedEmployer: string | null,
   ctx: RowContext,
 ): void {
-  if (resolutionEmployer !== null && assertedEmployer !== null && resolutionEmployer !== assertedEmployer) {
+  if (
+    resolutionEmployer !== null &&
+    assertedEmployer !== null &&
+    resolutionEmployer !== assertedEmployer
+  ) {
     ctx.issues.push({
       code: "conflicting_employer_mapping",
       level: "ambiguous",
@@ -569,14 +576,19 @@ function checkEmployer(
         "UNKNOWN, never the org root.",
       remedy:
         "Supply collector evidence for the current employer subsidiary id, or an operator " +
-        "employer/date mapping naming it with approver, instant, and rationale.",
+        "employer/date mapping naming it with a rationale and native Flow submission.",
     });
     return;
   }
-  const matching = row.employer.subsidiaryFacts.filter((candidate) => candidate.id === effectiveEmployer);
-  const distinct = new Set(matching.map((candidate) =>
-    `${candidate.orgId}\0${candidate.isActive}\0${candidate.isEliminated}`,
-  ));
+  const matching = row.employer.subsidiaryFacts.filter(
+    (candidate) => candidate.id === effectiveEmployer,
+  );
+  const distinct = new Set(
+    matching.map(
+      (candidate) =>
+        `${candidate.orgId}\0${candidate.isActive}\0${candidate.isEliminated}`,
+    ),
+  );
   if (distinct.size > 1) {
     ctx.issues.push({
       code: "conflicting_subsidiary_evidence",
@@ -715,7 +727,10 @@ function checkObservation(row: SourcePersonRow, ctx: RowContext): boolean {
     }
     return false;
   }
-  if (!isRecordedInstant(observation.observedAt) || !isNonBlank(observation.provenance)) {
+  if (
+    !isRecordedInstant(observation.observedAt) ||
+    !isNonBlank(observation.provenance)
+  ) {
     ctx.issues.push({
       code: "invalid_observation_evidence",
       level: "ambiguous",
@@ -731,13 +746,21 @@ function checkObservation(row: SourcePersonRow, ctx: RowContext): boolean {
   return true;
 }
 
-function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
+function checkResolutionDates(
+  row: SourcePersonRow,
+  ctx: RowContext,
+): {
   applied: boolean;
   hiredOn: string | null;
   terminatedOn: string | null;
   employer: string | null;
 } {
-  const empty = { applied: false, hiredOn: null, terminatedOn: null, employer: null };
+  const empty = {
+    applied: false,
+    hiredOn: null,
+    terminatedOn: null,
+    employer: null,
+  };
   const resolution = row.resolution;
   if (resolution === null) return empty;
   if (resolution.kind !== "operator-employer-date-mapping") {
@@ -747,20 +770,24 @@ function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
       detail: `resolution kind ${JSON.stringify(resolution.kind)} is not a recognized operator mapping.`,
       remedy:
         "Supply an operator employer/date mapping with kind operator-employer-date-mapping, employer, " +
-        "approver, instant, and rationale, authorized by a Flows approval gate for the mapping set; " +
-        "free-text approver metadata never authorizes a mapping.",
+        "rationale, and the native Flow submission id for the exact mapping set.",
     });
     return empty;
   }
   const problems: string[] = [];
-  if (!isNonBlank(resolution.approvedBy)) problems.push("approver is missing");
-  if (!isRecordedInstant(resolution.approvedAt)) problems.push("approval instant is not a valid UTC stamp");
   if (!isNonBlank(resolution.rationale)) problems.push("rationale is missing");
   if (resolution.hiredOn !== null && !isCivilDate(resolution.hiredOn)) {
-    problems.push(`mapped hired_on ${resolution.hiredOn} is not a valid YYYY-MM-DD date`);
+    problems.push(
+      `mapped hired_on ${resolution.hiredOn} is not a valid YYYY-MM-DD date`,
+    );
   }
-  if (resolution.terminatedOn !== null && !isCivilDate(resolution.terminatedOn)) {
-    problems.push(`mapped terminated_on ${resolution.terminatedOn} is not a valid YYYY-MM-DD date`);
+  if (
+    resolution.terminatedOn !== null &&
+    !isCivilDate(resolution.terminatedOn)
+  ) {
+    problems.push(
+      `mapped terminated_on ${resolution.terminatedOn} is not a valid YYYY-MM-DD date`,
+    );
   }
   // Civil event dates: only terminated strictly before hired contradicts.
   if (
@@ -779,8 +806,7 @@ function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
       detail: `operator mapping cannot be applied: ${problems.join("; ")}.`,
       remedy:
         "Supply a complete operator employer/date mapping (employer, valid date-only service dates, " +
-        "approver, valid approval instant, rationale) under a Flows approval gate for the mapping set; " +
-        "an incomplete mapping contributes nothing, and free-text approver metadata never authorizes one.",
+        "rationale) under a native Flow submission for the mapping set.",
     });
     return empty;
   }
@@ -793,20 +819,9 @@ function checkResolutionDates(row: SourcePersonRow, ctx: RowContext): {
 }
 
 const MAPPING_APPROVAL_REMEDY =
-  "Request Flows approval for the exact mapping set (subject kind " +
-  `${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND}), then re-run with the decided ` +
-  "approval gate id and the applying actor (--applied-by): the gate must be " +
-  "approved by an authenticated approver under its frozen separation-of-duties policy, and the " +
-  "approved digest must cover exactly the mappings in this run. Free-text " +
-  "approver names never authorize a mapping.";
+  "Submit the exact mapping set through Flows, complete any configured gates, then re-run with its approvalSubmissionId and the authenticated applying actor (--applied-by).";
 
-/**
- * Verify the Flows approval authorizing one operator mapping. Shape
- * completeness (checkResolutionDates) is necessary but never sufficient:
- * only a verified approval makes the mapping applicable. Every refusal
- * names the Flows path, and the remedy it names exists (the collector CLI
- * request-approval flow plus decideGate on the mapping approval subject).
- */
+/** Only the canonical submission receipt authorizes the exact mapping set. */
 function checkResolutionApproval(
   row: SourcePersonRow,
   appliedBy: string | undefined,
@@ -814,103 +829,40 @@ function checkResolutionApproval(
   ctx: RowContext,
 ): boolean {
   const resolution = row.resolution;
-  if (resolution === null) return false;
-  const gateId = resolution.approvalGateId ?? "";
-  if (!isNonBlank(gateId)) {
+  if (!resolution) return false;
+  const id = resolution.approvalSubmissionId;
+  const proof = resolution.approval;
+  const problem = !isNonBlank(id)
+    ? ["unapproved_mapping", "This mapping names no native Flow submission."]
+    : !proof || proof.submissionId.toLowerCase() !== id.toLowerCase()
+      ? [
+          "unverified_mapping_approval",
+          "The native Flow submission was not verified in this migration transaction.",
+        ]
+      : proof.status !== "approved"
+        ? [
+            "mapping_not_approved",
+            `The mapping submission is ${proof.status}; its configured decisions have not released these mappings.`,
+          ]
+        : !isNonBlank(appliedBy)
+          ? [
+              "unknown_mapping_applier",
+              "The applying actor is unknown. Supply an authenticated applying actor.",
+            ]
+          : proof.subjectKind !== HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND ||
+              groupDigest === null ||
+              proof.subjectDigest !== groupDigest
+            ? [
+                "approval_subject_mismatch",
+                "The verified submission does not cover this exact mapping set.",
+              ]
+            : null;
+  if (problem) {
     ctx.issues.push({
-      code: "unapproved_mapping",
+      code: problem[0]!,
       level: "requires_review",
-      detail:
-        "operator mapping names no Flows approval gate: an unapproved mapping contributes nothing, " +
-        "even when its dates and employer are otherwise complete.",
+      detail: problem[1]!,
       remedy: MAPPING_APPROVAL_REMEDY,
-    });
-    return false;
-  }
-  const snapshot = resolution.approval ?? null;
-  // UUID text is case-insensitive (postgres canonicalizes to lowercase):
-  // compare folded so an uppercase gate id still binds its approval.
-  if (snapshot === null || snapshot.gateId.toLowerCase() !== gateId.toLowerCase()) {
-    ctx.issues.push({
-      code: "unverified_mapping_approval",
-      level: "requires_review",
-      detail:
-        `operator mapping names approval gate ${gateId} but carries no approval verified against ` +
-        "flow_gates; a gate id the database cannot vouch for authorizes nothing.",
-      remedy:
-        "Re-run through the collector or apply path so the gate is re-resolved from flow_gates " +
-        "inside the migration transaction; " + MAPPING_APPROVAL_REMEDY,
-    });
-    return false;
-  }
-  if (snapshot.status !== "approved") {
-    ctx.issues.push({
-      code: "mapping_not_approved",
-      level: "requires_review",
-      detail:
-        `approval gate ${gateId} is ${snapshot.status}, not approved: a pending, rejected, or ` +
-        "otherwise undecided gate authorizes nothing.",
-      remedy: MAPPING_APPROVAL_REMEDY,
-    });
-    return false;
-  }
-  if (!isNonBlank(snapshot.decidedBy)) {
-    ctx.issues.push({
-      code: "anonymous_mapping_approval",
-      level: "requires_review",
-      detail:
-        `approval gate ${gateId} records no human decider: a system or unattributed decision is ` +
-        "not an authenticated approver and never authorizes a mapping.",
-      remedy: MAPPING_APPROVAL_REMEDY,
-    });
-    return false;
-  }
-  if (appliedBy === undefined || !isNonBlank(appliedBy)) {
-    ctx.issues.push({
-      code: "unknown_mapping_applier",
-      level: "requires_review",
-      detail:
-        "the applying actor is unknown, so command authority and the approval policy cannot be " +
-        "verified: supply an authenticated applying actor.",
-      remedy:
-        "Re-run with the applying actor supplied (--applied-by); " + MAPPING_APPROVAL_REMEDY,
-    });
-    return false;
-  }
-  if (snapshot.requireIndependentActor !== false && snapshot.decidedBy.toLowerCase() === appliedBy.toLowerCase()) {
-    ctx.issues.push({
-      code: "self_approved_mapping",
-      level: "requires_review",
-      detail:
-        `approval gate ${gateId} was decided by ${snapshot.decidedBy}, who is also applying this ` +
-        "migration: this gate's policy requires a distinct applying actor.",
-      remedy: MAPPING_APPROVAL_REMEDY,
-    });
-    return false;
-  }
-  if (snapshot.subjectKind !== HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND) {
-    ctx.issues.push({
-      code: "approval_subject_mismatch",
-      level: "requires_review",
-      detail:
-        `approval gate ${gateId} decides subject kind ${snapshot.subjectKind}, not a migration ` +
-        "mapping set: an approval for something else never authorizes these mappings.",
-      remedy: MAPPING_APPROVAL_REMEDY,
-    });
-    return false;
-  }
-  if (groupDigest === null || snapshot.subjectDigest !== groupDigest) {
-    ctx.issues.push({
-      code: "approval_subject_mismatch",
-      level: "requires_review",
-      detail:
-        `approval gate ${gateId} covers mapping digest ${snapshot.subjectDigest}, but this run's ` +
-        `mapping set digests to ${groupDigest ?? "nothing"}: the approval does not cover exactly ` +
-        "these mappings, so it authorizes none of them.",
-      remedy:
-        "Either re-run with exactly the approved mapping set (any added, removed, or edited " +
-        "mapping changes the digest), or request a new Flows approval for this set; " +
-        MAPPING_APPROVAL_REMEDY,
     });
     return false;
   }
@@ -938,16 +890,26 @@ function checkEvidence(
   row: SourcePersonRow,
   observationCurrent: boolean,
   observationTerminated: boolean,
-  resolution: { applied: boolean; hiredOn: string | null; terminatedOn: string | null },
+  resolution: {
+    applied: boolean;
+    hiredOn: string | null;
+    terminatedOn: string | null;
+  },
   ctx: RowContext,
 ): { serviceStart: string | null; serviceStartProvenance: string | null } {
   const role = row.role !== null && row.role.present ? row.role : null;
-  const payroll = row.payroll !== null && row.payroll.present ? row.payroll : null;
-  if (row.role !== null && !row.role.present && (row.role.hiredOn !== null || row.role.terminatedOn !== null)) {
+  const payroll =
+    row.payroll !== null && row.payroll.present ? row.payroll : null;
+  if (
+    row.role !== null &&
+    !row.role.present &&
+    (row.role.hiredOn !== null || row.role.terminatedOn !== null)
+  ) {
     ctx.issues.push({
       code: "contradictory_role_presence",
       level: "ambiguous",
-      detail: "source reports no role yet carries role service dates; refusing to guess which claim holds.",
+      detail:
+        "source reports no role yet carries role service dates; refusing to guess which claim holds.",
       remedy:
         "Supply collector evidence confirming whether an employee role exists for this party and, " +
         "if so, its actual service dates with provenance.",
@@ -960,7 +922,8 @@ function checkEvidence(
   // contradict, so there is nothing to silently prefer here.
   const mappedStart = resolution.applied ? resolution.hiredOn : null;
   const mappedEnd = resolution.applied ? resolution.terminatedOn : null;
-  const mappedStartProvenance = mappedStart !== null ? "operator-employer-date-mapping" : null;
+  const mappedStartProvenance =
+    mappedStart !== null ? "operator-employer-date-mapping" : null;
   if (role === null && payroll === null) {
     // One explicit date-evidence contract across role presence: observed
     // termination requires an actual terminated_on date, never invented
@@ -978,7 +941,10 @@ function checkEvidence(
             "unknown. The observation-start anchor is not copied into hired_on.",
         });
       }
-      return { serviceStart: mappedStart, serviceStartProvenance: mappedStartProvenance };
+      return {
+        serviceStart: mappedStart,
+        serviceStartProvenance: mappedStartProvenance,
+      };
     }
     ctx.issues.push({
       code: "insufficient_employment_evidence",
@@ -991,7 +957,10 @@ function checkEvidence(
         "provenance, a payroll profile, or an operator-asserted current observation with " +
         "instant and provenance. Current active flags alone are never enough.",
     });
-    return { serviceStart: mappedStart, serviceStartProvenance: mappedStartProvenance };
+    return {
+      serviceStart: mappedStart,
+      serviceStartProvenance: mappedStartProvenance,
+    };
   }
   let serviceStart: string | null = null;
   let serviceStartProvenance: string | null = null;
@@ -1001,7 +970,8 @@ function checkEvidence(
     // interval endpoints: only terminated strictly before hired contradicts;
     // a same-day hire plus termination is valid and migrates as-is.
     const roleHiredValid = role.hiredOn !== null && isCivilDate(role.hiredOn);
-    const roleTerminatedValid = role.terminatedOn !== null && isCivilDate(role.terminatedOn);
+    const roleTerminatedValid =
+      role.terminatedOn !== null && isCivilDate(role.terminatedOn);
     if (role.hiredOn !== null && !roleHiredValid) {
       ctx.issues.push({
         code: "invalid_service_date",
@@ -1101,8 +1071,12 @@ function checkEvidence(
     if (observationTerminated && serviceEnd === null) {
       addMissingTerminationDate(ctx);
     }
-    if (role.countryContext !== null && payroll !== null && payroll.countryContext !== null &&
-      role.countryContext !== payroll.countryContext) {
+    if (
+      role.countryContext !== null &&
+      payroll !== null &&
+      payroll.countryContext !== null &&
+      role.countryContext !== payroll.countryContext
+    ) {
       ctx.issues.push({
         code: "country_context_conflict",
         level: "ambiguous",
@@ -1251,7 +1225,8 @@ function classifyRow(
     ctx.issues.push({
       code: "invalid_source_identity",
       level: "ambiguous",
-      detail: "the candidate lacks a complete (org, namespace, source id, native party) identity.",
+      detail:
+        "the candidate lacks a complete (org, namespace, source id, native party) identity.",
       remedy:
         "Supply collector evidence with the stable org id, source namespace, source key, and native " +
         "party id for this candidate.",
@@ -1275,20 +1250,29 @@ function classifyRow(
   // Flows approval authorizes it. The conflict checks below still read the
   // claimed employer so a source-versus-operator disagreement refuses as
   // ambiguous even before approval exists.
-  const gateKey = (row.resolution?.approvalGateId ?? "").toLowerCase();
-  const groupDigest = isNonBlank(gateKey) ? (approval.groupDigests.get(gateKey) ?? null) : null;
-  const authorized = row.resolution !== null
-    ? checkResolutionApproval(row, approval.appliedBy, groupDigest, ctx)
-    : false;
-  const applied = shape.applied && authorized;
-  const effectiveEmployer = applied && shape.employer !== null
-    ? shape.employer
-    : assertedEmployer;
-  checkEmployer(row, effectiveEmployer, shape.employer, assertedEmployer, ctx);
-  const payrollScope = row.payroll !== null && row.payroll.present
-    ? normalizedId(row.payroll.subsidiaryId)
+  const submissionKey = (
+    row.resolution?.approvalSubmissionId ?? ""
+  ).toLowerCase();
+  const groupDigest = isNonBlank(submissionKey)
+    ? (approval.groupDigests.get(submissionKey) ?? null)
     : null;
-  if (payrollScope !== null && effectiveEmployer !== null && payrollScope !== effectiveEmployer) {
+  const authorized =
+    row.resolution !== null
+      ? checkResolutionApproval(row, approval.appliedBy, groupDigest, ctx)
+      : false;
+  const applied = shape.applied && authorized;
+  const effectiveEmployer =
+    applied && shape.employer !== null ? shape.employer : assertedEmployer;
+  checkEmployer(row, effectiveEmployer, shape.employer, assertedEmployer, ctx);
+  const payrollScope =
+    row.payroll !== null && row.payroll.present
+      ? normalizedId(row.payroll.subsidiaryId)
+      : null;
+  if (
+    payrollScope !== null &&
+    effectiveEmployer !== null &&
+    payrollScope !== effectiveEmployer
+  ) {
     ctx.issues.push({
       code: "schedule_employer_conflict",
       level: "ambiguous",
@@ -1301,16 +1285,26 @@ function classifyRow(
     });
   }
   const observationCurrent = checkObservation(row, ctx);
-  const observationTerminated = observationCurrent && row.observation?.status === "terminated";
+  const observationTerminated =
+    observationCurrent && row.observation?.status === "terminated";
   const evidence = checkEvidence(
     row,
     observationCurrent,
     observationTerminated,
-    { applied, hiredOn: applied ? shape.hiredOn : null, terminatedOn: applied ? shape.terminatedOn : null },
+    {
+      applied,
+      hiredOn: applied ? shape.hiredOn : null,
+      terminatedOn: applied ? shape.terminatedOn : null,
+    },
     ctx,
   );
   const fingerprint = fingerprintSourceRow(row);
-  const bindingConsistent = checkBinding(row, fingerprint, effectiveEmployer, ctx);
+  const bindingConsistent = checkBinding(
+    row,
+    fingerprint,
+    effectiveEmployer,
+    ctx,
+  );
 
   // The candidate emits only when nothing blocks: any retained issue —
   // including an invalid employer under a valid observation — nulls it.
@@ -1334,7 +1328,10 @@ function classifyRow(
   const provenance = [...ctx.provenance].sort();
   const issues = ctx.issues;
   let classification: PreflightCode = "ready";
-  if (isDuplicate && issues.some((issue) => issue.code === "duplicate_source_key")) {
+  if (
+    isDuplicate &&
+    issues.some((issue) => issue.code === "duplicate_source_key")
+  ) {
     classification = "ambiguous";
   } else {
     for (const level of PRIMARY_PRIORITY) {
@@ -1387,11 +1384,11 @@ export function preflightEmploymentMigration(
   rows: readonly SourcePersonRow[],
   options: PreflightEmploymentMigrationOptions = {},
 ): PreflightReport {
-  const counts = Object.fromEntries(PREFLIGHT_CODES.map((code) => [code, 0])) as Record<
-    PreflightCode,
-    number
-  >;
-  if (rows.length === 0) return { status: "empty_not_evaluated", rows: [], counts };
+  const counts = Object.fromEntries(
+    PREFLIGHT_CODES.map((code) => [code, 0]),
+  ) as Record<PreflightCode, number>;
+  if (rows.length === 0)
+    return { status: "empty_not_evaluated", rows: [], counts };
   const seen = new Map<string, number>();
   for (const row of rows) {
     const key = duplicateKey(row);
@@ -1403,31 +1400,39 @@ export function preflightEmploymentMigration(
   // binding in checkResolutionApproval.
   const groupEntries = new Map<string, MappingSetEntry[]>();
   for (const row of rows) {
-    const gateKey = (row.resolution?.approvalGateId ?? "").toLowerCase();
-    if (!isNonBlank(gateKey)) continue;
+    const submissionKey = (
+      row.resolution?.approvalSubmissionId ?? ""
+    ).toLowerCase();
+    if (!isNonBlank(submissionKey)) continue;
     const entry = mappingEntryOf(row);
     if (entry === null) continue;
-    const list = groupEntries.get(gateKey);
-    if (list === undefined) groupEntries.set(gateKey, [entry]);
+    const list = groupEntries.get(submissionKey);
+    if (list === undefined) groupEntries.set(submissionKey, [entry]);
     else list.push(entry);
   }
   const groupDigests = new Map<string, string>();
-  for (const [gateKey, entries] of groupEntries) {
-    groupDigests.set(gateKey, hashOperatorMappingSet(entries));
+  for (const [submissionKey, entries] of groupEntries) {
+    groupDigests.set(submissionKey, hashOperatorMappingSet(entries));
   }
-  const approval: ApprovalContext = { appliedBy: options.appliedBy, groupDigests };
+  const approval: ApprovalContext = {
+    appliedBy: options.appliedBy,
+    groupDigests,
+  };
   const decorated = rows.map((row) => ({
     fingerprint: fingerprintSourceRow(row),
     tieBreak: rowIdentityHash(row),
     result: classifyRow(row, (seen.get(duplicateKey(row)) ?? 0) > 1, approval),
   }));
   decorated.sort((a, b) => {
-    if (a.result.orgId !== b.result.orgId) return a.result.orgId < b.result.orgId ? -1 : 1;
+    if (a.result.orgId !== b.result.orgId)
+      return a.result.orgId < b.result.orgId ? -1 : 1;
     if (a.result.sourceNamespace !== b.result.sourceNamespace) {
       return a.result.sourceNamespace < b.result.sourceNamespace ? -1 : 1;
     }
-    if (a.result.sourceId !== b.result.sourceId) return a.result.sourceId < b.result.sourceId ? -1 : 1;
-    if (a.fingerprint !== b.fingerprint) return a.fingerprint < b.fingerprint ? -1 : 1;
+    if (a.result.sourceId !== b.result.sourceId)
+      return a.result.sourceId < b.result.sourceId ? -1 : 1;
+    if (a.fingerprint !== b.fingerprint)
+      return a.fingerprint < b.fingerprint ? -1 : 1;
     if (a.tieBreak !== b.tieBreak) return a.tieBreak < b.tieBreak ? -1 : 1;
     return 0;
   });

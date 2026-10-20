@@ -1,3 +1,6 @@
+import {seedApprovalFlow} from "../testing/fixtures.ts";
+import {decideGate} from "../flows/gates.ts";
+import { before } from "node:test";
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
@@ -70,44 +73,59 @@ async function fixture() {
   return {org,signer,reviewer,ctx,inOrg,post,postInTransaction,signed,snapshot,auditCount,close}
 }
 
-test('neutral late history is independently reviewed once without changing signed evidence, and later sign-offs inherit only identical current proof',enabled,async()=>{
-  const f=await fixture()
-  try {
-    const first=await f.signed(f.org.date,'250.00','250.00')
-    const next=new Date(f.org.date+'T00:00:00Z');next.setUTCDate(next.getUTCDate()+1)
-    const later=await f.signed(next.toISOString().slice(0,10),'100.00','350.00')
-    await f.post('10.00');await f.post('-10.00')
-    const before=await f.snapshot()
-    assert.equal((await f.inOrg(()=>reconciliationStaleness(first,f.ctx()))).stale,true)
-    assert.equal((await f.inOrg(()=>reconciliationStaleness(later,f.ctx()))).stale,true)
-    const preview=await f.inOrg(()=>previewSignOffRevalidation(first,f.ctx()))
-    assert.equal(preview.proof.lateEffect,'0.0000')
-    assert.equal(preview.proof.lateEntries,2)
-    const results=await Promise.all([1,2].map(()=>f.inOrg(()=>revalidateReconciliationSignOff(first,
+test(
+  'neutral late history is independently reviewed once without changing signed evidence, and later sign-offs inherit only identical current proof',
+  enabled,
+  async () => {
+    const f = await fixture();
+    try {
+      const first=await f.signed(f.org.date,'250.00','250.00')
+      const next=new Date(f.org.date+'T00:00:00Z');
+      next.setUTCDate(next.getUTCDate() + 1);
+      const later=await f.signed(next.toISOString().slice(0,10),'100.00','350.00')
+      await f.post("10.00");
+      await f.post("-10.00");
+      const before = await f.snapshot();
+      assert.equal((await f.inOrg(()=>reconciliationStaleness(first,f.ctx()))).stale,true)
+      assert.equal((await f.inOrg(()=>reconciliationStaleness(later,f.ctx()))).stale,true)
+      const preview=await f.inOrg(()=>previewSignOffRevalidation(first,f.ctx()))
+      assert.equal(preview.proof.lateEffect,'0.0000')
+      assert.equal(preview.proof.lateEntries,2)
+      const results=await Promise.all([1,2].map(()=>f.inOrg(()=>revalidateReconciliationSignOff(first,
       {expectedDigest:preview.proof.digest,reason},f.ctx()))))
-    assert.equal(results.filter(result=>result.replayed).length,1)
-    assert.equal(await f.auditCount(),1)
-    assert.deepEqual(await f.snapshot(),before,'review preserves all original statements, matches, stamps and sign-offs')
-    const own=await f.inOrg(()=>reconciliationStaleness(first,f.ctx()))
-    const inherited=await f.inOrg(()=>reconciliationStaleness(later,f.ctx()))
-    assert.equal(own.stale,false);assert.equal(own.revalidation?.inherited,false)
-    assert.equal(inherited.stale,false);assert.equal(inherited.revalidation?.inherited,true)
-    assert.equal(inherited.revalidation?.reviewedReconciliationId,first)
-    assert.equal(inherited.lateEntries.length,2,'reviewed late lines remain visible and uncleared')
-    await f.post('1.00')
-    assert.equal((await f.inOrg(()=>reconciliationStaleness(first,f.ctx()))).stale,true)
-    assert.equal((await f.inOrg(()=>reconciliationStaleness(later,f.ctx()))).stale,true)
-    assert.equal(await f.auditCount(),1)
-  }finally{await f.close()}
-})
+      assert.equal(
+        results.filter(
+          (result) => result.status === "recorded" && result.replayed,
+        ).length,
+        1,
+      );
+      assert.equal(await f.auditCount(), 1);
+      assert.deepEqual(await f.snapshot(),before,'review preserves all original statements, matches, stamps and sign-offs')
+      const own=await f.inOrg(()=>reconciliationStaleness(first,f.ctx()))
+      const inherited=await f.inOrg(()=>reconciliationStaleness(later,f.ctx()))
+      assert.equal(own.stale, false);
+      assert.equal(own.revalidation?.inherited,false)
+      assert.equal(inherited.stale, false);
+      assert.equal(inherited.revalidation?.inherited,true)
+      assert.equal(inherited.revalidation?.reviewedReconciliationId,first)
+      assert.equal(inherited.lateEntries.length,2,'reviewed late lines remain visible and uncleared')
+      await f.post("1.00");
+      assert.equal((await f.inOrg(()=>reconciliationStaleness(first,f.ctx()))).stale,true)
+      assert.equal((await f.inOrg(()=>reconciliationStaleness(later,f.ctx()))).stale,true)
+      assert.equal(await f.auditCount(), 1);
+    } finally {
+      await f.close();
+    }
+  },
+);
 
-test('review requires current evidence, independent live authority, requested scope and an open Banking period; caught rollback records no certificate',enabled,async()=>{
+test('review requires current evidence, live authority, requested scope and an open Banking period; caught rollback records no certificate',enabled,async()=>{
   const f=await fixture()
   try {
     const id=await f.signed(f.org.date,'250.00','250.00');await f.post('5.00');await f.post('-5.00')
     const before=await f.snapshot()
     const preview=await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx()))
-    await assert.rejects(f.inOrg(()=>previewSignOffRevalidation(id,f.ctx(f.signer))),/Another authorized/)
+    assert.equal((await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx(f.signer)))).proof.digest,preview.proof.digest,"the tenant can permit the original signer to submit a review");
     await assert.rejects(f.inOrg(()=>previewSignOffRevalidation(id,{...f.ctx(),allowedSubsidiaryIds:new Set([randomUUID()])})))
     await assert.rejects(f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:'0'.repeat(64),reason},f.ctx())),/evidence changed/)
     await f.inOrg(()=>setPeriodLockState({orgId:f.org.orgId,periodId:f.org.periodId,bookId:f.org.bookId,
@@ -132,7 +150,6 @@ test('review requires current evidence, independent live authority, requested sc
   }finally{await f.close()}
 })
 
-
 test('a balance-changing late posting refuses neutral review without changing any signed evidence',enabled,async()=>{
   const f=await fixture()
   try {
@@ -144,7 +161,6 @@ test('a balance-changing late posting refuses neutral review without changing an
     assert.deepEqual(await f.snapshot(),before)
   }finally{await f.close()}
 })
-
 
 test('a transaction that began before sign-off and commits after review invalidates the full cut-off proof even with an older posting timestamp',enabled,async()=>{
   const f=await fixture()
@@ -185,7 +201,6 @@ test('a transaction that began before sign-off and commits after review invalida
   }
 })
 
-
 test('a late movement offset by retained older uncleared evidence is reviewed as one neutral set without clearing or discarding either source',enabled,async()=>{
   const f=await fixture()
   try {
@@ -211,7 +226,6 @@ test('a late movement offset by retained older uncleared evidence is reviewed as
     assert.equal(await f.auditCount(),1)
   }finally{await f.close()}
 })
-
 
 test('a later sign-off cannot inherit an earlier review when an older transaction changes only its uncleared cutoff history',enabled,async()=>{
   const f=await fixture()
@@ -259,33 +273,92 @@ test('a later sign-off cannot inherit an earlier review when an older transactio
   }
 })
 
-
-test('narrow sign-off review authority preserves reconciliation authority and refuses live role-scope or duty loss',enabled,async()=>{
-  const f=await fixture()
-  try {
-    const id=await f.signed(f.org.date,'250.00','250.00');await f.post('5.00');await f.post('-5.00')
-    const before=await f.snapshot()
-    assert.equal(await f.inOrg(()=>actorHasPermission(db,f.org.orgId,f.reviewer,'banking.review_sign_off')),true)
-    assert.equal(await f.inOrg(()=>actorHasPermission(db,f.org.orgId,f.reviewer,'banking.reconcile')),false)
-    const preview=await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx()))
-    await withBypassContext(()=>db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb
+test(
+  'narrow sign-off review authority preserves reconciliation authority and refuses live role-scope or duty loss',
+  enabled,
+  async () => {
+    const f = await fixture();
+    try {
+      const id=await f.signed(f.org.date,'250.00','250.00');
+      await f.post("5.00");
+      await f.post("-5.00");
+      const before = await f.snapshot();
+      assert.equal(await f.inOrg(()=>actorHasPermission(db,f.org.orgId,f.reviewer,'banking.review_sign_off')),true)
+      assert.equal(await f.inOrg(()=>actorHasPermission(db,f.org.orgId,f.reviewer,'banking.reconcile')),false)
+      const preview=await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx()))
+      await withBypassContext(()=>db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb
       where org_id=${f.org.orgId} and key='bank-review'`))
-    await assert.rejects(f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx())))
-    await withBypassContext(()=>db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb,
+      await assert.rejects(f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx())))
+      await withBypassContext(()=>db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb,
       permissions='["banking.read"]'::jsonb where org_id=${f.org.orgId} and key='bank-review'`))
-    await assert.rejects(f.inOrg(()=>previewSignOffRevalidation(id,f.ctx())))
-    assert.equal(await f.auditCount(),0)
-    assert.deepEqual(await f.snapshot(),before)
-    await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["banking.reconcile"]'::jsonb
+      await assert.rejects(f.inOrg(()=>previewSignOffRevalidation(id,f.ctx())))
+      assert.equal(await f.auditCount(), 0);
+      assert.deepEqual(await f.snapshot(),before)
+      await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["banking.reconcile"]'::jsonb
       where org_id=${f.org.orgId} and key='bank-review'`))
-    assert.equal((await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx()))).proof.digest,preview.proof.digest,
+      assert.equal((await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx()))).proof.digest,preview.proof.digest,
       'existing full reconciliation authority can still review the same evidence')
-    await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["banking.review_sign_off"]'::jsonb
+      await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["banking.review_sign_off"]'::jsonb
       where org_id=${f.org.orgId} and key='bank-review'`))
-    const reviewed=await f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx()))
-    assert.equal(reviewed.replayed,false)
-    assert.equal(reviewed.certificate.reviewedBy,f.reviewer)
-    assert.deepEqual(await f.snapshot(),before)
-    assert.equal(await f.auditCount(),1)
-  }finally{await f.close()}
-})
+      const reviewed=await f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx()))
+      assert.equal(
+        reviewed.status,
+        "recorded",
+        "The zero-gate submission must complete its native outcome",
+      );
+      if (reviewed.status !== "recorded")
+        throw new Error(
+          "The zero-gate submission unexpectedly awaits approval.",
+        );
+      assert.equal(reviewed.replayed, false);
+      assert.equal(reviewed.certificate.reviewedBy,f.reviewer)
+      assert.deepEqual(await f.snapshot(),before)
+      assert.equal(await f.auditCount(), 1);
+    } finally {
+      await f.close();
+    }
+  },
+);
+
+// Exercise the same native Flow composition installed by application entry points.
+before(async () => {
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
+});
+
+
+test('all tenant sign-off gates complete before the session and matched ledger evidence seal together',enabled,async()=>{
+ const f=await fixture();
+ try{
+  await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,flows}','true'::jsonb) where id=${f.org.orgId}`));
+  for(let index=0;index<10;index++)await withBypassContext(()=>seedApprovalFlow(f.org.orgId,{subjectKind:'bank_reconciliation_sign_off',assignees:[{type:'user',userId:f.signer}],mode:'all',preventSelfApproval:false}));
+  const id=await f.signed(f.org.date,'250.00','250.00');
+  const read=()=>f.inOrg(()=>db.execute<{status:string;stamps:number}>(sql`select r.status,
+    (select count(*)::int from journal_lines l where l.org_id=r.org_id and l.reconciliation_id=r.id and l.reconciled_at is not null) as stamps
+    from reconciliations r where r.org_id=${f.org.orgId} and r.id=${id}`));
+  const gates=await f.inOrg(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='bank_reconciliation_sign_off' and subject_id=${id} and status='pending' order by id`));
+  assert.equal(gates.rows.length,10);
+  for(const gate of gates.rows.slice(0,-1))await decideGate({gateId:gate.id,userId:f.signer,decision:'approved'});
+  assert.deepEqual((await read()).rows[0],{status:'in_progress',stamps:0});
+  await decideGate({gateId:gates.rows.at(-1)!.id,userId:f.signer,decision:'approved'});
+  assert.deepEqual((await read()).rows[0],{status:'signed_off',stamps:1});
+  assert.deepEqual(await f.inOrg(()=>markReconciled(id,f.ctx(f.signer))),{status:'signed_off',journalLinesReconciled:1});
+ }finally{await f.close();}
+});
+
+test('the original signer can submit and decide a neutral review when its tenant Flow permits self approval',enabled,async()=>{
+ const f=await fixture();
+ try{
+  const id=await f.signed(f.org.date,'250.00','250.00');await f.post('5.00');await f.post('-5.00');
+  await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,flows}','true'::jsonb) where id=${f.org.orgId}`));
+  await withBypassContext(()=>seedApprovalFlow(f.org.orgId,{subjectKind:'bank_reconciliation_review',assignees:[{type:'user',userId:f.signer}],mode:'all',preventSelfApproval:false}));
+  const preview=await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx(f.signer)));
+  const before=await f.snapshot();
+  assert.deepEqual(await f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx(f.signer))),{status:'pending_approval'});
+  assert.equal(await f.auditCount(),0);
+  const gate=(await f.inOrg(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='bank_reconciliation_review' and subject_id=${id} and status='pending'`))).rows[0]!;
+  await decideGate({gateId:gate.id,userId:f.signer,decision:'approved'});
+  assert.equal(await f.auditCount(),1);
+  assert.deepEqual(await f.snapshot(),before,'review preserves signed financial evidence');
+ }finally{await f.close();}
+});

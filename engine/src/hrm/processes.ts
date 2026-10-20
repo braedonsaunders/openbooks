@@ -12,10 +12,9 @@ import {
   type ChecklistDocument,
   type ChecklistStepDesign,
 } from "@openbooks/forms-core";
-import { cancelDispatchRuns, dispatchFailureReason } from "../flows/dispatch-result.ts";
+import { cancelDispatchRuns } from "../flows/dispatch-result.ts";
 import { businessToday } from "../platform/business-date.ts";
-import { runRecordFlows } from "../flows/run.ts";
-import { lockFlowSubjectDecision } from "../flows/decision-lock.ts";
+import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
@@ -1741,13 +1740,15 @@ export interface CompleteStepQuery {
  * actor may read; none flips clean. A manager (hrm.process.manage in
  * scope) may complete any step; the employee may complete only their own.
  */
-export async function completeProcessStep(query: CompleteStepQuery): Promise<void> {
+export async function completeProcessStep(
+  query: CompleteStepQuery,
+): Promise<{ status: "done" | "pending_approval" }> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const stepId = requireId(query.stepId, "stepId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
-    await lockFlowSubjectDecision(orgId, CHECKLIST_STEP_SUBJECT_KIND, stepId);
+    await lockApprovalSubject(orgId, CHECKLIST_STEP_SUBJECT_KIND, stepId);
     const step = await loadStepForUpdate(db, orgId, stepId);
     if (step.process_status !== "open") {
       throw new HrmProcessError(
@@ -1775,7 +1776,7 @@ export async function completeProcessStep(query: CompleteStepQuery): Promise<voi
         "this step is owned by someone else — ask its owner or a manager to complete it, or hold hrm.process.manage in the employer's scope",
       );
     }
-    const reviewed = (
+    let reviewed = (
       await db.execute<{
         design: unknown;
         approval_status: string;
@@ -1788,7 +1789,24 @@ export async function completeProcessStep(query: CompleteStepQuery): Promise<voi
     const design = checklistStepDesignSchema.parse(reviewed?.design ?? {});
     if (design.form && query.response)
       query = { ...query, response: withComputedFormulas(design.form.sections, query.response) };
-    if (design.approval && reviewed?.approval_status === "approved") {
+    if (
+      reviewed?.approval_status !== "approved" &&
+      reviewed?.approval_status !== "pending"
+    ) {
+      await submitChecklistStepApproval(query);
+      reviewed = (
+        await db.execute<{
+        design: unknown;
+        approval_status: string;
+        response: Record<string, unknown> | null;
+        attachment_id: string | null;
+      }>(sql`
+        select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`)
+      ).rows[0];
+    }
+    if (reviewed?.approval_status === "pending")
+      return { status: "pending_approval" as const };
+    if (reviewed?.approval_status === "approved") {
       const matches = (
         await db.execute<{ matches: boolean }>(
           sql`select response is not distinct from ${JSON.stringify(query.response ?? null)}::jsonb and attachment_id is not distinct from ${query.attachmentId ?? null}::uuid as matches from hrm_process_steps where org_id=${orgId} and id=${stepId}`,
@@ -1848,6 +1866,7 @@ export async function completeProcessStep(query: CompleteStepQuery): Promise<voi
       "Completed checklist evidence.",
       "hrm_processes",
     );
+    return { status: "done" as const };
   });
 }
 
@@ -1871,7 +1890,7 @@ export async function skipProcessStep(query: SkipStepQuery): Promise<void> {
   const reason = requireNonBlank("reason", query.reason);
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
-    await lockFlowSubjectDecision(orgId, CHECKLIST_STEP_SUBJECT_KIND, stepId);
+    await lockApprovalSubject(orgId, CHECKLIST_STEP_SUBJECT_KIND, stepId);
     const step = await loadStepForUpdate(db, orgId, stepId);
     if (step.process_status !== "open") {
       throw new HrmProcessError(
@@ -2028,7 +2047,7 @@ export async function cancelProcess(query: {
       )
     ).rows;
     for (const step of stepIds)
-      await lockFlowSubjectDecision(orgId, CHECKLIST_STEP_SUBJECT_KIND, step.id);
+      await lockApprovalSubject(orgId, CHECKLIST_STEP_SUBJECT_KIND, step.id);
     const process = await loadProcessForUpdate(db, orgId, processId);
     if (process.status !== "open") {
       throw new HrmProcessError(
@@ -2582,18 +2601,6 @@ export async function publishChecklistDraft(query: {
           });
         }
       }
-      if (step.design.approval) {
-        const policy = (
-          await db.execute(
-            sql`select id from flows where org_id = ${orgId} and subject_kind = ${CHECKLIST_STEP_SUBJECT_KIND} and enabled limit 1`,
-          )
-        ).rows[0];
-        if (!policy)
-          throw new HrmProcessError(
-            "REFUSED",
-            `Step "${step.title}" requires approval — configure an enabled HRM checklist step policy in Flows before publishing.`,
-          );
-      }
     }
     await db.execute(sql`select set_config('app.checklist_publish',${id},true)`);
     // Existing step identities remain so historical foreign keys are preserved.
@@ -2757,20 +2764,22 @@ async function validateDesignedCompletion(
       "REFUSED",
       "This step does not collect a form response — remove the response before completing it.",
     );
-  if (!submitting && design.approval && row.approval_status !== "approved")
+  if (!submitting && row.approval_status !== "approved")
     throw new HrmProcessError(
       "REFUSED",
       "This step requires approval — submit it for review and wait for the configured approvers before completing it.",
     );
 }
 
-export async function submitChecklistStepApproval(query: CompleteStepQuery): Promise<void> {
+export async function submitChecklistStepApproval(
+  query: CompleteStepQuery,
+): Promise<void> {
   const orgId = requireOrgId(query.orgId),
     actorId = requireActorId(query.actorId),
     id = requireId(query.stepId, "stepId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
-    await lockFlowSubjectDecision(orgId, CHECKLIST_STEP_SUBJECT_KIND, id);
+    await lockApprovalSubject(orgId, CHECKLIST_STEP_SUBJECT_KIND, id);
     const step = await loadStepForUpdate(db, orgId, id);
     if ((await resolveStepActor(db, orgId, actorId, step)) === "stranger")
       throw new HrmProcessError(
@@ -2795,11 +2804,6 @@ export async function submitChecklistStepApproval(query: CompleteStepQuery): Pro
     if (!row)
       throw new HrmProcessError("NOT_FOUND", "Checklist step not found — reload the checklist.");
     const design = checklistStepDesignSchema.parse(row.design);
-    if (!design.approval)
-      throw new HrmProcessError(
-        "REFUSED",
-        "This step does not require approval — complete it through its checklist action.",
-      );
     if (row.approval_status === "pending" || row.approval_status === "approved")
       throw new HrmProcessError(
         "BAD_STATE",
@@ -2832,35 +2836,18 @@ export async function submitChecklistStepApproval(query: CompleteStepQuery): Pro
         "REFUSED",
         "The step changed during submission — reload and retry.",
       );
-    const attempt = (
-      await db.execute<{ submitted_at: string }>(
-        sql`select submitted_at::text from hrm_process_steps where org_id=${orgId} and id=${id}`,
-      )
-    ).rows[0];
-    const result = await runRecordFlows(
-      {
-        kind: "on_submit",
-        source: "ui",
-        occurrenceKey: `checklist-step:${id}:${attempt?.submitted_at}`,
-      },
-      CHECKLIST_STEP_SUBJECT_KIND,
-      id,
-      { orgId, userId: actorId },
-    );
-    if (result.failed)
-      throw new HrmProcessError(
-        "REFUSED",
-        `Checklist approval could not start: ${dispatchFailureReason(result)}. Correct the policy in Flows and submit again.`,
-      );
-    const gated = result.runs.find((r) => r.gatesCreated > 0);
-    if (!gated)
-      throw new HrmProcessError(
-        "REFUSED",
-        "No approval policy matched this step — configure HRM checklist step approvals in Flows, then submit again.",
-      );
+    const { routeSubjectSubmission } =
+      await import("../flows/submission-policy.ts");
+    const { policy, dispatch, submissionId } = await routeSubjectSubmission({
+      orgId,
+      actorId,
+      subjectKind: CHECKLIST_STEP_SUBJECT_KIND,
+      subjectId: id,
+    });
+    const gated = dispatch.runs.find((run) => run.gatesCreated > 0);
     const stored = (
       await db.execute(
-        sql`update hrm_process_steps set flow_run_id=${gated.runId} where org_id=${orgId} and id=${id} and approval_status='pending' returning id`,
+        sql`update hrm_process_steps set flow_run_id=${gated?.runId ?? null},approval_status=${policy.kind === "gated" ? "pending" : "approved"} where org_id=${orgId} and id=${id} and approval_status='pending' returning id`,
       )
     ).rows;
     if (stored.length !== 1)
@@ -2882,8 +2869,10 @@ export async function submitChecklistStepApproval(query: CompleteStepQuery): Pro
       },
       {
         stepId: id,
-        runId: gated.runId,
-        approvalStatus: "pending",
+        submissionId,
+        policy,
+        runId: gated?.runId ?? null,
+        approvalStatus: policy.kind === "gated" ? "pending" : "approved",
         response: query.response ?? null,
         attachmentId: query.attachmentId ?? null,
       },
@@ -2916,11 +2905,13 @@ export async function releaseChecklistStepApproval(args: {
       "BAD_STATE",
       "This checklist no longer accepts approval decisions — cancel the outstanding gate through its workflow controls.",
     );
-  if (row.submitted_by === actorId && !(row.flow_run_id === args.approvalRunId &&
-    await completedGateAllowsSelfApproval(db, {
+  if (
+    row.submitted_by === actorId &&
+    !(await completedGateAllowsSelfApproval(db, {
       orgId, subjectKind: CHECKLIST_STEP_SUBJECT_KIND, subjectId: step.id,
       approvalRunId: args.approvalRunId, actorId, outcome: args.outcome,
-    })))
+    }))
+  )
     throw new HrmProcessError(
       "FORBIDDEN",
       "The submitted Flow policy requires another authorized approver for this checklist evidence.",

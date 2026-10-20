@@ -14,7 +14,7 @@ import { assertRecurringBenefitsRunFresh } from './benefit-plan-inputs.ts';
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { employeeTaxYearFenceKey, employerLevyFenceKey, takeEmployeeTaxYearFences, takeEmployerLevyFences } from "./fences.ts";
 import { sql } from "drizzle-orm";
-import { db, withTransactionSavepoint } from "../platform/db.ts";
+import { db, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
@@ -67,7 +67,8 @@ export async function acknowledgePayRunRefusals(input: {
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<PayRunRefusalAcknowledgement> {
   const { orgId, documentId, actorId } = input;
-  return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+  return await withOrgTransaction(orgId, () => withTransactionSavepoint(db, async () => {
+    const tx = db;
     const sourceIdentity = (await tx.execute<{taxYear: number}>(sql`
       select r.tax_year as "taxYear" from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
        where r.org_id=${orgId} and r.document_id=${documentId}
@@ -153,7 +154,8 @@ export async function commitPayRun(input: {
   const { orgId, documentId, actorId } = input;
   // A caller may catch the late freshness refusal inside its own transaction.
   // Restore our projection, liability stamps, and time claims before returning it.
-  return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+  return await withOrgTransaction(orgId, () => withTransactionSavepoint(db, async () => {
+    const tx = db;
     const sourceIdentity = (await tx.execute<{taxYear: number}>(sql`
       select r.tax_year as "taxYear" from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
        where r.org_id=${orgId} and r.document_id=${documentId}
@@ -298,6 +300,13 @@ export async function commitPayRun(input: {
     // document-void.ts).
     const { assertPayRunApprovalReleased } = await import("./approval.ts");
     await assertPayRunApprovalReleased(orgId, documentId, tx);
+    if(run.doc_status === "draft") {
+      const {submitAndReleaseIfUngated}=await import("../flows/submit.ts");
+      const submission=await submitAndReleaseIfUngated("pay_run",documentId,actorId);
+      if(submission.gated || submission.flowError)throw new PayrollError(submission.flowError ?? "Complete this pay run's configured Flow gates before committing.");
+      run.doc_status="approved";
+    }
+
 
     // Recompute and lock the canonical source population before producing a
     // single GL line. Legacy calculated rows have no evidence and therefore

@@ -112,7 +112,7 @@ const mockSources = new Map<string, string>([
     'mock:flows',
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-submit-approval-test')]
-      export async function submitForApproval(...args) {
+      export async function submitAndReleaseIfUngated(...args) {
         state.submitCalls.push(args)
         return { ...state.submitResult }
       }

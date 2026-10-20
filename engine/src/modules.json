@@ -22,7 +22,6 @@
     "allocations": {
       "description": "The allocation kernel: rules, drivers, apportionment, period runs and the posting seam.",
       "dependsOn": [
-        "flows",
         "journal",
         "money",
         "organization",
@@ -61,12 +60,11 @@
       ]
     },
     "automations": {
-      "description": "HRM automation recipes: triggers, rules, conditions, actions, exception-only approval, simulator, run log, action reasons and change event verbs.",
+      "description": "HRM automation recipes: triggers, rules, conditions, actions, simulator, run log, action reasons and change event verbs.",
       "dependsOn": [
         "delivery",
         "flows",
         "hrm",
-        "money",
         "organization",
         "platform",
         "scheduling",
@@ -167,8 +165,12 @@
       "description": "Composition root: installs the runtime seams (script journal writer first) that lower modules cannot import without cycling.",
       "dependsOn": [
         "allocations",
+        "banking",
+        "billing",
         "chart",
         "close",
+        "compliance",
+        "crm",
         "equity",
         "flows",
         "hrm",
@@ -183,9 +185,11 @@
         "payments",
         "payroll",
         "platform",
+        "projects",
         "records",
         "resourcing",
         "revenue",
+        "sandbox",
         "schedule-boards",
         "scripting",
         "service",
@@ -360,12 +364,10 @@
       "description": "HR-15 inbox read model: one My Tasks list over approvals, checklist steps, requests, reviews, windows, signatures, weeks, and expenses.",
       "dependsOn": [
         "automations",
-        "close",
         "flows",
         "hrm",
         "organization",
         "payroll",
-        "periods",
         "platform"
       ]
     },
@@ -678,7 +680,6 @@
     "resourcing": {
       "description": "Professional services capacity, availability and resource planning.",
       "dependsOn": [
-        "flows",
         "money",
         "organization",
         "payroll",
@@ -755,7 +756,6 @@
     "sandbox": {
       "description": "Environments: sandbox cloning, refresh, promotion, catalog and wipe guards.",
       "dependsOn": [
-        "composition",
         "money",
         "organization",
         "payroll",

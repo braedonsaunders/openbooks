@@ -62,7 +62,7 @@ test("a restricted actor cannot approve an out-of-scope gate by id", { skip: !DB
       update documents set subsidiary_id = ${hiddenId}
        where id = ${docId} and org_id = ${org.orgId}
     `);
-    const submitted = await submitForApproval("vendor_bill", docId);
+    const submitted = await submitForApproval("vendor_bill", docId, actors.submitterId);
     assert.equal(submitted.gated, true, "the fixture must raise a real pending gate");
     const gate = (await db.execute<{ id: string }>(sql`
       select id from flow_gates

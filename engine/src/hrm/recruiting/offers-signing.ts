@@ -1,3 +1,4 @@
+import { cancelNativeApprovals } from "../../platform/approval-routing.ts";
 import { createHash, createHmac } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { renderTemplate } from "@openbooks/pdf";
@@ -15,7 +16,7 @@ import {
 } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId } from "./input.ts";
-import { loadOffer } from "./offers.ts";
+import { loadOffer, sendOffer } from "./offers.ts";
 import { loadApplication } from "./applications.ts";
 import {
   enqueueRecruitingEmailJob,
@@ -74,7 +75,6 @@ export interface OfferTemplateDTO {
   readonly name: string;
   readonly bodyTemplate: string;
   readonly clauses: readonly OfferClause[];
-  readonly approvalRequired: boolean;
   readonly isActive: boolean;
 }
 
@@ -91,7 +91,6 @@ type TemplateRow = {
   name: string;
   bodyTemplate: string;
   clauses: unknown;
-  approvalRequired: boolean;
   isActive: boolean;
 };
 
@@ -131,7 +130,6 @@ function toTemplateDTO(row: TemplateRow): OfferTemplateDTO {
     name: row.name,
     bodyTemplate: row.bodyTemplate,
     clauses: parseClauses(row.clauses, row.name),
-    approvalRequired: row.approvalRequired,
     isActive: row.isActive,
   };
 }
@@ -141,11 +139,13 @@ export async function loadOfferTemplate(
   orgId: string,
   templateId: string,
 ): Promise<OfferTemplateDTO | null> {
-  const row = (await exec.execute<TemplateRow>(sql`
+  const row = (
+    await exec.execute<TemplateRow>(sql`
     select id, name, body_template as "bodyTemplate", clauses,
-           approval_required as "approvalRequired", is_active as "isActive"
+           is_active as "isActive"
       from hrm_offer_templates where org_id = ${orgId} and id = ${templateId}
-  `)).rows[0];
+  `)
+  ).rows[0];
   return row ? toTemplateDTO(row) : null;
 }
 
@@ -160,13 +160,15 @@ export async function listOfferTemplates(query: {
     // Shared configuration: any recruiting reader lists; writing needs
     // unrestricted scope (see createOfferTemplate).
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
-    const rows = (await db.execute<TemplateRow>(sql`
+    const rows = (
+      await db.execute<TemplateRow>(sql`
       select id, name, body_template as "bodyTemplate", clauses,
-             approval_required as "approvalRequired", is_active as "isActive"
+             is_active as "isActive"
         from hrm_offer_templates
        where org_id = ${orgId} and (${query.includeInactive === true} or is_active)
        order by name
-    `)).rows;
+    `)
+    ).rows;
     return rows.map(toTemplateDTO);
   });
 }
@@ -177,7 +179,6 @@ export async function createOfferTemplate(query: {
   name: unknown;
   bodyTemplate: unknown;
   clauses?: unknown;
-  approvalRequired?: boolean;
 }): Promise<OfferTemplateDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
@@ -195,14 +196,16 @@ export async function createOfferTemplate(query: {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
     try {
-      const row = (await db.execute<TemplateRow>(sql`
+      const row = (
+        await db.execute<TemplateRow>(sql`
         insert into hrm_offer_templates
-          (org_id, name, body_template, clauses, approval_required, created_by, updated_by)
+          (org_id, name, body_template, clauses, created_by, updated_by)
         values (${orgId}, ${query.name}, ${query.bodyTemplate}, ${JSON.stringify(clauses)},
-                ${query.approvalRequired === true}, ${actorId}, ${actorId})
+                ${actorId}, ${actorId})
         returning id, name, body_template as "bodyTemplate", clauses,
-                  approval_required as "approvalRequired", is_active as "isActive"
-      `)).rows[0];
+                  is_active as "isActive"
+      `)
+      ).rows[0];
       if (!row) throw new RecruitingError("REFUSED", "the template was not stored — no row was written; retry the request");
       return toTemplateDTO(row);
     } catch (error) {
@@ -352,12 +355,6 @@ export async function renderOfferVersion(query: {
         `template ${template.name} is retired — reactivate it in Setup or pick a live template instead of rendering a retired one`,
       );
     }
-    if (template.approvalRequired) {
-      throw new RecruitingError(
-        "REFUSED",
-        `template ${template.name} requires approval before rendering — run the approval chain first instead of rendering directly`,
-      );
-    }
     const row = (await db.execute<{ version: number }>(sql`
       select coalesce(max(version), 0) + 1 as version
         from hrm_offer_versions where org_id = ${orgId} and offer_id = ${offerId}
@@ -385,15 +382,24 @@ export async function renderOfferVersion(query: {
     // cleared in the same statement that reopens signing, so an old link
     // can never sign terms it never displayed. The recruiter resends a
     // fresh link for the new version.
-    const bumped = (await db.execute<{ one: number }>(sql`
+    await cancelNativeApprovals({
+      orgId,
+      actorId,
+      subjectKind: "recruiting_offer",
+      subjectId: offerId,
+    });
+    const bumped = (
+      await db.execute<{ one: number }>(sql`
       update hrm_offers
          set template_id = ${templateId}, version = ${version}, rendered_file_id = ${renderedFileId},
              signature_status = 'unsigned', signing_token_hash = null,
+             status='draft',approval_status='none',approval_version=null,submitted_by=null,submission_policy=null,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId}
          and version = ${locked.version}
       returning 1 as one
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!bumped) {
       throw new RecruitingError("REFUSED", "the offer was concurrently finalized — reload it instead of re-rendering");
     }
@@ -536,11 +542,15 @@ export async function listOffersWithSignature(query: {
   });
 }
 
-export interface OfferLinkResult {
+export interface SentOfferLinkResult {
   readonly offerId: string;
   readonly signingToken: string;
   readonly signingUrlPath: string;
 }
+
+export type OfferLinkResult =
+  | SentOfferLinkResult
+  | { readonly offerId: string; readonly pendingApproval: true };
 
 /** Send the offer for signature: marks sent, mints the sessionless link, emails the candidate. */
 export async function sendOfferLink(query: {
@@ -569,6 +579,18 @@ export async function sendOfferLink(query: {
     const application = await loadApplication(db, orgId, offer.applicationId);
     if (!application) throw new RecruitingError("NOT_FOUND", "application is not visible in this organization");
     await requireHrmRecruitingManage(db, orgId, actorId, application.requisitionId);
+    if (offer.status === "draft") {
+      const issued = await sendOffer({ orgId, actorId, offerId });
+      if (issued.status !== "sent")
+        return {
+          link: { offerId, pendingApproval: true as const },
+          email: null,
+        };
+    } else if (offer.status !== "sent")
+      throw new RecruitingError(
+        "BAD_STATE",
+        "Only a released offer can be sent for signature.",
+      );
     const live = (await db.execute<{ signatureStatus: string | null }>(sql`
       select signature_status as "signatureStatus" from hrm_offers where org_id = ${orgId} and id = ${offerId}
     `)).rows[0];
@@ -617,7 +639,8 @@ export async function sendOfferLink(query: {
       email,
     };
   });
-  await enqueue(staged.email.data, { jobId: staged.email.jobId });
+  if (staged.email)
+    await enqueue(staged.email.data, { jobId: staged.email.jobId });
   return staged.link;
 }
 
@@ -858,7 +881,10 @@ export async function signOffer(query: {
         `this offer is ${current.status} — a ${current.status} offer takes no signature; ask the recruiter for fresh terms instead of signing this one`,
       );
     }
-    if (current.status === "sent" && current.expiresOn !== null && current.expiresOn < await businessToday(orgId)) {
+    if (
+      current.status === "sent" && current.expiresOn !== null &&
+      current.expiresOn < (await businessToday(orgId))
+    ) {
       throw new RecruitingError(
         "REFUSED",
         "this offer expired before it was signed — the expiry stands as recorded; ask the recruiter for fresh terms instead of signing this one",

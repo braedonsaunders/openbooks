@@ -26,7 +26,6 @@ import {
 } from "./shared.ts";
 import type {
   BenefitAllocation,
-  BenefitApprovalMode,
   BenefitDeliveryMethod,
   BenefitFrequency,
   BenefitMetric,
@@ -65,7 +64,6 @@ import {
 // Re-export the shared vocabulary so callers import one module.
 export type {
   BenefitAllocation,
-  BenefitApprovalMode,
   BenefitDeliveryMethod,
   BenefitFrequency,
   BenefitMetric,
@@ -82,7 +80,7 @@ const PROGRAM_COLUMNS = sql`id, code, name, family,
   description, legal_entity_id as "legalEntityId", currency, status,
   effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
   pay_component_id as "payComponentId",
-  approval_mode as "approvalMode", delivery_method as "deliveryMethod", valuation,
+  delivery_method as "deliveryMethod", valuation,
   metric, metric_scope as "metricScope",
   allocation, period_basis as "periodBasis", percent_rate::text as "percentRate",
   fixed_amount::text as "fixedAmount", cap_amount::text as "capAmount",
@@ -111,11 +109,6 @@ function asFamily(value: unknown, field: string): BenefitProgramFamily {
 function asStatus(value: unknown): BenefitProgramStatus {
   if (value === "draft" || value === "active" || value === "closed") return value;
   throw new BenefitsError("REFUSED", "benefit program carries an unknown status — reload and retry");
-}
-
-function asApprovalMode(value: unknown): BenefitApprovalMode {
-  if (value === "none" || value === "flows") return value;
-  throw new BenefitsError("INVALID_INPUT", "approvalMode is none or flows — choose no approvals or native Flows approval for this program");
 }
 
 function asDelivery(value: unknown): BenefitDeliveryMethod {
@@ -238,7 +231,10 @@ function asEligibility(value: unknown): "members" | "all_employees" {
 
 const NO_SCOPES: ProgramScopeRows = { departmentIds: [], projectIds: [], customerIds: [], excludedProjectIds: [] };
 
-function toProgram(row: Record<string, unknown>, scopes: ProgramScopeRows = NO_SCOPES): BenefitProgram {
+function toProgram(
+  row: Record<string, unknown>,
+  scopes: ProgramScopeRows = NO_SCOPES,
+): BenefitProgram {
   const metricScope = asMetricScope(row.metricScope);
   return {
     id: String(row.id),
@@ -252,7 +248,6 @@ function toProgram(row: Record<string, unknown>, scopes: ProgramScopeRows = NO_S
     effectiveFrom: String(row.effectiveFrom).slice(0, 10),
     effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
     payComponentId: row.payComponentId != null ? String(row.payComponentId) : null,
-    approvalMode: asApprovalMode(row.approvalMode),
     deliveryMethod: asDelivery(row.deliveryMethod),
     valuation: asValuation(row.valuation),
     metric: asMetric(row.metric),
@@ -267,7 +262,9 @@ function toProgram(row: Record<string, unknown>, scopes: ProgramScopeRows = NO_S
     projectLossCap: row.projectLossCap != null ? String(row.projectLossCap) : null,
     poolRounding: row.poolRounding === "pool" ? "pool" : "share",
     includeOpenCommitments: row.includeOpenCommitments === true,
-    hourClassifications: Array.isArray(row.hourClassifications) ? row.hourClassifications.map(String) as BenefitProgram["hourClassifications"][number][] : [],
+    hourClassifications: Array.isArray(row.hourClassifications)
+      ? (row.hourClassifications.map(String) as BenefitProgram["hourClassifications"][number][])
+      : [],
     eligibility: row.eligibility === "all_employees" ? "all_employees" : "members",
     allocation: asAllocation(row.allocation),
     percentRate: row.percentRate != null ? String(row.percentRate) : null,
@@ -913,7 +910,6 @@ export interface CreateBenefitProgramQuery {
   readonly effectiveFrom: string;
   readonly effectiveTo?: string | null;
   readonly payComponentId?: string | null;
-  readonly approvalMode?: BenefitApprovalMode;
   readonly deliveryMethod?: BenefitDeliveryMethod;
   readonly valuation?: BenefitValuation;
   readonly metric?: BenefitMetric | null;
@@ -957,7 +953,9 @@ function optionalProgramReason(value: unknown): string | null {
   return reason;
 }
 
-export async function createBenefitProgram(query: CreateBenefitProgramQuery): Promise<BenefitProgram> {
+export async function createBenefitProgram(
+  query: CreateBenefitProgramQuery,
+): Promise<BenefitProgram> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const reason = optionalProgramReason(query.reason);
@@ -979,7 +977,6 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
   if (effectiveTo !== null && effectiveTo < effectiveFrom) {
     throw new BenefitsError("INVALID_INPUT", "effectiveTo ends on or after effectiveFrom");
   }
-  const approvalMode = query.approvalMode === undefined ? "none" : asApprovalMode(query.approvalMode);
   const deliveryMethod = query.deliveryMethod === undefined ? "payroll" : asDelivery(query.deliveryMethod);
   const valuation = query.valuation === undefined ? "fixed" : asValuation(query.valuation);
   const metric = query.metric === undefined ? null : asMetric(query.metric);
@@ -1041,7 +1038,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
         await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_programs
             (org_id, code, name, family, description, legal_entity_id, currency,
-             effective_from, effective_to, pay_component_id, approval_mode, delivery_method,
+             effective_from, effective_to, pay_component_id, delivery_method,
              valuation, metric, metric_scope, allocation,
              percent_rate, fixed_amount, cap_amount, budget_amount,
              threshold_amount, frequency, period_basis, payment_delay_days, unassigned_time,
@@ -1049,7 +1046,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
              created_by, updated_by)
           values (${orgId}, ${code}, ${name}, ${family}, ${description}, ${legalEntityId},
                   ${currency}, ${effectiveFrom}::date, ${effectiveTo}::date,
-                  ${payComponentId}, ${approvalMode}, ${deliveryMethod}, ${valuation}, ${metric},
+                  ${payComponentId}, ${deliveryMethod}, ${valuation}, ${metric},
                   ${metricScope}, ${allocation},
                   ${rules.percentRate}, ${rules.fixedAmount}, ${rules.capAmount},
                   ${rules.budgetAmount}, ${rules.thresholdAmount}, ${frequency},
@@ -1103,7 +1100,6 @@ export interface UpdateBenefitProgramQuery {
   readonly effectiveFrom?: string;
   readonly effectiveTo?: string | null;
   readonly payComponentId?: string | null;
-  readonly approvalMode?: BenefitApprovalMode;
   readonly deliveryMethod?: BenefitDeliveryMethod;
   readonly valuation?: BenefitValuation;
   readonly metric?: BenefitMetric | null;
@@ -1144,7 +1140,9 @@ export interface UpdateBenefitProgramQuery {
  * program's code, family, employer, currency, start date, measure and
  * delivery are its identity and never change once active.
  */
-export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Promise<BenefitProgram> {
+export async function updateBenefitProgram(
+  query: UpdateBenefitProgramQuery,
+): Promise<BenefitProgram> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const programId = requireId(query.programId, "programId");
@@ -1191,7 +1189,6 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
             ? null
             : requireCivilDate(query.effectiveTo, "effectiveTo"),
       payComponentId: query.payComponentId === undefined ? before.payComponentId : query.payComponentId,
-      approvalMode: query.approvalMode === undefined ? before.approvalMode : asApprovalMode(query.approvalMode),
       deliveryMethod: query.deliveryMethod === undefined ? before.deliveryMethod : asDelivery(query.deliveryMethod),
       valuation: query.valuation === undefined ? before.valuation : asValuation(query.valuation),
       metric: query.metric === undefined ? before.metric : asMetric(query.metric),
@@ -1204,7 +1201,12 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
       lossPercentRate: query.lossPercentRate === undefined ? before.lossPercentRate : canonicalAmount(query.lossPercentRate, "lossPercentRate"),
       projectProfitCap: query.projectProfitCap === undefined ? before.projectProfitCap : canonicalAmount(query.projectProfitCap, "projectProfitCap"),
       projectLossCap: query.projectLossCap === undefined ? before.projectLossCap : canonicalAmount(query.projectLossCap, "projectLossCap"),
-      poolRounding: query.poolRounding === undefined ? before.poolRounding : query.poolRounding === "pool" ? "pool" as const : "share" as const,
+      poolRounding:
+        query.poolRounding === undefined
+          ? before.poolRounding
+          : query.poolRounding === "pool"
+            ? ("pool" as const)
+            : ("share" as const),
       includeOpenCommitments: query.includeOpenCommitments === undefined ? before.includeOpenCommitments : query.includeOpenCommitments === true,
       hourClassifications: query.hourClassifications === undefined ? before.hourClassifications : [...query.hourClassifications],
       eligibility: query.eligibility === undefined ? before.eligibility : asEligibility(query.eligibility),
@@ -1299,7 +1301,7 @@ export async function updateBenefitProgram(query: UpdateBenefitProgramQuery): Pr
                  effective_from = ${next.effectiveFrom}::date,
                  effective_to = ${next.effectiveTo}::date,
                  pay_component_id = ${next.payComponentId},
-                 approval_mode = ${next.approvalMode}, delivery_method = ${next.deliveryMethod}, valuation = ${next.valuation},
+                 delivery_method = ${next.deliveryMethod}, valuation = ${next.valuation},
                  metric = ${next.metric}, metric_scope = ${next.metricScope},
                  allocation = ${next.allocation}, percent_rate = ${next.percentRate},
                  fixed_amount = ${next.fixedAmount}, cap_amount = ${next.capAmount},

@@ -1,10 +1,10 @@
-import { z } from "zod";
+import { z } from 'zod'
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { sql } from 'drizzle-orm'
 import { db, orgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   PaymentAcceptanceError,
@@ -29,18 +29,21 @@ const acceptanceConfigSchema = z.object({
   action: z.never().optional(),
   provider: z.enum(["stripe", "adyen", "gocardless"]),
   displayName: z.string().trim().min(1).max(120).optional(),
-  isEnabled: z.boolean().optional(), acceptanceEnabled: z.boolean().optional(),
-  defaultBankAccountId: uuidString().nullable().optional(), surchargeRuleId: uuidString().nullable().optional(),
-  publishableKey: z.string().nullable().optional(), apiKey: z.string().nullable().optional(), webhookSecret: z.string().nullable().optional(),
+  isEnabled: z.boolean().optional(),
+  acceptanceEnabled: z.boolean().optional(),
+  defaultBankAccountId: uuidString().nullable().optional(),
+  surchargeRuleId: uuidString().nullable().optional(),
+  publishableKey: z.string().nullable().optional(),
+  apiKey: z.string().nullable().optional(),
+  webhookSecret: z.string().nullable().optional(),
   settings: z.record(z.string(), z.json()).nullable().optional(),
   // Refund/dispute automation half of the same row: the setup screen owns the
   // policy and the posting accounts, so a save names them (explicit null
   // clears a mapping) while an omitted field keeps the stored value.
-  refundPolicy: z.enum(["automatic", "review"]).nullable().optional(),
   defaultDisputedFundsAccountId: uuidString().nullable().optional(),
   defaultChargebackLossAccountId: uuidString().nullable().optional(),
   defaultDisputeFeeAccountId: uuidString().nullable().optional(),
-});
+})
 const requestBodySchema = z.union([
   z.discriminatedUnion("action", [
     z.object({ action: z.literal("saveRule"), name: z.string().trim().min(1).max(200), calculation: z.enum(["percent", "fixed", "percent_plus_fixed"]), feeIncomeAccountId: uuidString(), id: uuidString().optional(), provider: z.enum(["stripe", "adyen", "gocardless"]).nullable().optional(), paymentMethod: z.enum(["card", "bank_debit", "all"]).optional(), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), percent: surchargeMoney("Surcharge percent").nullable().optional(), fixedAmount: surchargeMoney("Surcharge fixed amount").nullable().optional(), capAmount: surchargeMoney("Surcharge cap amount").nullable().optional() }),
@@ -50,9 +53,7 @@ const requestBodySchema = z.union([
   acceptanceConfigSchema,
 ]);
 
-
-export const runtime = "nodejs";
-
+export const runtime = 'nodejs'
 
 /** Audit-evidence shape for payment_surcharge_rules: the stored row itself. */
 type SurchargeRuleSnapshot = {
@@ -107,8 +108,6 @@ async function legacyGET(authz: Parameters<typeof readPaymentProviderSetupData>[
   return NextResponse.json(await readPaymentProviderSetupData(authz));
 }
 
-
-
 export const GET = defineRoute({
   permission: "admin.setup.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
@@ -116,27 +115,24 @@ export const GET = defineRoute({
 });
 
 export const POST = defineRoute({
-  permission: "admin.setup.manage",
+  permission: 'admin.setup.manage',
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
-  scope: "unrestricted",
+  scope: 'unrestricted',
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
-
-    const gate = routeAuthz;
+    const gate = routeAuthz
 
     if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
       return NextResponse.json({ error: "feature disabled" }, { status: 404 });
     }
 
+    const orgId = gate.user.orgId
 
-
-    const orgId = gate.user.orgId;
-
-    if (body.action === "saveRule") {
+    if (body.action === 'saveRule') {
       const unrestrictedScope = guardUnrestrictedScope(gate);
       if (unrestrictedScope) return unrestrictedScope;
       const name = typeof body.name === "string" ? body.name.trim() : "";
-      const calculation = body.calculation;
+      const calculation = body.calculation
       if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
       if (calculation !== "percent" && calculation !== "fixed" && calculation !== "percent_plus_fixed") {
         return NextResponse.json({ error: "invalid calculation" }, { status: 400 });
@@ -267,15 +263,15 @@ export const POST = defineRoute({
           try {
             await withOrgTransaction(orgId, async () => {
               const beforeRow = id
-                ? (
+                ? ((
                     await db.execute<SurchargeRuleSnapshot>(sql`
                       select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
                         from payment_surcharge_rules
                        where org_id = ${orgId} and id = ${id}
                        for update
                     `)
-                  ).rows[0] ?? null
-                : null;
+                  ).rows[0] ?? null)
+                : null
               if (id && !beforeRow) throw new SurchargeRuleMissing();
 
               // Same provider tier + overlapping effective window + overlapping
@@ -331,8 +327,8 @@ export const POST = defineRoute({
                           ${JSON.stringify({ rule: [null, afterRow] })}::jsonb, ${gate.user.id})
                 `);
               }
-            });
-            break;
+            })
+            break
           } catch (error) {
             if (postgresErrorCode(error) !== "40P01") throw error;
             if (!ownsTransaction || attempt >= 2) {
@@ -359,7 +355,7 @@ export const POST = defineRoute({
         }
         throw e;
       }
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true })
     }
 
     if (body.action === "deleteRule") {
@@ -401,22 +397,22 @@ export const POST = defineRoute({
       return NextResponse.json({ ok: true });
     }
 
-    if (body.action === "test") {
+    if (body.action === 'test') {
       // A connection test reads the org-wide config (including sealed-secret
       // presence) and writes its last_error back to the shared row: restricted
       // callers are refused before touching it.
       const unrestrictedTest = guardUnrestrictedScope(gate);
       if (unrestrictedTest) return unrestrictedTest;
-      const provider = body.provider;
+      const provider = body.provider
       if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
         return NextResponse.json({ error: "unknown provider" }, { status: 400 });
       }
-      const config = (await db.execute<Parameters<typeof configSecrets>[0]>(sql`
+      const config = await db.execute<Parameters<typeof configSecrets>[0]>(sql`
         select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
                publishable_key, settings, surcharge_rule_id, secrets
           from psp_provider_configs
          where org_id = ${orgId} and provider = ${provider} limit 1
-      `));
+      `)
       if (!config.rows[0]) return NextResponse.json({ ok: false, detail: "provider is not configured" });
       let result: { ok: boolean; detail: string };
       try {
@@ -428,7 +424,7 @@ export const POST = defineRoute({
         update psp_provider_configs set last_error = ${result.ok ? null : result.detail}, updated_at = now()
          where org_id = ${orgId} and provider = ${provider}
       `);
-      return NextResponse.json(result);
+      return NextResponse.json(result)
     }
 
     // Provider configs are org-wide rows with no subsidiary lineage: saving one
@@ -437,8 +433,7 @@ export const POST = defineRoute({
     // saves above stay available to restricted callers, constrained to
     // in-scope fee accounts by the scoped lookup.
 
-
-    const provider = body.provider;
+    const provider = body.provider
     if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
       return NextResponse.json({ error: "provider must be stripe, adyen or gocardless" }, { status: 400 });
     }
@@ -461,32 +456,36 @@ export const POST = defineRoute({
         provider,
         body.settings == null ? undefined : (body.settings as Record<string, unknown>),
       );
-      await saveAcceptanceConfig(gate.user.orgId, gate.user.id, {
-        provider,
-        displayName: typeof body.displayName === "string" ? body.displayName : undefined,
-        isEnabled: body.isEnabled !== false,
-        acceptanceEnabled: body.acceptanceEnabled === true,
-        // The unrestricted gate above already refused restricted callers; the
-        // engine re-asserts it, so the settlement bank can never be set
-        // cross-entity even by a future caller that skips the route guard.
-        defaultBankAccountId: typeof body.defaultBankAccountId === "string" ? body.defaultBankAccountId : null,
-        publishableKey: typeof body.publishableKey === "string" ? body.publishableKey : null,
-        surchargeRuleId: typeof body.surchargeRuleId === "string" ? body.surchargeRuleId : null,
-        // Automation fields travel through untouched: an omitted field stays
-        // undefined so the engine keeps the stored policy, while an explicit
-        // null clears a mapping the setup screen owns.
-        refundPolicy: body.refundPolicy,
-        defaultDisputedFundsAccountId: body.defaultDisputedFundsAccountId,
-        defaultChargebackLossAccountId: body.defaultChargebackLossAccountId,
-        defaultDisputeFeeAccountId: body.defaultDisputeFeeAccountId,
-        settings,
-        apiKey: typeof body.apiKey === "string" && body.apiKey ? body.apiKey : null,
-        webhookSecret: typeof body.webhookSecret === "string" && body.webhookSecret ? body.webhookSecret : null,
-      }, gate.allowedSubsidiaryIds);
-      return NextResponse.json({ ok: true });
+      await saveAcceptanceConfig(
+        gate.user.orgId,
+        gate.user.id,
+        {
+          provider,
+          displayName: typeof body.displayName === "string" ? body.displayName : undefined,
+          isEnabled: body.isEnabled !== false,
+          acceptanceEnabled: body.acceptanceEnabled === true,
+          // The unrestricted gate above already refused restricted callers; the
+          // engine re-asserts it, so the settlement bank can never be set
+          // cross-entity even by a future caller that skips the route guard.
+          defaultBankAccountId: typeof body.defaultBankAccountId === "string" ? body.defaultBankAccountId : null,
+          publishableKey: typeof body.publishableKey === "string" ? body.publishableKey : null,
+          surchargeRuleId: typeof body.surchargeRuleId === "string" ? body.surchargeRuleId : null,
+          // Automation fields travel through untouched: an omitted field stays
+          // undefined so the engine keeps the stored policy, while an explicit
+          // null clears a mapping the setup screen owns.
+          defaultDisputedFundsAccountId: body.defaultDisputedFundsAccountId,
+          defaultChargebackLossAccountId: body.defaultChargebackLossAccountId,
+          defaultDisputeFeeAccountId: body.defaultDisputeFeeAccountId,
+          settings,
+          apiKey: typeof body.apiKey === "string" && body.apiKey ? body.apiKey : null,
+          webhookSecret: typeof body.webhookSecret === "string" && body.webhookSecret ? body.webhookSecret : null,
+        },
+        gate.allowedSubsidiaryIds,
+      )
+      return NextResponse.json({ ok: true })
     } catch (e) {
       if (e instanceof PaymentAcceptanceError) return apiErrorResponse(e, { safeStatus: 422 })
       return apiErrorResponse(e);
     }
   },
-});
+})

@@ -19,7 +19,6 @@ import {
   parseAutomationRules,
   parseAutomationTrigger,
 } from "./triggers.ts";
-import type { ApprovalSettings } from "./approvals.ts";
 
 /**
  * HR-16 automation recipe CRUD + approval-settings writes + shipped recipes.
@@ -58,8 +57,13 @@ export async function automationsFeatureOn(orgId: string): Promise<boolean> {
   return hrmFeatureOn(orgId, "automations");
 }
 
-export async function hrmFeatureOn(orgId: string, key: string): Promise<boolean> {
-  const rows = await db.execute<{ features: Record<string, boolean> | null }>(sql`
+export async function hrmFeatureOn(
+  orgId: string,
+  key: string,
+): Promise<boolean> {
+  const rows = await db.execute<{
+    features: Record<string, boolean> | null;
+  }>(sql`
     select settings -> 'features' as features from orgs where id = ${orgId} limit 1
   `);
   const features = rows.rows[0]?.features ?? {};
@@ -92,7 +96,11 @@ export type AutomationDTO = {
   version: number;
 };
 
-async function requireAutomations(orgId: string, actorId: string, permission: "automations.read" | "automations.manage"): Promise<void> {
+async function requireAutomations(
+  orgId: string,
+  actorId: string,
+  permission: "automations.read" | "automations.manage",
+): Promise<void> {
   const ok = await actorHasPermission(db, orgId, actorId, permission);
   if (!ok) {
     throw new AutomationServiceError(
@@ -101,7 +109,10 @@ async function requireAutomations(orgId: string, actorId: string, permission: "a
   }
 }
 
-export async function listAutomations(orgId: string, actorId: string): Promise<AutomationDTO[]> {
+export async function listAutomations(
+  orgId: string,
+  actorId: string,
+): Promise<AutomationDTO[]> {
   await requireAutomations(orgId, actorId, "automations.read");
   return withOrg(orgId, async () => {
     const rows = await db.execute<AutomationDTO>(sql`
@@ -163,7 +174,10 @@ export async function createAutomation(input: {
                 last_run_at as "lastRunAt", error_message as "errorMessage", version
     `);
     const row = rows.rows[0];
-    if (!row) throw new AutomationServiceError("the automation was not stored — nothing was written; retry the save");
+    if (!row)
+      throw new AutomationServiceError(
+        "the automation was not stored — nothing was written; retry the save",
+      );
     return row;
   });
 }
@@ -192,10 +206,15 @@ export async function updateAutomation(input: {
       select version, status from automations where org_id = ${input.orgId} and id = ${input.automationId} for update
     `);
     if (current.rows.length === 0) {
-      throw new AutomationServiceError("automation not found — reload the list and try again");
+      throw new AutomationServiceError(
+        "automation not found — reload the list and try again",
+      );
     }
     const storedVersion = current.rows[0]!.version;
-    if (input.expectedVersion !== undefined && input.expectedVersion !== storedVersion) {
+    if (
+      input.expectedVersion !== undefined &&
+      input.expectedVersion !== storedVersion
+    ) {
       throw new AutomationVersionConflictError(storedVersion);
     }
     const currentStatus = current.rows[0]!.status;
@@ -205,10 +224,14 @@ export async function updateAutomation(input: {
     void params;
     const patch: Record<string, string> = {};
     if (input.name !== undefined) {
-      if (!input.name.trim()) throw new AutomationServiceError("the automation needs a non-blank name");
+      if (!input.name.trim())
+        throw new AutomationServiceError(
+          "the automation needs a non-blank name",
+        );
       patch["name"] = input.name.trim();
     }
-    if (input.description !== undefined) patch["description"] = input.description ?? "";
+    if (input.description !== undefined)
+      patch["description"] = input.description ?? "";
     if (input.trigger !== undefined) {
       const trigger = parseAutomationTrigger(input.trigger);
       assertValidScheduleTrigger(trigger);
@@ -218,14 +241,19 @@ export async function updateAutomation(input: {
       if (currentStatus === "enabled") assertTriggerCanEnable(trigger);
       patch["trigger"] = JSON.stringify(trigger);
     }
-    if (input.rules !== undefined) patch["rules"] = JSON.stringify(parseAutomationRules(input.rules));
-    if (input.conditions !== undefined) patch["conditions"] = JSON.stringify(parseAutomationConditions(input.conditions));
+    if (input.rules !== undefined)
+      patch["rules"] = JSON.stringify(parseAutomationRules(input.rules));
+    if (input.conditions !== undefined)
+      patch["conditions"] = JSON.stringify(
+        parseAutomationConditions(input.conditions),
+      );
     if (input.actions !== undefined) {
       const actions = parseAutomationActions(input.actions);
       assertPublishableAutomationActions(actions);
       patch["actions"] = JSON.stringify(actions);
     }
-    if (input.priority !== undefined) patch["priority"] = String(input.priority);
+    if (input.priority !== undefined)
+      patch["priority"] = String(input.priority);
     const rows = await db.execute<AutomationDTO>(sql`
       update automations
          set name = coalesce(${patch["name"] ?? null}::text, name),
@@ -243,7 +271,10 @@ export async function updateAutomation(input: {
                 last_run_at as "lastRunAt", error_message as "errorMessage", version
     `);
     const row = rows.rows[0];
-    if (!row) throw new AutomationServiceError("the automation changed while saving — reload and try again");
+    if (!row)
+      throw new AutomationServiceError(
+        "the automation changed while saving — reload and try again",
+      );
     return row;
   });
 }
@@ -256,15 +287,24 @@ export async function setAutomationStatus(input: {
 }): Promise<AutomationDTO> {
   await requireAutomations(input.orgId, input.actorId, "automations.manage");
   if (!["enabled", "disabled"].includes(input.status)) {
-    throw new AutomationServiceError("status must be enabled or disabled — drafts enable, errors re-enable after a fix");
+    throw new AutomationServiceError(
+      "status must be enabled or disabled — drafts enable, errors re-enable after a fix",
+    );
   }
   return withOrgTransaction(input.orgId, async () => {
-    const current = await db.execute<{ trigger: unknown; actions: unknown; status: string }>(sql`
+    const current = await db.execute<{
+      trigger: unknown;
+      actions: unknown;
+      status: string;
+    }>(sql`
       select trigger, actions, status from automations
        where org_id = ${input.orgId} and id = ${input.automationId} for update
     `);
     const row = current.rows[0];
-    if (!row) throw new AutomationServiceError("automation not found — reload the list and try again");
+    if (!row)
+      throw new AutomationServiceError(
+        "automation not found — reload the list and try again",
+      );
     if (input.status === "enabled") {
       // A broken recipe can never be enabled: re-validate on the way in.
       const trigger = parseAutomationTrigger(row.trigger);
@@ -285,7 +325,10 @@ export async function setAutomationStatus(input: {
                 last_run_at as "lastRunAt", error_message as "errorMessage", version
     `);
     const out = updated.rows[0];
-    if (!out) throw new AutomationServiceError("the automation changed while saving — reload and try again");
+    if (!out)
+      throw new AutomationServiceError(
+        "the automation changed while saving — reload and try again",
+      );
     return out;
   });
 }
@@ -296,7 +339,15 @@ export async function listAutomationRuns(
   automationId: string,
   status?: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
-): Promise<{ id: string; status: string; version: number; subjectKind: string | null; createdAt: string }[]> {
+): Promise<
+  {
+    id: string;
+    status: string;
+    version: number;
+    subjectKind: string | null;
+    createdAt: string;
+  }[]
+> {
   await requireAutomations(orgId, actorId, "automations.read");
   const allowed = await resolveRunScope(orgId, actorId, allowedSubsidiaryIds);
   return withOrg(orgId, async () => {
@@ -309,18 +360,30 @@ export async function listAutomationRuns(
        order by created_at desc limit 100
     `);
     const runs = rows.rows as {
-      id: string; status: string; version: number;
-      subjectKind: string | null; subjectId: string | null; createdAt: string
+      id: string;
+      status: string;
+      version: number;
+      subjectKind: string | null;
+      subjectId: string | null;
+      createdAt: string;
     }[];
     // The subject id scopes the read but is not part of the list contract.
     const contract = (run: (typeof runs)[number]) => ({
-      id: run.id, status: run.status, version: run.version,
-      subjectKind: run.subjectKind, createdAt: run.createdAt,
+      id: run.id,
+      status: run.status,
+      version: run.version,
+      subjectKind: run.subjectKind,
+      createdAt: run.createdAt,
     });
     if (allowed === null) return runs.map(contract);
     const subsidiaries = await resolveRunSubjectSubsidiaries(orgId, runs);
     return runs
-      .filter((run) => runSubjectVisible(allowed, runScopeFor(subsidiaries, run.subjectKind, run.subjectId)))
+      .filter((run) =>
+        runSubjectVisible(
+          allowed,
+          runScopeFor(subsidiaries, run.subjectKind, run.subjectId),
+        ),
+      )
       .map(contract);
   });
 }
@@ -344,75 +407,25 @@ export async function getAutomationRun(
              started_at as "startedAt", finished_at as "finishedAt", error, steps
         from automation_runs where org_id = ${orgId} and id = ${runId} limit 1
     `);
-    const row = rows.rows[0] as { subjectKind: string | null; subjectId: string | null } | undefined;
-    if (!row) throw new AutomationServiceError("run not found — reload the runs tab and try again");
+    const row = rows.rows[0] as
+      { subjectKind: string | null; subjectId: string | null } | undefined;
+    if (!row)
+      throw new AutomationServiceError(
+        "run not found — reload the runs tab and try again",
+      );
     if (allowed !== null) {
       const subsidiaries = await resolveRunSubjectSubsidiaries(orgId, [row]);
-      if (!runSubjectVisible(allowed, runScopeFor(subsidiaries, row.subjectKind, row.subjectId))) {
-        throw new AutomationServiceError("run not found — reload the runs tab and try again");
+      if (
+        !runSubjectVisible(
+          allowed,
+          runScopeFor(subsidiaries, row.subjectKind, row.subjectId),
+        )
+      ) {
+        throw new AutomationServiceError(
+          "run not found — reload the runs tab and try again",
+        );
       }
     }
-    return row;
-  });
-}
-
-const approvalSettingsBody = z.object({
-  subjectKind: z.string().min(1),
-  exceptionOnly: z.boolean(),
-  thresholds: z.record(z.string(), z.unknown()).default({}),
-  autoApproveWhenNoRule: z.boolean().default(false),
-  delegateAfterDays: z.number().int().min(1).nullish(),
-  excludeInitiator: z.boolean().default(true),
-});
-
-export async function saveApprovalSettings(input: {
-  orgId: string;
-  actorId: string;
-  subjectKind: string;
-  exceptionOnly: boolean;
-  thresholds?: Record<string, unknown>;
-  autoApproveWhenNoRule?: boolean;
-  delegateAfterDays?: number | null;
-  excludeInitiator?: boolean;
-}): Promise<ApprovalSettings & { subjectKind: string }> {
-  await requireAutomations(input.orgId, input.actorId, "automations.manage");
-  const parsed = approvalSettingsBody.safeParse({
-    subjectKind: input.subjectKind,
-    exceptionOnly: input.exceptionOnly,
-    thresholds: input.thresholds ?? {},
-    autoApproveWhenNoRule: input.autoApproveWhenNoRule ?? false,
-    delegateAfterDays: input.delegateAfterDays ?? null,
-    excludeInitiator: input.excludeInitiator ?? true,
-  });
-  if (!parsed.success) {
-    throw new AutomationServiceError(
-      `approval settings are invalid: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
-    );
-  }
-  return withOrgTransaction(input.orgId, async () => {
-    const rows = await db.execute(sql`
-      insert into automation_approval_settings
-        (org_id, subject_kind, exception_only, thresholds, auto_approve_when_no_rule,
-         delegate_after_days, exclude_initiator, created_by, updated_by)
-      values (${input.orgId}, ${parsed.data.subjectKind}, ${parsed.data.exceptionOnly},
-              ${JSON.stringify(parsed.data.thresholds)}::jsonb, ${parsed.data.autoApproveWhenNoRule},
-              ${parsed.data.delegateAfterDays}, ${parsed.data.excludeInitiator},
-              ${input.actorId}, ${input.actorId})
-      on conflict (org_id, subject_kind)
-      do update set exception_only = excluded.exception_only, thresholds = excluded.thresholds,
-                    auto_approve_when_no_rule = excluded.auto_approve_when_no_rule,
-                    delegate_after_days = excluded.delegate_after_days,
-                    exclude_initiator = excluded.exclude_initiator,
-                    updated_by = excluded.updated_by, updated_at = now()
-      returning subject_kind as "subjectKind", exception_only as "exceptionOnly",
-                thresholds, auto_approve_when_no_rule as "autoApproveWhenNoRule",
-                delegate_after_days as "delegateAfterDays",
-                exclude_initiator as "excludeInitiator"
-    `);
-    // ON CONFLICT here is the settings upsert contract (one row per
-    // subject): the conflict is expected and RETURNING re-reads the row.
-    const row = rows.rows[0] as (ApprovalSettings & { subjectKind: string }) | undefined;
-    if (!row) throw new AutomationServiceError("the settings write matched no row — reload and try again");
     return row;
   });
 }
@@ -425,35 +438,90 @@ export async function saveApprovalSettings(input: {
  * fired (D14). When writers exist for one, add its recipe back with the
  * enable-time refusal lifted for exactly that trigger.
  */
-export function automationRecipes(): { key: string; name: string; description: string; trigger: unknown; actions: unknown }[] {
+export function automationRecipes(): {
+  key: string;
+  name: string;
+  description: string;
+  trigger: unknown;
+  actions: unknown;
+}[] {
   return [
     {
       key: "welcome_tasks",
       name: "Welcome tasks before start",
-      description: "Three days before an employment starts, notify the manager to prepare.",
-      trigger: { kind: "date_relative", entity: "employment", dateField: "service_start", offsetDays: 3, direction: "before", atTime: "09:00" },
-      actions: [{ kind: "send_notification", to: "manager", body: "A new starter joins in 3 days — prepare their workspace and access." }],
+      description:
+        "Three days before an employment starts, notify the manager to prepare.",
+      trigger: {
+        kind: "date_relative",
+        entity: "employment",
+        dateField: "service_start",
+        offsetDays: 3,
+        direction: "before",
+        atTime: "09:00",
+      },
+      actions: [
+        {
+          kind: "send_notification",
+          to: "manager",
+          body: "A new starter joins in 3 days — prepare their workspace and access.",
+        },
+      ],
     },
     {
       key: "probation_end",
       name: "Probation-end reminder",
-      description: "A reminder to the manager when probation approaches its end.",
-      trigger: { kind: "date_relative", entity: "employment", dateField: "service_start", offsetDays: 7, direction: "after", atTime: "09:00" },
-      actions: [{ kind: "send_notification", to: "manager", body: "Probation review is due — complete the review before the window closes." }],
+      description:
+        "A reminder to the manager when probation approaches its end.",
+      trigger: {
+        kind: "date_relative",
+        entity: "employment",
+        dateField: "service_start",
+        offsetDays: 7,
+        direction: "after",
+        atTime: "09:00",
+      },
+      actions: [
+        {
+          kind: "send_notification",
+          to: "manager",
+          body: "Probation review is due — complete the review before the window closes.",
+        },
+      ],
     },
     {
       key: "qualification_expiring",
       name: "Qualification expiring in 30 days",
-      description: "Warns the employee before a qualification lapses (lights up when certifications land).",
-      trigger: { kind: "date_relative", entity: "enrollment", dateField: "coverage_to", offsetDays: 30, direction: "before", atTime: "09:00" },
-      actions: [{ kind: "send_notification", to: "initiator", body: "A qualification expires in 30 days — renew it to stay compliant." }],
+      description:
+        "Warns the employee before a qualification lapses (lights up when certifications land).",
+      trigger: {
+        kind: "date_relative",
+        entity: "enrollment",
+        dateField: "coverage_to",
+        offsetDays: 30,
+        direction: "before",
+        atTime: "09:00",
+      },
+      actions: [
+        {
+          kind: "send_notification",
+          to: "initiator",
+          body: "A qualification expires in 30 days — renew it to stay compliant.",
+        },
+      ],
     },
     {
       key: "timesheet_unsubmitted",
       name: "Timesheet unsubmitted after deadline",
-      description: "Nudges the employee when the week's timesheet is still a draft past the deadline.",
+      description:
+        "Nudges the employee when the week's timesheet is still a draft past the deadline.",
       trigger: { kind: "schedule", cron: "0 9 * * MON", timezone: "UTC" },
-      actions: [{ kind: "send_notification", to: "initiator", body: "Your timesheet for last week is still unsubmitted — submit it today." }],
+      actions: [
+        {
+          kind: "send_notification",
+          to: "initiator",
+          body: "Your timesheet for last week is still unsubmitted — submit it today.",
+        },
+      ],
     },
   ];
 }

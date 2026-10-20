@@ -1,5 +1,8 @@
 import 'server-only'
-import { approveBatch, rejectBatch } from '@openbooks/engine/hrm/field-time/crew'
+import {
+  approveBatch,
+  rejectBatch,
+} from '@openbooks/engine/hrm/field-time/crew'
 import { actorAllowedSubsidiaryIds } from '@openbooks/engine/organization/actor-subsidiaries'
 import { db } from '@openbooks/engine/platform/db'
 
@@ -21,16 +24,22 @@ export async function releaseCrewTimeBatchApproval(
   subjectId: string,
   outcome: 'approved' | 'rejected',
   comment?: string | null,
+  approvalRunId?: string,
 ): Promise<void> {
   // Flows' release context carries no subsidiary scope, so resolve the
   // approver's scope on the trusted runner (the same helper the HRM gates
   // use) and pass it explicitly — the crew service takes no omitted scope.
-  const allowedSubsidiaryIds = await actorAllowedSubsidiaryIds(db, orgId, actorId)
+  const allowedSubsidiaryIds = await actorAllowedSubsidiaryIds(
+    db,
+    orgId,
+    actorId,
+  )
   if (outcome === 'approved') {
     await approveBatch({
       orgId,
       actorUserId: actorId,
       batchId: subjectId,
+      approvalRunId,
       comment: comment ?? null,
       allowedSubsidiaryIds,
     })
@@ -42,6 +51,7 @@ export async function releaseCrewTimeBatchApproval(
     orgId,
     actorUserId: actorId,
     batchId: subjectId,
+    approvalRunId,
     reason,
     allowedSubsidiaryIds,
   })

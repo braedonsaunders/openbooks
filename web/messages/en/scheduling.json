@@ -138,7 +138,7 @@
     "discard": "Discard changes",
     "submit": "Submit for publication",
     "submitted": "{count, plural, one {Submitted a change for publication.} other {Submitted # changes for publication.}}",
-    "governedExplain": "Governed board: publishing records a publication. When an approval Flow applies, the changes publish once it is approved.",
+    "flowExplain": "Publishing submits these changes through tenant Flows. With no approval gates, they publish immediately.",
     "awaiting": "{count, plural, one {# change is} other {# changes are}} waiting for a publication decision.",
     "awaitingFlow": "An approval Flow decides this publication in Approvals. The submitted changes stay locked until then.",
     "openApprovals": "Open Approvals"

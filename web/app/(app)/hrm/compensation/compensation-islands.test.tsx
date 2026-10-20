@@ -51,8 +51,6 @@ test("the decide reason is labelled with its own label, never Submit", () => {
       lineId="line-1"
       labels={LABELS}
       reasonLabel="Decision reason"
-      approveLabel="Approve"
-      rejectLabel="Reject"
       reopenLabel="Reopen"
     />,
   );
@@ -159,6 +157,7 @@ const posted: { url: string; body: string }[] = [];
 function stubFetch(): void {
   posted.length = 0;
   (globalThis as Record<string, unknown>).fetch = (async (input: unknown, init?: { body?: unknown }) => {
+    if(String(input).startsWith('/api/flows/record-state'))return Response.json({approvalState:{status:'pending',pendingWith:[{name:'Assigned reviewer',since:'2026-07-14T00:00:00.000Z'}],myActions:{gateId:'gate-1',signatureRequired:false},awaitingAnotherApprover:false},history:[],failedRun:null,canRetry:false});
     posted.push({ url: String(input), body: String(init?.body ?? "") });
     return Response.json({ id: "line-1" });
   }) as typeof fetch;

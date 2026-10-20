@@ -206,7 +206,7 @@ test("approval lookup resolves a gate directly and counts the mapped worklist", 
       mode: "any",
     });
     const documentId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", documentId);
+    await submitForApproval("vendor_bill", documentId, actors.submitterId);
     const gate = (await gatesForSubject(org.orgId, "vendor_bill", documentId))[0]!;
     const ctx = { orgId: org.orgId, actorId: actors.approver1Id, asOf: nowIso() };
     const item = await flowsApprovalAdapter.lookup!(ctx, `gate:${gate.id}`);
@@ -222,9 +222,10 @@ test("a leave maker reassigned to their own gate sees no decision actions", { sk
   try {
     await enableHrm(org.orgId);
     const workerId = await createScratchUser(org.orgId, "Self Approving Worker", "self_approving_worker");
-    await grant(org.orgId, workerId, ["hrm.leave.request", "hrm.leave.manage"]);
+    await grant(org.orgId, workerId, ["hrm.leave.request", "hrm.leave.manage", "hrm.leave.approve"]);
     const workerParty = await linkPerson(org.orgId, workerId, "Self Approving Worker");
     const approverId = await createScratchUser(org.orgId, "Independent Approver", "leave_approver");
+    await grant(org.orgId,approverId,["hrm.leave.read","hrm.leave.approve"]);
     await linkPerson(org.orgId, approverId, "Independent Approver");
     const employmentId = await mkEmployment(org.orgId, workerParty, org.subsidiaryId);
     const type = await createLeaveType({ orgId: org.orgId, actorId: workerId, code: "SOD", name: "SoD leave", paid: true, valueCrossing: "payout" });
@@ -423,7 +424,7 @@ test("OM-10: an actor without leave access loads the leave leg with no own items
 
 test("OM-10: the approver leg still shows gates addressed to an approver who lacks hrm.leave.request", { skip: !DB }, async () => {
   // The own-leg gate must not take the approver leg with it: an approver
-  // with NO hrm grants at all still sees leave gates assigned to them,
+  // with the native approval duty and no leave-request duty sees their gates,
   // and sees no own-draft items.
   const org: ScratchOrg = await createScratchOrg();
   try {
@@ -432,6 +433,7 @@ test("OM-10: the approver leg still shows gates addressed to an approver who lac
     const approverId = await createScratchUser(org.orgId, "Inbox Leave Approver", "inbox_leave_approver");
     await grant(org.orgId, workerId, ["hrm.leave.request", "hrm.leave.manage"]);
     const workerParty = await linkPerson(org.orgId, workerId, "Inbox Leave Worker");
+    await grant(org.orgId,approverId,["hrm.leave.read","hrm.leave.approve"]);
     await linkPerson(org.orgId, approverId, "Inbox Leave Approver");
     const employmentId = await mkEmployment(org.orgId, workerParty, org.subsidiaryId);
     const type = await createLeaveType({ orgId: org.orgId, actorId: workerId, code: "VAC", name: "Vacation", paid: true, valueCrossing: "payout" });
@@ -595,13 +597,21 @@ test("an unsubmitted own week opens that week's timesheet, not the bare list", {
 test("a week covered by approved leave owes no timesheet, but partial or pending leave still does", { skip: !DB }, async () => {
   const org: ScratchOrg = await createScratchOrg();
   try {
+    await enableHrm(org.orgId);
     const userId = await createScratchUser(org.orgId, "Inbox Leave Owner", "inbox_leave_owner");
     const partyId = await linkPerson(org.orgId, userId, "Inbox Leave Owner");
     const approverId = await createScratchUser(org.orgId, "Inbox Leave Approver", "inbox_leave_approver");
+    await grant(org.orgId,userId,["hrm.leave.request","hrm.leave.manage"]);
+    await grant(org.orgId,approverId,["hrm.leave.read","hrm.leave.approve"]);
+    await linkPerson(org.orgId,approverId,"Inbox Leave Approver");
     const employmentId = await mkEmployment(org.orgId, partyId, org.subsidiaryId);
     const leaveType = randomUUID();
     await db.execute(sql`
       insert into hrm_leave_types (id, org_id, code, name) values (${leaveType}, ${org.orgId}, 'VAC', 'Vacation')`);
+    await createLeavePolicy({orgId:org.orgId,actorId:userId,leaveTypeId:leaveType,
+      appliesTo:{employer_subsidiary_id:null,department_id:null},accrualRule:{kind:"per_year",hours:"480"},
+      carryoverRule:{kind:"none"},minimumNoticeDays:0,effectiveFrom:"2020-01-01"});
+    await seedApprovalFlow(org.orgId,{subjectKind:HRM_LEAVE_REQUEST_SUBJECT_KIND,assignees:[{type:"user",userId:approverId}],mode:"all"});
     // Three ended Sunday-start weeks with nothing recorded.
     const covered = "2026-01-04"; // approved leave Monday through Friday
     const partial = "2026-01-11"; // approved leave Monday through Thursday only
@@ -612,12 +622,13 @@ test("a week covered by approved leave owes no timesheet, but partial or pending
         values (${org.orgId}, ${partyId}, ${week}, 'draft')`);
     }
     const leave = async (from: string, to: string, status: "approved" | "submitted"): Promise<void> => {
-      const decided = status === "approved";
-      await db.execute(sql`
-        insert into hrm_leave_requests (org_id, employment_id, leave_type_id, starts_on, ends_on, hours, status, decided_by, decided_at, decision_reason)
-        values (${org.orgId}, ${employmentId}, ${leaveType}, ${from}::date, ${to}::date, 40.00, ${status},
-                ${decided ? approverId : null}, ${decided ? new Date().toISOString() : null}::timestamptz,
-                ${decided ? "Approved vacation" : null})`);
+      const draft=await fileLeaveRequest({orgId:org.orgId,actorId:userId,employmentId,leaveTypeId:leaveType,
+        startsOn:from,endsOn:to,hours:to==='2026-01-15'?"32":"40",reason:"Planned vacation"});
+      await submitLeaveRequest({orgId:org.orgId,actorId:userId,requestId:draft.id});
+      if(status==='approved'){
+        const [gate]=await gatesForSubject(org.orgId,HRM_LEAVE_REQUEST_SUBJECT_KIND,draft.id);
+        assert.ok(gate);await decideGate({gateId:gate.id,userId:approverId,decision:"approved",comment:"Approved vacation"});
+      }
     };
     await leave("2026-01-05", "2026-01-09", "approved");
     await leave("2026-01-12", "2026-01-15", "approved");
@@ -635,27 +646,53 @@ test("a week covered by approved leave owes no timesheet, but partial or pending
   }
 });
 
-test("a period reopen request reaches an independent close.reopen holder's inbox, never the requester's", { skip: !DB }, async () => {
-  const org: ScratchOrg = await createScratchOrg();
-  try {
-    const requesterId = await createScratchUser(org.orgId, "Reopen Requester", "reopen_requester");
-    const approverId = await createScratchUser(org.orgId, "Reopen Approver", "reopen_approver");
-    const bystanderId = await createScratchUser(org.orgId, "Reopen Bystander", "reopen_bystander");
-    await grant(org.orgId, requesterId, ["close.reopen"]);
-    await grant(org.orgId, approverId, ["close.reopen"]);
-    const requestId = randomUUID();
-    await db.execute(sql`
-      insert into close_reopen_requests
-        (id, org_id, period_id, book_id, modules, reason, impact_snapshot, requested_by, created_by, updated_by)
-      values (${requestId}, ${org.orgId}, ${org.periodId}, ${org.bookId}, '["gl"]'::jsonb, 'Late vendor credit',
-              '{}'::jsonb, ${requesterId}, ${requesterId}, ${requesterId})`);
-    const read = (actorId: string) => listInbox({ orgId: org.orgId, actorId, asOf: nowIso() }, { kinds: ["close_reopen_request"] });
-    const approverItems = await read(approverId);
-    assert.deepEqual(approverItems.map((item) => item.source.id), [requestId], "the independent approver is asked");
-    assert.deepEqual(await read(requesterId), [], "the requester is never asked to approve their own request");
-    assert.deepEqual(await read(bystanderId), [], "nobody without close.reopen is asked");
-    assert.ok(approverItems[0]!.actions.some((action) => action.key === "approve"));
-  } finally {
+test(
+  "period reopen work reaches only its assigned native Flow reviewer",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      const { setPeriodLockState } = await import("../periods/period-locks.ts");
+      const { requestPeriodReopen } = await import("../close/reopening.ts");
+      await setPeriodLockState({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        module: "gl",
+        state: "closed",
+        actorId: actors.adminId,
+        reason: "Close the period before its correction",
+      });
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "close_reopen_request",
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        mode: "all",
+      });
+      const id = await requestPeriodReopen({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        modules: ["gl"],
+        actorId: actors.adminId,
+        reason: "Correct the original period evidence",
+      });
+      const read = (actorId: string) =>
+        listInbox(
+          { orgId: org.orgId, actorId, asOf: nowIso() },
+          { kinds: ["flows_approval"] },
+        );
+      const assigned = await read(actors.approver1Id);
+      assert.equal(assigned.length, 1);
+      assert.equal(assigned[0]?.kind, "flows_approval");
+      assert.ok(assigned[0]?.subjectHref.includes(id));
+      assert.ok(
+        assigned[0]?.actions.some((action) => action.key === "approve"),
+      );
+      assert.deepEqual(await read(actors.adminId), []);
+      assert.deepEqual(await read(actors.approver2Id), []);
+    } finally {
     await dropScratchOrg(org.orgId);
   }
-});
+  },
+);

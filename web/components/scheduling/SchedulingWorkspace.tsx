@@ -283,15 +283,15 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
       {props.refusal ? (
         <SchedulingAlert message={props.refusal.message} remedy={props.refusal.remedy} />
       ) : null}
-      {people && pendingPublication ? (
+      {pendingPublication ? (
         <SchedulingAlert tone="info" message={t('publish.awaiting', { count: pendingPublication.entryIds.length })} remedy={pendingPublication.flowGated ? t('publish.awaitingFlow') : null}>
           {pendingPublication.flowGated ? <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs"><Link href={APPROVALS_HOME_HREF}>{t('publish.openApprovals')}</Link></Button> : null}
         </SchedulingAlert>
       ) : null}
-      {people && board.publishPolicy !== 'live' && stagedDrafts.length ? (
-        <SchedulingAlert tone="warning" message={t('publish.pending', { count: stagedDrafts.length, people: new Set(stagedDrafts.map((entry) => entry.subjectId)).size })} remedy={board.publishPolicy === 'governed' ? t('publish.governedExplain') : t('publish.explain')}>
+      {stagedDrafts.length > 0 && !pendingPublication ? (
+        <SchedulingAlert tone="warning" message={t('publish.pending', { count: stagedDrafts.length, people: new Set(stagedDrafts.map((entry) => entry.subjectId)).size })} remedy={t('publish.flowExplain')}>
           {window?.canManage ? <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => void discardDrafts()}>{t('publish.discard')}</Button> : null}
-          {window?.canPublish && !pendingPublication ? <Button size="sm" className="h-7 px-2 text-xs" onClick={() => void publishDrafts()} disabled={publishing}><Send className="mr-1 h-3.5 w-3.5" />{board.publishPolicy === 'governed' ? t('publish.submit') : t('publish.action')}</Button> : null}
+          {window?.canPublish && !pendingPublication ? <Button size="sm" className="h-7 px-2 text-xs" onClick={() => void publishDrafts()} disabled={publishing}><Send className="mr-1 h-3.5 w-3.5" />{t('publish.submit')}</Button> : null}
         </SchedulingAlert>
       ) : null}
       {people && view === 'grid' && legend.length ? (

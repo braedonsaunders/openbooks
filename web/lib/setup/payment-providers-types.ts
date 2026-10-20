@@ -12,7 +12,6 @@ export interface PaymentProviderConfig {
   settings: Record<string, unknown>
   hasSecrets: boolean
   lastError: string | null
-  refundPolicy: 'automatic' | 'review' | null
   defaultDisputedFundsAccountId: string | null
   defaultChargebackLossAccountId: string | null
   defaultDisputeFeeAccountId: string | null
@@ -22,7 +21,6 @@ export interface PaymentAutomationConfig {
   provider: AutomationProviderKey
   displayName: string
   isEnabled: boolean
-  refundPolicy: 'automatic' | 'review' | null
   defaultDisputedFundsAccountId: string | null
   defaultChargebackLossAccountId: string | null
   defaultDisputeFeeAccountId: string | null

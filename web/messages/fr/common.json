@@ -319,7 +319,7 @@
   "approvalFlow": {
     "pendingWith": "En attente de {names}",
     "awaitingAnother": "En attente d'un autre approbateur",
-    "rejectTitle": "Rejeter ce document ?",
+    "rejectTitle": "Rejeter cette soumission ?",
     "rejectReasonLabel": "Motif du rejet",
     "signTitle": "Signer cette approbation",
     "signLabel": "Saisissez votre nom comme attestation d’approbation",
@@ -327,7 +327,7 @@
     "alreadyDecided": "Cette approbation a déjà été traitée — actualisation",
     "decisionFailed": "Échec de la décision",
     "submitRun": "Soumettre pour approbation",
-    "submitted": "Envoyé dans le circuit d’approbation — la nouvelle approbation figure sur la liste de travail",
+    "submitted": "Soumission traitée.",
     "submitFailed": "Échec de la soumission",
     "withdrawTitle": "Retirer cette soumission ?",
     "withdrawReasonLabel": "Motif du retrait",
@@ -350,7 +350,9 @@
     },
     "retryRun": "Relancer l’approbation",
     "retried": "Approbation relancée — la nouvelle étape est dans la liste de travail",
-    "retryFailed": "La relance a échoué"
+    "retryFailed": "La relance a échoué",
+    "commandWithdrawn": "Soumission retirée. Le dossier peut être modifié et soumis à nouveau.",
+    "decisionRecorded": "Décision enregistrée."
   },
   "customFields": {
     "noOptions": "Aucune option définie",

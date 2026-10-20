@@ -1,0 +1,1 @@
+Receipt validation uses the native invoker-only home-identity and membership locks, restoring tenant scope before returning. No receipt, decision, actor identity or financial row is rewritten.

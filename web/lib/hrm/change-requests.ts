@@ -11,7 +11,11 @@ import { HrmAuthorizationError } from '@openbooks/engine/hrm/authorization'
 import { can, type Authz } from '../authz'
 import { setupSectionParams } from '../list-params'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import { resolveQueueStatus, segmentOfServiceStatus, QUEUE_SEGMENTS } from './queue-status'
+import {
+  resolveQueueStatus,
+  segmentOfServiceStatus,
+  QUEUE_SEGMENTS,
+} from './queue-status'
 
 /**
  * Org-wide employment change-request queue — one read for the working
@@ -53,7 +57,8 @@ export interface QueueRow {
   requesterLabel: string
   submittedLabel: string
   statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  statusVariant:
+    'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   /** HR-16 classification (0227): action label + reason code, null when unclassified. */
   actionLabel: string | null
   reasonCode: string | null
@@ -123,7 +128,7 @@ export interface ChangeRequestQueueData {
   canManage: boolean
   /**
    * Verb actions (Rescind/Correct) display gate: the rescind route
-   * requires hrm.employment.approve, so the buttons render only for
+   * requires hrm.employment.manage, so the buttons render only for
    * approvers — never as dead buttons that can only refuse.
    */
   canVerb: boolean
@@ -182,21 +187,34 @@ async function resolveQueueRows(
   t: Awaited<ReturnType<typeof getTranslations>>,
   orgId: string,
   visible: ServiceRow[],
-  workerByEmployment: Map<string, { name: string | null; partyId: string | null }>,
+  workerByEmployment: Map<
+    string,
+    { name: string | null; partyId: string | null }
+  >,
   requesterByUser: Map<string, string>,
   segment: string | undefined,
 ): Promise<QueueRow[]> {
-  const appliedIds = [...new Set(visible.map((row) => row.appliedEmploymentChangeId).filter((id): id is string => id !== null))]
+  const appliedIds = [
+    ...new Set(
+      visible
+        .map((row) => row.appliedEmploymentChangeId)
+        .filter((id): id is string => id !== null),
+    ),
+  ]
   const verbByChange = new Map<string, string>()
   if (appliedIds.length > 0) {
-    const verbs = (await db.execute<{ id: string; verb: string }>(sql`
+    const verbs = (
+      await db.execute<{ id: string; verb: string }>(sql`
       select id::text as id, verb from employment_changes
        where org_id = ${orgId}::uuid and id = any(${`{${appliedIds.join(',')}}`}::uuid[])
-    `)).rows
+    `)
+    ).rows
     for (const v of verbs) verbByChange.set(v.id, v.verb)
   }
   return visible.map((row) => {
-    const window = effectiveWindow(row.payload as { kind: string } & Record<string, unknown>)
+    const window = effectiveWindow(
+      row.payload as { kind: string } & Record<string, unknown>,
+    )
     const worker = workerByEmployment.get(row.employmentId)
     const requesterId = row.submittedBy ?? row.createdBy
     const kind = (row.payload as { kind: string }).kind
@@ -210,19 +228,28 @@ async function resolveQueueRows(
       effectiveFrom: window.from,
       effectiveTo: window.to,
       status,
-      requesterName: requesterId !== null ? (requesterByUser.get(requesterId) ?? null) : null,
+      requesterName:
+        requesterId !== null
+          ? (requesterByUser.get(requesterId) ?? null)
+          : null,
       submittedAt: row.submittedAt ? row.submittedAt.toISOString() : null,
       createdAt: row.createdAt.toISOString(),
       employeeLabel: worker?.name ?? t('queue.notAvailable'),
-      employeeHref: worker?.partyId ? `/entities/employees?party=${encodeURIComponent(worker.partyId)}` : null,
+      employeeHref: worker?.partyId
+        ? `/entities/employees?party=${encodeURIComponent(worker.partyId)}`
+        : null,
       kindLabel: kindLabelOf(t, kind),
       effectiveWindow:
         window.from === null
           ? t('queue.notAvailable')
           : `${window.from} → ${window.to ?? t('employment.episodes.present')}`,
       requesterLabel:
-        requesterId !== null ? (requesterByUser.get(requesterId) ?? t('queue.notAvailable')) : t('queue.notAvailable'),
-      submittedLabel: row.submittedAt ? row.submittedAt.toISOString() : t('queue.notAvailable'),
+        requesterId !== null
+          ? (requesterByUser.get(requesterId) ?? t('queue.notAvailable'))
+          : t('queue.notAvailable'),
+      submittedLabel: row.submittedAt
+        ? row.submittedAt.toISOString()
+        : t('queue.notAvailable'),
       statusLabel: t.has(`employment.changeRequests.statusNames.${status}`)
         ? t(`employment.changeRequests.statusNames.${status}`)
         : status,
@@ -232,16 +259,20 @@ async function resolveQueueRows(
           ? t(`options.hrmAction.${row.action}`)
           : (row.action ?? null),
       reasonCode: row.reasonCode ?? null,
-      actionDisplay:
-        row.action
-          ? `${row.action && t.has(`options.hrmAction.${row.action}`) ? t(`options.hrmAction.${row.action}`) : row.action}${row.reasonCode ? ` · ${row.reasonCode}` : ''}`
-          : null,
-      verb: row.appliedEmploymentChangeId ? (verbByChange.get(row.appliedEmploymentChangeId) ?? null) : null,
+      actionDisplay: row.action
+        ? `${row.action && t.has(`options.hrmAction.${row.action}`) ? t(`options.hrmAction.${row.action}`) : row.action}${row.reasonCode ? ` · ${row.reasonCode}` : ''}`
+        : null,
+      verb: row.appliedEmploymentChangeId
+        ? (verbByChange.get(row.appliedEmploymentChangeId) ?? null)
+        : null,
       verbLabel:
-        row.appliedEmploymentChangeId && verbByChange.get(row.appliedEmploymentChangeId) && verbByChange.get(row.appliedEmploymentChangeId) !== 'apply'
+        row.appliedEmploymentChangeId &&
+        verbByChange.get(row.appliedEmploymentChangeId) &&
+        verbByChange.get(row.appliedEmploymentChangeId) !== 'apply'
           ? t(`queue.verbs.${verbByChange.get(row.appliedEmploymentChangeId)}`)
           : null,
-      appliedChangeId: status === 'applied' ? (row.appliedEmploymentChangeId ?? null) : null,
+      appliedChangeId:
+        status === 'applied' ? (row.appliedEmploymentChangeId ?? null) : null,
       requestHref: detailHref(segment, row.id),
       openLabel: t('queue.openRequest'),
     }
@@ -258,7 +289,10 @@ function detailHref(segment: string | undefined, requestId: string): string {
 }
 
 export interface QueueLabels {
-  workerByEmployment: Map<string, { name: string | null; partyId: string | null }>
+  workerByEmployment: Map<
+    string,
+    { name: string | null; partyId: string | null }
+  >
   requesterByUser: Map<string, string>
 }
 
@@ -274,25 +308,45 @@ export async function loadQueueLabels(
   employmentIds: readonly string[],
   userIds: readonly string[],
 ): Promise<QueueLabels> {
-  const workerByEmployment = new Map<string, { name: string | null; partyId: string | null }>()
+  const workerByEmployment = new Map<
+    string,
+    { name: string | null; partyId: string | null }
+  >()
   if (employmentIds.length > 0) {
     const ids = employmentIds.map((id) => sql`${id}::uuid`)
-    const rows = (await db.execute<{ employmentId: string; workerName: string | null; partyId: string | null }>(sql`
+    const rows = (
+      await db.execute<{
+        employmentId: string
+        workerName: string | null
+        partyId: string | null
+      }>(sql`
       select w.id::text as "employmentId", p.display_name as "workerName", p.id::text as "partyId"
         from worker_employments w
         join parties p on p.id = w.worker_party_id and p.org_id = w.org_id
-       where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})`)).rows
-    for (const row of rows) workerByEmployment.set(row.employmentId, { name: row.workerName, partyId: row.partyId })
+       where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})`)
+    ).rows
+    for (const row of rows)
+      workerByEmployment.set(row.employmentId, {
+        name: row.workerName,
+        partyId: row.partyId,
+      })
   }
   const requesterByUser = new Map<string, string>()
   if (userIds.length > 0) {
     const ids = userIds.map((id) => sql`${id}::uuid`)
-    const rows = (await db.execute<{ userId: string; workerName: string | null; userName: string }>(sql`
+    const rows = (
+      await db.execute<{
+        userId: string
+        workerName: string | null
+        userName: string
+      }>(sql`
       select u.id::text as "userId", p.display_name as "workerName", u.name as "userName"
         from users u
         left join parties p on p.id = u.party_id and p.org_id = u.org_id
-       where u.org_id = ${orgId}::uuid and u.id in (${sql.join(ids, sql`, `)})`)).rows
-    for (const row of rows) requesterByUser.set(row.userId, row.workerName ?? row.userName)
+       where u.org_id = ${orgId}::uuid and u.id in (${sql.join(ids, sql`, `)})`)
+    ).rows
+    for (const row of rows)
+      requesterByUser.set(row.userId, row.workerName ?? row.userName)
   }
   return { workerByEmployment, requesterByUser }
 }
@@ -301,7 +355,8 @@ function effectiveWindow(payload: { kind: string } & Record<string, unknown>): {
   from: string | null
   to: string | null
 } {
-  const text = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null)
+  const text = (value: unknown): string | null =>
+    typeof value === 'string' && value !== '' ? value : null
   if (payload.kind === 'termination') {
     return { from: text(payload.effectiveDate), to: null }
   }
@@ -314,7 +369,11 @@ type Catalog = {
 }
 
 /** Header/dialog hrefs preserve the active status segment; the dialog closes by navigating the param away. */
-function queueHref(status: string | undefined, propose: boolean, hire = false): string {
+function queueHref(
+  status: string | undefined,
+  propose: boolean,
+  hire = false,
+): string {
   const params = new URLSearchParams()
   if (status) params.set('status', status)
   if (propose) params.set('propose', '1')
@@ -370,13 +429,23 @@ export async function loadChangeRequestQueue(
   // Verbs and reason codes ride Human resources, which the page gate
   // already holds: only the grants decide. Reason codes configure where
   // changes are proposed, so the button and section render for managers.
-  const canVerb = can(authz, 'hrm.employment.approve')
+  const canVerb = can(authz, 'hrm.employment.manage')
   const reasonsOn = canManage
 
   const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
-  const dialogRequestId = typeof sp.request === 'string' && sp.request !== '' ? sp.request : null
+  const dialogRequestId =
+    typeof sp.request === 'string' && sp.request !== '' ? sp.request : null
   const dialogCloseHref = queueHref(rawStatus, false)
-  const base: Omit<ChangeRequestQueueData, 'refusal' | 'hasContent' | 'rows' | 'counts' | 'total' | 'truncated' | 'segments'> = {
+  const base: Omit<
+    ChangeRequestQueueData,
+    | 'refusal'
+    | 'hasContent'
+    | 'rows'
+    | 'counts'
+    | 'total'
+    | 'truncated'
+    | 'segments'
+  > = {
     title: t('queue.title'),
     description: t('queue.description'),
     listTitle: t('queue.listTitle'),
@@ -413,10 +482,17 @@ export async function loadChangeRequestQueue(
     verbHeader: t('queue.columns.verb'),
     // HR-16 end
     proposeButton: t('queue.proposeButton'),
-    proposeHref: queueHref(typeof sp.status === 'string' ? sp.status : undefined, true),
+    proposeHref: queueHref(
+      typeof sp.status === 'string' ? sp.status : undefined,
+      true,
+    ),
     proposeOpen: sp.propose === '1',
     hireMode: sp.hire === '1',
-    hireHref: queueHref(typeof sp.status === 'string' ? sp.status : undefined, true, true),
+    hireHref: queueHref(
+      typeof sp.status === 'string' ? sp.status : undefined,
+      true,
+      true,
+    ),
     hireLinkLabel: t('queue.proposeHireLink'),
     proposeEmploymentLabel: t('queue.proposeEmploymentLabel'),
     proposeEmploymentPlaceholder: t('queue.proposeEmploymentPlaceholder'),
@@ -430,7 +506,10 @@ export async function loadChangeRequestQueue(
     reasonsHref: '/hrm/change-requests?reasons=1',
     reasonsLabel: t('queue.reasonsButton'),
     showReasons: false,
-    reasonsCloseHref: queueHref(typeof sp.status === 'string' ? sp.status : undefined, false),
+    reasonsCloseHref: queueHref(
+      typeof sp.status === 'string' ? sp.status : undefined,
+      false,
+    ),
     queue: {
       openEmployee: t('queue.openEmployee'),
       notAvailable: t('queue.notAvailable'),
@@ -450,19 +529,29 @@ export async function loadChangeRequestQueue(
 
   const resolved = resolveQueueStatus(rawStatus ?? null)
   if (!resolved.ok) {
-    return refuse(t('queue.refusalTitle'), t('queue.unknownSegment', { value: rawStatus ?? '' }))
+    return refuse(
+      t('queue.refusalTitle'),
+      t('queue.unknownSegment', { value: rawStatus ?? '' }),
+    )
   }
 
   let serviceRows: ServiceRow[]
   try {
     // One bounded read for both the counts and the list, so the segments
     // and the rows can never disagree about what was fetched.
-    serviceRows = await listChangeRequests({ orgId, actorId: authz.user.id, limit: QUEUE_LIMIT })
+    serviceRows = await listChangeRequests({
+      orgId,
+      actorId: authz.user.id,
+      limit: QUEUE_LIMIT,
+    })
   } catch (error) {
     // The service enforces subsidiary scope per row by refusing: a mixed-
     // scope actor sees the refusal with its remedy, never a partial list
     // pretending to be the whole queue.
-    if (error instanceof HrmAuthorizationError || error instanceof HrmChangeRequestError) {
+    if (
+      error instanceof HrmAuthorizationError ||
+      error instanceof HrmChangeRequestError
+    ) {
       return refuse(t('queue.refusalTitle'), (error as Error).message)
     }
     throw error
@@ -475,7 +564,9 @@ export async function loadChangeRequestQueue(
     if (segment !== null) counts[segment] = (counts[segment] ?? 0) + 1
   }
   const segmentLabel = (segment: string): string =>
-    t.has(`queue.segments.${segment}`) ? t(`queue.segments.${segment}`) : segment
+    t.has(`queue.segments.${segment}`)
+      ? t(`queue.segments.${segment}`)
+      : segment
   const segments: QueueSegment[] = QUEUE_SEGMENTS.map((segment) => ({
     value: segment,
     // FilterChips renders the count separately from the translated label.
@@ -483,28 +574,51 @@ export async function loadChangeRequestQueue(
     count: counts[segment] ?? 0,
   }))
 
-  const visible = resolved.serviceStatus === null
-    ? serviceRows
-    : serviceRows.filter((row) => row.status === resolved.serviceStatus)
+  const visible =
+    resolved.serviceStatus === null
+      ? serviceRows
+      : serviceRows.filter((row) => row.status === resolved.serviceStatus)
 
   // Display labels only, through the shared resolver the overview
   // cockpit reuses so the two surfaces cannot resolve names differently.
   const employmentIds = [...new Set(visible.map((row) => row.employmentId))]
-  const userIds = [...new Set(visible.flatMap((row) => [row.submittedBy, row.createdBy]).filter((id): id is string => id !== null))]
-  const { workerByEmployment, requesterByUser } = await loadQueueLabels(orgId, employmentIds, userIds)
+  const userIds = [
+    ...new Set(
+      visible
+        .flatMap((row) => [row.submittedBy, row.createdBy])
+        .filter((id): id is string => id !== null),
+    ),
+  ]
+  const { workerByEmployment, requesterByUser } = await loadQueueLabels(
+    orgId,
+    employmentIds,
+    userIds,
+  )
   // Departments feed the propose/edit drawer, exactly like the employee
   // drawer's own picker: active names, org-scoped, never ids alone.
-  const departments = (await db.execute<{ id: string; name: string }>(sql`
-    select id::text as id, name from departments where org_id = ${orgId}::uuid and is_active order by name`)).rows
+  const departments = (
+    await db.execute<{ id: string; name: string }>(sql`
+    select id::text as id, name from departments where org_id = ${orgId}::uuid and is_active order by name`)
+  ).rows
 
-  const rows: QueueRow[] = await resolveQueueRows(t, orgId, visible, workerByEmployment, requesterByUser, rawStatus)
+  const rows: QueueRow[] = await resolveQueueRows(
+    t,
+    orgId,
+    visible,
+    workerByEmployment,
+    requesterByUser,
+    rawStatus,
+  )
 
   // The detail drawer names its subject from the visible row when the
   // requested id is in this list; a deep link into another segment (or an
   // id outside the viewer's scope) leaves the subject null and the drawer's
   // own fetch owns what renders — data for a permitted request, the named
   // refusal otherwise.
-  const active = dialogRequestId !== null ? (rows.find((row) => row.id === dialogRequestId) ?? null) : null
+  const active =
+    dialogRequestId !== null
+      ? (rows.find((row) => row.id === dialogRequestId) ?? null)
+      : null
   const dialogSubject: ChangeRequestDialogSubject | null = active
     ? {
         employeeLabel: active.employeeLabel,
@@ -526,11 +640,19 @@ export async function loadChangeRequestQueue(
     total: serviceRows.length,
     truncated: serviceRows.length >= QUEUE_LIMIT,
     segments,
-    departmentOptions: departments.map((row) => ({ value: row.id, label: row.name })),
+    departmentOptions: departments.map((row) => ({
+      value: row.id,
+      label: row.name,
+    })),
     canEditReasons: reasonsOn,
-    reasonsHref: reasonsHref(typeof sp.status === 'string' ? sp.status : undefined),
+    reasonsHref: reasonsHref(
+      typeof sp.status === 'string' ? sp.status : undefined,
+    ),
     reasonsLabel: t('queue.reasonsButton'),
     showReasons: sp.reasons === '1' && reasonsOn,
-    reasonsCloseHref: queueHref(typeof sp.status === 'string' ? sp.status : undefined, false),
+    reasonsCloseHref: queueHref(
+      typeof sp.status === 'string' ? sp.status : undefined,
+      false,
+    ),
   }
 }

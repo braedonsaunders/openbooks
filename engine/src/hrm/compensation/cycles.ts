@@ -1,3 +1,8 @@
+import { lockApprovalSubject } from "../../platform/approval-routing.ts";
+import {
+  requestNativeCommandApproval,
+  readNativeApprovalDecision,
+} from "../../platform/approval-routing.ts";
 import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
@@ -1204,7 +1209,9 @@ function dispPct6(pct6: string): string {
   return pct6.includes(".") ? pct6.replace(/0+$/, "").replace(/\.$/, "") : pct6;
 }
 
-export async function proposeLine(query: ProposeLineQuery): Promise<CompCycleLineDTO> {
+export async function proposeLine(
+  query: ProposeLineQuery,
+): Promise<CompCycleLineDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const lineId = requireId(query.lineId, "lineId");
@@ -1257,7 +1264,9 @@ export async function proposeLine(query: ProposeLineQuery): Promise<CompCycleLin
     const proposedUnits = toUnits(proposedRate);
     const derivedPct6: string | null =
       currentUnits === 0n
-        ? (proposedUnits === 0n ? "0.000000" : null)
+        ? proposedUnits === 0n
+          ? "0.000000"
+          : null
         : pct6String(proposedUnits - currentUnits, currentUnits);
     const storedPct6: string | null = hasPct ? pct6 : derivedPct6;
     // Outside-guideline is allowed but flagged: without a reason it refuses.
@@ -1388,51 +1397,18 @@ export async function reopenLine(query: {
 // Line decisions retain person identity and the cycle's submitted Flow policy.
 // ---------------------------------------------------------------------------
 
-/**
- * Person identities remain required regardless of the tenant's policy.
- * When independence is required, the decider must be neither the proposing
- * user nor another login for that person. An unresolvable proposer — a legacy
- * line with no proposed_by, a deleted proposing user, or a null party on
- * either side — is a named refusal (re-propose the line), never a pass:
- * an identity that cannot be checked cannot be cleared.
- */
-export function assertLineDeciderSeparation(args: {
-  proposedBy: string | null;
-  proposerPartyId: string | null;
-  deciderUserId: string;
-  deciderPartyId: string | null;
-  requireIndependentActor?: boolean;
-}): void {
-  if (args.proposedBy === null) {
-    throw new CompensationError(
-      "REFUSED",
-      "this line names no proposer — separation of duties cannot be verified; re-propose the line before deciding",
-    );
-  }
-  if (args.proposerPartyId === null || args.deciderPartyId === null) {
-    throw new CompensationError(
-      "REFUSED",
-      "the line proposer can't be verified — re-propose the line so separation of duties can be checked",
-    );
-  }
-  if (args.requireIndependentActor === false) return;
-  if (args.proposedBy === args.deciderUserId || args.proposerPartyId === args.deciderPartyId) {
-    throw new CompensationError(
-      "REFUSED",
-      "the submitted cycle Flow has not authorized this proposer to decide their own line — submit the round and complete its configured approval, or use an authorized independent approver",
-    );
-  }
-}
-
 async function decideLine(
   orgId: string,
   actorId: string,
   lineId: string,
   decision: "approved" | "rejected",
   reason: string | null,
+  approvalRunId?: string,
 ): Promise<CompCycleLineDTO> {
   return withOrgTransaction(orgId, async () => {
-    await requireHrmCompensationApprove(db, orgId, actorId);
+    await lockApprovalSubject(orgId, "compensation_cycle_line", lineId);
+    if (approvalRunId) await requireHrmCompensationApprove(db, orgId, actorId);
+    else await requireHrmCompensationManage(db, orgId, actorId);
     const { cycle, line } = await loadCycleAndLineForUpdate(orgId, lineId);
     // Deciding moves another entity's wage: the Flows approve grant never
     // substitutes for entity scope — the cycle anchor and the line's
@@ -1451,20 +1427,44 @@ async function decideLine(
         `a ${line.status} line cannot be decided — only proposed lines decide`,
       );
     }
-    const selfApprovalAuthorized = cycle.status === "approved"
-      && await completedGateAllowsSelfApproval(db, {
-        orgId, subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND, subjectId: cycle.id,
-        approvalRunId: cycle.flow_run_id ?? undefined, actorId, outcome: "approved",
-      });
-    assertLineDeciderSeparation({
-      proposedBy: line.proposed_by,
-      proposerPartyId: (await db.execute<{ party_id: string | null }>(sql`
-        select party_id from users where org_id = ${orgId} and id = ${line.proposed_by}`)).rows[0]?.party_id ?? null,
-      deciderUserId: actorId,
-      deciderPartyId: (await db.execute<{ party_id: string | null }>(sql`
-        select party_id from users where org_id = ${orgId} and id = ${actorId}`)).rows[0]?.party_id ?? null,
-      requireIndependentActor: !selfApprovalAuthorized,
-    });
+    if (!line.proposed_by)
+      throw new CompensationError(
+        "REFUSED",
+        "This line has no proposer identity. Re-propose its current terms before submitting them through Flows.",
+      );
+    if (
+      decision === "approved" &&
+      (await requestNativeCommandApproval({
+        orgId,
+        actorId,
+        subjectKind: "compensation_cycle_line",
+        subjectId: lineId,
+        command: { reason },
+        approvalRunId,
+      }))
+    ) {
+      const worker = (
+        await db.execute<{ worker_party_id: string }>(
+          sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${line.employment_id}`,
+        )
+      ).rows[0];
+      return toLineDTO(line, worker?.worker_party_id ?? "");
+    }
+    if (
+      decision === "rejected" &&
+      !(await readNativeApprovalDecision({
+        orgId,
+        actorId,
+        subjectKind: "compensation_cycle_line",
+        subjectId: lineId,
+        outcome: "rejected",
+        approvalRunId,
+      }))
+    )
+      throw new CompensationError(
+        "REFUSED",
+        "Reject this proposal through its assigned native Flow gate.",
+      );
     if (decision === "rejected" && (reason === null || reason.trim().length === 0)) {
       throw new CompensationError("INVALID_INPUT", "a rejection needs its reason — the manager reads it");
     }
@@ -1488,21 +1488,37 @@ async function decideLine(
 }
 
 export async function approveLine(query: {
+  approvalRunId?: string;
   orgId: string;
   actorId: string;
   lineId: string;
   reason?: string | null;
 }): Promise<CompCycleLineDTO> {
-  return decideLine(requireOrgId(query.orgId), requireActorId(query.actorId), requireId(query.lineId, "lineId"), "approved", query.reason ?? null);
+  return decideLine(
+    requireOrgId(query.orgId),
+    requireActorId(query.actorId),
+    requireId(query.lineId, "lineId"),
+    "approved",
+    query.reason ?? null,
+    query.approvalRunId,
+  );
 }
 
 export async function rejectLine(query: {
+  approvalRunId?: string;
   orgId: string;
   actorId: string;
   lineId: string;
   reason: string;
 }): Promise<CompCycleLineDTO> {
-  return decideLine(requireOrgId(query.orgId), requireActorId(query.actorId), requireId(query.lineId, "lineId"), "rejected", requireReason(query.reason));
+  return decideLine(
+    requireOrgId(query.orgId),
+    requireActorId(query.actorId),
+    requireId(query.lineId, "lineId"),
+    "rejected",
+    requireReason(query.reason),
+    query.approvalRunId,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1510,15 +1526,12 @@ export async function rejectLine(query: {
 // ---------------------------------------------------------------------------
 
 /** Submit an open cycle: the approval is a Flows run over the cycle. */
-export async function submitCycleForApproval(query: {
-  orgId: string;
-  actorId: string;
-  cycleId: string;
-}): Promise<CompCycleDTO> {
+export async function submitCycleForApproval(query: { orgId: string; actorId: string; cycleId: string }): Promise<CompCycleDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const cycleId = requireId(query.cycleId, "cycleId");
   return withOrgTransaction(orgId, async () => {
+    await lockApprovalSubject(orgId, HRM_COMP_CYCLE_SUBJECT_KIND, cycleId);
     await requireHrmCompensationManage(db, orgId, actorId);
     const cycle = await loadCycleForUpdate(orgId, cycleId);
     // Submitting moves the whole round into approval: the anchor and
@@ -1540,26 +1553,26 @@ export async function submitCycleForApproval(query: {
         `${undecided.n} lines were never proposed — every line needs a proposal (or an explicit rejection of the round) before review`,
       );
     }
-    const { runRecordFlows } = await import("../../flows/run.ts");
-    const flowResult = await runRecordFlows(
-      { kind: "on_submit", source: "api" },
-      HRM_COMP_CYCLE_SUBJECT_KIND,
-      cycleId,
-      { orgId, userId: actorId },
-    );
-    const gatedRun = flowResult.runs.find((run) => run.gatesCreated > 0);
-    if (flowResult.failed || !gatedRun) {
-      throw new CompensationError(
-        "REFUSED",
-        "no enabled approval flow produced an approval gate for compensation cycles — configure a flow for compensation cycles before submitting",
-      );
-    }
-    const updated = (await db.execute<CycleRow>(sql`
+    const { routeSubjectSubmission } =
+      await import("../../flows/submission-policy.ts");
+    const routing = await routeSubjectSubmission({
+      orgId,
+      actorId,
+      subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
+      subjectId: cycleId,
+      source: "api",
+    });
+    const gatedRun = routing.gatingRunId
+      ? { runId: routing.gatingRunId }
+      : null;
+    const updated = (
+      await db.execute<CycleRow>(sql`
       update hrm_comp_cycles
-         set status = 'in_review', flow_run_id = ${gatedRun.runId}, revision = revision + 1,
+         set status = ${gatedRun ? "in_review" : "approved"}, approved_at=case when ${gatedRun === null} then now() else null end, flow_run_id = ${gatedRun?.runId ?? null}, revision = revision + 1,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${cycleId} and status = 'open' and revision = ${cycle.revision}
-       returning ${CYCLE_COLUMNS}`)).rows[0];
+       returning ${CYCLE_COLUMNS}`)
+    ).rows[0];
     if (!updated) {
       throw new CompensationError("STALE_REVISION", "the cycle moved while it was submitted — reload it and submit again");
     }
@@ -1605,19 +1618,23 @@ export async function releaseCompCycleDecision(
       throw new CompensationError("REFUSED", "Complete this compensation cycle's submitted Flow approval before releasing its decision");
     }
     if (decision === "approved") {
-      const updated = (await db.execute<CycleRow>(sql`
+      const updated = (
+        await db.execute<CycleRow>(sql`
         update hrm_comp_cycles
-           set status = 'approved', approved_at = now(), flow_run_id = ${approvalRunId}, revision = revision + 1, updated_at = now()
+           set status = 'approved', approved_at = now(), flow_run_id = ${approvalRunId}, revision = revision + 1, updated_at = now(),updated_by=${deciderId}
          where org_id = ${orgId} and id = ${cycleId} and status = 'in_review'
-         returning ${CYCLE_COLUMNS}`)).rows[0];
+         returning ${CYCLE_COLUMNS}`)
+      ).rows[0];
       if (!updated) throw new CompensationError("STALE_REVISION", "the cycle moved while it was released — the gate stays pending");
       await recordEvent(db, orgId, cycleId, null, "approved", deciderId, "flows approval released");
     } else {
-      const updated = (await db.execute<CycleRow>(sql`
+      const updated = (
+        await db.execute<CycleRow>(sql`
         update hrm_comp_cycles
-           set status = 'open', flow_run_id = ${approvalRunId}, revision = revision + 1, updated_at = now()
+           set status = 'open', flow_run_id = ${approvalRunId}, revision = revision + 1, updated_at = now(),updated_by=${deciderId}
          where org_id = ${orgId} and id = ${cycleId} and status = 'in_review'
-         returning ${CYCLE_COLUMNS}`)).rows[0];
+         returning ${CYCLE_COLUMNS}`)
+      ).rows[0];
       if (!updated) throw new CompensationError("STALE_REVISION", "the cycle moved while it was released — the gate stays pending");
       await recordEvent(db, orgId, cycleId, null, "rejected", deciderId, "flows approval rejected — rework and resubmit");
     }

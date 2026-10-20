@@ -72,8 +72,6 @@ const INITIAL: FormProps['initial'] = {
   reportPdfStyle: 'formal',
   fairValueRangePolicy: 'off',
   contractCreation: 'first_billing',
-  requireVendorBillApproval: false,
-  requireStockCountReview: false,
   controlAccounts: {
     ar: 'a1',
     ap: 'a2',
@@ -95,7 +93,6 @@ const PROPS: Omit<FormProps, 'initial'> = {
     { code: 'CAD', name: 'Canadian Dollar' },
   ],
   timeZones: ['UTC', 'America/Toronto'],
-  vendorBillFlowConfigured: false,
 }
 
 interface SeenRequest {
@@ -297,57 +294,20 @@ test('legal identity offers the country\'s tax numbers, checks them before savin
   }
 })
 
-// CTRL-01: the vendor-bill release policy lives on Company Settings as an
-// explicit opt-in (default off), with a warning while no approval flow is
-// configured for vendor bills.
-test('the approvals card exposes the vendor-bill requirement and the no-flow warning', async () => {
+test('approval configuration links to the sole Flow policy surface', async () => {
   const { unmount } = await mountForm()
   try {
-    const box = document.getElementById('requireVendorBillApproval') as HTMLInputElement | null
-    assert.ok(box, 'expected the vendor-bill approval requirement control')
-    assert.equal(box.type, 'checkbox', 'the requirement is an explicit opt-in control, never a hidden default')
-    assert.equal(box.checked, false, 'the requirement defaults off')
-    // t.rich renders the <flows> tag as a link: strip tags to get the expectation.
-    const plain = (key: string): string =>
-      String(settingsCopy.approvals?.[key] ?? '').replace(/<\/?flows>/g, '')
-    const warning = document.body.textContent ?? ''
-    assert.ok(
-      warning.includes(plain('noFlowWarningAuto')),
-      'the card warns while no vendor-bill approval flow is configured',
+    assert.equal(document.getElementById('requireVendorBillApproval'), null)
+    assert.equal(document.getElementById('requireStockCountReview'), null)
+    const link = [...document.querySelectorAll('a')].find(
+      (item) => item.getAttribute('href') === '/admin/flows',
     )
-    const flows = [...document.querySelectorAll('a')].find((a) =>
-      (a.textContent ?? '').includes('Flows'),
-    ) as HTMLAnchorElement | undefined
-    assert.equal(
-      flows?.getAttribute('href'),
-      '/admin/flows?quickApproval=vendor_bill',
-      'the warning deep-links the Flows setup surface into the one-step approval dialog for vendor bills',
-    )
-    await act(async () => {
-      box.click()
-      await tick()
-    })
-    await tick()
+    assert.ok(link)
+    assert.equal(link.textContent, String(settingsCopy.approvals?.manageFlows))
     assert.ok(
-      (document.body.textContent ?? '').includes(plain('noFlowWarningRequired')),
-      'opting in rewords the warning to the refusal the submit path names',
-    )
-  } finally {
-    await unmount()
-  }
-})
-
-// IN11: the stock-count independent-review policy lives on the same
-// Approvals card as an explicit opt-in (default off).
-test('the approvals card exposes the stock-count independent-review requirement', async () => {
-  const { unmount } = await mountForm()
-  try {
-    const box = document.getElementById('requireStockCountReview') as HTMLInputElement | null
-    assert.ok(box, 'expected the stock-count review requirement control')
-    assert.equal(box.checked, false, 'the requirement defaults off')
-    assert.ok(
-      (document.body.textContent ?? '').includes(String(settingsCopy.approvals?.requireStockCountReviewHint)),
-      'the requirement explains both the on and the off behaviour',
+      (document.body.textContent ?? '').includes(
+        String(settingsCopy.approvals?.description),
+      ),
     )
   } finally {
     await unmount()
@@ -487,6 +447,10 @@ async function mountWorkflow(
       method: (init?.method ?? 'GET').toUpperCase(),
       body: init?.body ? JSON.parse(String(init.body)) : null,
     }
+    if(record.url.startsWith('/api/flows/record-state')){
+      const id=new URL(record.url,'http://test.local').searchParams.get('subjectId');
+      return Response.json({approvalState:{status:'pending',pendingWith:[],myActions:{gateId:`gate-${id}`,signatureRequired:false}},history:[],failedRun:null,canRetry:false});
+    }
     seen.push(record)
     return respond(record)
   }) as typeof fetch
@@ -598,7 +562,7 @@ test('normalization evidence renders accessible month rows with only pending app
       action.click()
       await tick()
     })
-    assert.ok(seen.some((entry) => entry.method === 'POST' && entry.url.endsWith('/request-august/approve')))
+    assert.ok(seen.some((entry) => entry.method === 'POST' && entry.url==='/api/flows/gates/decide'))
     assert.match(document.body.textContent ?? '', /another authorized approver review August/)
   } finally {
     await unmount()
@@ -717,7 +681,7 @@ test('submitting a request posts one month, a reason, and a uuid key, then reloa
   }
 })
 
-test('approving a pending month posts to its approve URL and surfaces a refusal remedy', async () => {
+test('a pending month decides its configured Flow gate and surfaces a refusal remedy', async () => {
   const pending = [
     {
       month: '2026-07-01',
@@ -745,7 +709,7 @@ test('approving a pending month posts to its approve URL and surfaces a refusal 
   })
   try {
     await act(async () => {
-      clickWorkflowButton(String(normalizationCopy.approveSubmit)).click()
+      clickWorkflowButton('Approve').click()
       await tick()
       await tick()
     })
@@ -754,9 +718,9 @@ test('approving a pending month posts to its approve URL and surfaces a refusal 
       seen.some(
         (entry) =>
           entry.method === 'POST' &&
-          entry.url === '/api/metrics/normalization/requests/request-1/approve',
+          entry.url === '/api/flows/gates/decide' && (entry.body as {gateId?:string})?.gateId==='gate-request-1',
       ),
-      'approval posts to the request approve URL with no body',
+      'the decision addresses the native Flow gate',
     )
     assert.ok(
       document.body.textContent?.includes('different authorized approver'),
@@ -865,13 +829,13 @@ test('a non-JSON approval error renders the approval fallback', async () => {
   })
   try {
     await act(async () => {
-      clickWorkflowButton(String(normalizationCopy.approveSubmit)).click()
+      clickWorkflowButton('Approve').click()
       await tick()
       await tick()
     })
     await tick()
     assert.ok(
-      document.body.textContent?.includes(String(normalizationCopy.approveFailed)),
+      document.body.textContent?.includes(String(messages.common.approvalFlow.decisionFailed)),
       'the approval fallback must render when the error body cannot be parsed',
     )
   } finally {

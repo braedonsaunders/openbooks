@@ -1,4 +1,4 @@
-"use client";
+'use client'
 
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useCallback, useState } from "react";
@@ -50,18 +50,18 @@ export function PaymentProvidersClient({ initialData }: {
 }) {
   const t = useTranslations("admin.setup.paymentProviders");
   const tFunding = useTranslations('processorReceipts');
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const router = useRouter();
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const ruleDrawerOpen = searchParams.get('rule') === 'new'
   const requestedView = searchParams.get('view')
   const view = resolvePaymentProviderView(requestedView, initialData.view, ruleDrawerOpen)
   const { closeHref: closeRuleHref, newHref: newRuleHref } = surchargeRuleDrawerHrefs(pathname, searchParams.toString())
-  const tc = useTranslations("common");
+  const tc = useTranslations('common')
   const [data, setData] = useState<Data>(initialData);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const { busy, execute } = useAppAction();
+  const { busy, execute } = useAppAction()
 
   // The unrestricted-scope remedy survives the lifecycle conversion: the
   // failure keeps the server's machine-readable code, so map it to the
@@ -126,13 +126,21 @@ export function PaymentProvidersClient({ initialData }: {
   }
 
   return (
-    <ListPageLayout header={<PageHeader
-      title={t('title')}
-      description={view === 'processor_receipts' ? tFunding('description') : t('description')}
-      actions={view === 'surcharge' ? (
-        <Button asChild><Link href={newRuleHref}>{t('addRule')}</Link></Button>
-      ) : undefined}
-    />}>
+    <ListPageLayout
+      header={
+        <PageHeader
+          title={t('title')}
+          description={view === 'processor_receipts' ? tFunding('description') : t('description')}
+          actions={
+            view === 'surcharge' ? (
+              <Button asChild>
+                <Link href={newRuleHref}>{t('addRule')}</Link>
+              </Button>
+            ) : undefined
+          }
+        />
+      }
+    >
       <div className="space-y-5">
         <ModuleHomeTabs placement="local" tabs={[
           ...(data.featureEnabled ? [
@@ -142,11 +150,21 @@ export function PaymentProvidersClient({ initialData }: {
           ] : []),
           ...(data.bankingEnabled ? [{ label: tFunding('accountsTab'), href: `${pathname}?view=processor_receipts`, active: view === 'processor_receipts' }] : []),
         ]} />
-        {error ? <div className="flex items-center justify-between gap-3" role="alert"><p className="text-sm text-red-600">{error}</p><Button variant="outline" onClick={() => void load()}>{tc('actions.retry')}</Button></div> : null}
-        {notice ? <p className="text-sm text-teal-700 dark:text-teal-400">{notice}</p> : null}
+        {error ? (
+          <div className="flex items-center justify-between gap-3" role="alert">
+            <p className="text-sm text-red-600">{error}</p>
+            <Button variant="outline" onClick={() => void load()}>
+              {tc('actions.retry')}
+            </Button>
+          </div>
+        ) : null}
+        {notice ? (
+          <p className="text-sm text-teal-700 dark:text-teal-400">{notice}</p>
+        ) : null}
         {view === 'processor_receipts' ? <ProcessorReceiptPolicies /> : null}
-        {view === 'checkout' ? <div className="space-y-5">
-      {PROVIDERS.map((p) => (
+        {view === 'checkout' ? (
+          <div className="space-y-5">
+            {PROVIDERS.map((p) => (
         <ProviderCard
           key={p.key}
           provider={p}
@@ -159,10 +177,12 @@ export function PaymentProvidersClient({ initialData }: {
           t={t}
         />
       ))}
-        </div> : null}
+          </div>
+        ) : null}
 
-        {view === 'settlement' ? <div className="space-y-5">
-      {AUTOMATION_PROVIDERS.map((p) => (
+        {view === 'settlement' ? (
+          <div className="space-y-5">
+            {AUTOMATION_PROVIDERS.map((p) => (
         <AutomationProviderCard
           key={p.key}
           providerKey={p.key}
@@ -173,10 +193,11 @@ export function PaymentProvidersClient({ initialData }: {
           t={t}
         />
       ))}
-        </div> : null}
+          </div>
+        ) : null}
 
-        {view === 'surcharge' ?
-      <SurchargeRules
+        {view === 'surcharge' ? (
+          <SurchargeRules
         rules={data.surchargeRules}
         incomeAccounts={data.incomeAccounts}
         onSave={post}
@@ -186,10 +207,10 @@ export function PaymentProvidersClient({ initialData }: {
         closeHref={closeRuleHref}
         onClose={() => router.replace(closeRuleHref)}
       />
-        : null}
+        ) : null}
       </div>
     </ListPageLayout>
-  );
+  )
 }
 
 function ProviderCard({
@@ -212,7 +233,7 @@ function ProviderCard({
   t: ReturnType<typeof useTranslations>;
 }) {
   const [enabled, setEnabled] = useState(config?.acceptanceEnabled ?? false);
-  const [apiKey, setApiKey] = useState("");
+  const [apiKey, setApiKey] = useState('')
   const [webhookSecret, setWebhookSecret] = useState("");
   const [publishableKey, setPublishableKey] = useState(config?.publishableKey ?? "");
   const [merchantAccount, setMerchantAccount] = useState(
@@ -220,11 +241,10 @@ function ProviderCard({
   );
   const [bankAccountId, setBankAccountId] = useState(config?.defaultBankAccountId ?? "");
   const [surchargeRuleId, setSurchargeRuleId] = useState(config?.surchargeRuleId ?? "");
-  const [reviewRequired, setReviewRequired] = useState((config?.refundPolicy ?? "automatic") === "review");
   const [disputedFundsAccountId, setDisputedFundsAccountId] = useState(config?.defaultDisputedFundsAccountId ?? "");
   const [chargebackLossAccountId, setChargebackLossAccountId] = useState(config?.defaultChargebackLossAccountId ?? "");
   const [disputeFeeAccountId, setDisputeFeeAccountId] = useState(config?.defaultDisputeFeeAccountId ?? "");
-  const tc = useTranslations("common");
+  const tc = useTranslations('common')
   const { busy: testing, execute } = useAppAction();
   const [testResult, setTestResult] = useState<{ ok: boolean; detail: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -248,7 +268,9 @@ function ProviderCard({
     <Card>
       <CardContent className="space-y-4 p-5">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900 dark:text-white">{provider.label}</h2>
+          <h2 className="font-semibold text-slate-900 dark:text-white">
+            {provider.label}
+          </h2>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
             {t("enableAcceptance")}
@@ -309,8 +331,6 @@ function ProviderCard({
             </Select>
           </div>
           <AutomationFields
-            reviewRequired={reviewRequired}
-            onReviewToggle={() => setReviewRequired((v) => !v)}
             disputedFundsAccountId={disputedFundsAccountId}
             onDisputedFundsChange={setDisputedFundsAccountId}
             chargebackLossAccountId={chargebackLossAccountId}
@@ -321,7 +341,7 @@ function ProviderCard({
             t={t}
           />
           <div className="space-y-1.5 sm:col-span-2">
-            <Label>{t("webhookUrl")}</Label>
+            <Label>{t('webhookUrl')}</Label>
             <div className="flex items-center gap-2">
               <code className="flex-1 truncate rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
                 {webhookUrl}
@@ -339,7 +359,9 @@ function ProviderCard({
                 {copied ? t("copied") : t("copy")}
               </Button>
             </div>
-            <p className="text-xs text-slate-400 dark:text-slate-500">{t("webhookHint")}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              {t('webhookHint')}
+            </p>
           </div>
         </div>
         <div className="flex items-center justify-between">
@@ -363,7 +385,6 @@ function ProviderCard({
                 defaultBankAccountId: bankAccountId || null,
                 publishableKey: publishableKey || null,
                 surchargeRuleId: surchargeRuleId || null,
-                refundPolicy: reviewRequired ? "review" : "automatic",
                 defaultDisputedFundsAccountId: disputedFundsAccountId || null,
                 defaultChargebackLossAccountId: chargebackLossAccountId || null,
                 defaultDisputeFeeAccountId: disputeFeeAccountId || null,
@@ -373,24 +394,24 @@ function ProviderCard({
               })
             }
           >
-            {t("save")}
+            {t('save')}
           </Button>
         </div>
-        {provider.key === "stripe" && config?.hasSecrets ? <StripeBillingImport /> : null}
+        {provider.key === "stripe" && config?.hasSecrets ? (
+          <StripeBillingImport />
+        ) : null}
       </CardContent>
     </Card>
-  );
+  )
 }
 
 /**
  * The refunds-and-disputes half of a provider card, shared by hosted-checkout
- * providers and automation-only ones: one review switch and the three posting
+ * providers and automation-only ones: the three posting
  * accounts the automation journals through. Plain language first — the
  * accounting role follows each label as secondary text.
  */
 function AutomationFields({
-  reviewRequired,
-  onReviewToggle,
   disputedFundsAccountId,
   onDisputedFundsChange,
   chargebackLossAccountId,
@@ -400,16 +421,14 @@ function AutomationFields({
   postingAccounts,
   t,
 }: {
-  reviewRequired: boolean;
-  onReviewToggle: () => void;
-  disputedFundsAccountId: string;
+  disputedFundsAccountId: string
   onDisputedFundsChange: (value: string) => void;
-  chargebackLossAccountId: string;
+  chargebackLossAccountId: string
   onChargebackLossChange: (value: string) => void;
-  disputeFeeAccountId: string;
+  disputeFeeAccountId: string
   onDisputeFeeChange: (value: string) => void;
-  postingAccounts: Account[];
-  t: ReturnType<typeof useTranslations>;
+  postingAccounts: Account[]
+  t: ReturnType<typeof useTranslations>
 }) {
   const pickers = [
     {
@@ -434,16 +453,12 @@ function AutomationFields({
   return (
     <>
       <div className="border-t border-slate-100 pt-4 sm:col-span-2 dark:border-slate-800">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">{t("automationTitle")}</h3>
-        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t("automationHint")}</p>
-      </div>
-      <div className="sm:col-span-2">
-        <SwitchField
-          label={t("refundReviewSwitch")}
-          description={t("refundReviewHint")}
-          on={reviewRequired}
-          onToggle={onReviewToggle}
-        />
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+          {t('automationTitle')}
+        </h3>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          {t('automationHint')}
+        </p>
       </div>
       {pickers.map((picker) => (
         <div key={picker.label} className="space-y-1.5">
@@ -457,11 +472,13 @@ function AutomationFields({
               </option>
             ))}
           </Select>
-          <p className="text-xs text-slate-400 dark:text-slate-500">{picker.hint}</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            {picker.hint}
+          </p>
         </div>
       ))}
     </>
-  );
+  )
 }
 
 /**
@@ -487,7 +504,6 @@ function AutomationProviderCard({
   t: ReturnType<typeof useTranslations>;
 }) {
   const [automationEnabled, setAutomationEnabled] = useState(config?.isEnabled ?? false);
-  const [reviewRequired, setReviewRequired] = useState((config?.refundPolicy ?? "automatic") === "review");
   const [disputedFundsAccountId, setDisputedFundsAccountId] = useState(config?.defaultDisputedFundsAccountId ?? "");
   const [chargebackLossAccountId, setChargebackLossAccountId] = useState(config?.defaultChargebackLossAccountId ?? "");
   const [disputeFeeAccountId, setDisputeFeeAccountId] = useState(config?.defaultDisputeFeeAccountId ?? "");
@@ -506,20 +522,24 @@ function AutomationProviderCard({
     <Card>
       <CardContent className="space-y-4 p-5">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900 dark:text-white">{name}</h2>
+          <h2 className="font-semibold text-slate-900 dark:text-white">
+            {name}
+          </h2>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={automationEnabled} onChange={(e) => setAutomationEnabled(e.target.checked)} />
             {t("enableAutomation")}
           </label>
         </div>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
-        {providerKey === "shopify_payments" ? (
-          <p className="text-xs text-slate-400 dark:text-slate-500">{t("shopifyChannelsNote")}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {description}
+        </p>
+        {providerKey === 'shopify_payments' ? (
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            {t('shopifyChannelsNote')}
+          </p>
         ) : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <AutomationFields
-            reviewRequired={reviewRequired}
-            onReviewToggle={() => setReviewRequired((v) => !v)}
             disputedFundsAccountId={disputedFundsAccountId}
             onDisputedFundsChange={setDisputedFundsAccountId}
             chargebackLossAccountId={chargebackLossAccountId}
@@ -535,22 +555,21 @@ function AutomationProviderCard({
             disabled={busy}
             onClick={() =>
               void onSave({
-                action: "saveConfig",
+                action: 'saveConfig',
                 provider: providerKey,
                 isEnabled: automationEnabled,
-                refundPolicy: reviewRequired ? "review" : "automatic",
                 defaultDisputedFundsAccountId: disputedFundsAccountId || null,
                 defaultChargebackLossAccountId: chargebackLossAccountId || null,
                 defaultDisputeFeeAccountId: disputeFeeAccountId || null,
               })
             }
           >
-            {t("save")}
+            {t('save')}
           </Button>
         </div>
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function SurchargeRules({
@@ -573,7 +592,7 @@ function SurchargeRules({
   onClose: () => void;
 }) {
   const tc = useTranslations('common')
-  const [name, setName] = useState("");
+  const [name, setName] = useState('')
   const [calculation, setCalculation] = useState("percent");
   const [percent, setPercent] = useState("");
   const [fixedAmount, setFixedAmount] = useState("");
@@ -609,60 +628,83 @@ function SurchargeRules({
     <>
       <Card>
         <CardContent className="space-y-4 p-5">
-        <div>
-          <h2 className="font-semibold text-slate-900 dark:text-white">{t("surchargeRules")}</h2>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t("surchargeHint")}</p>
-        </div>
-        <SharedTable className="w-full text-sm">
-          <SharedTableHeader>
-            <SharedTableRow className="text-left text-xs text-slate-500">
-              <SharedTableHead className="py-1">{t("ruleName")}</SharedTableHead>
-              <SharedTableHead>{t("ruleCalc")}</SharedTableHead>
-              <SharedTableHead>{t("ruleProvider")}</SharedTableHead>
-              <SharedTableHead>{t("ruleEffective")}</SharedTableHead>
-              <SharedTableHead />
-            </SharedTableRow>
-          </SharedTableHeader>
-          <SharedTableBody>
-            {rules.map((r) => (
-              <SharedTableRow key={r.id} className="border-t border-slate-100 dark:border-slate-800">
-                <SharedTableCell className="py-1.5">{r.name}</SharedTableCell>
-                <SharedTableCell className="tabular-nums">
-                  {r.calculation === "percent"
+          <div>
+            <h2 className="font-semibold text-slate-900 dark:text-white">
+              {t('surchargeRules')}
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              {t('surchargeHint')}
+            </p>
+          </div>
+          <SharedTable className="w-full text-sm">
+            <SharedTableHeader>
+              <SharedTableRow className="text-left text-xs text-slate-500">
+                <SharedTableHead className="py-1">
+                  {t('ruleName')}
+                </SharedTableHead>
+                <SharedTableHead>{t("ruleCalc")}</SharedTableHead>
+                <SharedTableHead>{t("ruleProvider")}</SharedTableHead>
+                <SharedTableHead>{t("ruleEffective")}</SharedTableHead>
+                <SharedTableHead />
+              </SharedTableRow>
+            </SharedTableHeader>
+            <SharedTableBody>
+              {rules.map((r) => (
+                <SharedTableRow key={r.id} className="border-t border-slate-100 dark:border-slate-800">
+                  <SharedTableCell className="py-1.5">{r.name}</SharedTableCell>
+                  <SharedTableCell className="tabular-nums">
+                    {r.calculation === "percent"
                     ? `${r.percent}%`
                     : r.calculation === "fixed"
                       ? r.fixedAmount
                       : `${r.percent}% + ${r.fixedAmount}`}
-                  {r.capAmount ? ` (≤ ${r.capAmount})` : ""}
-                </SharedTableCell>
-                <SharedTableCell>{r.provider ?? t("allProviders")}</SharedTableCell>
-                <SharedTableCell className="tabular-nums">{r.effectiveFrom}{r.effectiveTo ? ` → ${r.effectiveTo}` : ""}</SharedTableCell>
-                <SharedTableCell className="text-right">
-                  {r.isActive ? (
-                    <button
+                    {r.capAmount ? ` (≤ ${r.capAmount})` : ""}
+                  </SharedTableCell>
+                  <SharedTableCell>
+                    {r.provider ?? t('allProviders')}
+                  </SharedTableCell>
+                  <SharedTableCell className="tabular-nums">
+                    {r.effectiveFrom}
+                    {r.effectiveTo ? ` → ${r.effectiveTo}` : ""}
+                  </SharedTableCell>
+                  <SharedTableCell className="text-right">
+                    {r.isActive ? (
+                      <button
                       type="button"
                       className="text-xs text-red-600 hover:underline"
                       disabled={busy}
                       onClick={() => void onSave({ action: "deleteRule", id: r.id })}
                     >
-                      {t("deactivate")}
-                    </button>
-                  ) : (
-                    <span className="text-xs text-slate-400">{t("inactive")}</span>
-                  )}
-                </SharedTableCell>
-              </SharedTableRow>
-            ))}
-          </SharedTableBody>
-        </SharedTable>
+                        {t('deactivate')}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">
+                        {t('inactive')}
+                      </span>
+                    )}
+                  </SharedTableCell>
+                </SharedTableRow>
+              ))}
+            </SharedTableBody>
+          </SharedTable>
         </CardContent>
       </Card>
-      <UrlDrawer open={open} closeHref={closeHref} title={t('addRule')} size="lg" footer={(
-        <div className="flex w-full justify-end gap-2">
-          <Button asChild variant="outline"><Link href={closeHref}>{tc('actions.cancel')}</Link></Button>
-          <Button onClick={() => void add()} disabled={busy || !name.trim() || !feeIncomeAccountId}>{t('addRule')}</Button>
-        </div>
-      )}>
+      <UrlDrawer
+        open={open}
+        closeHref={closeHref}
+        title={t('addRule')}
+        size="lg"
+        footer={
+          <div className="flex w-full justify-end gap-2">
+            <Button asChild variant="outline">
+              <Link href={closeHref}>{tc('actions.cancel')}</Link>
+            </Button>
+            <Button onClick={() => void add()} disabled={busy || !name.trim() || !feeIncomeAccountId}>
+              {t('addRule')}
+            </Button>
+          </div>
+        }
+      >
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>{t("ruleName")}</Label>
@@ -728,5 +770,5 @@ function SurchargeRules({
         </div>
       </UrlDrawer>
     </>
-  );
+  )
 }

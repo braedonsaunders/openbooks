@@ -1,14 +1,11 @@
+import { installEngineSeams } from "../composition/install.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
-  createScratchUser,
-  seedApprovalFlow,
-  seedDraftDocument,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+  createScratchUser, type ScratchOrg } from "../testing/fixtures.ts";
 import {
   addLiveVersion,
   grant,
@@ -17,8 +14,6 @@ import {
   setupHarness,
   withHarness,
 } from "../testing/hrm-harness.ts";
-import { submitForApproval } from "../flows/submit.ts";
-import { saveApprovalSettings } from "./services.ts";
 import {
   createAutomation,
   automationsFeatureOn,
@@ -26,13 +21,12 @@ import {
 import { executeAutomation, AutomationExecuteError } from "./execute.ts";
 import { AutomationContractError } from "./triggers.ts";
 import { simulateAutomation } from "./simulator.ts";
-import { applyExceptionOnly, ApprovalPolicyError, scoreException } from "./approvals.ts";
 import { upsertActionReason, validateSubmitActionReason, ActionReasonError } from "./action-reasons.ts";
 import {
   correctEmploymentChange,
   rescindEmploymentChange,
   EventVerbError,
-} from "./event-verbs.ts";
+} from "../hrm/change-event-actions.ts";
 import { getEmploymentAsOf } from "../hrm/employment-read.ts";
 
 /**
@@ -71,6 +65,7 @@ const AUTOMATIONS_SPEC = {
 } as const;
 
 async function setupAutomationsHarness(): Promise<Harness> {
+  installEngineSeams();
   return setupHarness(AUTOMATIONS_SPEC);
 }
 
@@ -599,43 +594,48 @@ test("a rescind refuses instead of filing null evidence when the pre-rescind sna
   }, { bypass: true });
 });
 
-test("correct defaults to a pre-filled reapproval request; direct when allowed", { skip: !DB }, async () => {
-  await withHarness(setupAutomationsHarness, async (h) => {
-    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Automation Worker", withVersion: false });
-    await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
-    const target = await addLiveVersion(h.org.orgId, employmentId, { status: "on_leave", from: "2026-02-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
-    // Default (correct_requires_reapproval true): opens a new request.
-    const via = await correctEmploymentChange({
+test(
+  "both native employment correction commands use tenant Flow routing",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      setupAutomationsHarness,
+      async (h) => {
+        const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Automation Worker", withVersion: false });
+        await addLiveVersion(h.org.orgId, employmentId, { status: "active", from: "2026-01-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
+        const target = await addLiveVersion(h.org.orgId, employmentId, { status: "on_leave", from: "2026-02-01", changeKind: "status_changed", reason: "automation seed", sourceRef: "hr16-seed" });
+        // A typed correction request follows the ordinary submission lifecycle.
+        const via = await correctEmploymentChange({
       orgId: h.org.orgId,
       actorId: h.adminId,
       changeId: target.changeId,
       reason: "wrong start month",
       prefillPayload: { kind: "status_change", status: "active", effectiveFrom: "2026-02-01", effectiveTo: null },
     });
-    assert.equal(via.mode, "reapproval");
-    assert.ok(via.requestId, "the correction travels as a new pre-filled request");
-    // Opt-out: direct version superseding at the same effective date.
-    await db.execute(sql`
-      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{hrmCorrectRequiresReapproval}', 'false')
-       where id = ${h.org.orgId}
-    `);
-    const direct = await correctEmploymentChange({
+        assert.equal(via.mode, "submitted");
+        assert.ok(via.requestId, "the correction travels as a new pre-filled request");
+        const separate=await seedEmployment(h.org.orgId,h.org.subsidiaryId,{displayName:"Scalar correction worker",withVersion:false});
+        await addLiveVersion(h.org.orgId,separate.employmentId,{status:"active",from:"2026-01-01",changeKind:"status_changed",reason:"Recorded employment start",sourceRef:"employment-start"});
+        const directTarget=await addLiveVersion(h.org.orgId,separate.employmentId,{status:"on_leave",from:"2026-02-01",changeKind:"status_changed",reason:"Recorded leave",sourceRef:"employment-leave"});
+        const direct = await correctEmploymentChange({
       orgId: h.org.orgId,
       actorId: h.adminId,
-      changeId: target.changeId,
+      changeId: directTarget.changeId,
       reason: "status typo",
       correctedFields: { status: "active" },
     });
-    assert.equal(direct.mode, "direct");
-    const verb = (await db.execute<{ verb: string; corrected: string | null }>(sql`
+        assert.equal(direct.mode, "applied");
+        if (direct.mode !== "applied")
+          throw new Error("The zero-gate correction did not apply.");
+        const verb = (await db.execute<{ verb: string; corrected: string | null }>(sql`
       select verb, corrected_change_id as corrected from employment_changes where id = ${direct.changeId}
     `)).rows[0]!;
-    assert.equal(verb.verb, "correct");
-    assert.equal(verb.corrected, target.changeId);
-    const scopedId = await createScratchUser(h.org.orgId, "Scoped corrector", "scoped_corrector");
-    await grant(h.org.orgId, scopedId, ["hrm.employment.manage"]);
-    await db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"list","subsidiaryIds":[]}'::jsonb where org_id = ${h.org.orgId} and key = 'scoped_corrector'`); // No subsidiary visible, so the scope gate refuses before the dependency gate
-    await assert.rejects(
+        assert.equal(verb.verb, "correct");
+        assert.equal(verb.corrected, directTarget.changeId);
+        const scopedId = await createScratchUser(h.org.orgId, "Scoped corrector", "scoped_corrector");
+        await grant(h.org.orgId, scopedId, ["hrm.employment.manage"]);
+        await db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"list","subsidiaryIds":[]}'::jsonb where org_id = ${h.org.orgId} and key = 'scoped_corrector'`); // No subsidiary visible, so the scope gate refuses before the dependency gate
+        await assert.rejects(
       correctEmploymentChange({
         orgId: h.org.orgId,
         actorId: scopedId,
@@ -645,59 +645,8 @@ test("correct defaults to a pre-filled reapproval request; direct when allowed",
       }),
       /not visible/,
     );
-  }, { bypass: true });
-});
-
-test("exclude-initiator: a gate assigned to the initiator refuses instead of auto-deciding", { skip: !DB }, async () => {
-  await withHarness(setupAutomationsHarness, async (h) => {
-    await seedApprovalFlow(h.org.orgId, {
-      subjectKind: "vendor_bill",
-      assignees: [{ type: "user", userId: h.adminId }],
-      mode: "any",
-    });
-    const docId = await seedDraftDocument(h.org.orgId, { kind: "vendor_bill", createdBy: h.adminId });
-    const res = await submitForApproval("vendor_bill", docId);
-    assert.equal(res.gated, true);
-    const gateId = (await db.execute<{ id: string }>(sql`
-      select id from flow_gates where subject_id = ${docId} order by created_at limit 1
-    `)).rows[0]!.id;
-    await saveApprovalSettings({
-      orgId: h.org.orgId,
-      actorId: h.adminId,
-      subjectKind: "timesheet_week",
-      exceptionOnly: true,
-      thresholds: { max_hours_per_day: 10, max_week_hours: 40 },
-      excludeInitiator: true,
-    });
-    await assert.rejects(
-      applyExceptionOnly({
-        orgId: h.org.orgId,
-        actorId: h.adminId,
-        subjectKind: "timesheet_week",
-        subjectId: randomUUID(),
-        gateId,
-        initiatorUserId: h.adminId,
-      }),
-      (e: unknown) => e instanceof ApprovalPolicyError && /exclude_initiator is on/.test((e as Error).message),
+      },
+      { bypass: true },
     );
-    const status = (await db.execute<{ status: string }>(sql`
-      select status from flow_gates where id = ${gateId}
-    `)).rows[0]!.status;
-    assert.equal(status, "pending", "the refused gate stays pending for a human");
-  }, { bypass: true });
-});
-
-test("exception scoring refusal and naming live beside the pure matrix", { skip: !DB }, async () => {
-  await withHarness(setupAutomationsHarness, async () => {
-    // Unknown thresholds refuse instead of passing, over a real org row set.
-    assert.throws(
-      () =>
-        scoreException(
-          "timesheet_week",
-          { entity: "timesheet_week", fields: { total_hours: 5 }, scope: {} },
-          {},
-        ),
-      /needs max_hours_per_day/,
-    );
-  }, { bypass: true });
-});
+  },
+);

@@ -94,7 +94,7 @@ test('quick setup creates an enabled, audited flow that gates a submission', asy
 
     const docId = await withBypassContext(() =>
       seedDraftDocument(org.orgId, { kind: 'vendor_bill', createdBy: actors.submitterId }))
-    const result = await submitForApproval('vendor_bill', docId)
+    const result = await submitForApproval('vendor_bill', docId, actors.submitterId)
     assert.equal(result.gated, true, 'the submission is gated by the quick flow')
     assert.equal(await docStatus(docId), 'pending_approval')
     const gates = (await withBypassContext(() => db.execute<{ n: string }>(sql`
@@ -122,12 +122,12 @@ test('a threshold gates only submissions over the amount', async () => {
 
     const smallId = await withBypassContext(() =>
       seedDraftDocument(org.orgId, { kind: 'vendor_bill', createdBy: actors.submitterId, total: '100.00' }))
-    const small = await submitForApproval('vendor_bill', smallId)
+    const small = await submitForApproval('vendor_bill', smallId, actors.submitterId)
     assert.equal(small.gated, false, 'a submission under the threshold passes the gate by')
 
     const bigId = await withBypassContext(() =>
       seedDraftDocument(org.orgId, { kind: 'vendor_bill', createdBy: actors.submitterId, total: '20000.00' }))
-    const big = await submitForApproval('vendor_bill', bigId)
+    const big = await submitForApproval('vendor_bill', bigId, actors.submitterId)
     assert.equal(big.gated, true, 'a submission over the threshold is gated')
     assert.equal(await docStatus(bigId), 'pending_approval')
   } finally {
@@ -184,3 +184,20 @@ test('refusals carry a machine code for translated toasts', async () => {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+
+test('quick setup preserves an explicit tenant policy allowing the submitter to decide', async()=>{
+ const {org,actors}=await setupOrg();
+ try{
+  const response=await withOrgContext(org.orgId,()=>setup(post({subjectKind:'vendor_bill',approver:{type:'user',userId:actors.adminId},preventSelfApproval:false})));
+  assert.equal(response.status,200,await response.clone().text());
+  const id=await withBypassContext(()=>seedDraftDocument(org.orgId,{kind:'vendor_bill',createdBy:actors.adminId}));
+  const submitted=await submitForApproval('vendor_bill',id,actors.adminId);
+  assert.equal(submitted.gated,true);
+  const gate=(await withBypassContext(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`))).rows[0];
+  assert.ok(gate);
+  const {decideGate}=await import('@openbooks/engine/testing/flows/gates');
+  await decideGate({gateId:gate.id,userId:actors.adminId,decision:'approved'});
+  assert.equal(await docStatus(id),'approved');
+ }finally{state.user=null;await withBypassContext(()=>dropScratchOrg(org.orgId));}
+});

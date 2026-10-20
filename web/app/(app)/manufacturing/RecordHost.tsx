@@ -1,11 +1,11 @@
-"use client";
+'use client'
 
 import { useIdentityState } from "@/lib/use-identity-state"
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import Link from "next/link";
+import Link from 'next/link'
 import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
-import { toast } from "sonner";
+import { toast } from 'sonner'
 import { Button, Badge, EmptyState, ContextMenu, useContextMenu } from "@openbooks/ui";
 import { AsyncUrlDrawer } from "@/components/async-url-drawer";
 import { JournalEntryLink } from "@/components/journal-entry-link";
@@ -194,26 +194,24 @@ export function ManufacturingRecordHost({
   canGovernRevisions = false,
   canReadQuality = false,
   canSubcontract = false,
-  routingDirectApply = false,
 }: {
-  view: ManufacturingView;
-  recordId?: string;
-  closeHref: string;
-  options: ManufacturingOptions;
-  initialWorkflow?: OperatingProfileChoice;
-  initialDepartmentId?: string;
+  view: ManufacturingView
+  recordId?: string
+  closeHref: string
+  options: ManufacturingOptions
+  initialWorkflow?: OperatingProfileChoice
+  initialDepartmentId?: string
   initialValues?: {producedItemId?:string;subsidiaryId?:string;quantityOrdered?:string};
-  canManage: boolean;
-  canPost: boolean;
-  canBuy: boolean;
-  canReadJournal: boolean;
-  canRollup?: boolean;
-  canGovernRevisions?: boolean;
-  canReadQuality?:boolean;
-  canSubcontract?:boolean;
-  routingDirectApply?: boolean;
+  canManage: boolean
+  canPost: boolean
+  canBuy: boolean
+  canReadJournal: boolean
+  canRollup?: boolean
+  canGovernRevisions?: boolean
+  canReadQuality?: boolean
+  canSubcontract?: boolean
 }) {
-  const actionMenu = useContextMenu();
+  const actionMenu = useContextMenu()
   const t = useTranslations("manufacturing"),
     router = useRouter(),
     locale = useLocale(),
@@ -261,13 +259,20 @@ export function ManufacturingRecordHost({
       });
     return () => controller.abort();
   }, [recordId, view, attempt, t, setData, setLoadedId, setError, setPending]);
-  if (!recordId) return null;
+  if (!recordId) return null
   const isNew = recordId === "new",
     visibleData = loadedId === recordId ? data : null;
   const tabs = tabKeys[view].filter(
-    (key) => (key !== "process" || (visibleData?.record.operatingProfile as {physicalModel?:string}|undefined)?.physicalModel==='process') && (key !== "subcontracts" || canSubcontract && canReadQuality) && (key !== "entries" || canReadJournal) && (key !== "standard" || canRollup && visibleData?.record.status === "active"),
-  );
-  const tab = tabs.includes(requestedTab) ? requestedTab : tabs[0] ?? "summary";
+    (key) =>
+      (key !== "process" || (visibleData?.record.operatingProfile as {physicalModel?:string}|undefined)?.physicalModel==='process') &&
+      (key !== 'subcontracts' || (canSubcontract && canReadQuality)) &&
+      (key !== 'entries' || canReadJournal) &&
+      (key !== 'standard' ||
+        (canRollup && visibleData?.record.status === "active")),
+  )
+  const tab = tabs.includes(requestedTab)
+    ? requestedTab
+    : (tabs[0] ?? 'summary')
   const title = isNew
     ? t("new." + view)
     : String(
@@ -306,10 +311,17 @@ export function ManufacturingRecordHost({
     return label(value);
   };
   const cell = (key: string, row: ManufacturingRow) => {
-    if ((tab === "issues" || tab === "receipts") && (key === "lotNumber" || key === "serialNumber")) {
+    if (
+      (tab === "issues" || tab === "receipts") && (key === "lotNumber" || key === "serialNumber")
+    ) {
       const kind = key === "lotNumber" ? "lot" : "serial";
       const id = row[kind === "lot" ? "lotId" : "serialId"];
-      if (typeof id === "string") return <Link className="text-teal-700 hover:underline" href={("/manufacturing/genealogy?kind=" + kind + "&id=" + id + "&direction=" + (tab === "issues" ? "forward" : "backward")) as never}>{label(row[key])}</Link>;
+      if (typeof id === 'string')
+        return (
+          <Link className="text-teal-700 hover:underline" href={("/manufacturing/genealogy?kind=" + kind + "&id=" + id + "&direction=" + (tab === "issues" ? "forward" : "backward")) as never}>
+            {label(row[key])}
+          </Link>
+        )
     }
     if (key === "number" && tab === "entries" && canReadJournal)
       return (
@@ -335,17 +347,21 @@ export function ManufacturingRecordHost({
           {label(row[key])}
         </Link>
       );
-    return formatted(key, row[key]);
-  };
+    return formatted(key, row[key])
+  }
   async function openCommand(value: Command) {
     if (identity.current !== requestedIdentity) return;
     if (peerDirty) {
-      if (!await confirmDialog(t("discardDraft")) || identity.current !== requestedIdentity) return;
-      setPeerDirty(false);
-      setTab("summary");
+      if (
+        !(await confirmDialog(t('discardDraft'))) ||
+        identity.current !== requestedIdentity
+      )
+        return
+      setPeerDirty(false)
+      setTab('summary')
     }
-    setCommand(value);
-    setDirty(true);
+    setCommand(value)
+    setDirty(true)
   }
   function cancelCommand() {
     setCommand(null);
@@ -383,14 +399,23 @@ export function ManufacturingRecordHost({
           canBuy,
         )
       : [];
-  const actions = visibleData && canManage ? recordCommands(view,visibleData,options,canPost,canBuy,{routingDirectApply}).filter(action=>!["activate","activateDirect"].includes(action.key)||canGovernRevisions) : [];
-  let nextAction:Command|null=null;
-  if(view==="work-orders" && visibleData && canManage) {
+  const actions =
+    visibleData && canManage
+      ? recordCommands(view, visibleData, options, canPost, canBuy).filter(
+          (action) => !['activate'].includes(action.key) || canGovernRevisions,
+        )
+      : []
+  let nextAction: Command | null = null
+  if (view==="work-orders" && visibleData && canManage) {
     const record=visibleData.record, operation=(visibleData.sections.operations??[]).find(row=>row.status!=="done");
     const target=add(String(record.quantityOrdered),neg(String(record.quantityScrapped)));
     const allLoss=cmp(target,'0')<=0&&cmp(String(record.quantityCompleted),'0')===0;
     const key=record.status==="draft"?"release":record.status==="released"?"start":record.status==="on_hold"?"resume":record.status==="in_progress"&&allLoss?'hold':record.status==="in_progress"&&!operation?cmp(String(record.quantityCompleted),target)>=0?"done":"complete":null;
-    nextAction=key?actions.find(action=>action.key===key)??null:operation?childCommands(view,"operations",record,operation,options,canPost,canBuy).find(action=>["startOperation","resumeOperation","completeOperation"].includes(action.key))??null:null;
+    nextAction = key
+      ? (actions.find(action=>action.key===key)??null)
+      : operation
+        ? (childCommands(view,"operations",record,operation,options,canPost,canBuy).find(action=>["startOperation","resumeOperation","completeOperation"].includes(action.key))??null)
+        : null
   }
   const activeRows = visibleData?.sections[tab] ?? [];
   const childColumns =
@@ -489,7 +514,14 @@ export function ManufacturingRecordHost({
           ) : view === "mrp" ? (
             <p className="text-sm text-slate-500">{t("mrpNote")}</p>
           ) : null}
-          {actions.length ? <div className="flex justify-end"><Button size="sm" variant="outline" disabled={!!command} aria-haspopup="menu" aria-expanded={actionMenu.open} onClick={event=>actionMenu.openBelow(event.currentTarget)}>{t("journey.actions")}</Button><ContextMenu open={actionMenu.open} position={actionMenu.position} onClose={actionMenu.close} items={actions.map(action=>({key:action.key,label:t("actions."+action.key),onSelect:()=>openCommand(action),disabled:!!command,danger:action.key==="cancel"}))}/></div> : null}
+          {actions.length ? (
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" disabled={!!command} aria-haspopup="menu" aria-expanded={actionMenu.open} onClick={event=>actionMenu.openBelow(event.currentTarget)}>
+                {t('journey.actions')}
+              </Button>
+              <ContextMenu open={actionMenu.open} position={actionMenu.position} onClose={actionMenu.close} items={actions.map(action=>({key:action.key,label:t("actions."+action.key),onSelect:()=>openCommand(action),disabled:!!command,danger:action.key==="cancel"}))}/>
+            </div>
+          ) : null}
           {activeCommand ? (
             <CommandForm
               key={activeCommand.path + activeCommand.key}
@@ -506,7 +538,7 @@ export function ManufacturingRecordHost({
             />
           ) : null}
           <RecordTabs
-            label={t("recordTabs")}
+            label={t('recordTabs')}
             active={tab}
             tabs={tabs.map((key) => ({
               key,
@@ -516,15 +548,23 @@ export function ManufacturingRecordHost({
                 : {}),
             }))}
             onChange={async (value) => {
-              if (value === tab) return;
-              if (peerDirty && !await confirmDialog(t("discardDraft"))) return;
+              if (value === tab) return
+              if (peerDirty && !(await confirmDialog(t('discardDraft')))) return
               if (identity.current !== requestedIdentity) return;
-              setPeerDirty(false);
-              setTab(value);
-              setSelected(null);
+              setPeerDirty(false)
+              setTab(value)
+              setSelected(null)
             }}
           >
-            {view === "work-orders" && tab === "process" ? <ProcessRunPanel data={visibleData} onOpen={setTab}/> : view === "work-orders" && tab === "subcontracts" && canSubcontract ? <SubcontractPanel workOrderId={visibleData.record.id} canWrite={canManage && canPost} canBuy={canBuy} onDirty={()=>setPeerDirty(true)} onSaved={()=>setPeerDirty(false)} /> : view === "routings" && tab === "standard" && canRollup ? <StandardRollupPanel itemId={String(visibleData.record.producedItemId)} options={options} onDirty={()=>setPeerDirty(true)} onSaved={()=>setPeerDirty(false)} /> : view === "work-orders" && tab === "summary" ? <WorkOrderJourney canReadQuality={canReadQuality} data={visibleData} next={nextAction} onCommand={openCommand} busy={!!command} onOpen={(nextTab,row)=>{setTab(nextTab);setSelected(row??null)}} /> : tab === "summary" || tab === "details" ? (
+            {view === "work-orders" && tab === "process" ? (
+              <ProcessRunPanel data={visibleData} onOpen={setTab}/>
+            ) : view === "work-orders" && tab === "subcontracts" && canSubcontract ? (
+              <SubcontractPanel workOrderId={visibleData.record.id} canWrite={canManage && canPost} canBuy={canBuy} onDirty={()=>setPeerDirty(true)} onSaved={()=>setPeerDirty(false)} />
+            ) : view === "routings" && tab === "standard" && canRollup ? (
+              <StandardRollupPanel itemId={String(visibleData.record.producedItemId)} options={options} onDirty={()=>setPeerDirty(true)} onSaved={()=>setPeerDirty(false)} />
+            ) : view === "work-orders" && tab === "summary" ? (
+              <WorkOrderJourney canReadQuality={canReadQuality} data={visibleData} next={nextAction} onCommand={openCommand} busy={!!command} onOpen={(nextTab,row)=>{setTab(nextTab);setSelected(row??null)}} />
+            ) : tab === 'summary' || tab === 'details' ? (
               <dl className="grid gap-4 py-4 sm:grid-cols-2">
                 {summaryKeys[view].map((key) => (
                   <div key={key}>
@@ -557,9 +597,15 @@ export function ManufacturingRecordHost({
               </dl>
             ) : (
               <div className="space-y-3 py-4">
-                {tab === "capacity" ? (
-                  <p className="text-sm text-slate-500">{t(visibleData.record.capacityEvidence==="frozen"?"capacityFrozenNote":"capacityNote")}</p>
-                ) : tab==='byproducts'?<p className="text-sm text-slate-500">{t('jointOutputNote')}</p> : tab === "scrap" ? (
+                {tab === 'capacity' ? (
+                  <p className="text-sm text-slate-500">
+                    {t(visibleData.record.capacityEvidence==="frozen"?"capacityFrozenNote":"capacityNote")}
+                  </p>
+                ) : tab === 'byproducts' ? (
+                  <p className="text-sm text-slate-500">
+                    {t('jointOutputNote')}
+                  </p>
+                ) : tab === "scrap" ? (
                   <p className="text-sm text-slate-500">
                     {t("normalScrapNote")}
                   </p>
@@ -648,5 +694,5 @@ export function ManufacturingRecordHost({
         </div>
       ) : null}
     </AsyncUrlDrawer>
-  );
+  )
 }

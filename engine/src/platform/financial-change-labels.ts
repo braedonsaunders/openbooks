@@ -16,7 +16,8 @@ export const FINANCIAL_CHANGE_OPERATION_LABELS: Record<string, string> = {
   group_valuation: "Group valuation",
   net_investment_oci_reversal: "Net-investment FX correction",
   net_investment_oci: "Net-investment FX assessment",
-  historical_translation_contribution: "Historical translation contribution evidence",
+  historical_translation_contribution:
+    "Historical translation contribution evidence",
   loss_of_control: "Loss of control",
   reversal: "Reversal",
   bom_revision_activation: "Bill of materials revision approval",
@@ -25,6 +26,8 @@ export const FINANCIAL_CHANGE_OPERATION_LABELS: Record<string, string> = {
   standard_cost_rollup: "Manufacturing standard-cost roll-up",
   scrap_snapshot_restatement: "Scrap snapshot restatement",
   account_merge: "Account merge",
+  source_managed_depreciation_reversal:
+    "Source-managed depreciation correction",
 };
 
 export const FINANCIAL_CHANGE_DOMAIN_LABELS: Record<string, string> = {
@@ -48,7 +51,10 @@ export const FINANCIAL_CHANGE_STATUS_LABELS: Record<string, string> = {
 };
 
 export function financialChangeEventLabel(operation: string): string {
-  return FINANCIAL_CHANGE_OPERATION_LABELS[operation] ?? operation.replaceAll("_", " ");
+  return (
+    FINANCIAL_CHANGE_OPERATION_LABELS[operation] ??
+    operation.replaceAll("_", " ")
+  );
 }
 
 export function financialChangeDomainLabel(domain: string): string {
@@ -70,5 +76,7 @@ export function financialChangeInboxLabel(values: {
     typeof values.subjectLabel === "string" ? values.subjectLabel.trim() : "";
   if (subject) return `${event} · ${subject}`;
   const when = values.effectiveOn == null ? "" : String(values.effectiveOn);
-  return when ? `${event} · ${when}` : event || String(values.id ?? "accounting event");
+  return when
+    ? `${event} · ${when}`
+    : event || String(values.id ?? "accounting event");
 }

@@ -1,6 +1,6 @@
-import { defineRoute } from "@/lib/api/route";
-import { z } from "zod";
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
+import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { can } from '../../../../../lib/authz'
@@ -8,9 +8,7 @@ import { postPermission } from '../../../../../lib/document-kinds'
 import { postDocument } from '@openbooks/engine/ledger/posting-document'
 import { paymentControlDeps } from '@openbooks/engine/payments/payment-accounts'
 import {
-  approveBatch,
   postBatch,
-  rejectBatch,
   setBatchLines,
   submitBatch,
   withdrawBatch,
@@ -29,22 +27,33 @@ function fieldTime(error: unknown) {
   throw error
 }
 
-async function batchGate(perm: 'time.crew.enter' | 'time.read' | 'time.approve' | 'time.manage') {
+async function batchGate(
+  perm: 'time.crew.enter' | 'time.read' | 'time.approve' | 'time.manage',
+) {
   return guardFeaturePermission(perm, 'fieldTime')
 }
 
 /** GET → batch detail with lines and append-only history. */
-async function legacyGET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function legacyGET(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
   const { id } = await ctx.params
   const read = await batchGate('time.read')
-  const gate = read instanceof NextResponse ? await batchGate('time.crew.enter') : read
+  const gate =
+    read instanceof NextResponse ? await batchGate('time.crew.enter') : read
   if (gate instanceof NextResponse) return gate
   try {
-    return NextResponse.json(await getBatchDetail(
-      gate.user.orgId,
-      { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
-      id,
-    ))
+    return NextResponse.json(
+      await getBatchDetail(
+        gate.user.orgId,
+        {
+          actorUserId: gate.user.id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        },
+        id,
+      ),
+    )
   } catch (error) {
     return fieldTime(error)
   }
@@ -62,88 +71,87 @@ const lineSchema = z.object({
 })
 
 const LINES_NEEDS = 'Lines need the worker and hours on every row'
-const REJECT_NEEDS = 'Rejecting needs a reason — tell the foreman what to fix'
 
 /**
  * The six batch actions as one body. The action names the branch and
  * the branch names what it needs, so an unknown action and a missing
  * reason are both refused here with the words the foreman reads.
  */
-const batchActionBody = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('lines'), lines: z.array(lineSchema, { error: LINES_NEEDS }).max(500) }),
-  z.object({ action: z.literal('submit'), signerName: z.string().nullish() }),
-  z.object({ action: z.literal('withdraw'), reason: z.string().nullish() }),
-  z.object({ action: z.literal('approve'), comment: z.string().nullish() }),
-  z.object({ action: z.literal('reject'), reason: z.string({ error: REJECT_NEEDS }).trim().min(1, REJECT_NEEDS) }),
-  z.object({ action: z.literal('post') }),
-], { error: 'Unknown batch action — use lines, submit, withdraw, approve, reject or post' })
+const batchActionBody = z.discriminatedUnion(
+  'action',
+  [
+    z.object({
+      action: z.literal('lines'),
+      lines: z.array(lineSchema, { error: LINES_NEEDS }).max(500),
+    }),
+    z.object({ action: z.literal('submit'), signerName: z.string().nullish() }),
+    z.object({ action: z.literal('withdraw'), reason: z.string().nullish() }),
+    z.object({ action: z.literal('post') }),
+  ],
+  { error: 'Unknown batch action — use lines, submit, withdraw or post' },
+)
 
 /**
  * POST {action} — lines (draft only), submit (signed), withdraw,
  * approve (current stage), reject (reason required), post (entries +
  * equipment charges, then the charge documents to the ledger).
  */
-async function legacyPOST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function legacyPOST(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
   const { id } = await ctx.params
-  const parsedBody = await parseJsonBody(req, batchActionBody, { status: 422 });
-  if (!parsedBody.ok) return parsedBody.response;
+  const parsedBody = await parseJsonBody(req, batchActionBody, { status: 422 })
+  if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data
   try {
     if (body.action === 'lines') {
       const gate = await batchGate('time.crew.enter')
       if (gate instanceof NextResponse) return gate
-      const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
+      const actor = {
+        actorUserId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      }
       await setBatchLines({
-        orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id, lines: body.lines,
-        canManageAll: can(gate, 'time.manage'), allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        orgId: gate.user.orgId,
+        actorUserId: gate.user.id,
+        batchId: id,
+        lines: body.lines,
+        canManageAll: can(gate, 'time.manage'),
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id))
     }
     if (body.action === 'submit') {
       const gate = await batchGate('time.crew.enter')
       if (gate instanceof NextResponse) return gate
-      const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
+      const actor = {
+        actorUserId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      }
       await submitBatch({
         orgId: gate.user.orgId,
         actorUserId: gate.user.id,
         batchId: id,
         signerName: body.signerName ?? null,
-        canManageAll: can(gate, 'time.manage'), allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        canManageAll: can(gate, 'time.manage'),
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id))
     }
     if (body.action === 'withdraw') {
       const gate = await batchGate('time.crew.enter')
       if (gate instanceof NextResponse) return gate
-      const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
+      const actor = {
+        actorUserId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      }
       await withdrawBatch({
         orgId: gate.user.orgId,
         actorUserId: gate.user.id,
         batchId: id,
         reason: body.reason ?? null,
-        canManageAll: can(gate, 'time.manage'), allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-      return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id))
-    }
-    if (body.action === 'approve') {
-      const gate = await batchGate('time.approve')
-      if (gate instanceof NextResponse) return gate
-      const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
-      const status = await approveBatch({
-        orgId: gate.user.orgId,
-        actorUserId: gate.user.id,
-        batchId: id,
-        comment: body.comment ?? null,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-      return NextResponse.json({ status, batch: await getBatchDetail(gate.user.orgId, actor, id) })
-    }
-    if (body.action === 'reject') {
-      const gate = await batchGate('time.approve')
-      if (gate instanceof NextResponse) return gate
-      const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
-      await rejectBatch({
-        orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id, reason: body.reason,
+        canManageAll: can(gate, 'time.manage'),
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id))
@@ -158,10 +166,15 @@ async function legacyPOST(req: Request, ctx: { params: Promise<{ id: string }> }
       // charges here. Refused BEFORE postBatch commits anything, by name.
       const batchPostPerm = postPermission('project_charge')
       if (!can(gate, batchPostPerm)) {
-        return NextResponse.json({ error: `missing permission: ${batchPostPerm}` }, { status: 403 })
+        return NextResponse.json(
+          { error: `missing permission: ${batchPostPerm}` },
+          { status: 403 },
+        )
       }
       const result = await postBatch({
-        orgId: gate.user.orgId, actorUserId: gate.user.id, batchId: id,
+        orgId: gate.user.orgId,
+        actorUserId: gate.user.id,
+        batchId: id,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       // The entries and charge documents committed in one transaction
@@ -171,7 +184,12 @@ async function legacyPOST(req: Request, ctx: { params: Promise<{ id: string }> }
       const entryIds: string[] = []
       for (const documentId of result.chargeDocumentIds) {
         try {
-          entryIds.push(await postDocument(documentId, await paymentControlDeps(gate.user.orgId)))
+          entryIds.push(
+            await postDocument(
+              documentId,
+              await paymentControlDeps(gate.user.orgId),
+            ),
+          )
         } catch (error) {
           return bad(
             `The batch posted but equipment charge ${documentId} did not reach the ledger (${error instanceof Error ? error.message : 'posting failed'}) — re-post the charge document from Equipment`,
@@ -182,20 +200,22 @@ async function legacyPOST(req: Request, ctx: { params: Promise<{ id: string }> }
     }
     // The union above admits exactly six actions, so this is
     // unreachable; it keeps the handler total for the type checker.
-    return bad('Unknown batch action — use lines, submit, withdraw, approve, reject or post')
+    return bad('Unknown batch action — use lines, submit, withdraw or post')
   } catch (error) {
     return fieldTime(error)
   }
 }
 
 export const GET = defineRoute({
-  public: "session",
-  params: z.object({ "id": z.string() }),
-  handler: ({ request, params }) => legacyGET(request, { params: Promise.resolve(params) }),
-});
+  public: 'session',
+  params: z.object({ id: z.string() }),
+  handler: ({ request, params }) =>
+    legacyGET(request, { params: Promise.resolve(params) }),
+})
 
 export const POST = defineRoute({
-  public: "session",
-  params: z.object({ "id": z.string() }),
-  handler: ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params) }),
-});
+  public: 'session',
+  params: z.object({ id: z.string() }),
+  handler: ({ request, params }) =>
+    legacyPOST(request, { params: Promise.resolve(params) }),
+})

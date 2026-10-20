@@ -1,4 +1,6 @@
-"use client";
+'use client'
+
+import { ApprovalActions } from '@/components/approval-actions'
 
 import { RecordTabs } from '@/components/module-home/record-tabs'
 
@@ -55,8 +57,7 @@ interface ChangeOrder {
   approvedOn: string | null;
   targetSovLineId: string | null;
   targetSovLineDescription: string | null;
-  incomeAccountId: string | null;
-  independentApprovalAllowed: boolean;
+  incomeAccountId: string | null
 }
 
 interface PayApp {
@@ -69,8 +70,7 @@ interface PayApp {
   invoiceNumber: string | null;
   invoiceTotal: string | null;
   invoiceStatus: string | null;
-  invoiceDocumentId: string | null;
-  independentApprovalAllowed: boolean;
+  invoiceDocumentId: string | null
 }
 
 interface Data {
@@ -255,13 +255,27 @@ export function ApplicationsBillingWorkspace({
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("title")}</h3>
-        <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{t("description")}</p>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t('title')}
+        </h3>
+        <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+          {t('description')}
+        </p>
       </div>
 
-      {error ? <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">{error}</p> : null}
-      {msg ? <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p> : null}
-      {loading && !data ? <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">{t("loading")}</p> : null}
+      {error ? (
+        <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+          {error}
+        </p>
+      ) : null}
+      {msg ? (
+        <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>
+      ) : null}
+      {loading && !data ? (
+        <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
+          {t('loading')}
+        </p>
+      ) : null}
 
       {data ? (
         <>
@@ -330,18 +344,22 @@ export function ApplicationsBillingWorkspace({
         </>
       ) : null}
     </div>
-  );
+  )
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <Card>
       <CardContent className="p-4">
-        <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{label}</div>
-        <div className="mt-1 text-xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">{value}</div>
+        <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+          {label}
+        </div>
+        <div className="mt-1 text-xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+          {value}
+        </div>
       </CardContent>
     </Card>
-  );
+  )
 }
 
 function SectionHeader({
@@ -356,12 +374,16 @@ function SectionHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h4>
-        <p className="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {title}
+        </h4>
+        <p className="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400">
+          {description}
+        </p>
       </div>
       {action}
     </div>
-  );
+  )
 }
 
 function ScheduleSection({
@@ -382,9 +404,9 @@ function ScheduleSection({
   /** Any application row exists (even voided): contract value is controlled. */
   billingBegan: boolean;
 }) {
-  const { money } = useMoney();
+  const { money } = useMoney()
   const t = useTranslations("applications.sov");
-  const tc = useTranslations("common");
+  const tc = useTranslations('common')
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SovLine | null>(null);
   const [form, setForm] = useState({
@@ -443,9 +465,15 @@ function ScheduleSection({
   return (
     <div className="space-y-4">
       <SectionHeader
-        title={t("title")}
-        description={t("workspaceHint")}
-        action={canCreate ? <Button size="sm" onClick={() => setFormOpen(true)} disabled={billingBegan} title={billingBegan ? t("lockedHint") : undefined}>{t("addLine")}</Button> : undefined}
+        title={t('title')}
+        description={t('workspaceHint')}
+        action={
+          canCreate ? (
+            <Button size="sm" onClick={() => setFormOpen(true)} disabled={billingBegan} title={billingBegan ? t("lockedHint") : undefined}>
+              {t('addLine')}
+            </Button>
+          ) : undefined
+        }
       />
       {canCreate && billingBegan ? (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
@@ -456,10 +484,14 @@ function ScheduleSection({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t("item")}</TableHead>
+              <TableHead>{t('item')}</TableHead>
               <TableHead>{t("description")}</TableHead>
-              <TableHead className="text-right">{t("scheduledValue")}</TableHead>
-              <TableHead className="text-right">{t("retainagePercent")}</TableHead>
+              <TableHead className="text-right">
+                {t('scheduledValue')}
+              </TableHead>
+              <TableHead className="text-right">
+                {t('retainagePercent')}
+              </TableHead>
               <TableHead className="w-20" />
             </TableRow>
           </TableHeader>
@@ -467,12 +499,22 @@ function ScheduleSection({
             {lines.map((line) => (
               <TableRow key={line.id}>
                 <TableCell>
-                  {line.itemNo ?? "—"}
-                  {line.changeOrderId ? <Badge variant="secondary" className="ml-1.5">CO</Badge> : null}
+                  {line.itemNo ?? '—'}
+                  {line.changeOrderId ? (
+                    <Badge variant="secondary" className="ml-1.5">
+                      CO
+                    </Badge>
+                  ) : null}
                 </TableCell>
-                <TableCell className="font-medium">{line.description}</TableCell>
-                <TableCell className="text-right tabular-nums">{money(line.scheduledValue)}</TableCell>
-                <TableCell className="text-right tabular-nums">{line.retainagePercent ?? t("default")}</TableCell>
+                <TableCell className="font-medium">
+                  {line.description}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {money(line.scheduledValue)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {line.retainagePercent ?? t('default')}
+                </TableCell>
                 <TableCell className="text-right">
                   {canCreate ? (
                     <span className="inline-flex gap-1">
@@ -513,7 +555,11 @@ function ScheduleSection({
               </TableRow>
             ))}
             {lines.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="py-10 text-center text-slate-500 dark:text-slate-400">{t("empty")}</TableCell></TableRow>
+              <TableRow>
+                <TableCell colSpan={5} className="py-10 text-center text-slate-500 dark:text-slate-400">
+                  {t('empty')}
+                </TableCell>
+              </TableRow>
             ) : null}
           </TableBody>
         </Table>
@@ -525,35 +571,57 @@ function ScheduleSection({
         size="md"
         onClose={closeGuard.close}
         title={editing ? t("editLine") : t("addLine")}
-        description={editing ? (editingLocked ? t("lockedValuesHint") : t("formHint")) : t("formHint")}
+        description={
+          editing
+            ? editingLocked ? t("lockedValuesHint") : t("formHint")
+            : t('formHint')
+        }
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" disabled={busy} onClick={closeGuard.close}>{t("cancel")}</Button>
+            <Button variant="outline" disabled={busy} onClick={closeGuard.close}>
+              {t('cancel')}
+            </Button>
             {editing ? (
-              <Button disabled={busy || !form.description || !form.scheduledValue} onClick={saveEdit}>{tc("actions.save")}</Button>
+              <Button disabled={busy || !form.description || !form.scheduledValue} onClick={saveEdit}>
+                {tc('actions.save')}
+              </Button>
             ) : (
-              <Button disabled={busy || !form.description || !form.scheduledValue} onClick={addLine}>{t("addLine")}</Button>
+              <Button disabled={busy || !form.description || !form.scheduledValue} onClick={addLine}>
+                {t('addLine')}
+              </Button>
             )}
           </div>
         }
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t("item")}><Input value={form.itemNo} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, itemNo: event.target.value })} /></Field>
-          <Field label={t("description")}><Input value={form.description} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Field>
-          <Field label={t("scheduledValue")}><Input type="number" inputMode="decimal" value={form.scheduledValue} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, scheduledValue: event.target.value })} /></Field>
-          <Field label={t("retainagePercent")}><Input type="number" inputMode="decimal" value={form.retainagePercent} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, retainagePercent: event.target.value })} /></Field>
+          <Field label={t('item')}>
+            <Input value={form.itemNo} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, itemNo: event.target.value })} />
+          </Field>
+          <Field label={t('description')}>
+            <Input value={form.description} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+          </Field>
+          <Field label={t('scheduledValue')}>
+            <Input type="number" inputMode="decimal" value={form.scheduledValue} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, scheduledValue: event.target.value })} />
+          </Field>
+          <Field label={t('retainagePercent')}>
+            <Input type="number" inputMode="decimal" value={form.retainagePercent} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, retainagePercent: event.target.value })} />
+          </Field>
           <div className="sm:col-span-2">
-            <Field label={t("incomeAccount")}>
+            <Field label={t('incomeAccount')}>
               <Select value={form.incomeAccountId} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}>
                 <option value="">{t("defaultIncomeAccount")}</option>
-                {incomeAccounts.map((account) => <option key={account.id} value={account.id}>{account.label}</option>)}
+                {incomeAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.label}
+                  </option>
+                ))}
               </Select>
             </Field>
           </div>
         </div>
       </Drawer>
     </div>
-  );
+  )
 }
 
 function ChangeOrdersSection({
@@ -580,9 +648,9 @@ function ChangeOrdersSection({
   /** An open application blocks change-order approval server-side. */
   approvalBlocked: boolean;
 }) {
-  const { money } = useMoney();
+  const { money } = useMoney()
   const t = useTranslations("applications.changeOrders");
-  const tc = useTranslations("common");
+  const tc = useTranslations('common')
   const [formOpen, setFormOpen] = useState(false);
   // Unallocated COs bill through the carried income account: preselect the
   // org project-revenue default so the created SOV line needs no manual edit
@@ -599,24 +667,32 @@ function ChangeOrdersSection({
 
   async function addOrder() {
     const result = await onChange({
-      action: "addChangeOrder",
+      action: 'addChangeOrder',
       projectId,
       ...form,
       targetSovLineId: form.targetSovLineId || null,
       // A targeted order reprices its line's own account: carry none.
-      incomeAccountId: form.targetSovLineId ? null : (form.incomeAccountId || null),
-    });
+      incomeAccountId: form.targetSovLineId
+        ? null
+        : form.incomeAccountId || null,
+    })
     if (result) {
-      closeForm();
+      closeForm()
     }
   }
 
   return (
     <div className="space-y-4">
       <SectionHeader
-        title={t("title")}
-        description={t("workspaceHint")}
-        action={canCreate ? <Button size="sm" onClick={() => { setForm(freshForm(defaultIncomeAccountId)); setFormOpen(true); }}>{t("add")}</Button> : undefined}
+        title={t('title')}
+        description={t('workspaceHint')}
+        action={
+          canCreate ? (
+            <Button size="sm" onClick={() => { setForm(freshForm(defaultIncomeAccountId)); setFormOpen(true); }}>
+              {t('add')}
+            </Button>
+          ) : undefined
+        }
       />
       <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
         <Table>
@@ -635,18 +711,36 @@ function ChangeOrdersSection({
               <TableRow key={order.id}>
                 <TableCell className="font-medium">CO {order.number}</TableCell>
                 <TableCell>{order.description || "—"}</TableCell>
-                <TableCell className="text-slate-500 dark:text-slate-400">{order.targetSovLineDescription || t("newScheduleLine")}</TableCell>
-                <TableCell className="text-right tabular-nums">{money(order.amount)}</TableCell>
-                <TableCell><Badge variant={order.status === "approved" ? "success" : "secondary"}>{t(`status.${order.status}`)}</Badge></TableCell>
+                <TableCell className="text-slate-500 dark:text-slate-400">
+                  {order.targetSovLineDescription || t("newScheduleLine")}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {money(order.amount)}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={order.status === "approved" ? "success" : "secondary"}>
+                    {t(`status.${order.status}`)}
+                  </Badge>
+                </TableCell>
                 <TableCell className="text-right">
-                  {order.status === "draft" && canApprove && order.independentApprovalAllowed ? (
+                  <ApprovalActions
+                    subjectKind="customer_change_order"
+                    subjectId={order.id}
+                  />
+                  {order.status === 'draft' && canCreate ? (
                     approvalBlocked ? (
                       <span className="inline-flex flex-col items-end gap-1">
-                        <Button size="sm" variant="ghost" disabled title={t("approvalBlockedHint")}>{t("approve")}</Button>
-                        <span className="max-w-36 text-xs font-normal text-slate-500 dark:text-slate-400">{t("approvalBlockedHint")}</span>
+                        <Button size="sm" variant="ghost" disabled title={t("approvalBlockedHint")}>
+                          {tc('actions.submit')}
+                        </Button>
+                        <span className="max-w-36 text-xs font-normal text-slate-500 dark:text-slate-400">
+                          {t('approvalBlockedHint')}
+                        </span>
                       </span>
                     ) : (
-                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onChange({ action: "approveChangeOrder", id: order.id })}>{t("approve")}</Button>
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onChange({ action: "approveChangeOrder", id: order.id })}>
+                        {tc('actions.submit')}
+                      </Button>
                     )
                   ) : null}
                   {order.status === "draft" && canCreate ? (
@@ -666,7 +760,11 @@ function ChangeOrdersSection({
               </TableRow>
             ))}
             {orders.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="py-10 text-center text-slate-500 dark:text-slate-400">{t("empty")}</TableCell></TableRow>
+              <TableRow>
+                <TableCell colSpan={6} className="py-10 text-center text-slate-500 dark:text-slate-400">
+                  {t('empty')}
+                </TableCell>
+              </TableRow>
             ) : null}
           </TableBody>
         </Table>
@@ -677,40 +775,61 @@ function ChangeOrdersSection({
         stacked
         size="md"
         onClose={closeGuard.close}
-        title={t("add")}
-        description={t("formHint")}
+        title={t('add')}
+        description={t('formHint')}
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" disabled={busy} onClick={closeGuard.close}>{t("cancel")}</Button>
-            <Button disabled={busy || !form.number || !form.amount || (deductive && !form.targetSovLineId)} onClick={addOrder}>{t("add")}</Button>
+            <Button variant="outline" disabled={busy} onClick={closeGuard.close}>
+              {t('cancel')}
+            </Button>
+            <Button disabled={busy || !form.number || !form.amount || (deductive && !form.targetSovLineId)} onClick={addOrder}>
+              {t('add')}
+            </Button>
           </div>
         }
       >
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={t("number")}><Input disabled={busy} value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} /></Field>
-            <Field label={t("amount")}><Input disabled={busy} type="number" inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></Field>
+            <Field label={t('number')}>
+              <Input disabled={busy} value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
+            </Field>
+            <Field label={t('amount')}>
+              <Input disabled={busy} type="number" inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
+            </Field>
           </div>
-          <Field label={t("description")}><Input disabled={busy} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Field>
-          <Field label={t("applyTo")}>
+          <Field label={t('description')}>
+            <Input disabled={busy} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+          </Field>
+          <Field label={t('applyTo')}>
             <Select value={form.targetSovLineId} disabled={busy} onChange={(event) => setForm({ ...form, targetSovLineId: event.target.value })}>
               <option value="">{t("newScheduleLine")}</option>
-              {sov.map((line) => <option key={line.id} value={line.id}>{line.itemNo ? `${line.itemNo} · ` : ""}{line.description}</option>)}
+              {sov.map((line) => (
+                <option key={line.id} value={line.id}>
+                  {line.itemNo ? `${line.itemNo} · ` : ''}
+                  {line.description}
+                </option>
+              ))}
             </Select>
           </Field>
           {form.targetSovLineId ? null : (
-            <Field label={t("incomeAccount")}>
+            <Field label={t('incomeAccount')}>
               <Select value={form.incomeAccountId} disabled={busy} onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}>
                 <option value="">{t("defaultIncomeAccount")}</option>
-                {incomeAccounts.map((account) => <option key={account.id} value={account.id}>{account.label}</option>)}
+                {incomeAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.label}
+                  </option>
+                ))}
               </Select>
             </Field>
           )}
-          <p className="text-xs text-slate-500 dark:text-slate-400">{deductive ? t("deductiveHint") : t("additiveHint")}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {deductive ? t("deductiveHint") : t("additiveHint")}
+          </p>
         </div>
       </Drawer>
     </div>
-  );
+  )
 }
 
 /** Billing/retainage actions answer untyped JSON; the fields this view reads
@@ -771,9 +890,9 @@ function PayApplicationsSection({
   canInvoice: boolean;
   busy: boolean;
 }) {
-  const { money } = useMoney();
+  const { money } = useMoney()
   const t = useTranslations("applications.payApplications");
-  const tc = useTranslations("common");
+  const tc = useTranslations('common')
   const [newOpen, setNewOpen] = useState(false);
   const [periodEnd, setPeriodEnd] = useState("");
   const [drawApp, setDrawApp] = useState<PayApp | null>(null);
@@ -804,9 +923,15 @@ function PayApplicationsSection({
   return (
     <div className="space-y-4">
       <SectionHeader
-        title={t("title")}
-        description={t("workspaceHint")}
-        action={canCreate ? <Button size="sm" disabled={sov.length === 0} onClick={() => setNewOpen(true)}>{t("newApplication")}</Button> : undefined}
+        title={t('title')}
+        description={t('workspaceHint')}
+        action={
+          canCreate ? (
+            <Button size="sm" disabled={sov.length === 0} onClick={() => setNewOpen(true)}>
+              {t('newApplication')}
+            </Button>
+          ) : undefined
+        }
       />
       <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
         <Table>
@@ -825,7 +950,11 @@ function PayApplicationsSection({
               <TableRow key={app.id}>
                 <TableCell className="font-medium">
                   {t("applicationNumber", { number: app.applicationNumber })}
-                  {app.kind === "retainage_release" ? <Badge variant="secondary" className="ml-2">{t("retainage")}</Badge> : null}
+                  {app.kind === 'retainage_release' ? (
+                    <Badge variant="secondary" className="ml-2">
+                      {t('retainage')}
+                    </Badge>
+                  ) : null}
                 </TableCell>
                 <TableCell>{app.periodEnd}</TableCell>
                 <TableCell>
@@ -838,13 +967,33 @@ function PayApplicationsSection({
                     <Link className="font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/ar/invoices?doc=${app.invoiceDocumentId}`}>
                       {app.invoiceNumber ?? t("openInvoice")}
                     </Link>
-                  ) : "—"}
+                  ) : (
+                    '—'
+                  )}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">{app.invoiceTotal ? money(app.invoiceTotal) : "—"}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {app.invoiceTotal ? money(app.invoiceTotal) : "—"}
+                </TableCell>
                 <TableCell className="text-right">
-                  {app.status === "draft" && canCreate ? <Button size="sm" variant="ghost" onClick={() => setDrawApp(app)}>{t("enterDraws")}</Button> : null}
-                  {app.status === "submitted" && canApprove && app.independentApprovalAllowed ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => onChange({ action: "approvePayApp", payApplicationId: app.id })}>{t("approve")}</Button> : null}
-                  {app.status === "approved" && canInvoice ? <Button size="sm" variant="ghost" disabled={busy} onClick={() => bill(app.id)}>{t("createInvoice")}</Button> : null}
+                  {app.status === 'draft' && canCreate ? (
+                    <Button size="sm" variant="ghost" onClick={() => setDrawApp(app)}>
+                      {t('enterDraws')}
+                    </Button>
+                  ) : null}
+                  <ApprovalActions
+                    subjectKind="customer_pay_application"
+                    subjectId={app.id}
+                  />
+                  {app.status === 'submitted' && canCreate ? (
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => onChange({ action: "approvePayApp", payApplicationId: app.id })}>
+                      {tc('actions.submit')}
+                    </Button>
+                  ) : null}
+                  {app.status === 'approved' && canInvoice ? (
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => bill(app.id)}>
+                      {t('createInvoice')}
+                    </Button>
+                  ) : null}
                   {["draft", "submitted", "approved"].includes(app.status) && canApprove ? (
                     <Button
                       size="sm"
@@ -862,7 +1011,11 @@ function PayApplicationsSection({
               </TableRow>
             ))}
             {apps.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="py-10 text-center text-slate-500 dark:text-slate-400">{t("empty")}</TableCell></TableRow>
+              <TableRow>
+                <TableCell colSpan={6} className="py-10 text-center text-slate-500 dark:text-slate-400">
+                  {t('empty')}
+                </TableCell>
+              </TableRow>
             ) : null}
           </TableBody>
         </Table>
@@ -873,16 +1026,22 @@ function PayApplicationsSection({
         stacked
         size="sm"
         onClose={newCloseGuard.close}
-        title={t("newApplication")}
-        description={t("newHint")}
+        title={t('newApplication')}
+        description={t('newHint')}
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" disabled={busy} onClick={newCloseGuard.close}>{t("cancel")}</Button>
-            <Button disabled={busy || !periodEnd || sov.length === 0} onClick={createApplication}>{t("create")}</Button>
+            <Button variant="outline" disabled={busy} onClick={newCloseGuard.close}>
+              {t('cancel')}
+            </Button>
+            <Button disabled={busy || !periodEnd || sov.length === 0} onClick={createApplication}>
+              {t('create')}
+            </Button>
           </div>
         }
       >
-        <Field label={t("periodEnding")}><DateField disabled={busy} value={periodEnd} onChange={(value) => setPeriodEnd(value)} /></Field>
+        <Field label={t('periodEnding')}>
+          <DateField disabled={busy} value={periodEnd} onChange={(value) => setPeriodEnd(value)} />
+        </Field>
       </Drawer>
 
       {drawApp ? (
@@ -901,7 +1060,7 @@ function PayApplicationsSection({
         />
       ) : null}
     </div>
-  );
+  )
 }
 
 function DrawEntryDrawer({
@@ -918,7 +1077,7 @@ function DrawEntryDrawer({
   onSubmit: (lines: { sovLineId: string; thisPeriodCompleted: string; materialsStored: string }[]) => Promise<void>;
 }) {
   const t = useTranslations("applications.payApplications");
-  const tc = useTranslations("common");
+  const tc = useTranslations('common')
   const [lines, setLines] = useState<Record<string, { thisPeriodCompleted: string; materialsStored: string }>>({});
   const submitLines = Object.entries(lines).map(([sovLineId, value]) => ({ sovLineId, ...value }));
   const closeGuard = useDirtyClose({
@@ -937,8 +1096,12 @@ function DrawEntryDrawer({
       bodyClassName="overflow-auto p-4"
       footer={
         <div className="flex w-full justify-end gap-2">
-          <Button variant="outline" disabled={busy} onClick={closeGuard.close}>{t("cancel")}</Button>
-          <Button disabled={busy} onClick={() => onSubmit(submitLines)}>{t("submit")}</Button>
+          <Button variant="outline" disabled={busy} onClick={closeGuard.close}>
+            {t('cancel')}
+          </Button>
+          <Button disabled={busy} onClick={() => onSubmit(submitLines)}>
+            {t('submit')}
+          </Button>
         </div>
       }
     >
@@ -946,17 +1109,23 @@ function DrawEntryDrawer({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t("item")}</TableHead>
+              <TableHead>{t('item')}</TableHead>
               <TableHead>{t("description")}</TableHead>
-              <TableHead className="text-right">{t("workThisPeriod")}</TableHead>
-              <TableHead className="text-right">{t("materialsStored")}</TableHead>
+              <TableHead className="text-right">
+                {t('workThisPeriod')}
+              </TableHead>
+              <TableHead className="text-right">
+                {t('materialsStored')}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sov.map((line) => (
               <TableRow key={line.id}>
                 <TableCell>{line.itemNo ?? "—"}</TableCell>
-                <TableCell className="font-medium">{line.description}</TableCell>
+                <TableCell className="font-medium">
+                  {line.description}
+                </TableCell>
                 <TableCell>
                   <Input
                     disabled={busy}
@@ -995,7 +1164,7 @@ function DrawEntryDrawer({
         </Table>
       </div>
     </Drawer>
-  );
+  )
 }
 
 function RetainageSection({
@@ -1013,11 +1182,11 @@ function RetainageSection({
   canInvoice: boolean;
   busy: boolean;
 }) {
-  const { money } = useMoney();
+  const { money } = useMoney()
   const t = useTranslations("applications.retainage");
-  const tc = useTranslations("common");
+  const tc = useTranslations('common')
   const [formOpen, setFormOpen] = useState(false);
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState('')
   const [periodEnd, setPeriodEnd] = useState("");
   function closeForm() { setAmount(""); setPeriodEnd(""); setFormOpen(false); }
   const closeGuard = useDirtyClose({
@@ -1038,11 +1207,21 @@ function RetainageSection({
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div>
-            <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{t("heldLabel")}</div>
-            <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">{money(held)}</div>
-            <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500 dark:text-slate-400">{t("workspaceHint")}</p>
+            <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
+              {t('heldLabel')}
+            </div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+              {money(held)}
+            </div>
+            <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500 dark:text-slate-400">
+              {t('workspaceHint')}
+            </p>
           </div>
-          {canInvoice ? <Button size="sm" disabled={cmp(held, "0") <= 0} onClick={() => setFormOpen(true)}>{t("release")}</Button> : null}
+          {canInvoice ? (
+            <Button size="sm" disabled={cmp(held, "0") <= 0} onClick={() => setFormOpen(true)}>
+              {t('release')}
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -1051,20 +1230,28 @@ function RetainageSection({
         stacked
         size="sm"
         onClose={closeGuard.close}
-        title={t("title")}
+        title={t('title')}
         description={t("description", { held: money(held) })}
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button variant="outline" disabled={busy} onClick={closeGuard.close}>{t("cancel")}</Button>
-            <Button disabled={busy || !amount || !periodEnd} onClick={release}>{t("release")}</Button>
+            <Button variant="outline" disabled={busy} onClick={closeGuard.close}>
+              {t('cancel')}
+            </Button>
+            <Button disabled={busy || !amount || !periodEnd} onClick={release}>
+              {t('release')}
+            </Button>
           </div>
         }
       >
         <div className="space-y-4">
-          <Field label={t("amount")}><Input type="number" inputMode="decimal" disabled={busy} value={amount} onChange={(event) => setAmount(event.target.value)} /></Field>
-          <Field label={t("periodEnding")}><DateField disabled={busy} value={periodEnd} onChange={(value) => setPeriodEnd(value)} /></Field>
+          <Field label={t('amount')}>
+            <Input type="number" inputMode="decimal" disabled={busy} value={amount} onChange={(event) => setAmount(event.target.value)} />
+          </Field>
+          <Field label={t('periodEnding')}>
+            <DateField disabled={busy} value={periodEnd} onChange={(value) => setPeriodEnd(value)} />
+          </Field>
         </div>
       </Drawer>
     </>
-  );
+  )
 }

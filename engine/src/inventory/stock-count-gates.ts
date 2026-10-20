@@ -2,7 +2,11 @@ import { assertOwnedLocation } from "./stock-eligibility.ts";
 import { sql } from "drizzle-orm";
 import { add, cmp, neg } from "../money/money.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { InventoryError, InventoryNotFoundError, InventoryOwnershipError } from "./contracts.ts";
+import {
+  InventoryError,
+  InventoryNotFoundError,
+  InventoryOwnershipError,
+} from "./contracts.ts";
 import type { Runner } from "./contracts.ts";
 import { assertStockLocationAdmitsSubsidiary } from "./profile-policy.ts";
 import type { SubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -19,7 +23,8 @@ import { periodForDate, persistReceiptMoney } from "./position.ts";
  * bare Error or a storage failure.
  */
 
-export type StockCountStatus = "draft" | "counting" | "review" | "posted" | "cancelled";
+export type StockCountStatus =
+  "draft" | "counting" | "review" | "posted" | "cancelled";
 
 const COUNT_TRANSITIONS: Record<StockCountStatus, StockCountStatus[]> = {
   draft: ["counting", "cancelled"],
@@ -30,16 +35,24 @@ const COUNT_TRANSITIONS: Record<StockCountStatus, StockCountStatus[]> = {
 };
 
 const TRANSITION_REMEDY: Record<string, string> = {
-  "draft:review": "start the count first (draft → counting), record every line, then submit for review",
-  "draft:posted": "start the count first (draft → counting), record every line, submit for review, then post",
-  "counting:posted": "submit the count for review first (counting → review), then post",
+  "draft:review":
+    "start the count first (draft → counting), record every line, then submit for review",
+  "draft:posted":
+    "start the count first (draft → counting), record every line, submit for review, then post",
+  "counting:posted":
+    "submit the count for review first (counting → review), then post",
   "counting:counting": "the count is already open for counting",
   "review:review": "the count is already awaiting review",
-  "posted:posted": "the count is already posted — counts are immutable once posted; correct with a new count",
-  "cancelled:counting": "the count is cancelled — open a new count instead of reusing a cancelled one",
-  "posted:counting": "the count is already posted — counts are immutable once posted; correct with a new count",
-  "cancelled:review": "the count is cancelled — open a new count instead of reusing a cancelled one",
-  "posted:review": "the count is already posted — counts are immutable once posted; correct with a new count",
+  "posted:posted":
+    "the count is already posted — counts are immutable once posted; correct with a new count",
+  "cancelled:counting":
+    "the count is cancelled — open a new count instead of reusing a cancelled one",
+  "posted:counting":
+    "the count is already posted — counts are immutable once posted; correct with a new count",
+  "cancelled:review":
+    "the count is cancelled — open a new count instead of reusing a cancelled one",
+  "posted:review":
+    "the count is already posted — counts are immutable once posted; correct with a new count",
 };
 
 /**
@@ -47,7 +60,10 @@ const TRANSITION_REMEDY: Record<string, string> = {
  * not reachable from `from`. Pure so the unit partition can prove every
  * refusal fires without a database.
  */
-export function assertCountTransition(from: StockCountStatus, to: StockCountStatus): void {
+export function assertCountTransition(
+  from: StockCountStatus,
+  to: StockCountStatus,
+): void {
   if (from === to && (to === "posted" || to === "cancelled")) {
     // Posting twice / cancelling twice are the refusals operators hit most;
     // name them directly rather than falling through to the generic message.
@@ -56,11 +72,16 @@ export function assertCountTransition(from: StockCountStatus, to: StockCountStat
         "stock count is already posted — counts are immutable once posted; correct with a new count",
       );
     }
-    throw new InventoryError("stock count is already cancelled — open a new count instead of reusing a cancelled one");
+    throw new InventoryError(
+      "stock count is already cancelled — open a new count instead of reusing a cancelled one",
+    );
   }
   if (COUNT_TRANSITIONS[from].includes(to)) return;
-  const remedy = TRANSITION_REMEDY[`${from}:${to}`] ?? `move the count from ${from} first`;
-  throw new InventoryError(`cannot move stock count from ${from} to ${to} — ${remedy}`);
+  const remedy =
+    TRANSITION_REMEDY[`${from}:${to}`] ?? `move the count from ${from} first`;
+  throw new InventoryError(
+    `cannot move stock count from ${from} to ${to} — ${remedy}`,
+  );
 }
 
 export function parseCountStatus(value: unknown): StockCountStatus {
@@ -100,7 +121,10 @@ export function assertCountedNonNegative(counted: string): void {
 }
 
 /** Variance is counted − expected, in exact decimal arithmetic (never floats). */
-export function countVariance(countedQuantity: string, expectedQuantity: string): string {
+export function countVariance(
+  countedQuantity: string,
+  expectedQuantity: string,
+): string {
   const counted = parseCountQuantity(countedQuantity, "counted quantity");
   assertCountedNonNegative(counted);
   const expected = parseCountQuantity(expectedQuantity, "expected quantity");
@@ -145,12 +169,14 @@ export async function assertCountWarehouses(
   stockLocationIds: string[],
 ): Promise<void> {
   for (const stockLocationId of [...new Set(stockLocationIds)].sort()) {
-    await assertOwnedLocation(tx,orgId,stockLocationId);
-    const row = (await tx.execute<{ code: string | null; is_active: boolean }>(sql`
+    await assertOwnedLocation(tx, orgId, stockLocationId);
+    const row = (
+      await tx.execute<{ code: string | null; is_active: boolean }>(sql`
       select code, is_active
         from stock_locations
        where org_id = ${orgId} and id = ${stockLocationId}
-       for share`)).rows[0];
+       for share`)
+    ).rows[0];
     if (!row) {
       throw new InventoryError(
         "count line stock location not found in this organization — choose an active stock location",
@@ -162,7 +188,14 @@ export async function assertCountWarehouses(
       );
     }
     try {
-      await assertStockLocationAdmitsSubsidiary(tx, orgId, ctx, stockLocationId, subsidiaryId, "count");
+      await assertStockLocationAdmitsSubsidiary(
+        tx,
+        orgId,
+        ctx,
+        stockLocationId,
+        subsidiaryId,
+        "count",
+      );
     } catch (error) {
       if (error instanceof InventoryOwnershipError) {
         throw new InventoryError(
@@ -172,26 +205,6 @@ export async function assertCountWarehouses(
       throw error;
     }
   }
-}
-
-/**
- * Is the org's "require a different user to post stock counts" switch on?
- * Stored at `orgs.settings.approvals.requireStockCountReview`, default OFF
- * (today's self-post behaviour). Absent — or anything but the JSON boolean
- * true — reads as OFF. The comparison is strict text, never a boolean
- * cast: Postgres accepts 'yes'/'on'/'1' as true, so a cast would let junk
- * enable the gate (fail open toward refusals). Mirrors the vendor-bill
- * release policy in flows/vendor-bill-approval.ts.
- */
-export async function isStockCountReviewRequired(
-  orgId: string,
-  executor: Runner,
-): Promise<boolean> {
-  const rows = (await executor.execute<{ required: boolean | null }>(sql`
-    select coalesce((settings->'approvals'->>'requireStockCountReview') = 'true', false) as required
-      from orgs where id = ${orgId}
-  `)).rows;
-  return rows[0]?.required === true;
 }
 
 export type CountHeader = {
@@ -222,7 +235,7 @@ export async function loadCountHeader(
   forUpdate: boolean,
 ): Promise<CountHeader> {
   const lock = forUpdate ? sql` for update` : sql``;
-  const r = (await runner.execute<{
+  const r = await runner.execute<{
     id: string;
     status: string;
     location_id: string;
@@ -231,7 +244,7 @@ export async function loadCountHeader(
     memo: string | null;
     blind: boolean;
   }>(sql`select id, status, location_id, subsidiary_id, counted_on::text, memo, blind
-            from stock_counts where org_id = ${orgId} and id = ${countId}${lock}`));
+            from stock_counts where org_id = ${orgId} and id = ${countId}${lock}`);
   const row = r.rows[0];
   if (!row) {
     // Under RLS an absent result is either a wrong id or another org's row;
@@ -254,7 +267,7 @@ export async function loadCountLines(
   orgId: string,
   countId: string,
 ): Promise<CountLine[]> {
-  const r = (await runner.execute<{
+  const r = await runner.execute<{
     id: string;
     item_id: string;
     stock_location_id: string;
@@ -267,7 +280,7 @@ export async function loadCountLines(
                 expected_quantity::text, counted_quantity::text, adjustment_movement_id
            from stock_count_lines
           where org_id = ${orgId} and stock_count_id = ${countId}
-          order by item_id, stock_location_id, lot_id nulls first, id`));
+          order by item_id, stock_location_id, lot_id nulls first, id`);
   return r.rows.map((row) => ({
     id: row.id,
     itemId: row.item_id,
@@ -289,10 +302,10 @@ export async function transitionCount(
   to: StockCountStatus,
 ): Promise<void> {
   assertCountTransition(count.status, to);
-  const updated = (await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(sql`
     update stock_counts set status = ${to}, updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${count.id} and status = ${count.status}
-    returning id`));
+    returning id`);
   if (updated.rows.length === 0) {
     throw new InventoryError(
       `stock count ${count.id} changed while this action was in flight — reload the count and try again`,
@@ -307,14 +320,18 @@ export async function requireAllLinesCounted(
 ): Promise<CountLine[]> {
   const lines = await loadCountLines(runner, orgId, countId);
   if (lines.length === 0) {
-    throw new InventoryError("a stock count needs at least one line — add the items to count");
+    throw new InventoryError(
+      "a stock count needs at least one line — add the items to count",
+    );
   }
   const missing = lines.filter((l) => l.countedQuantity === null);
   if (missing.length > 0) {
     const first = missing[0]!;
-    const detail = (await runner.execute<{ code: string | null; loc: string | null }>(sql`
+    const detail = (
+      await runner.execute<{ code: string | null; loc: string | null }>(sql`
       select (select code from items where org_id = ${orgId} and id = ${first.itemId}) as code,
-             (select code from stock_locations where org_id = ${orgId} and id = ${first.stockLocationId}) as loc`)).rows[0];
+             (select code from stock_locations where org_id = ${orgId} and id = ${first.stockLocationId}) as loc`)
+    ).rows[0];
     const where = `item ${detail?.code ?? first.itemId} at ${detail?.loc ?? first.stockLocationId}`;
     throw new InventoryError(
       missing.length === 1

@@ -1,3 +1,4 @@
+import { completedGateDecisionPolicy } from '@openbooks/engine/flows/approval-decision-policy'
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrg, type SqlExecutor } from '@openbooks/engine/platform/db'
@@ -123,9 +124,9 @@ export async function resolveTicketPeriod(
   projectId: string | null,
   onDate?: string,
 ): Promise<TicketPeriod> {
-  const asOf = onDate ?? await businessToday(orgId)
+  const asOf = onDate ?? (await businessToday(orgId))
   const valid = (v: unknown): v is TicketPeriod => TICKET_PERIODS.includes(v as TicketPeriod)
-  const resolved = (await db.execute<{ period: string }>(sql`
+  const resolved = await db.execute<{ period: string }>(sql`
     select policy.period
       from field_ticket_policies policy
       left join projects project
@@ -143,7 +144,7 @@ export async function resolveTicketPeriod(
        when 'project' then 1 when 'customer' then 2 else 3 end,
        policy.effective_from desc
      limit 1
-  `))
+  `)
   return valid(resolved.rows[0]?.period) ? resolved.rows[0].period : 'weekly'
 }
 
@@ -207,11 +208,9 @@ export async function createFieldTicket(
       }
     }
     const proj = input.projectId
-      ? (
-          (await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
+      ? ((await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
             select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
-              from projects p where p.id = ${input.projectId} and p.org_id = ${orgId} and p.is_active for share of p`))
-        ).rows[0] ?? null
+              from projects p where p.id = ${input.projectId} and p.org_id = ${orgId} and p.is_active for share of p`)).rows[0] ?? null)
       : null
     if (input.projectId && !proj) throw new FieldTicketError('Project not found')
     // A requested project must be in scope (uniform not-found otherwise);
@@ -228,23 +227,23 @@ export async function createFieldTicket(
       if (!resolved.ok) throw new FieldTicketError(resolved.error)
       ticketSubsidiaryId = resolved.subsidiaryId
     }
-    const anchorDate = input.date ?? await businessToday(orgId)
+    const anchorDate = input.date ?? (await businessToday(orgId))
     if (!isIsoCalendarDate(anchorDate)) throw new FieldTicketError('Invalid ticket date')
     if (input.period !== undefined && !TICKET_PERIODS.includes(input.period)) throw new FieldTicketError('Invalid ticket period')
     const period = input.period ?? (await resolveTicketPeriod(orgId, input.projectId ?? null, anchorDate))
     const window = ticketWindow(period, anchorDate)
-    const org = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
-    const foreman = (await db.execute<{ party_id: string | null }>(sql`
-      select party_id from users where id = ${userId} and org_id = ${orgId}`))
+    const org = await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`)
+    const foreman = await db.execute<{ party_id: string | null }>(sql`
+      select party_id from users where id = ${userId} and org_id = ${orgId}`)
     const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', ticketSubsidiaryId ?? undefined)
-    const row = (await db.execute<{ id: string; document_number: string }>(sql`
+    const row = await db.execute<{ id: string; document_number: string }>(sql`
       insert into documents (id, org_id, kind, document_number, document_date, currency, status, party_id, project_id,
                              subsidiary_id, reference_number, billing_method, subtotal, tax_total, total, custom, created_by)
       values (${input.requestId !== undefined ? sql`${input.requestId}::uuid` : sql`gen_random_uuid()`},
               ${orgId}, 'field_ticket', ${documentNumber}, ${window.end}, ${org.rows[0]?.base_currency ?? 'CAD'},
               'draft', ${proj?.customer_id ?? null}, ${proj?.id ?? null}, ${ticketSubsidiaryId},
               ${proj?.po ?? null}, 'time_and_materials', '0', '0', '0', '{}'::jsonb, ${userId})
-      returning id, document_number`))
+      returning id, document_number`)
     await db.execute(sql`
       insert into field_tickets
         (document_id, org_id, period, period_start, period_end, foreman_party_id,
@@ -280,14 +279,15 @@ export async function updateTicketHeader(
   expectedRevision: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<void> {
-  await withOrg(orgId, () => runDocumentVersionedTransaction<
-    TicketTransaction,
-    { status: string; updatedAt: string },
-    void
-  >({
-    expectedRevision,
-    transaction: (work) => db.transaction(work),
-    lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
+  await withOrg(orgId, () =>
+    runDocumentVersionedTransaction<
+      TicketTransaction,
+      { status: string; updatedAt: string },
+      void
+    >({
+      expectedRevision,
+      transaction: (work) => db.transaction(work),
+      lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
       select d.status,
              ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "updatedAt"
         from documents d
@@ -296,38 +296,40 @@ export async function updateTicketHeader(
        where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
        for update of d, ft
     `)).rows[0] ?? null,
-    mutate: async (tx) => {
-      // Re-homing the ticket onto a project attaches new Projects
-      // disable-blockers, so a disable racing this edit must refuse one
-      // side or the other. Checked before the Field Tickets recheck (which
-      // also fails once Projects goes off, via the parent gate) so the
-      // refusal names the gate.
-      if (patch.projectId != null && !(await checkProjectsWriteEnabled(orgId, tx))) {
+      mutate: async (tx) => {
+        // Re-homing the ticket onto a project attaches new Projects
+        // disable-blockers, so a disable racing this edit must refuse one
+        // side or the other. Checked before the Field Tickets recheck (which
+        // also fails once Projects goes off, via the parent gate) so the
+        // refusal names the gate.
+        if (patch.projectId != null && !(await checkProjectsWriteEnabled(orgId, tx))) {
         throw new FieldTicketError('Projects feature is disabled')
       }
-      await assertFieldTicketsEnabledTx(tx, orgId)
-      const doc = await loadHeader(orgId, ticketId)
-      if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
-      if (!subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
+        await assertFieldTicketsEnabledTx(tx, orgId)
+        const doc = await loadHeader(orgId, ticketId)
+        if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
+        if (!subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
         throw new FieldTicketNotFoundError('Ticket not found')
       }
-      // Strict calendar boundary (mirrors ticket creation): a shape-valid
-      // non-day such as February 30 would otherwise reach the DATE columns
-      // and surface as a 500 from PostgreSQL instead of failing closed here.
-      if (patch.documentDate !== undefined && !isIsoCalendarDate(patch.documentDate)) {
+        // Strict calendar boundary (mirrors ticket creation): a shape-valid
+        // non-day such as February 30 would otherwise reach the DATE columns
+        // and surface as a 500 from PostgreSQL instead of failing closed here.
+        if (patch.documentDate !== undefined && !isIsoCalendarDate(patch.documentDate)) {
         throw new FieldTicketError('Invalid ticket date')
       }
-      const ft = { ...doc.fieldTicket }
+        const ft = { ...doc.fieldTicket }
 
-      // Resolve every column ONCE in JS (a column may only be assigned once).
-      let projChange: { id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null } | null = null
-      if (patch.projectId !== undefined && patch.projectId !== doc.project_id) {
-        if (!patch.projectId) throw new FieldTicketError('A ticket needs a project')
-        const proj = (await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
+        // Resolve every column ONCE in JS (a column may only be assigned once).
+        let projChange: { id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null } | null = null
+        if (
+          patch.projectId !== undefined && patch.projectId !== doc.project_id
+        ) {
+          if (!patch.projectId) throw new FieldTicketError('A ticket needs a project')
+          const proj = await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
           select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
-            from projects p where p.id = ${patch.projectId} and p.org_id = ${orgId} and p.is_active for share`))
-        if (!proj.rows[0]) throw new FieldTicketError('Project not found')
-        const linkedTime = (await tx.execute<{
+            from projects p where p.id = ${patch.projectId} and p.org_id = ${orgId} and p.is_active for share`)
+          if (!proj.rows[0]) throw new FieldTicketError('Project not found')
+          const linkedTime = (await tx.execute<{
           status: string
           employee_party_id: string
           employee_subsidiary_id: string | null
@@ -337,15 +339,15 @@ export async function updateTicketHeader(
             join parties p on p.id = te.employee_party_id and p.org_id = te.org_id
            where te.org_id = ${orgId} and te.field_ticket_id = ${ticketId}
            order by te.id for update of te, p`)).rows
-        if (linkedTime.some(entry => entry.status !== 'draft')) {
+          if (linkedTime.some(entry => entry.status !== 'draft')) {
           throw new FieldTicketError('This ticket has submitted or approved time. Resolve that time through its review workflow before changing the project.')
         }
-        const newProject = proj.rows[0]
-        projChange = newProject
-        if (!subsidiaryScopeAllows(allowedSubsidiaryIds, newProject.subsidiary_id)) {
+          const newProject = proj.rows[0]
+          projChange = newProject
+          if (!subsidiaryScopeAllows(allowedSubsidiaryIds, newProject.subsidiary_id)) {
           throw new FieldTicketNotFoundError('Ticket not found')
         }
-        if (doc.subsidiaryId !== newProject.subsidiary_id) {
+          if (doc.subsidiaryId !== newProject.subsidiary_id) {
           if (linkedTime.some(entry =>
             newProject.subsidiary_id !== null && entry.employee_subsidiary_id !== newProject.subsidiary_id
           )) {
@@ -368,17 +370,15 @@ export async function updateTicketHeader(
             )
           }
         }
-        // Re-resolve the period for the new job unless the caller pinned one.
-        if (patch.period === undefined) {
+          // Re-resolve the period for the new job unless the caller pinned one.
+          if (patch.period === undefined) {
           const resolved = await resolveTicketPeriod(orgId, projChange.id, patch.documentDate ?? doc.document_date)
           if (resolved !== ft.period) patch.period = resolved
         }
-      }
+        }
 
-      const hourCount = (
-        (await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`))
-      ).rows[0]!.n
-      if ((patch.period !== undefined || patch.documentDate !== undefined) && hourCount === 0) {
+        const hourCount = (await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`)).rows[0]!.n
+        if ((patch.period !== undefined || patch.documentDate !== undefined) && hourCount === 0) {
         const period = patch.period ?? ft.period
         const anchor = patch.documentDate ?? doc.document_date
         const window = ticketWindow(period, anchor)
@@ -386,10 +386,10 @@ export async function updateTicketHeader(
         ft.periodStart = window.start
         ft.periodEnd = window.end
       }
-      const nextForemanPartyId = patch.foremanPartyId !== undefined
+        const nextForemanPartyId = patch.foremanPartyId !== undefined
         ? patch.foremanPartyId
         : ft.foremanPartyId
-      if (nextForemanPartyId && (patch.foremanPartyId !== undefined || projChange)) {
+        if (nextForemanPartyId && (patch.foremanPartyId !== undefined || projChange)) {
         const targetSubsidiaryId = projChange ? projChange.subsidiary_id : doc.subsidiaryId
         const foremanEntityFilter = targetSubsidiaryId === null
           ? sql``
@@ -409,18 +409,18 @@ export async function updateTicketHeader(
           )
         }
       }
-      if (patch.foremanPartyId !== undefined) ft.foremanPartyId = patch.foremanPartyId
+        if (patch.foremanPartyId !== undefined) ft.foremanPartyId = patch.foremanPartyId
 
-      const nextRef =
+        const nextRef =
         patch.referenceNumber !== undefined
           ? patch.referenceNumber
           : projChange && !doc.reference_number
             ? projChange.po
             : doc.reference_number
-      const nextMemo = patch.memo !== undefined ? patch.memo : doc.memo
-      const nextDate = patch.documentDate ?? doc.document_date
+        const nextMemo = patch.memo !== undefined ? patch.memo : doc.memo
+        const nextDate = patch.documentDate ?? doc.document_date
 
-      await tx.execute(sql`
+        await tx.execute(sql`
         update documents set
           project_id = ${projChange ? projChange.id : doc.project_id},
           party_id = ${projChange ? projChange.customer_id : sql`party_id`},
@@ -433,20 +433,21 @@ export async function updateTicketHeader(
             updated_at + interval '1 microsecond'
           ), updated_by = ${userId}
          where id = ${ticketId} and org_id = ${orgId}`)
-      await tx.execute(sql`
+        await tx.execute(sql`
         update field_tickets
            set period = ${ft.period}, period_start = ${ft.periodStart},
                period_end = ${ft.periodEnd}, foreman_party_id = ${ft.foremanPartyId},
                updated_at = now(), updated_by = ${userId}
          where document_id = ${ticketId} and org_id = ${orgId}
       `)
-      // Re-home any existing draft hours/lines onto the new project.
-      if (projChange) {
+        // Re-home any existing draft hours/lines onto the new project.
+        if (projChange) {
         await tx.execute(sql`update time_entries set project_id = ${projChange.id}, project_task_id = null, updated_at = now() where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
         await tx.execute(sql`update document_lines set project_id = ${projChange.id} where document_id = ${ticketId} and org_id = ${orgId}`)
       }
-    },
-  }))
+      },
+    }),
+  )
 }
 
 export interface CrewRowInput {
@@ -506,14 +507,15 @@ export async function saveCrewGrid(
   expectedRevision: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<void> {
-  await withOrg(orgId, () => runDocumentVersionedTransaction<
-    TicketTransaction,
-    { status: string; updatedAt: string },
-    void
-  >({
-    expectedRevision,
-    transaction: (work) => db.transaction(work),
-    lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
+  await withOrg(orgId, () =>
+    runDocumentVersionedTransaction<
+      TicketTransaction,
+      { status: string; updatedAt: string },
+      void
+    >({
+      expectedRevision,
+      transaction: (work) => db.transaction(work),
+      lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string }>(sql`
       select d.status,
              ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "updatedAt"
         from documents d
@@ -522,44 +524,44 @@ export async function saveCrewGrid(
        where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
        for update of d, ft
     `)).rows[0] ?? null,
-    mutate: async (tx) => {
-      const doc = await loadHeader(orgId, ticketId)
-      // Crew hours land as draft time entries carrying the ticket's project
-      // — new Projects disable-blockers — so a disable racing this save
-      // must refuse one side or the other. Checked before the Field Tickets
-      // recheck (which also fails once Projects goes off, via the parent
-      // gate) so the refusal names the gate instead of a bare 404.
-      if (doc.project_id && !(await checkProjectsWriteEnabled(orgId, tx))) {
+      mutate: async (tx) => {
+        const doc = await loadHeader(orgId, ticketId)
+        // Crew hours land as draft time entries carrying the ticket's project
+        // — new Projects disable-blockers — so a disable racing this save
+        // must refuse one side or the other. Checked before the Field Tickets
+        // recheck (which also fails once Projects goes off, via the parent
+        // gate) so the refusal names the gate instead of a bare 404.
+        if (doc.project_id && !(await checkProjectsWriteEnabled(orgId, tx))) {
         throw new FieldTicketError('Projects feature is disabled')
       }
-      await assertFieldTicketsEnabledTx(tx, orgId)
-      if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
-      if (!subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
+        await assertFieldTicketsEnabledTx(tx, orgId)
+        if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
+        if (!subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
         throw new FieldTicketNotFoundError('Ticket not found')
       }
-      const ft = doc.fieldTicket
+        const ft = doc.fieldTicket
 
-      const existing = (await db.execute<{ id: string; employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string; hours: string }>(sql`
+        const existing = await db.execute<{ id: string; employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string; hours: string }>(sql`
         select id, employee_party_id, item_id, project_task_id, time_type_id, worked_on::text as worked_on, hours
-          from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`))
-      const key = (e: { employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string }) =>
+          from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`)
+        const key = (e: { employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string }) =>
         `${e.employee_party_id}|${e.item_id ?? ''}|${e.project_task_id ?? ''}|${e.time_type_id}|${e.worked_on}`
-      const byKey = new Map(existing.rows.map((e) => [key(e), e]))
-      const seen = new Set<string>()
+        const byKey = new Map(existing.rows.map((e) => [key(e), e]))
+        const seen = new Set<string>()
 
-      // The field-ticket switch is independent of whether a type is usable in
-      // ordinary timesheets. Existing ticket types remain legal so changing setup
-      // never makes an older draft impossible to save.
-      const requestedTypeIds = [...new Set(rows.map((row) => row.timeTypeId).filter(Boolean))]
-      if (requestedTypeIds.length) {
-        if (requestedTypeIds.some((id) => !isUuid(id))) {
+        // The field-ticket switch is independent of whether a type is usable in
+        // ordinary timesheets. Existing ticket types remain legal so changing setup
+        // never makes an older draft impossible to save.
+        const requestedTypeIds = [...new Set(rows.map((row) => row.timeTypeId).filter(Boolean))]
+        if (requestedTypeIds.length) {
+          if (requestedTypeIds.some((id) => !isUuid(id))) {
           throw new FieldTicketError('Choose a valid time type')
         }
-        const existingTypeIds = new Set(existing.rows.map((entry) => entry.time_type_id))
-        const selectable = (await db.execute<{ id: string }>(sql`
+          const existingTypeIds = new Set(existing.rows.map((entry) => entry.time_type_id))
+          const selectable = await db.execute<{ id: string }>(sql`
           select id from time_types
            where org_id = ${orgId} and is_active and show_on_field_ticket
-             and id = any(${`{${requestedTypeIds.join(',')}}`}::uuid[])`))
+             and id = any(${`{${requestedTypeIds.join(',')}}`}::uuid[])`)
         const allowed = new Set([...existingTypeIds, ...selectable.rows.map((type) => type.id)])
         if (requestedTypeIds.some((id) => !allowed.has(id))) {
           throw new FieldTicketError('Choose a time type enabled for field tickets')
@@ -581,7 +583,7 @@ export async function saveCrewGrid(
         const crewSubsidiaryFilter = doc.subsidiaryId
           ? sql`and p.subsidiary_id = ${doc.subsidiaryId}`
           : sql``
-        const crew = (await db.execute<{ id: string }>(sql`
+          const crew = await db.execute<{ id: string }>(sql`
           select p.id from parties p
            where p.org_id = ${orgId} and p.is_active
              and exists (
@@ -589,7 +591,7 @@ export async function saveCrewGrid(
                 where r.party_id = p.id and r.org_id = p.org_id and r.is_active
              )
              ${crewSubsidiaryFilter}
-             and p.id = any(${`{${newEmployeeIds.join(',')}}`}::uuid[])`))
+             and p.id = any(${`{${newEmployeeIds.join(',')}}`}::uuid[])`)
         if (crew.rows.length !== newEmployeeIds.length) {
           throw new FieldTicketError('Choose an active employee in this ticket’s legal entity')
         }
@@ -601,10 +603,10 @@ export async function saveCrewGrid(
       const existingItemIds = new Set(existing.rows.map((entry) => entry.item_id).filter((id): id is string => Boolean(id)))
       const newItemIds = requestedItemIds.filter((id) => !existingItemIds.has(id))
       if (newItemIds.length) {
-        const validItems = (await db.execute<{ id: string }>(sql`
+        const validItems = await db.execute<{ id: string }>(sql`
           select id from items
            where org_id = ${orgId} and is_active
-             and id = any(${`{${newItemIds.join(',')}}`}::uuid[])`))
+             and id = any(${`{${newItemIds.join(',')}}`}::uuid[])`)
         if (validItems.rows.length !== newItemIds.length) {
           throw new FieldTicketError('Choose an active item')
         }
@@ -614,9 +616,9 @@ export async function saveCrewGrid(
         if (requestedTaskIds.some((id) => !isUuid(id))) {
           throw new FieldTicketError('Choose a valid project task')
         }
-        const validTasks = (await db.execute<{ id: string }>(sql`
+        const validTasks = await db.execute<{ id: string }>(sql`
           select id from project_tasks where org_id = ${orgId} and project_id = ${doc.project_id}
-            and id = any(${`{${requestedTaskIds.join(',')}}`}::uuid[])`))
+            and id = any(${`{${requestedTaskIds.join(',')}}`}::uuid[])`)
         if (validTasks.rows.length !== requestedTaskIds.length) throw new FieldTicketError('Choose a task from this project')
       }
 
@@ -630,55 +632,56 @@ export async function saveCrewGrid(
           if (!isIsoCalendarDate(day) || day < ft.periodStart || day > ft.periodEnd) {
             throw new FieldTicketError(`Crew hours for ${day} are outside this ticket’s ${ft.periodStart}…${ft.periodEnd} window`)
           }
-          const k = `${row.employeePartyId}|${row.itemId ?? ''}|${row.projectTaskId ?? ''}|${row.timeTypeId}|${day}`
-          seen.add(k)
-          const cur = byKey.get(k)
-          if (cur) {
-            if (cmp(normalizeMoney(String(cur.hours)), h) !== 0) {
-              // Approved history is immutable through this grid: a zero-row
-              // update means the entry left draft (timesheet approval runs
-              // independently), so fail loudly instead of reporting a save
-              // that changed nothing.
-              const rewritten = (await tx.execute<{ id: string }>(sql`
+            const k = `${row.employeePartyId}|${row.itemId ?? ''}|${row.projectTaskId ?? ''}|${row.timeTypeId}|${day}`
+            seen.add(k)
+            const cur = byKey.get(k)
+            if (cur) {
+              if (cmp(normalizeMoney(String(cur.hours)), h) !== 0) {
+                // Approved history is immutable through this grid: a zero-row
+                // update means the entry left draft (timesheet approval runs
+                // independently), so fail loudly instead of reporting a save
+                // that changed nothing.
+                const rewritten = await tx.execute<{ id: string }>(sql`
                 update time_entries set hours = ${h}, updated_at = now(), updated_by = ${userId}
                  where id = ${cur.id} and org_id = ${orgId} and status = 'draft'
-                 returning id`))
-              if (!rewritten.rows[0]) {
+                 returning id`)
+                if (!rewritten.rows[0]) {
                 throw new FieldTicketError(`Crew hours for ${day} were approved and can no longer be changed on this ticket`)
               }
-            }
-          } else {
+              }
+            } else {
             await tx.execute(sql`
               insert into time_entries (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
                                         project_id, project_task_id, is_billable, status, field_ticket_id, created_by, updated_by)
               values (${orgId}, ${row.employeePartyId}, ${day}, ${h}, ${row.timeTypeId}, ${row.itemId},
                       ${doc.project_id}, ${row.projectTaskId ?? null}, true, 'draft', ${ticketId}, ${userId}, ${userId})`)
           }
-        }
-      }
-      // Remove cleared cells (draft entries only — approved history is immutable).
-      for (const e of existing.rows) {
-        if (!seen.has(key(e))) {
-          // Like the update above, a zero-row delete means the entry left
-          // draft; fail loudly instead of silently keeping the cleared cell.
-          const removed = (await tx.execute<{ id: string }>(sql`
-            delete from time_entries where id = ${e.id} and org_id = ${orgId} and status = 'draft' and field_ticket_id = ${ticketId}
-            returning id`))
-          if (!removed.rows[0]) {
-            throw new FieldTicketError(`Crew hours for ${e.worked_on} were approved and can no longer be removed from this ticket`)
           }
         }
-      }
-      // Crew hours are line evidence too: advance the parent document
-      // revision in the same transaction so a following header/line save
-      // cannot reuse the pre-grid token.
-      await tx.execute(sql`
+        // Remove cleared cells (draft entries only — approved history is immutable).
+        for (const e of existing.rows) {
+          if (!seen.has(key(e))) {
+            // Like the update above, a zero-row delete means the entry left
+            // draft; fail loudly instead of silently keeping the cleared cell.
+            const removed = await tx.execute<{ id: string }>(sql`
+            delete from time_entries where id = ${e.id} and org_id = ${orgId} and status = 'draft' and field_ticket_id = ${ticketId}
+            returning id`)
+            if (!removed.rows[0]) {
+            throw new FieldTicketError(`Crew hours for ${e.worked_on} were approved and can no longer be removed from this ticket`)
+          }
+          }
+        }
+        // Crew hours are line evidence too: advance the parent document
+        // revision in the same transaction so a following header/line save
+        // cannot reuse the pre-grid token.
+        await tx.execute(sql`
         update documents set
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
           updated_by = ${userId}
          where id = ${ticketId} and org_id = ${orgId}`)
-    },
-  }))
+      },
+    }),
+  )
 }
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
@@ -747,8 +750,12 @@ async function addTicketLineUnlocked(
   ticketId: string,
   input: {
     itemId: string; quantity: string | number; rateUnitCode?: string | null; equipmentUnitId?: string | null
+    /** The crew member who ran this unit. See ChargeLineInput.employeeId — the
+     * ticket is where somebody actually knows, because they are standing in
+     * front of the machine while they fill it in. */
     employeeId?: string | null
     description?: string | null
+    /** The project task the line's cost is attributed to (optional). */
     projectTaskId?: string | null
   },
   tx: TicketTransaction,
@@ -756,8 +763,8 @@ async function addTicketLineUnlocked(
 ): Promise<void> {
   const doc = await loadHeader(orgId, ticketId)
   if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
-  const item = (await db.execute<{ id: string; name: string; unit: string | null; default_rate: string | null; default_cost: string | null; kind: string }>(sql`
-    select id, name, unit, default_rate, default_cost, kind from items where id = ${input.itemId} and org_id = ${orgId}`))
+  const item = await db.execute<{ id: string; name: string; unit: string | null; default_rate: string | null; default_cost: string | null; kind: string }>(sql`
+    select id, name, unit, default_rate, default_cost, kind from items where id = ${input.itemId} and org_id = ${orgId}`)
   if (!item.rows[0]) throw new FieldTicketError('Item not found')
   // The drawer already hides inventory from the picker. Turning Inventory off
   // must also refuse a new inventory / assembly / kit line so a crafted
@@ -806,9 +813,9 @@ async function addTicketLineUnlocked(
         throw error
       }
     }
-    const equipment = (await db.execute<{ charge_item_id: string | null; status: string; subsidiary_id: string | null }>(sql`
+    const equipment = await db.execute<{ charge_item_id: string | null; status: string; subsidiary_id: string | null }>(sql`
       select charge_item_id, status, subsidiary_id from equipment_units
-       where id = ${input.equipmentUnitId} and org_id = ${orgId}`))
+       where id = ${input.equipmentUnitId} and org_id = ${orgId}`)
     if (!equipment.rows[0] || equipment.rows[0].status !== 'active' || equipment.rows[0].charge_item_id !== input.itemId
       || (doc.subsidiaryId !== null && equipment.rows[0].subsidiary_id !== doc.subsidiaryId)) {
       throw new FieldTicketError('Choose active equipment linked to this item')
@@ -823,15 +830,15 @@ async function addTicketLineUnlocked(
     // the ticket does not place there would make the signature cover a claim it
     // never made — and this line becomes payable money downstream.
     const crewSubsidiaryFilter = doc.subsidiaryId
-      ? sql`and p.subsidiary_id = ${doc.subsidiaryId}`
-      : sql``
-    const crew = (await db.execute(sql`
+          ? sql`and p.subsidiary_id = ${doc.subsidiaryId}`
+          : sql``
+    const crew = await db.execute(sql`
       select 1 from time_entries te
       join parties p on p.id = te.employee_party_id and p.org_id = te.org_id
        where te.org_id = ${orgId} and te.field_ticket_id = ${ticketId}
          and te.employee_party_id = ${input.employeeId}
          ${crewSubsidiaryFilter}
-       limit 1`))
+       limit 1`)
     if (!crew.rows[0]) throw new FieldTicketError('The operator must be on this ticket’s crew')
   }
 
@@ -867,9 +874,9 @@ async function addTicketLineUnlocked(
   const baseQuantity = resolved?.baseQuantity ?? quantity
   const transactionUnit = resolved?.transactionUnitCode ?? item.rows[0].unit ?? 'unit'
 
-  const next = (await tx.execute<{ n: number }>(sql`
-    select coalesce(max(line_number), 0) + 1 as n from document_lines where document_id = ${ticketId} and org_id = ${orgId}`))
-  const inserted = (await tx.execute<{ id: string }>(sql`
+  const next = await tx.execute<{ n: number }>(sql`
+    select coalesce(max(line_number), 0) + 1 as n from document_lines where document_id = ${ticketId} and org_id = ${orgId}`)
+  const inserted = await tx.execute<{ id: string }>(sql`
     insert into document_lines (org_id, document_id, line_number, item_id, description, quantity, unit, unit_price, amount,
                                 project_id, is_billable, equipment_unit_id, employee_id, rate_version_id, rate_presentation,
                                 base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
@@ -878,7 +885,7 @@ async function addTicketLineUnlocked(
             ${quantity}, ${transactionUnit}, ${billRate}, ${billAmount}, ${doc.project_id}, true, ${input.equipmentUnitId ?? null},
             ${input.employeeId ?? null},
             ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'}, ${baseQuantity}, ${baseUnit},
-            ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${ticketId}, ${input.projectTaskId ?? null}, ${userId}, ${userId}) returning id`))
+            ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${ticketId}, ${input.projectTaskId ?? null}, ${userId}, ${userId}) returning id`)
   const components = [
     ...(resolved?.cost.components ?? [{ rateLineId: null, unitCode: baseUnit, unitName: baseUnit, quantity, rate: costRate, amount: costAmount }]).map((c) => ({ ...c, role: 'cost' })),
     ...(resolved?.bill.components ?? [{ rateLineId: null, unitCode: baseUnit, unitName: baseUnit, quantity, rate: billRate, amount: billAmount }]).map((c) => ({ ...c, role: 'bill' })),
@@ -980,7 +987,7 @@ async function loadHeader(
   ticketId: string,
   lockForUpdate = false,
 ): Promise<HeaderRow> {
-  const r = (await db.execute<HeaderRow>(sql`
+  const r = await db.execute<HeaderRow>(sql`
     select d.id, d.document_number, d.status, d.party_id,
            d.subsidiary_id as "subsidiaryId", d.project_id, d.currency,
            d.document_date::text as document_date, d.reference_number, d.memo,
@@ -994,7 +1001,7 @@ async function loadHeader(
         on ft.document_id = d.id and ft.org_id = d.org_id
      where d.id = ${ticketId} and d.org_id = ${orgId}
        and d.kind = 'field_ticket'
-     ${lockForUpdate ? sql`for update of d, ft` : sql``}`))
+     ${lockForUpdate ? sql`for update of d, ft` : sql``}`)
   if (!r.rows[0]) throw new FieldTicketError('Ticket not found')
   const row = r.rows[0]
   row.fieldTicket = {
@@ -1027,7 +1034,7 @@ async function ensureFieldTicketLaborSnapshot(
   userId: string,
   doc: HeaderRow,
 ): Promise<LaborSnapshotResult> {
-  const current = (await db.execute<{ id: string; revision: number; line_count: number }>(sql`
+  const current = await db.execute<{ id: string; revision: number; line_count: number }>(sql`
     select snapshot.id, snapshot.revision,
            (select count(*)::int
               from field_ticket_labor_lines line
@@ -1038,7 +1045,7 @@ async function ensureFieldTicketLaborSnapshot(
        and snapshot.field_ticket_id = ${doc.id}
        and snapshot.superseded_at is null
      limit 1
-  `))
+  `)
   if (current.rows[0]) {
     return {
       id: current.rows[0].id,
@@ -1047,7 +1054,7 @@ async function ensureFieldTicketLaborSnapshot(
     }
   }
 
-  const entries = (await db.execute<{
+  const entries = await db.execute<{
       id: string
       employee_party_id: string
       employee_name: string
@@ -1092,7 +1099,7 @@ async function ensureFieldTicketLaborSnapshot(
        and te.hours <> 0
      order by te.worked_on, te.employee_party_id, te.item_id nulls first,
               te.time_type_id nulls first, te.project_task_id nulls first, te.id
-  `))
+  `)
   const missingTimeType = entries.rows.find((entry) => !entry.time_type_id)
   if (missingTimeType) {
     throw new FieldTicketError(
@@ -1287,15 +1294,18 @@ export async function lockTicketLifecycleRevision(
  * approver, hardcoded threshold, or parallel approval path.
  */
 export async function submitFieldTicket(
-  orgId: string, userId: string, ticketId: string, expectedRevision: string,
+  orgId: string,
+  userId: string,
+  ticketId: string,
+  expectedRevision: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<void> {
   const outcome = await withOrg(orgId, async () => {
     const doc = await lockTicketLifecycleRevision(orgId, userId, ticketId, expectedRevision, allowedSubsidiaryIds)
     if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be submitted')
-    const counts = (await db.execute<{ hours: number; lines: number }>(sql`
+    const counts = await db.execute<{ hours: number; lines: number }>(sql`
       select (select count(*) from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}) as hours,
-             (select count(*) from document_lines where org_id = ${orgId} and document_id = ${ticketId}) as lines`))
+             (select count(*) from document_lines where org_id = ${orgId} and document_id = ${ticketId}) as lines`)
     const countsRow = counts.rows[0]!
     if (Number(countsRow.hours) === 0 && Number(countsRow.lines) === 0) {
       throw new FieldTicketError('Add hours or lines before submitting')
@@ -1364,9 +1374,33 @@ export async function releaseFieldTicketApproval(
   ticketId: string,
   outcome: 'approved' | 'rejected',
   comment?: string | null,
+  approvalRunId?: string,
 ): Promise<void> {
   await assertFieldTicketsEnabled(orgId)
   const doc = await loadHeader(orgId, ticketId, true)
+  const decision = approvalRunId
+    ? await completedGateDecisionPolicy(db, {
+        orgId,
+        subjectKind: 'field_ticket',
+        subjectId: ticketId,
+        approvalRunId,
+        actorId: userId,
+        outcome,
+      })
+    : null
+  const ungated =
+    outcome === 'approved' &&
+    !approvalRunId &&
+    (
+      await db.execute<{
+        allowed: boolean
+      }>(sql`select public.flow_ungated_submission_authorized(
+    ${orgId},'field_ticket',${ticketId},${userId}) as allowed`)
+    ).rows[0]?.allowed === true
+  if (!decision && !ungated)
+    throw new FieldTicketError(
+      'Complete the configured native Flow gates before releasing this ticket.',
+    )
   if (outcome === 'rejected') {
     if (doc.status !== 'pending_approval') {
       throw new FieldTicketError('Only submitted tickets can be rejected')
@@ -1393,32 +1427,11 @@ export async function releaseFieldTicketApproval(
     if (doc.status === 'approved') return
     throw new FieldTicketError('Only draft or submitted tickets can be approved')
   }
-  // Separation of duties: a ticket carrying the approver's own crew time is
-  // the approver's own time evidence. While the org's time-approval policy
-  // prevents self-approval (the default), the crew member whose person
-  // party matches the actor cannot release the ticket — route it to another
-  // approver, or opt out explicitly in Time settings.
-  {
-    const { timeSelfApprovalPrevented, actorPersonPartyId, SELF_APPROVAL_REMEDY } = await import('./time-approval')
-    if (await timeSelfApprovalPrevented(orgId, doc.fieldTicket.periodEnd)) {
-      const own = await actorPersonPartyId(orgId, userId)
-      if (own !== null) {
-        const crew = (await db.execute<{ employee: string }>(sql`
-          select distinct employee_party_id as employee from time_entries
-           where org_id = ${orgId} and field_ticket_id = ${ticketId}`)).rows
-        if (crew.some((row) => row.employee === own)) {
-          throw new FieldTicketError(
-            `You cannot approve a field ticket carrying your own crew time. ${SELF_APPROVAL_REMEDY}`,
-          )
-        }
-      }
-    }
-  }
   const previousStatus = doc.status
   const laborSnapshot = await ensureFieldTicketLaborSnapshot(orgId, userId, doc)
 
   // Materialize item lines as a project charge so job cost + T&M billing see them.
-  const lines = (await db.execute<{ id: string; item_id: string; description: string | null; quantity: string; unit: string | null; cost_rate: string | null;
+  const lines = await db.execute<{ id: string; item_id: string; description: string | null; quantity: string; unit: string | null; cost_rate: string | null;
       bill_rate: string | null; cost_amount: string | null; bill_amount: string | null; equipment_unit_id: string | null;
       employee_id: string | null;
       rate_version_id: string | null; rate_presentation: 'summary' | 'rate_components' | null;
@@ -1427,16 +1440,16 @@ export async function releaseFieldTicketApproval(
            equipment_unit_id, employee_id, rate_version_id, rate_presentation, base_quantity, base_unit,
            project_task_id
       from document_lines
-     where document_id = ${ticketId} and org_id = ${orgId} and item_id is not null`))
+     where document_id = ${ticketId} and org_id = ${orgId} and item_id is not null`)
   let chargeDocumentId = doc.fieldTicket.chargeDocumentId ?? null
   if (lines.rows.length > 0 && doc.project_id && !chargeDocumentId) {
     const lineIds = `{${lines.rows.map((line) => line.id).join(',')}}`
-    const componentRows = (await db.execute<{ document_line_id: string; role: 'cost' | 'bill'; rate_line_id: string | null; unit_code: string;
+    const componentRows = await db.execute<{ document_line_id: string; role: 'cost' | 'bill'; rate_line_id: string | null; unit_code: string;
         unit_name: string; quantity: string; rate: string; amount: string; quantity_ratio: { numerator: string; denominator: string } | null }>(sql`
       select document_line_id, role, rate_line_id, unit_code, unit_name, quantity, rate, amount, quantity_ratio
         from charge_rate_components
        where org_id = ${orgId} and document_line_id = any(${lineIds}::uuid[])
-       order by document_line_id, role, sequence`))
+       order by document_line_id, role, sequence`)
     const componentsFor = (lineId: string, role: 'cost' | 'bill') => componentRows.rows
       .filter((component) => component.document_line_id === lineId && component.role === role)
       .map((component) => ({ rateLineId: component.rate_line_id, unitCode: component.unit_code,
@@ -1550,7 +1563,7 @@ export async function loadFieldTicket(
       ? sql` and (${sql.raw(column)} is null or ${sql.raw(column)} = ${doc.subsidiaryId})`
       : sql` and ${sql.raw(column)} = ${doc.subsidiaryId}`
     : sql``
-  const snapshotResult = (await db.execute<{
+  const snapshotResult = await db.execute<{
       id: string
       revision: number
       evidence_basis: 'operational_time' | 'source_import' | 'controlled_amendment'
@@ -1566,7 +1579,7 @@ export async function loadFieldTicket(
        and field_ticket_id = ${ticketId}
        and superseded_at is null
      limit 1
-  `))
+  `)
   const laborSnapshot = snapshotResult.rows[0] ?? null
   const entriesQuery = laborSnapshot
     ? db.execute(sql`
@@ -1742,7 +1755,9 @@ export async function loadFieldTicket(
   const preview = unpriced.length ? await snapshotTimeBillRates(orgId, unpriced, { dryRun: true }) : new Map<string, string>()
   for (const e of entries.rows) if (e.bill_rate == null && preview.has(e.id)) e.bill_rate = preview.get(e.id)!
   const laborTotal = sum(
-    entries.rows.map((e) => (e.bill_rate != null ? mul(String(e.hours), String(e.bill_rate)) : '0')),
+    entries.rows.map((e) =>
+      e.bill_rate != null ? mul(String(e.hours), String(e.bill_rate)) : '0',
+    ),
   )
   // Crew hours with no bill rate after the preview (no labor item, or no
   // rate-book match) price at $0: surface the unpriced hours so a $0 labor

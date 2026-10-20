@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { ComponentProps } from 'react'
-import { AutomationApprovalSettings, AutomationRowActions, NewAutomationButton } from './AutomationsClient'
+import { AutomationRowActions, NewAutomationButton } from './AutomationsClient'
 
 /**
  * The automations list's composite cells, mirroring the flows list cells:
@@ -9,7 +9,13 @@ import { AutomationApprovalSettings, AutomationRowActions, NewAutomationButton }
  * and the widget registry — never a second copy.
  */
 
-export function AutomationNameCell({ name, href }: { name: string; href: string }) {
+export function AutomationNameCell({
+  name,
+  href,
+}: {
+  name: string
+  href: string
+}) {
   return (
     <Link
       href={href}
@@ -60,8 +66,4 @@ export function AutomationRowActionsCell({
 
 export function NewAutomationListButton({ label }: { label: string }) {
   return <NewAutomationButton label={label} />
-}
-
-export function AutomationApprovalSettingsSection(props: ComponentProps<typeof AutomationApprovalSettings>) {
-  return <AutomationApprovalSettings {...props} />
 }

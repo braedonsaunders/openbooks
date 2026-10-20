@@ -138,7 +138,7 @@
     "discard": "放弃更改",
     "submit": "提交发布",
     "submitted": "已提交 {count} 项更改等待发布。",
-    "governedExplain": "受控排程板：发布会生成一条发布记录。若适用审批流程，更改将在批准后发布。",
+    "flowExplain": "发布时，这些更改将提交至组织的 Flows。未设置审批步骤时，将立即发布。",
     "awaiting": "{count} 项更改正在等待发布决定。",
     "awaitingFlow": "审批流程将在审批中决定此次发布。在此之前，已提交的更改保持锁定。",
     "openApprovals": "打开审批"

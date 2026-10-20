@@ -3,13 +3,7 @@ import { stubModules, withAuthzTestSurface } from "../../../../testing/stub-modu
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// Close configuration saves coerce isActive with `!== false` while every
-// sibling flag in the same file uses the strict `bool()` helper (`=== true`).
-// A mistyped isActive: "false" (or 0, or "yes") therefore ACTIVATES the row
-// with a 200 instead of failing closed — a live automation or reporting
-// package the admin tried to switch off keeps running. Same boolean-flag
-// class already fixed on project-types PATCH and
-// form-layouts/pdf-templates/list-views/projects PATCH.
+// Configuration boundaries refuse ambiguous flags before any writes.
 
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __closeFlagsUser: state });
@@ -117,6 +111,33 @@ test("close saves still accept real booleans for isActive", async () => {
     assert.equal(on.status, 200, await on.text());
   } finally {
     state.user = { orgId: "", id: "" };
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+
+test("close configuration cannot introduce approval authority outside Flows", async () => {
+  const {org,actorId}=await setup();
+  try {
+    const step={key:"review",title:"Review close evidence",workstream:"review",taskType:"approval",completionMode:"manual"};
+    const cases=[
+      {action:"save-blueprint",name:"Refused reviewer blueprint",steps:[{...step,defaultReviewerRoleKey:"controller"}]},
+      ...["reviewerUserId","reviewerRoleKey"].map(key=>({action:"save-automation",name:"Refused reviewer assignment",trigger:"task_ready",automationAction:"assign",config:{[key]:key==="reviewerUserId"?actorId:"controller"}})),
+      ...["review","segregation"].map(policyType=>({action:"save-policy",code:"refused-approval-policy",name:"Refused approval policy",policyType,rules:{prohibitSelfApproval:true}})),
+    ];
+    for(const body of cases){
+      const response=await withOrgContext(org.orgId,()=>POST(request(body)));
+      assert.equal(response.status,422,await response.text());
+    }
+    const counts=await withBypassContext(()=>db.execute(sql`select
+      (select count(*)::int from close_blueprints where org_id=${org.orgId} and name='Refused reviewer blueprint') as blueprints,
+      (select count(*)::int from close_automation_rules where org_id=${org.orgId} and name='Refused reviewer assignment') as automations,
+      (select count(*)::int from close_policies where org_id=${org.orgId} and code='refused-approval-policy') as policies`));
+    assert.deepEqual(counts.rows[0],{blueprints:0,automations:0,policies:0});
+    const owner=await withOrgContext(org.orgId,()=>POST(request({action:"save-automation",name:"Preparation assignment",trigger:"task_ready",automationAction:"assign",config:{ownerUserId:actorId}})));
+    assert.equal(owner.status,200,await owner.text());
+  } finally {
+    state.user={orgId:"",id:""};
     await dropScratchOrg(org.orgId);
   }
 });

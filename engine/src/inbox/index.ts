@@ -7,7 +7,10 @@
  * adapters whose source has not landed (qualification alerts,
  * document signatures) — they list nothing until their source exists.
  */
-import { aiCapabilityReviewAdapter, payrollAnomalyBlockAdapter } from "./adapters/ai-rails.ts";
+import {
+  aiCapabilityReviewAdapter,
+  payrollAnomalyBlockAdapter,
+} from "./adapters/ai-rails.ts";
 import { documentSignatureAdapter } from "./adapters/document-signature.ts";
 import { expenseReportAdapter } from "./adapters/expense-report.ts";
 import { fieldTicketSignatureAdapter } from "./adapters/field-ticket-signature.ts";
@@ -21,11 +24,9 @@ import { hrmFeedbackRequestAdapter } from "./adapters/hrm-feedback-request.ts";
 import { hrmReviewAdapter } from "./adapters/hrm-review.ts";
 import { notificationAdapter } from "./adapters/notification.ts";
 import { timesheetWeekAdapter } from "./adapters/timesheet-week.ts";
-import { timesheetApprovalAdapter } from "./adapters/timesheet-approval.ts";
 // HR-20 begin
 import { crewTimeBatchAdapter } from "./adapters/crew-time-batch.ts";
 // HR-20 end
-import { closeReopenRequestAdapter } from "./adapters/close-reopen-request.ts";
 import { equityActionAdapter } from "./adapters/equity-action.ts";
 import { registerInboxAdapter } from "./registry.ts";
 
@@ -42,7 +43,6 @@ registerInboxAdapter(hrmBenefitEnrollmentWindowAdapter);
 registerInboxAdapter(hrmQualificationAlertAdapter);
 registerInboxAdapter(fieldTicketSignatureAdapter);
 registerInboxAdapter(timesheetWeekAdapter);
-registerInboxAdapter(timesheetApprovalAdapter);
 // HR-20 begin
 registerInboxAdapter(crewTimeBatchAdapter);
 // HR-20 end
@@ -51,12 +51,20 @@ registerInboxAdapter(documentSignatureAdapter);
 // HR-21: blocking payroll checks and overdue capability reviews.
 registerInboxAdapter(payrollAnomalyBlockAdapter);
 registerInboxAdapter(aiCapabilityReviewAdapter);
-// Period reopen requests reach independent approvers holding close.reopen.
-registerInboxAdapter(closeReopenRequestAdapter);
 registerInboxAdapter(equityActionAdapter);
 
-export { actOnInboxItem, countInbox, InboxError, listInbox, type InboxSourceNotice } from "./registry.ts";
-export { markNotificationsRead, writeNotification, type NotificationWrite } from "./adapters/notification.ts";
+export {
+  actOnInboxItem,
+  countInbox,
+  InboxError,
+  listInbox,
+  type InboxSourceNotice,
+} from "./registry.ts";
+export {
+  markNotificationsRead,
+  writeNotification,
+  type NotificationWrite,
+} from "./adapters/notification.ts";
 export type { InboxAdapter, InboxPage } from "./registry.ts";
 export type {
   InboxActionDef,
@@ -66,4 +74,10 @@ export type {
   InboxListContext,
   InboxPriority,
 } from "./types.ts";
-export { compareInboxItems, dueBusinessDay, inboxItemId, parseInboxItemId, priorityForDueDate } from "./types.ts";
+export {
+  compareInboxItems,
+  dueBusinessDay,
+  inboxItemId,
+  parseInboxItemId,
+  priorityForDueDate,
+} from "./types.ts";

@@ -10,6 +10,7 @@ import type {
   TrainingParticipant,
   TrainingFeedback,
 } from '@openbooks/engine/hrm/training'
+import { ApprovalActions } from '@/components/approval-actions'
 import { InspectorPanel } from '@/components/builder/builder-kit'
 import { useDirtyUrlDrawer } from '@/components/dirty-url-drawer'
 import { CabinetFilePicker } from '@/components/cabinet-file-picker'
@@ -24,8 +25,18 @@ type TrainingActionProps = {
   feedback?: TrainingFeedback[]
   canManage: boolean
 } & (
-  | { course: TrainingCourse; session?: TrainingSession; participant?: TrainingParticipant; audience?: 'staff' }
-  | { course?: never; session: TrainingSession; participant: TrainingParticipant; audience: 'self' }
+  | {
+      course: TrainingCourse
+      session?: TrainingSession
+      participant?: TrainingParticipant
+      audience?: 'staff'
+    }
+  | {
+      course?: never
+      session: TrainingSession
+      participant: TrainingParticipant
+      audience: 'self'
+    }
 )
 
 export function TrainingActions({
@@ -50,7 +61,10 @@ export function TrainingActions({
   const [evidence, setEvidence] = useState(''),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null)
-  useDirtyUrlDrawer(Object.values(values).some((value) => value !== '') || evidence !== '', busy)
+  useDirtyUrlDrawer(
+    Object.values(values).some((value) => value !== '') || evidence !== '',
+    busy,
+  )
   const pending = useRef(false),
     feedbackKey = useRef<string | null>(null)
   const base = `/api/${audience === 'self' ? 'me/training' : 'hrm/training'}/${participant ? 'participants' : session ? 'sessions' : 'courses'}/${record.id}`
@@ -59,32 +73,59 @@ export function TrainingActions({
   if (canManage) {
     if (audience === 'self' && participant) {
       if (participant.status === 'invited') actions.push('accept', 'decline')
-      if (participant.status === 'completed' || participant.status === 'failed') actions.push('feedback')
+      if (participant.status === 'completed' || participant.status === 'failed')
+        actions.push('feedback')
     } else if (participant) {
       if (participant.status === 'invited') actions.push('accept', 'decline')
-      if (participant.status === 'invited' || participant.status === 'accepted') {
+      if (
+        participant.status === 'invited' ||
+        participant.status === 'accepted'
+      ) {
         actions.push('cancel')
         if (session?.status === 'in_progress') actions.push('result')
       }
-      if (participant.status === 'completed' || participant.status === 'failed') actions.push('void', 'feedback')
+      if (participant.status === 'completed' || participant.status === 'failed')
+        actions.push('void', 'feedback')
     } else if (session) {
       if (session.status === 'draft') actions.push('schedule', 'cancel')
       if (session.status === 'scheduled') actions.push('start', 'cancel')
       if (session.status === 'in_progress') actions.push('complete', 'cancel')
     } else {
-      if (course?.status === 'draft') actions.push('approve', 'cancel')
+      if (course?.status === 'draft') actions.push('cancel')
       if (course?.status === 'approved') actions.push('retire')
     }
   }
   const resultFields: SetupField[] = [
-    { key: 'attendanceMinutes', kind: 'integer', min: 0, required: true, labelKey: 'training.attendanceMinutes' },
+    {
+      key: 'attendanceMinutes',
+      kind: 'integer',
+      min: 0,
+      required: true,
+      labelKey: 'training.attendanceMinutes',
+    },
     ...(course?.passingScore != null
-      ? [{ key: 'score', kind: 'integer' as const, min: 0, max: 100, required: true, labelKey: 'training.score' }]
+      ? [
+          {
+            key: 'score',
+            kind: 'integer' as const,
+            min: 0,
+            max: 100,
+            required: true,
+            labelKey: 'training.score',
+          },
+        ]
       : []),
     { key: 'notes', kind: 'textarea', labelKey: 'training.notes' },
   ]
   const feedbackFields: SetupField[] = [
-    { key: 'rating', kind: 'integer', min: 1, max: 5, required: true, labelKey: 'training.rating' },
+    {
+      key: 'rating',
+      kind: 'integer',
+      min: 1,
+      max: 5,
+      required: true,
+      labelKey: 'training.rating',
+    },
     { key: 'comments', kind: 'textarea', labelKey: 'training.comments' },
   ]
   function fields(items: SetupField[]) {
@@ -107,8 +148,12 @@ export function TrainingActions({
   }
   async function act(action: string) {
     if (pending.current) return
-    const reasonRequired = audience === 'staff' || (action === 'feedback' && feedback.length > 0)
-    const common = coerceField({ key: 'reason', kind: 'textarea', required: reasonRequired }, values.reason)
+    const reasonRequired =
+      audience === 'staff' || (action === 'feedback' && feedback.length > 0)
+    const common = coerceField(
+      { key: 'reason', kind: 'textarea', required: reasonRequired },
+      values.reason,
+    )
     if ('error' in common) {
       setError(t('training.reasonHint'))
       return
@@ -138,7 +183,9 @@ export function TrainingActions({
       } else {
         delete body.expectedRevision
         body.supersedesId =
-          feedback.find((entry) => !feedback.some((next) => next.supersedesId === entry.id))?.id ?? null
+          feedback.find(
+            (entry) => !feedback.some((next) => next.supersedesId === entry.id),
+          )?.id ?? null
         suffix = '/feedback'
         feedbackKey.current ??= crypto.randomUUID()
       }
@@ -154,7 +201,9 @@ export function TrainingActions({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(action === 'feedback' ? { 'Idempotency-Key': feedbackKey.current! } : {}),
+          ...(action === 'feedback'
+            ? { 'Idempotency-Key': feedbackKey.current! }
+            : {}),
         },
         body: JSON.stringify(body),
         signal: controller.signal,
@@ -164,7 +213,14 @@ export function TrainingActions({
         return
       }
       feedbackKey.current = null
-      setValues({ reason: '', attendanceMinutes: '', score: '', notes: '', rating: '', comments: '' })
+      setValues({
+        reason: '',
+        attendanceMinutes: '',
+        score: '',
+        notes: '',
+        rating: '',
+        comments: '',
+      })
       setEvidence('')
       router.refresh()
     } catch {
@@ -179,19 +235,37 @@ export function TrainingActions({
     <div className="space-y-4">
       <InspectorPanel
         title={t('training.review')}
-        description={participant ? t('training.resultHint') : t('training.reviewHint')}
+        description={
+          participant ? t('training.resultHint') : t('training.reviewHint')
+        }
       >
         <p className="mb-4 text-sm">
           {t('training.status')}: {t(`training.statuses.${record.status}`)}
         </p>
-        {actions.length ? (
+        {actions.length ||
+        (!participant &&
+          !session &&
+          course?.status === 'draft' &&
+          canManage) ? (
           <div className="space-y-4">
             {audience === 'staff' || feedback.length > 0
-              ? fields([{ key: 'reason', kind: 'textarea', required: true, labelKey: 'training.reason' }])
+              ? fields([
+                  {
+                    key: 'reason',
+                    kind: 'textarea',
+                    required: true,
+                    labelKey: 'training.reason',
+                  },
+                ])
               : null}
             {actions.includes('result') ? (
-              <InspectorPanel title={t('training.result')} description={t('training.resultHint')}>
-                <div className="grid gap-4 sm:grid-cols-2">{fields(resultFields)}</div>
+              <InspectorPanel
+                title={t('training.result')}
+                description={t('training.resultHint')}
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {fields(resultFields)}
+                </div>
                 {course?.qualificationTypeId ? (
                   <div className="mt-4 space-y-1.5">
                     <Label>{t('training.evidence')}</Label>
@@ -203,26 +277,59 @@ export function TrainingActions({
                     />
                   </div>
                 ) : null}
-                <Button className="mt-4" disabled={busy} onClick={() => void act('result')}>
+                <Button
+                  className="mt-4"
+                  disabled={busy}
+                  onClick={() => void act('result')}
+                >
                   {t('training.actions.result')}
                 </Button>
               </InspectorPanel>
             ) : null}
             {actions.includes('feedback') ? (
-              <InspectorPanel title={t('training.feedback')} description={t('training.feedbackHint')}>
-                <div className="grid gap-4 sm:grid-cols-2">{fields(feedbackFields)}</div>
-                <Button className="mt-4" disabled={busy} onClick={() => void act('feedback')}>
+              <InspectorPanel
+                title={t('training.feedback')}
+                description={t('training.feedbackHint')}
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {fields(feedbackFields)}
+                </div>
+                <Button
+                  className="mt-4"
+                  disabled={busy}
+                  onClick={() => void act('feedback')}
+                >
                   {t('training.actions.feedback')}
                 </Button>
               </InspectorPanel>
             ) : null}
+            {!participant && !session && course ? (
+              <ApprovalActions
+                subjectKind="training_course"
+                subjectId={course.id}
+                    submitApprovalHref={canManage ? base : undefined}
+                submitApprovalBody={{
+                  action: 'submit',
+                  expectedRevision: course.revision,
+                  reason:
+                    typeof values.reason === 'string' ? values.reason : '',
+                }}
+                submissionStatuses={['draft']}
+              />
+            ) : null}
             <div className="flex flex-wrap gap-2">
               {actions
-                .filter((action) => action !== 'result' && action !== 'feedback')
+                .filter(
+                  (action) => action !== 'result' && action !== 'feedback',
+                )
                 .map((action) => (
                   <Button
                     key={action}
-                    variant={['cancel', 'retire', 'void', 'decline'].includes(action) ? 'outline' : 'default'}
+                    variant={
+                      ['cancel', 'retire', 'void', 'decline'].includes(action)
+                        ? 'outline'
+                        : 'default'
+                    }
                     disabled={busy}
                     onClick={() => void act(action)}
                   >
@@ -236,7 +343,10 @@ export function TrainingActions({
         )}
         {participant?.attendanceSeconds != null ? (
           <p className="mt-4 text-sm">
-            {t('training.recordedResult', { seconds: participant.attendanceSeconds, score: participant.score ?? '—' })}
+            {t('training.recordedResult', {
+              seconds: participant.attendanceSeconds,
+              score: participant.score ?? '—',
+            })}
           </p>
         ) : null}
         {error ? (
@@ -246,10 +356,16 @@ export function TrainingActions({
         ) : null}
       </InspectorPanel>
       {feedback.length ? (
-        <InspectorPanel title={t('training.feedback')} description={t('training.feedbackHint')}>
+        <InspectorPanel
+          title={t('training.feedback')}
+          description={t('training.feedbackHint')}
+        >
           {feedback.map((entry) => (
             <p key={entry.id} className="py-2 text-sm whitespace-pre-wrap">
-              {t('training.feedbackEntry', { rating: entry.rating, at: dateTime(entry.createdAt, locale) })}
+              {t('training.feedbackEntry', {
+                rating: entry.rating,
+                at: dateTime(entry.createdAt, locale),
+              })}
               {entry.comments ? ` · ${entry.comments}` : ''}
             </p>
           ))}

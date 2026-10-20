@@ -430,7 +430,7 @@ function validatedHistoryCurrency(args: {
     throw refusal(
       "saas_metrics_history_denomination_unknown",
       `${args.scope} is stored without normalized denomination evidence (reporting currency ${currency ?? "absent"}, denomination ${stored}) and cannot open ${args.month}.`,
-      `Open Company Setup → SaaS Metrics and submit a normalization request for ${args.sourceMonth}; have a different authorized approver approve it, then recompute ${args.month}. Closed periods remain closed and posted accounting history is never reversed or rewritten to normalize derived metrics.`,
+      `Open Company Setup → SaaS Metrics and submit a normalization request for ${args.sourceMonth}; complete any tenant Flow gates, then recompute ${args.month}. Closed periods remain closed and posted accounting history is never reversed or rewritten to normalize derived metrics.`,
       { field: "month" },
     );
   }

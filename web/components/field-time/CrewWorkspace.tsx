@@ -1,12 +1,17 @@
 'use client'
 
+import { ApprovalActions } from '@/components/approval-actions'
+
 import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { Button, Input, Label, Select } from '@openbooks/ui'
 import { Field } from '@/components/field'
-import { readApiErrorMessage, refusalMessageFromBody } from '../../lib/api-error'
+import {
+  readApiErrorMessage,
+  refusalMessageFromBody,
+} from '../../lib/api-error'
 import { DateField } from '../date-field'
 
 export interface CrewLine {
@@ -84,37 +89,64 @@ export function CrewWorkspace({
     defaultWorkedOn: string
   } | null
   /** People booked to this project on this day on boards that pre-fill crew time. */
-  scheduledCrew?: { employeePartyId: string; employeeName: string; hours: string; projectTaskId: string }[]
+  scheduledCrew?: {
+    employeePartyId: string
+    employeeName: string
+    hours: string
+    projectTaskId: string
+  }[]
 }) {
   const { dateTime } = useViewerFormat()
   const t = useTranslations('timesheets')
   const tScheduling = useTranslations('scheduling')
-  const [lines, setLines] = useState<CrewLine[]>(initialLines.length > 0 ? initialLines : [{ ...EMPTY_LINE }])
+  const [lines, setLines] = useState<CrewLine[]>(
+    initialLines.length > 0 ? initialLines : [{ ...EMPTY_LINE }],
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [signOpen, setSignOpen] = useState(false)
   const [signerName, setSignerName] = useState('')
-  const [reason, setReason] = useState('')
 
   // Booked people not yet on the sheet join it; the foreman reviews the hours and saves.
   const fillFromSchedule = () => {
-    const present = new Set(lines.map((line) => line.employeePartyId).filter(Boolean))
+    const present = new Set(
+      lines.map((line) => line.employeePartyId).filter(Boolean),
+    )
     const additions = scheduledCrew
-      .filter((booked, index, all) => !present.has(booked.employeePartyId) && all.findIndex((other) => other.employeePartyId === booked.employeePartyId) === index)
-      .map((booked) => ({ ...EMPTY_LINE, employeePartyId: booked.employeePartyId, employeeName: booked.employeeName, hours: booked.hours.includes('.') ? booked.hours.replace(/0+$/, '').replace(/\.$/, '') : booked.hours, projectTaskId: booked.projectTaskId }))
+      .filter(
+        (booked, index, all) =>
+          !present.has(booked.employeePartyId) &&
+          all.findIndex(
+            (other) => other.employeePartyId === booked.employeePartyId,
+          ) === index,
+      )
+      .map((booked) => ({
+        ...EMPTY_LINE,
+        employeePartyId: booked.employeePartyId,
+        employeeName: booked.employeeName,
+        hours: booked.hours.includes('.')
+          ? booked.hours.replace(/0+$/, '').replace(/\.$/, '')
+          : booked.hours,
+        projectTaskId: booked.projectTaskId,
+      }))
     if (!additions.length) {
       setNotice(tScheduling('prefill.crewNothing'))
       return
     }
     setError(null)
-    setLines((prev) => [...prev.filter((line) => line.employeePartyId || line.hours || line.id), ...additions])
+    setLines((prev) => [
+      ...prev.filter((line) => line.employeePartyId || line.hours || line.id),
+      ...additions,
+    ])
     setNotice(tScheduling('prefill.crewFilled', { count: additions.length }))
   }
 
   const setLine = (index: number, patch: Partial<CrewLine>) => {
-    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)))
+    setLines((prev) =>
+      prev.map((line, i) => (i === index ? { ...line, ...patch } : line)),
+    )
   }
 
   const act = useCallback(
@@ -128,11 +160,17 @@ export function CrewWorkspace({
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ action, ...extra }),
         })
-        const payload = (await res.json().catch(() => null)) as { error?: string } | null
+        const payload = (await res.json().catch(() => null)) as {
+          error?: string
+        } | null
         // The refusal reads through the shared helper so message, remedy and
         // code render instead of the bare `error` field.
         if (!res.ok) {
-          setError(refusalMessageFromBody(payload, { fallback: t('field.sendFailed') }) ?? t('field.sendFailed'))
+          setError(
+            refusalMessageFromBody(payload, {
+              fallback: t('field.sendFailed'),
+            }) ?? t('field.sendFailed'),
+          )
           return false
         }
         setSavedAt(dateTime(new Date(), { hour: 'numeric', minute: '2-digit' }))
@@ -155,14 +193,22 @@ export function CrewWorkspace({
     // omitted; explicit removal stays the only delete path.
     const incomplete = lines.findIndex((line) => {
       const hasContent = Boolean(
-        line.id || line.employeePartyId || line.hours.trim() || line.timeTypeId ||
-        line.projectTaskId || line.costCodeRef.trim() || line.equipmentId ||
-        line.equipmentHours.trim() || line.memo.trim(),
+        line.id ||
+        line.employeePartyId ||
+        line.hours.trim() ||
+        line.timeTypeId ||
+        line.projectTaskId ||
+        line.costCodeRef.trim() ||
+        line.equipmentId ||
+        line.equipmentHours.trim() ||
+        line.memo.trim(),
       )
       return hasContent && (!line.employeePartyId || line.hours.trim() === '')
     })
     if (incomplete >= 0) {
-      setError(`${incomplete + 1}: ${t('field.chooseWorker')} · ${t('field.hours')}`)
+      setError(
+        `${incomplete + 1}: ${t('field.chooseWorker')} · ${t('field.hours')}`,
+      )
       return false
     }
     const cleaned = lines
@@ -201,7 +247,12 @@ export function CrewWorkspace({
       className="space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800 md:grid md:grid-cols-[1fr_5rem_1fr_1fr] md:gap-2"
     >
       <Field label={t('field.worker')}>
-        <Select value={line.employeePartyId} onChange={(event) => setLine(index, { employeePartyId: event.target.value })}>
+        <Select
+          value={line.employeePartyId}
+          onChange={(event) =>
+            setLine(index, { employeePartyId: event.target.value })
+          }
+        >
           <option value="">{t('field.chooseWorker')}</option>
           {workers.map((worker) => (
             <option key={worker.id} value={worker.id}>
@@ -211,10 +262,20 @@ export function CrewWorkspace({
         </Select>
       </Field>
       <Field label={t('field.hours')}>
-        <Input value={line.hours} onChange={(event) => setLine(index, { hours: event.target.value })} inputMode="decimal" placeholder="8" />
+        <Input
+          value={line.hours}
+          onChange={(event) => setLine(index, { hours: event.target.value })}
+          inputMode="decimal"
+          placeholder="8"
+        />
       </Field>
       <Field label={t('field.timeType')}>
-        <Select value={line.timeTypeId} onChange={(event) => setLine(index, { timeTypeId: event.target.value })}>
+        <Select
+          value={line.timeTypeId}
+          onChange={(event) =>
+            setLine(index, { timeTypeId: event.target.value })
+          }
+        >
           <option value="">{t('field.noTimeType')}</option>
           {timeTypes.map((type) => (
             <option key={type.id} value={type.id}>
@@ -224,7 +285,12 @@ export function CrewWorkspace({
         </Select>
       </Field>
       <Field label={t('field.task')}>
-        <Select value={line.projectTaskId} onChange={(event) => setLine(index, { projectTaskId: event.target.value })}>
+        <Select
+          value={line.projectTaskId}
+          onChange={(event) =>
+            setLine(index, { projectTaskId: event.target.value })
+          }
+        >
           <option value="">{t('field.noTask')}</option>
           {tasks.map((task) => (
             <option key={task.id} value={task.id}>
@@ -234,12 +300,23 @@ export function CrewWorkspace({
         </Select>
       </Field>
       <Field label={t('field.costCode')}>
-        <Input value={line.costCodeRef} onChange={(event) => setLine(index, { costCodeRef: event.target.value })} placeholder={t('field.costCodePlaceholder')} />
+        <Input
+          value={line.costCodeRef}
+          onChange={(event) =>
+            setLine(index, { costCodeRef: event.target.value })
+          }
+          placeholder={t('field.costCodePlaceholder')}
+        />
       </Field>
       {equipmentOn ? (
         <>
           <Field label={t('field.equipment')}>
-            <Select value={line.equipmentId} onChange={(event) => setLine(index, { equipmentId: event.target.value })}>
+            <Select
+              value={line.equipmentId}
+              onChange={(event) =>
+                setLine(index, { equipmentId: event.target.value })
+              }
+            >
               <option value="">{t('field.noEquipment')}</option>
               {equipment.map((unit) => (
                 <option key={unit.id} value={unit.id}>
@@ -249,18 +326,31 @@ export function CrewWorkspace({
             </Select>
           </Field>
           <Field label={t('field.equipmentHours')}>
-            <Input value={line.equipmentHours} onChange={(event) => setLine(index, { equipmentHours: event.target.value })} inputMode="decimal" placeholder="4" />
+            <Input
+              value={line.equipmentHours}
+              onChange={(event) =>
+                setLine(index, { equipmentHours: event.target.value })
+              }
+              inputMode="decimal"
+              placeholder="4"
+            />
           </Field>
         </>
       ) : null}
       <Field label={t('field.memo')} className="md:col-span-2">
-        <Input value={line.memo} onChange={(event) => setLine(index, { memo: event.target.value })} placeholder={t('field.memoPlaceholder')} />
+        <Input
+          value={line.memo}
+          onChange={(event) => setLine(index, { memo: event.target.value })}
+          placeholder={t('field.memoPlaceholder')}
+        />
       </Field>
       {!locked ? (
         <div className="flex items-end">
           <Button
             variant="outline"
-            onClick={() => setLines((prev) => prev.filter((_, i) => i !== index))}
+            onClick={() =>
+              setLines((prev) => prev.filter((_, i) => i !== index))
+            }
             disabled={lines.length <= 1}
           >
             {t('field.removeLine')}
@@ -273,39 +363,74 @@ export function CrewWorkspace({
   // Unsaved-create renders the create form instead of batch rows. The branch
   // sits after every hook so both modes run the same hook order.
   if (create != null && batchId === '') {
-    return <CrewCreateForm workers={workers} projects={create.projects} defaultWorkedOn={create.defaultWorkedOn} />
+    return (
+      <CrewCreateForm
+        workers={workers}
+        projects={create.projects}
+        defaultWorkedOn={create.defaultWorkedOn}
+      />
+    )
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium dark:bg-slate-800">{status}</span>
-        {savedAt ? <span className="text-xs text-slate-500">{t('field.savedAt', { at: savedAt })}</span> : null}
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium dark:bg-slate-800">
+          {status}
+        </span>
+        {savedAt ? (
+          <span className="text-xs text-slate-500">
+            {t('field.savedAt', { at: savedAt })}
+          </span>
+        ) : null}
       </div>
 
-      <div className="space-y-3">{lines.map((line, index) => row(line, index))}</div>
+      <div className="space-y-3">
+        {lines.map((line, index) => row(line, index))}
+      </div>
 
       {error ? (
         <p className="text-sm text-red-600 dark:text-red-400" role="alert">
           {error}
         </p>
       ) : null}
-      {notice ? <p className="text-sm text-slate-600 dark:text-slate-300" role="status">{notice}</p> : null}
+      {notice ? (
+        <p className="text-sm text-slate-600 dark:text-slate-300" role="status">
+          {notice}
+        </p>
+      ) : null}
 
       {!locked ? (
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={busy} onClick={() => setLines((prev) => [...prev, { ...EMPTY_LINE }])}>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => setLines((prev) => [...prev, { ...EMPTY_LINE }])}
+          >
             {t('field.addLine')}
           </Button>
           {scheduledCrew.length ? (
-            <Button variant="outline" disabled={busy} title={tScheduling('prefill.crewHint')} onClick={fillFromSchedule}>
+            <Button
+              variant="outline"
+              disabled={busy}
+              title={tScheduling('prefill.crewHint')}
+              onClick={fillFromSchedule}
+            >
               {tScheduling('prefill.fill')}
             </Button>
           ) : null}
           <Button disabled={busy} onClick={save}>
             {busy ? t('field.working') : t('field.saveLines')}
           </Button>
-          <Button variant="outline" disabled={busy} onClick={() => (signatureRequired ? setSignOpen(true) : act('submit').then((ok) => ok && window.location.reload()))}>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              signatureRequired
+                ? setSignOpen(true)
+                : act('submit').then((ok) => ok && window.location.reload())
+            }
+          >
             {signLabel}
           </Button>
         </div>
@@ -313,24 +438,28 @@ export function CrewWorkspace({
         <div className="flex flex-wrap gap-2">
           {status === 'submitted' ? (
             <>
-              <Button variant="outline" disabled={busy} onClick={() => act('withdraw').then((ok) => ok && window.location.reload())}>
-                {t('field.withdraw')}
-              </Button>
-              <Button disabled={busy} onClick={() => act('approve').then((ok) => ok && window.location.reload())}>
-                {t('field.approve')}
-              </Button>
               <Button
                 variant="outline"
-                disabled={busy || !reason.trim()}
-                onClick={() => act('reject', { reason: reason.trim() }).then((ok) => ok && window.location.reload())}
+                disabled={busy}
+                onClick={() =>
+                  act('withdraw').then((ok) => ok && window.location.reload())
+                }
               >
-                {t('field.reject')}
+                {t('field.withdraw')}
               </Button>
-              <Input value={reason} onChange={(event) => setReason(event.target.value)} placeholder={t('field.rejectReason')} className="max-w-xs" />
+              <ApprovalActions
+                subjectKind="crew_time_batch"
+                subjectId={batchId}
+              />
             </>
           ) : null}
           {status === 'approved' ? (
-            <Button disabled={busy} onClick={() => act('post').then((ok) => ok && window.location.reload())}>
+            <Button
+              disabled={busy}
+              onClick={() =>
+                act('post').then((ok) => ok && window.location.reload())
+              }
+            >
               {t('field.post')}
             </Button>
           ) : null}
@@ -338,21 +467,34 @@ export function CrewWorkspace({
       )}
 
       {signOpen ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900" role="dialog" aria-label={signLabel}>
+        <div
+          className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
+          role="dialog"
+          aria-label={signLabel}
+        >
           <Label htmlFor="crew-sign-name">{t('field.signerName')}</Label>
-          <Input id="crew-sign-name" value={signerName} onChange={(event) => setSignerName(event.target.value)} placeholder={t('field.signerNamePlaceholder')} autoComplete="off" />
+          <Input
+            id="crew-sign-name"
+            value={signerName}
+            onChange={(event) => setSignerName(event.target.value)}
+            placeholder={t('field.signerNamePlaceholder')}
+            autoComplete="off"
+          />
           <p className="mt-2 text-xs text-slate-500">{t('field.signSeals')}</p>
           <div className="mt-4 flex gap-2">
             <Button disabled={busy} onClick={submit} className="flex-1">
               {signLabel}
             </Button>
-            <Button variant="outline" onClick={() => setSignOpen(false)} className="flex-1">
+            <Button
+              variant="outline"
+              onClick={() => setSignOpen(false)}
+              className="flex-1"
+            >
               {t('field.cancel')}
             </Button>
           </div>
         </div>
       ) : null}
-
     </div>
   )
 }
@@ -420,7 +562,10 @@ function CrewCreateForm({
     <div className="space-y-4" role="dialog" aria-label={t('field.newBatch')}>
       <div className="grid gap-3 md:grid-cols-2">
         <Field label={t('field.foremanLabel')}>
-          <Select value={foremanId} onChange={(event) => setForemanId(event.target.value)}>
+          <Select
+            value={foremanId}
+            onChange={(event) => setForemanId(event.target.value)}
+          >
             <option value="">{t('field.chooseWorker')}</option>
             {workers.map((worker) => (
               <option key={worker.id} value={worker.id}>
@@ -430,7 +575,10 @@ function CrewCreateForm({
           </Select>
         </Field>
         <Field label={t('field.projectLabel')}>
-          <Select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+          <Select
+            value={projectId}
+            onChange={(event) => setProjectId(event.target.value)}
+          >
             <option value="">{t('field.chooseProject')}</option>
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
@@ -440,10 +588,17 @@ function CrewCreateForm({
           </Select>
         </Field>
         <Field label={t('field.workedOnLabel')}>
-          <DateField value={workedOn} onChange={(value) => setWorkedOn(value)} />
+          <DateField
+            value={workedOn}
+            onChange={(value) => setWorkedOn(value)}
+          />
         </Field>
         <Field label={t('field.memo')}>
-          <Input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder={t('field.memoPlaceholder')} />
+          <Input
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder={t('field.memoPlaceholder')}
+          />
         </Field>
       </div>
 
@@ -457,7 +612,11 @@ function CrewCreateForm({
         <Button disabled={busy} onClick={create}>
           {busy ? t('field.working') : tCommon('actions.create')}
         </Button>
-        <Button variant="outline" disabled={busy} onClick={() => router.push('/time/crew' as never)}>
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={() => router.push('/time/crew' as never)}
+        >
           {t('field.cancel')}
         </Button>
       </div>

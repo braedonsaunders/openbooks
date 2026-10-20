@@ -10,7 +10,6 @@ export interface BenefitApprovalPolicies {
   readonly policies: readonly {
     id: string;
     name: string;
-    ungatedOutcome: "apply" | "require_approval";
     href: string;
   }[];
 }
@@ -30,9 +29,8 @@ export async function listBenefitApprovalPolicies(query: {
       await db.execute<{
         id: string;
         name: string;
-        ungated_outcome: string | null;
       }>(
-        sql`select id, name, graph->>'ungatedOutcome' as ungated_outcome from flows where org_id = ${orgId} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and enabled order by name, id`,
+        sql`select id, name from flows where org_id = ${orgId} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and enabled order by name, id`,
       )
     ).rows;
     return {
@@ -41,8 +39,6 @@ export async function listBenefitApprovalPolicies(query: {
       policies: rows.map((row) => ({
         id: row.id,
         name: row.name,
-        ungatedOutcome:
-          row.ungated_outcome === "apply" ? "apply" : "require_approval",
         href: `/admin/flows/${row.id}`,
       })),
     };

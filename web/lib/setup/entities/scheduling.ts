@@ -200,7 +200,6 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
           'dayEnds',
           'dayBreakMinutes',
           'publishPolicy',
-          'governedFrom',
         ],
       },
       {
@@ -678,14 +677,6 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
         required: true,
         defaultValue: 'live',
         helpTextKey: 'fieldHelp.scheduleBoardPublishPolicy',
-      },
-      {
-        key: 'governedFrom',
-        kind: 'date',
-        required: true,
-        showWhen: { field: 'publishPolicy', in: ['governed'] },
-        clearWhenHidden: true,
-        helpTextKey: 'fieldHelp.scheduleBoardGovernedFrom',
       },
       {
         key: 'prefillTimesheets',

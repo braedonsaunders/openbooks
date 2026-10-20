@@ -1,5 +1,7 @@
 'use client'
 
+import { ApprovalActions } from '@/components/approval-actions'
+
 import { DirectedExecutionForm,useDirectedExecution } from '@/components/directed-execution'
 import { InventoryTrackingFields } from '@/components/inventory-tracking-fields'
 import { promptDialog } from '@/lib/prompt'
@@ -60,7 +62,10 @@ export function NewCountButton({ label, currentParams = {} }: {
  * never omitted; a new key per call would turn every lost response plus
  * retry into a duplicate count, line write, or lifecycle step.
  */
-async function countAction(body: Record<string, unknown>, fallback: string): Promise<Record<string, unknown>> {
+async function countAction(
+  body: Record<string, unknown>,
+  fallback: string,
+): Promise<Record<string, unknown>> {
   const res = await fetch('/api/inventory/counts', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -70,7 +75,7 @@ async function countAction(body: Record<string, unknown>, fallback: string): Pro
   // fallback (never a hard-coded English string) carries the status when
   // the server names no refusal.
   if (!res.ok) throw new Error(await readApiErrorMessage(res, fallback))
-  return await res.json() as Record<string, unknown>
+  return (await res.json()) as Record<string, unknown>
 }
 
 function StatusBadge({ status, label }: { status: string; label: string }) {
@@ -82,7 +87,11 @@ function StatusBadge({ status, label }: { status: string; label: string }) {
         : status === 'cancelled'
           ? 'secondary'
           : 'default'
-  return <Badge variant={variant as 'success' | 'warning' | 'secondary' | 'default'}>{label}</Badge>
+  return (
+    <Badge variant={variant as 'success' | 'warning' | 'secondary' | 'default'}>
+      {label}
+    </Badge>
+  )
 }
 
 function CountLink({ id, params, children }: {
@@ -108,7 +117,6 @@ export function CountsList({
   stockLocations,
   lots,
   canPost,
-  reviewRequired,
   canManageStockLocations,
   canManageItems,
   barcodeScanningEnabled = false,
@@ -128,7 +136,6 @@ export function CountsList({
   lots: { id: string; item_id: string; lot_number: string }[]
   canPost: boolean
   /** Independent-review requirement for posting (Company Settings → Approvals). */
-  reviewRequired: boolean
   canManageStockLocations: boolean
   /** May manage items: gates the Item Costing setup link in the picker note. */
   canManageItems: boolean
@@ -155,7 +162,7 @@ export function CountsList({
   const selectedDetailResult = detailResult?.recordId === selectedId ? detailResult : null
   const currentDetailResult = selectedDetailResult?.requestKey === detailRequestKey ? selectedDetailResult : null
   const detail = selectedDetailResult?.detail ?? null
-  const detailError = detail ? null : currentDetailResult?.error ?? null
+  const detailError = detail ? null : (currentDetailResult?.error ?? null)
   const detailPending = !!selectedId && !detail && !detailError
   // Typed observations that are not yet recorded hold the count drawer open
   // behind a discard confirmation, so Escape or a row switch cannot drop them.
@@ -206,30 +213,53 @@ export function CountsList({
   }, [selectedId, detailRequestKey, t])
 
   const columns: RegisteredListColumn<StockCountSummary>[] = [
-    { key: 'date', header: t('counts.columns.date'), cell: (r) => <CountLink id={r.id} params={countParams}>{r.countedOn}</CountLink>, search: (r) => r.countedOn },
+    {
+      key: 'date',
+      header: t('counts.columns.date'),
+      cell: (r) => (
+        <CountLink id={r.id} params={countParams}>
+          {r.countedOn}
+        </CountLink>
+      ),
+      search: (r) => r.countedOn,
+    },
     {
       key: 'location',
       header: t('counts.columns.location'),
-      cell: (r) => <CountLink id={r.id} params={countParams}>{r.locationName ?? '—'}</CountLink>,
+      cell: (r) => (
+        <CountLink id={r.id} params={countParams}>
+          {r.locationName ?? '—'}
+        </CountLink>
+      ),
       search: (r) => `${r.locationName ?? ''} ${r.memo ?? ''}`,
     },
     {
       key: 'status',
       header: t('counts.columns.status'),
-      cell: (r) => <CountLink id={r.id} params={countParams}><StatusBadge status={r.status} label={t(`counts.statusNames.${r.status}`)} /></CountLink>,
+      cell: (r) => (
+        <CountLink id={r.id} params={countParams}>
+          <StatusBadge status={r.status} label={t(`counts.statusNames.${r.status}`)} />
+        </CountLink>
+      ),
       search: (r) => r.status,
     },
     {
       key: 'progress',
       header: t('counts.columns.progress'),
       align: 'right',
-      cell: (r) => <CountLink id={r.id} params={countParams}>{`${r.lineCount - r.uncountedCount}/${r.lineCount}`}</CountLink>,
+      cell: (r) => (
+        <CountLink id={r.id} params={countParams}>{`${r.lineCount - r.uncountedCount}/${r.lineCount}`}</CountLink>
+      ),
     },
     {
       key: 'variance',
       header: t('counts.columns.variance'),
       align: 'right',
-      cell: (r) => <CountLink id={r.id} params={countParams}><span className="tabular-nums">{r.discrepantLineCount}</span></CountLink>,
+      cell: (r) => (
+        <CountLink id={r.id} params={countParams}>
+          <span className="tabular-nums">{r.discrepantLineCount}</span>
+        </CountLink>
+      ),
     },
   ]
 
@@ -284,7 +314,6 @@ export function CountsList({
               itemOptions={itemOptions}
               stockLocationOptions={stockLocationOptions}
               canPost={canPost}
-              reviewRequired={reviewRequired}
               registerDirty={detailGuard.registerDirty}
               onDone={() => {
                 setSelectedId(null)
@@ -436,7 +465,8 @@ function CreateCountDrawer({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className={field}>
             <Label>
-              {t('counts.create.location')} <span className="text-red-500">*</span>
+              {t('counts.create.location')}{' '}
+              <span className="text-red-500">*</span>
             </Label>
             <SearchSelect
               disabled={busy}
@@ -462,7 +492,8 @@ function CreateCountDrawer({
           </div>
           <div className={field}>
             <Label>
-              {t('counts.create.subsidiary')} <span className="text-red-500">*</span>
+              {t('counts.create.subsidiary')}{' '}
+              <span className="text-red-500">*</span>
             </Label>
             <SearchSelect
               disabled={busy}
@@ -517,55 +548,64 @@ function CreateCountDrawer({
             return (
               <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
                 <div className="space-y-1">
-                <SearchSelect
-                  disabled={busy}
-                  value={line.itemId}
-                  onChange={(v) => {
-                    clearRowError()
-                    setLines((prev) => prev.map((p, j) => (j === i ? { ...p, itemId: v, lotId: '', serialId: '' } : p)))
-                  }}
-                  options={itemOptions}
-                  placeholder={t('counts.create.selectItem')}
-                  sheetTitle={t('counts.columns.item')}
-                  ariaLabel={t('counts.columns.item')}
-                  scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({ field: 'item', value }))}
-                />
+                  <SearchSelect
+                    disabled={busy}
+                    value={line.itemId}
+                    onChange={(v) => {
+                      clearRowError()
+                      setLines((prev) =>
+                        prev.map((p, j) =>
+                          j === i ? { ...p, itemId: v, lotId: '', serialId: '' } : p,
+                        ),
+                      )
+                    }}
+                    options={itemOptions}
+                    placeholder={t('counts.create.selectItem')}
+                    sheetTitle={t('counts.columns.item')}
+                    ariaLabel={t('counts.columns.item')}
+                    scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({ field: 'item', value }))}
+                  />
                 </div>
                 <div className="space-y-1">
-                <Label>
-                  {t('counts.columns.stockLocation')} <span className="text-red-500">*</span>
-                </Label>
-                <SearchSelect
-                  disabled={busy}
-                  value={line.stockLocationId}
-                  onChange={(v) => {
-                    clearRowError()
-                    setLines((prev) => prev.map((p, j) => (j === i ? { ...p, stockLocationId: v } : p)))
-                  }}
-                  options={lineStockOptions}
-                  placeholder={t('counts.create.selectStockLocation')}
-                  sheetTitle={t('counts.columns.stockLocation')}
-                  ariaLabel={t('counts.columns.stockLocation')}
-                  scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({ field: 'bin', value }))}
-                />
-                {rowError ? (
-                  <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-                    {rowError}
-                  </p>
-                ) : null}
-                {locationId && visibleStockLocations.length === 0 ? (
-                  <p className="text-sm text-slate-500">
-                    {t('counts.create.noStockLocations')}{' '}
-                    {canManageStockLocations ? (
-                      <Link
+                  <Label>
+                    {t('counts.columns.stockLocation')}{' '}
+                    <span className="text-red-500">*</span>
+                  </Label>
+                  <SearchSelect
+                    disabled={busy}
+                    value={line.stockLocationId}
+                    onChange={(v) => {
+                      clearRowError()
+                      setLines((prev) =>
+                        prev.map((p, j) =>
+                          j === i ? { ...p, stockLocationId: v } : p,
+                        ),
+                      )
+                    }}
+                    options={lineStockOptions}
+                    placeholder={t('counts.create.selectStockLocation')}
+                    sheetTitle={t('counts.columns.stockLocation')}
+                    ariaLabel={t('counts.columns.stockLocation')}
+                    scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({ field: 'bin', value }))}
+                  />
+                  {rowError ? (
+                    <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                      {rowError}
+                    </p>
+                  ) : null}
+                  {locationId && visibleStockLocations.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      {t('counts.create.noStockLocations')}{' '}
+                      {canManageStockLocations ? (
+                        <Link
                         className="underline"
                         href="/inventory?inventoryView=locations"
                       >
-                        {t('counts.create.manageStockLocations')}
-                      </Link>
-                    ) : null}
-                  </p>
-                ) : null}
+                          {t('counts.create.manageStockLocations')}
+                        </Link>
+                      ) : null}
+                    </p>
+                  ) : null}
                 </div>
                 <InventoryTrackingFields key={line.itemId} itemId={line.itemId} lotId={line.lotId} serialId={line.serialId}
                   onChange={(lot,serial)=>setLines(prev=>prev.map((p,j)=>j===i?{...p,lotId:lot,serialId:serial}:p))} disabled={busy} canCreate={canManageItems}/>
@@ -594,7 +634,9 @@ function CreateCountDrawer({
 
 /** A positive count variance (found stock), read from its exact decimal string. */
 function isFound(variance: string | null | undefined): boolean {
-  return variance != null && !variance.trim().startsWith('-') && /[1-9]/.test(variance)
+  return (
+    variance != null && !variance.trim().startsWith('-') && /[1-9]/.test(variance)
+  )
 }
 
 function CountDetailBody({
@@ -602,7 +644,6 @@ function CountDetailBody({
   itemOptions,
   stockLocationOptions,
   canPost,
-  reviewRequired,
   onDone,
   onChanged,
   registerDirty,
@@ -611,7 +652,6 @@ function CountDetailBody({
   itemOptions: { value: string; label: string }[]
   stockLocationOptions: { value: string; label: string }[]
   canPost: boolean
-  reviewRequired: boolean
   onDone: () => void
   onChanged: () => void
   /** Reports unsaved typed observations to the drawer's close guard. */
@@ -748,7 +788,9 @@ function CountDetailBody({
       key: 'expected',
       header: t('counts.columns.expected'),
       align: 'right',
-      cell: (l) => <span className="tabular-nums">{l.expectedQuantity??'—'}</span>,
+      cell: (l) => (
+        <span className="tabular-nums">{l.expectedQuantity??'—'}</span>
+      ),
     },
     {
       key: 'counted',
@@ -766,7 +808,8 @@ function CountDetailBody({
               value={counted[l.id] ?? ''}
               onChange={(e) => setCounted((prev) => ({ ...prev, [l.id]: e.target.value }))}
             />
-            {l.secondCountRequired && <Input
+            {l.secondCountRequired && (
+              <Input
               disabled={busy || execution.busy}
               className="w-56 text-left"
               aria-label={t('counts.observationContext', { item: l.itemCode ?? itemLabel(l.itemId) })}
@@ -774,7 +817,8 @@ function CountDetailBody({
               maxLength={500}
               value={observationContexts[l.id] ?? ''}
               onChange={event => setObservationContexts(previous => ({ ...previous, [l.id]: event.target.value }))}
-            />}
+            />
+            )}
             {/* A saved count clears the entry field for the next observation;
                 the recorded quantity stays in view so it never reads as lost. */}
             {l.countedQuantity != null && !(counted[l.id] ?? '').trim() ? (
@@ -834,7 +878,9 @@ function CountDetailBody({
         l.adjustmentMovementId ? (
           <StatusBadge status="posted" label={t('counts.detail.postedBadge')} />
         ) : (
-          <span className="text-xs text-slate-500">{t('counts.detail.unpostedBadge')}</span>
+          <span className="text-xs text-slate-500">
+            {t('counts.detail.unpostedBadge')}
+          </span>
         ),
     },
   ]
@@ -855,8 +901,13 @@ function CountDetailBody({
         <span className="tabular-nums">{header.countedOn}</span>
         <span>{header.locationName ?? ''}</span>
         <span className="text-slate-500">{header.subsidiaryName ?? ''}</span>
-        {header.memo ? <span className="text-slate-500">{header.memo}</span> : null}
+        {header.memo ? (
+          <span className="text-slate-500">{header.memo}</span>
+        ) : null}
       </div>
+      {header.status === 'review' ? (
+        <ApprovalActions subjectKind="stock_count" subjectId={header.id} />
+      ) : null}
       {canPost ? (
         <div className="flex flex-wrap items-center gap-2">
           {header.status === 'draft' ? (
@@ -868,14 +919,6 @@ function CountDetailBody({
             <Button size="sm" disabled={busy} onClick={() => void run(t('counts.actions.submit'), { action: 'submit' })}>
               {t('counts.actions.submit')}
             </Button>
-          ) : null}
-          {header.status === 'review' && !reviewRequired ? (
-            <p
-              role="note"
-              className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
-            >
-              {t('counts.detail.noIndependentReviewWarning')}
-            </p>
           ) : null}
           {header.status === 'review' ? (
             <>
@@ -931,16 +974,24 @@ function CountDetailBody({
           ) : null}
         </div>
       ) : null}
-      {execution.error&&!execution.task?<p role="alert" className="text-sm text-destructive">{execution.error}</p>:null}
-      {execution.task?<DirectedExecutionForm key={execution.task.id} task={execution.task} busy={execution.busy}
-        error={execution.error} onConfirm={execution.confirm} onBack={execution.clear}/>:<PagedTable
+      {execution.error && !execution.task ? (
+        <p role="alert" className="text-sm text-destructive">
+          {execution.error}
+        </p>
+      ) : null}
+      {execution.task ? (
+        <DirectedExecutionForm key={execution.task.id} task={execution.task} busy={execution.busy}
+        error={execution.error} onConfirm={execution.confirm} onBack={execution.clear}/>
+      ) : (
+        <PagedTable
         source="inventory_count_lines"
         rows={lines}
         columns={lineColumns}
         searchable
         empty={t('counts.detail.noLines')}
         rowKey={(l) => l.id}
-      />}
+      />
+      )}
       {header.status === 'posted' || header.status === 'cancelled' ? (
         <Button size="sm" variant="secondary" onClick={onDone}>
           {t('counts.actions.close')}

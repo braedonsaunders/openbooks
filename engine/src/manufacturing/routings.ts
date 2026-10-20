@@ -8,8 +8,10 @@ import { assertManufacturingItemExists } from "./item-policies.ts";
 import { lockManufacturingManageAuthority, lockManufacturingRoutingAuthority, lockManufacturingCenterAuthority, assertManufacturingStockLocationScope } from "./authority.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { loadFinancialChange, proposeFinancialChange, assertFinancialChangeApproved, completeFinancialChange, financialChangeFlowConfigured, FinancialChangeConflictError, MANUFACTURING_ROUTING_APPROVAL_OPERATION } from "../platform/financial-changes.ts";
-import type { FinancialChange } from "../platform/financial-changes.ts";
+import { loadFinancialChange, proposeFinancialChange, assertFinancialChangeApproved, completeFinancialChange,
+  submitNativeFinancialChange,
+  MANUFACTURING_ROUTING_APPROVAL_OPERATION,
+} from "../platform/financial-changes.ts";
 
 export interface RoutingInput {
   producedItemId: string; code: string; name: string; effectiveFrom: string; effectiveTo?: string | null;
@@ -161,15 +163,19 @@ export async function getRouting(tx: SqlExecutor, orgId: string, id: string): Pr
   return { ...row, operations: operations.rows, locations };
 }
 
-export async function updateRouting(tx: SqlExecutor, orgId: string, actorId: string, id: string, patch: Partial<RoutingInput>) {
+export async function updateRouting(tx: SqlExecutor, orgId: string, actorId: string, id: string, patch: Partial<RoutingInput>,
+) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   const commandScope = await lockManufacturingRoutingAuthority(tx,orgId,actorId,id);
   const before = await assertDraft(tx, orgId, id);
   const input = headerInput({
     producedItemId: String(before.producedItemId), code: String(patch.code ?? before.code), name: String(patch.name ?? before.name),
-    effectiveFrom: String(patch.effectiveFrom ?? before.effectiveFrom), effectiveTo: patch.effectiveTo === undefined ? before.effectiveTo as string | null : patch.effectiveTo,
-    defaultIssueLocationId: patch.defaultIssueLocationId === undefined ? before.defaultIssueLocationId as string | null : patch.defaultIssueLocationId,
-    defaultReceiptLocationId: patch.defaultReceiptLocationId === undefined ? before.defaultReceiptLocationId as string | null : patch.defaultReceiptLocationId,
+    effectiveFrom: String(patch.effectiveFrom ?? before.effectiveFrom), effectiveTo: patch.effectiveTo === undefined ? (before.effectiveTo as string | null)
+        : patch.effectiveTo,
+    defaultIssueLocationId: patch.defaultIssueLocationId === undefined ? (before.defaultIssueLocationId as string | null)
+        : patch.defaultIssueLocationId,
+    defaultReceiptLocationId: patch.defaultReceiptLocationId === undefined ? (before.defaultReceiptLocationId as string | null)
+        : patch.defaultReceiptLocationId,
     overheadBasis: (patch.overheadBasis ?? before.overheadBasis) as RoutingInput["overheadBasis"],
   });
   await assertManufacturingStockLocationScope(tx,orgId,input.defaultIssueLocationId,commandScope);
@@ -195,7 +201,11 @@ function operationInput(input: RoutingOperationInput): RoutingOperationInput {
   if (compareDecimal(setupMinutes, "0") === 0 && compareDecimal(runMinutesPerUnit, "0") === 0) {
     refused("This operation would consume no time — delete it or give it time.", "operation_no_time", "runMinutesPerUnit", "Delete the operation or enter setup or run minutes greater than zero.");
   }
-  if (!["operation", "approved_time"].includes(input.laborTimeSource ?? "operation") || !(["none", "start", "finish"].includes(input.backflushAt ?? "none")) || !(["none", "measure"].includes(input.qualityGate ?? "none"))) {
+  if (
+    !["operation", "approved_time"].includes(input.laborTimeSource ?? "operation") ||
+    !["none", "start", "finish"].includes(input.backflushAt ?? "none") ||
+    !["none", "measure"].includes(input.qualityGate ?? "none")
+  ) {
     refused("Choose a supported backflush point and quality gate.", "invalid_operation_option", "backflushAt", "Choose a listed backflush point and quality gate.");
   }
   return { ...input, name: input.name.trim(), setupMinutes, runMinutesPerUnit, laborMinutesPerUnit, laborTimeSource: input.laborTimeSource ?? "operation", backflushAt: input.backflushAt ?? "none", qualityGate: input.qualityGate ?? "none" };
@@ -227,7 +237,14 @@ export async function createRoutingOperation(tx: SqlExecutor, orgId: string, act
   return after;
 }
 
-export async function updateRoutingOperation(tx: SqlExecutor, orgId: string, actorId: string, routingId: string, operationId: string, patch: Partial<RoutingOperationInput>) {
+export async function updateRoutingOperation(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  routingId: string,
+  operationId: string,
+  patch: Partial<RoutingOperationInput>,
+) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingRoutingAuthority(tx,orgId,actorId,routingId);
   await assertDraft(tx, orgId, routingId);
@@ -235,9 +252,15 @@ export async function updateRoutingOperation(tx: SqlExecutor, orgId: string, act
   const before = selected.rows[0];
   if (!before) throw new ManufacturingNotFoundError();
   const input = operationInput({
-    sequence: Number(patch.sequence ?? before.sequence), name: String(patch.name ?? before.name), workCenterId: String(patch.workCenterId ?? before.workCenterId),
-    setupMinutes: String(patch.setupMinutes ?? before.setupMinutes), runMinutesPerUnit: String(patch.runMinutesPerUnit ?? before.runMinutesPerUnit),
-    laborMinutesPerUnit: patch.laborMinutesPerUnit === undefined ? before.laborMinutesPerUnit as string | null : patch.laborMinutesPerUnit,
+    sequence: Number(patch.sequence ?? before.sequence),
+    name: String(patch.name ?? before.name),
+    workCenterId: String(patch.workCenterId ?? before.workCenterId),
+    setupMinutes: String(patch.setupMinutes ?? before.setupMinutes),
+    runMinutesPerUnit: String(patch.runMinutesPerUnit ?? before.runMinutesPerUnit),
+    laborMinutesPerUnit:
+      patch.laborMinutesPerUnit === undefined
+        ? (before.laborMinutesPerUnit as string | null)
+        : patch.laborMinutesPerUnit,
     backflushAt: (patch.backflushAt ?? before.backflushAt) as RoutingOperationInput["backflushAt"],
     laborTimeSource: (patch.laborTimeSource ?? before.laborTimeSource) as RoutingOperationInput["laborTimeSource"],
     qualityGate: (patch.qualityGate ?? before.qualityGate) as RoutingOperationInput["qualityGate"],
@@ -279,7 +302,13 @@ function routingOverlapRefusal(row?: { code: string; version: number; effective_
   return refused(`This routing overlaps active ${other}.`, "routing_version_overlap", "effectiveFrom", remedy);
 }
 
-export async function activateRouting(tx: SqlExecutor, orgId: string, actorId: string, id: string, approvalChangeId?: string) {
+export async function activateRouting(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  id: string,
+  approvalChangeId?: string,
+) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await routingApprovalAuthority(tx,orgId,actorId);
   if (!approvalChangeId) refused("A routing revision requires approval before activation.","routing_approval_required","approvalChangeId","Propose activation from the routing, submit its Accounting event for approval, then apply the approved event.");
@@ -288,7 +317,11 @@ export async function activateRouting(tx: SqlExecutor, orgId: string, actorId: s
   if (change.domain!=="manufacturing" || change.operation!==MANUFACTURING_ROUTING_APPROVAL_OPERATION || change.subject_id!==id) throw new ManufacturingNotFoundError();
   if (change.status==="applied") {if(!change.result)throw new ManufacturingNotFoundError();return change.result;}
   const evidence=await routingActivationEvidence(tx,orgId,id);
-  if (change.status!=="approved" || !change.approved_by || change.approved_by===change.submitted_by && !change.self_approval_authorized) refused("This routing revision has no permitted approval decision.","routing_approval_required","approvalChangeId","Submit its Accounting event for approval before applying it.");
+  if (
+    change.status!=="approved" || !change.approved_by ||
+    (change.approved_by===change.submitted_by && !change.self_approval_authorized)
+  )
+    refused("This routing revision has no permitted approval decision.","routing_approval_required","approvalChangeId","Submit its Accounting event for approval before applying it.");
   if (canonicalJson(change.before_state)!==canonicalJson(evidence)) refused("The routing or effective revisions changed after proposal.","routing_approval_stale","approvalChangeId","Review the routing and propose a new activation against current revisions.");
   assertFinancialChangeApproved(change,{domain:"manufacturing",subjectId:id,beforeState:evidence});
   if (canonicalJson(change.payload.supersedes)!==canonicalJson(evidence.supersedes)) refused("The approved effective-date changes differ from current evidence.","routing_approval_stale","approvalChangeId","Propose and approve the current revision again.");
@@ -344,63 +377,38 @@ async function applyApprovedRoutingActivation(tx: SqlExecutor, orgId: string, ac
   return after;
 }
 
-/** Approval is an optional tenant Flow: true when no enabled Accounting-event
- * Flow can govern a routing revision, so the revision may apply directly. */
-export async function routingDirectApplyAllowed(tx: SqlExecutor, orgId: string): Promise<boolean> {
-  return !(await financialChangeFlowConfigured(tx, orgId));
+/** Submit one immutable activation proposal through all applicable Flows. */
+export async function submitRoutingActivation(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  id: string,
+  input: { subsidiaryId: string; reason: string; idempotencyKey: string },
+) {
+  const proposal = await proposeRoutingActivation(
+    tx,
+    orgId,
+    actorId,
+    id,
+    input,
+  );
+  await submitNativeFinancialChange(orgId, proposal.changeId, actorId);
+  const change = await loadFinancialChange(tx, orgId, proposal.changeId);
+  if (change.status === "pending")
+    return { changeId: change.id, status: "pending_approval" };
+  return activateRouting(tx, orgId, actorId, id, change.id);
 }
 
-function assertDirectApproval(change: FinancialChange, actorId: string): void {
-  const decision = change.payload.decision as { mode?: unknown; policy?: { flowConfigured?: unknown } } | undefined;
-  if (change.status !== "approved" || change.approved_by !== change.submitted_by || change.approved_by !== actorId
-    || decision?.mode !== "automatic" || decision?.policy?.flowConfigured !== false) {
-    refused("This routing revision has no permitted approval decision.", "routing_approval_required", "approvalChangeId", "Submit its Accounting event for approval before applying it.");
-  }
-}
-
-/** Activate a draft routing without a Flow decision. With no enabled Flow
- * governing routing revisions, a holder of the unrestricted manufacturing
- * authority applies the revision directly: the engine records a draft to
- * pending to approved financial change carrying the automatic no-flow
- * decision evidence the storage guard requires, then runs the same canonical
- * activation writer every approval uses — audited, superseding the
- * previously active revision per the existing effectivity rules. A
- * configured Flow still governs through "Propose revision approval". */
-export async function activateRoutingDirect(tx: SqlExecutor, orgId: string, actorId: string, id: string, input: { subsidiaryId: string; reason: string; idempotencyKey: string }) {
-  await routingApprovalAuthority(tx,orgId,actorId);
-  if (!isUuid(id) || !isUuid(input.subsidiaryId)) throw new ManufacturingNotFoundError();
-  if (input.reason.trim().length < 8 || input.reason.trim().length > 1000 || !input.idempotencyKey.trim() || input.idempotencyKey.length > 120) refused("Provide a reason of 8–1,000 characters and a stable request key.", "routing_proposal_invalid", "reason", "Explain the revision and retry with a stable request key.");
-  if (!(await routingDirectApplyAllowed(tx, orgId))) refused("An enabled approval flow governs routing revisions.", "routing_flow_governed", "approvalChangeId", "Propose revision approval and obtain approval through the configured flow.");
-  const entity = (await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`)).rows[0];
-  if (!entity) throw new ManufacturingNotFoundError();
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`financial-change:${orgId}:${input.idempotencyKey}`}))`);
-  const evidence = await routingActivationEvidence(tx,orgId,id);
-  if (!evidence.candidate.operations.length) refused("A routing requires operations before approval.", "routing_operations_required", "operations", "Add an operation with an active work center.");
-  let changeId: string;
-  try {
-    changeId = await proposeFinancialChange(tx, { orgId, actorId, subsidiaryId: input.subsidiaryId, domain: "manufacturing", subjectId: id, operation: MANUFACTURING_ROUTING_APPROVAL_OPERATION, effectiveOn: String(evidence.candidate.effectiveFrom), reason: input.reason, idempotencyKey: input.idempotencyKey, payload: { routingId: id, requiredSubsidiaryIds: [input.subsidiaryId], supersedes: evidence.supersedes, decision: { mode: "automatic", policy: { flowConfigured: false } } }, beforeState: evidence });
-  } catch (error) {
-    if (error instanceof FinancialChangeConflictError) throw new ManufacturingIdempotencyConflictError();
-    throw error;
-  }
-  let change = await loadFinancialChange(tx,orgId,changeId);
-  if (change.status === "applied") { if (!change.result) throw new ManufacturingNotFoundError(); return change.result; }
-  if (change.status !== "draft") throw new ManufacturingIdempotencyConflictError();
-  const pending = await tx.execute(sql`update financial_changes set status='pending',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${changeId} and status='draft' returning id`);
-  if (pending.rows.length !== 1) throw new ManufacturingIdempotencyConflictError();
-  const approved = await tx.execute(sql`update financial_changes set status='approved',approved_by=${actorId},approved_at=now(),updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${changeId} and status='pending' returning id`);
-  if (approved.rows.length !== 1) throw new ManufacturingError("The routing approval was not recorded.", { code: "write_failed", remedy: "Reload the routing and try again." });
-  if (!(await routingDirectApplyAllowed(tx, orgId))) refused("An enabled approval flow governs routing revisions.", "routing_flow_governed", "approvalChangeId", "Propose revision approval and obtain approval through the configured flow.");
-  change = await loadFinancialChange(tx,orgId,changeId);
-  assertDirectApproval(change, actorId);
-  const current = await routingActivationEvidence(tx,orgId,id);
-  if (canonicalJson(change.before_state) !== canonicalJson(current)) refused("The routing or effective revisions changed after proposal.", "routing_approval_stale", "approvalChangeId", "Review the routing and propose a new activation against current revisions.");
-  return applyApprovedRoutingActivation(tx,orgId,actorId,id,changeId,current);
-}
-
-async function routingApprovalAuthority(tx: SqlExecutor,orgId:string,actorId:string) {
-  await assertManufacturingFeature(tx,orgId,"manufacturing");
-  if (await lockManufacturingManageAuthority(tx,orgId,actorId,null)!==null) refused("Shared routing revisions require unrestricted manufacturing authority.","routing_approval_scope_required","routingId","Ask a manufacturing manager with access to every legal entity to govern this revision.");
+async function routingApprovalAuthority(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+) {
+  await assertManufacturingFeature(tx, orgId, "manufacturing");
+  if (
+    (await lockManufacturingManageAuthority(tx,orgId,actorId,null)) !== null
+  )
+    refused("Shared routing revisions require unrestricted manufacturing authority.","routing_approval_scope_required","routingId","Ask a manufacturing manager with access to every legal entity to govern this revision.");
 }
 
 async function routingActivationEvidence(tx:SqlExecutor,orgId:string,id:string) {

@@ -1,3 +1,7 @@
+import {
+  decideReopenFixture,
+  requestReviewedReopenFixture,
+} from "../testing/close.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -6,10 +10,8 @@ import { CloseError } from "../periods/period-policy.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 import {
   consumeReopenRequestsForClosedModules,
-  decidePeriodReopen,
   extendReopenRequest,
   recloseApprovedReopen,
-  requestPeriodReopen,
   withdrawPeriodReopen,
 } from "./reopening.ts";
 import {
@@ -36,8 +38,14 @@ test(
       const actors = await seedFlowActors(org.orgId);
       const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
       await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const first = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Approved correction work" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: first, actorId: actors.approver1Id, approve: true, hours: 2 });
+      const first = await requestReviewedReopenFixture({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Approved correction work" });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: first,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
 
       // The bookkeeper finishes and re-closes from Setup instead of the
       // re-close workflow: the lock flips, but the request still reads
@@ -50,16 +58,22 @@ test(
       });
       assert.deepEqual(consumed, [first]);
       assert.equal(await requestStatus(org.orgId, first), "reclosed");
-      const events = (await db.execute<{ n: number }>(sql`
+      const events = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from close_events
          where org_id = ${org.orgId} and event_type = 'period.reopen_consumed_by_reclose'
            and payload->>'requestId' = ${first}
-      `));
+      `);
       assert.equal(events.rows[0]?.n, 1);
 
       // A new reopen for the same scope is accepted once the old window ends.
-      const second = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Follow-up correction work" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: second, actorId: actors.approver1Id, approve: true, hours: 2 });
+      const second = await requestReviewedReopenFixture({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Follow-up correction work" });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: second,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
       assert.equal(await requestStatus(org.orgId, second), "approved");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -77,21 +91,32 @@ test(
       const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
       await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
       await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const first = await requestPeriodReopen({ ...target, modules: ["gl", "ap"], actorId: actors.adminId, reason: "First correction window" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: first, actorId: actors.approver1Id, approve: true, hours: 2 });
+      const first = await requestReviewedReopenFixture({ ...target, modules: ["gl", "ap"], actorId: actors.adminId, reason: "First correction window" });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: first,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
 
       // A request that leaves out a module of the active window is refused
       // when raised, naming the window and the supported remedy.
-      const error = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Second correction window" })
-        .catch((failure: unknown) => failure);
+      const error = await requestReviewedReopenFixture({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Second correction window" }).catch((failure: unknown) => failure);
       assert.ok(error instanceof CloseError);
       assert.match(error.message, /approved reopen window for .*GL, AP is active; to widen or extend it/);
       assert.doesNotMatch(error.message, UUID, "no bare request id in the refusal");
 
       // A request covering every module of the window widens or extends it:
       // an eligible approver decides it and its approval supersedes the window.
-      const widened = await requestPeriodReopen({ ...target, modules: ["gl", "ap"], actorId: actors.adminId, reason: "Extend the correction window" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: widened, actorId: actors.approver2Id, approve: true, hours: 2 });
+      const widened = await requestReviewedReopenFixture({ ...target, modules: ["gl", "ap"], actorId: actors.adminId, reason: "Extend the correction window" });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: widened,
+        actorId: actors.approver2Id,
+        decision: "approved",
+        hours: 2,
+      });
       assert.equal(await requestStatus(org.orgId, widened), "approved");
       assert.equal(await requestStatus(org.orgId, first), "superseded");
     } finally {
@@ -110,8 +135,14 @@ test(
       const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
       await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
       await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const first = await requestPeriodReopen({ ...target, modules: ["gl", "ap"], actorId: actors.adminId, reason: "Two-module correction" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: first, actorId: actors.approver1Id, approve: true, hours: 2 });
+      const first = await requestReviewedReopenFixture({ ...target, modules: ["gl", "ap"], actorId: actors.adminId, reason: "Two-module correction" });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: first,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
 
       await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "AP work completed" });
       const { consumed } = await consumeReopenRequestsForClosedModules({
@@ -123,7 +154,7 @@ test(
       assert.equal(await requestStatus(org.orgId, first), "approved");
 
       await assert.rejects(
-        requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "GL follow-up" }),
+        requestReviewedReopenFixture({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "GL follow-up" }),
         /approved reopen window for .*GL, AP is active; to widen or extend it/,
       );
     } finally {
@@ -144,8 +175,14 @@ test(
       await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
       await setPeriodLockState({ ...target, subsidiaryId: org.subsidiaryId, module: "gl", state: "closed", actorId: actors.adminId, reason: "Entity close for review" });
       await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const requestId = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Correction window" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId, actorId: actors.approver1Id, approve: true, hours: 2 });
+      const requestId = await requestReviewedReopenFixture({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Correction window" });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
       const before = (await db.execute<{ expires_at: Date; approved_by: string; modules: string[] }>(sql`
         select expires_at, approved_by, modules from close_reopen_requests where id = ${requestId}`)).rows[0]!;
       const extension = await extendReopenRequest({
@@ -161,9 +198,22 @@ test(
         select module, state, reopen_expires_at as expires_at from period_locks where org_id = ${org.orgId}`)).rows;
       assert.equal(pendingLocks.find((lock) => lock.module === "ap")?.state, "closed");
       assert.ok(pendingLocks.filter((lock) => lock.module === "gl").every((lock) => new Date(lock.expires_at!).getTime() === new Date(before.expires_at).getTime()));
-      await assert.rejects(decidePeriodReopen({ orgId: org.orgId, requestId: extension.requestId, actorId: actors.adminId, approve: true }), /independent approval/);
+      await assert.rejects(
+        decideReopenFixture({
+          orgId: org.orgId,
+          requestId: extension.requestId,
+          actorId: actors.adminId,
+          decision: "approved",
+        }),
+        /not an approver|self-approval|own submission/,
+      );
       await assert.rejects(extendReopenRequest({ orgId: org.orgId, requestId, actorId: actors.approver2Id, reason: "Another extension for the same scope", additionalHours: 1 }), /already awaiting a decision/);
-      await decidePeriodReopen({ orgId: org.orgId, requestId: extension.requestId, actorId: actors.approver2Id, approve: true });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: extension.requestId,
+        actorId: actors.approver2Id,
+        decision: "approved",
+      });
       assert.equal(await requestStatus(org.orgId, extension.requestId), "approved");
       assert.equal(await requestStatus(org.orgId, requestId), "superseded");
       const original = (await db.execute<{ expires_at: Date; approved_by: string; modules: string[]; reclosed_at: Date | null }>(sql`
@@ -180,52 +230,97 @@ test(
         select action from audit_log where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
          and row_id = ${extension.requestId} order by at`)).rows;
       assert.deepEqual(audit.map((row) => row.action), ["request", "approve"]);
-    } finally { await dropScratchOrg(org.orgId); }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
   },
 );
 
-test("widening alone preserves expiry and rejection leaves the original window intact", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actors = await seedFlowActors(org.orgId);
-    const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
-    await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-    await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-    const first = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Correction window" });
-    await decidePeriodReopen({ orgId: org.orgId, requestId: first, actorId: actors.approver1Id, approve: true, hours: 2 });
-    const before = (await db.execute<{ expires_at: Date }>(sql`select expires_at from close_reopen_requests where id = ${first}`)).rows[0]!;
-    await assert.rejects(extendReopenRequest({ orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "No actual scope or time change", additionalHours: 0, addModules: ["gl"] }), /must add time, modules, or both/);
-    for (const additionalHours of [undefined, 0]) {
-      const pending = await extendReopenRequest({ orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "Add AP without extending the window", addModules: ["ap"], additionalHours });
-      assert.equal(pending.expiresAt, new Date(before.expires_at).toISOString());
-      await decidePeriodReopen({ orgId: org.orgId, requestId: pending.requestId, actorId: actors.approver1Id, approve: false, decisionReason: "The scope needs further review before it can be widened" });
-      assert.equal(await requestStatus(org.orgId, first), "approved");
-      assert.equal(await requestStatus(org.orgId, pending.requestId), "rejected");
+test(
+  "widening alone preserves expiry and rejection leaves the original window intact",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
+      await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
+      await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Close for review" });
+      const first = await requestReviewedReopenFixture({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Correction window" });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: first,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
+      const before = (await db.execute<{ expires_at: Date }>(sql`select expires_at from close_reopen_requests where id = ${first}`)).rows[0]!;
+      await assert.rejects(extendReopenRequest({ orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "No actual scope or time change", additionalHours: 0, addModules: ["gl"] }), /must add time, modules, or both/);
+      for (const additionalHours of [undefined, 0]) {
+        const pending = await extendReopenRequest({ orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "Add AP without extending the window", addModules: ["ap"], additionalHours });
+        assert.equal(pending.expiresAt, new Date(before.expires_at).toISOString());
+        await decideReopenFixture({
+          orgId: org.orgId,
+          requestId: pending.requestId,
+          actorId: actors.approver1Id,
+          decision: "rejected",
+          reason: "The scope needs further review before it can be widened",
+        });
+        assert.equal(await requestStatus(org.orgId, first), "approved");
+        assert.equal(await requestStatus(org.orgId, pending.requestId), "rejected");
+      }
+      const pending = await extendReopenRequest({ orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "AP correction is now ready for review", addModules: ["ap"] });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: pending.requestId,
+        actorId: actors.approver1Id,
+        decision: "approved",
+      });
+      const locks = (await db.execute<{ expires_at: Date }>(sql`select reopen_expires_at as expires_at from period_locks where org_id = ${org.orgId}`)).rows;
+      assert.ok(locks.every((lock) => new Date(lock.expires_at).getTime() === new Date(before.expires_at).getTime()));
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-    const pending = await extendReopenRequest({ orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "AP correction is now ready for review", addModules: ["ap"] });
-    await decidePeriodReopen({ orgId: org.orgId, requestId: pending.requestId, actorId: actors.approver1Id, approve: true });
-    const locks = (await db.execute<{ expires_at: Date }>(sql`select reopen_expires_at as expires_at from period_locks where org_id = ${org.orgId}`)).rows;
-    assert.ok(locks.every((lock) => new Date(lock.expires_at).getTime() === new Date(before.expires_at).getTime()));
-  } finally { await dropScratchOrg(org.orgId); }
-});
+  },
+);
 
-test("an amendment cannot reactivate a window that was ended before approval", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actors = await seedFlowActors(org.orgId);
-    await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
-    const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
-    await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-    const first = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Correction window" });
-    await decidePeriodReopen({ orgId: org.orgId, requestId: first, actorId: actors.approver1Id, approve: true, hours: 2 });
-    const pending = await extendReopenRequest({ orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "More time requested for corrections", additionalHours: 1 });
-    await recloseApprovedReopen({ orgId: org.orgId, requestId: first, actorId: actors.approver1Id, reason: "Corrections completed and period reclosed" });
-    await assert.rejects(decidePeriodReopen({ orgId: org.orgId, requestId: pending.requestId, actorId: actors.approver2Id, approve: true }), /original reopen window has ended or changed/);
-    assert.equal(await requestStatus(org.orgId, first), "reclosed");
-    assert.equal(await requestStatus(org.orgId, pending.requestId), "requested");
-    await withdrawPeriodReopen({ orgId: org.orgId, requestId: pending.requestId, actorId: actors.adminId, reason: "The original correction work has completed" });
-  } finally { await dropScratchOrg(org.orgId); }
-});
+test(
+  "an amendment cannot reactivate a window that was ended before approval",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
+      const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
+      await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
+      const first = await requestReviewedReopenFixture({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Correction window" });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: first,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
+      const pending = await extendReopenRequest({ orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "More time requested for corrections", additionalHours: 1 });
+      await recloseApprovedReopen({ orgId: org.orgId, requestId: first, actorId: actors.approver1Id, reason: "Corrections completed and period reclosed" });
+      await assert.rejects(
+        decideReopenFixture({
+          orgId: org.orgId,
+          requestId: pending.requestId,
+          actorId: actors.approver2Id,
+          decision: "approved",
+        }),
+        /original reopen window has ended or changed/,
+      );
+      assert.equal(await requestStatus(org.orgId, first), "reclosed");
+      assert.equal(await requestStatus(org.orgId, pending.requestId), "requested");
+      await withdrawPeriodReopen({ orgId: org.orgId, requestId: pending.requestId, actorId: actors.adminId, reason: "The original correction work has completed" });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test(
   "ending a window early requires the reopen permission, never identity",
@@ -236,9 +331,16 @@ test(
       const actors = await seedFlowActors(org.orgId);
       const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
       await setPeriodLockState({ ...target, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
-      const first = await requestPeriodReopen({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "First window" });
-      await decidePeriodReopen({ orgId: org.orgId, requestId: first, actorId: actors.approver1Id, approve: true, hours: 2 });
+      const first = await requestReviewedReopenFixture({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "First window" });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId: first,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
 
+      await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.adminId},'close.reopen','deny') on conflict(user_id,permission) do update set effect='deny'`);
       // Neither the uninvolved operator nor the permission-less requester
       // can end the window: the gate is the reopen permission, with a
       // remedy naming who can grant it.
@@ -263,11 +365,11 @@ test(
         orgId: org.orgId, requestId: first, actorId: actors.approver2Id, reason: "Independent approver ends the window after re-closing",
       });
       assert.equal(await requestStatus(org.orgId, first), "reclosed");
-      const audits = (await db.execute<{ n: number }>(sql`
+      const audits = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
            and row_id = ${first} and action = 'end'
-      `));
+      `);
       assert.equal(audits.rows[0]?.n, 1);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -275,20 +377,26 @@ test(
   },
 );
 
-test("concurrent overlapping requests accept exactly one pending request", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actors = await seedFlowActors(org.orgId);
-    const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ["gl"] as const };
-    const outcomes = await Promise.allSettled([
-      requestPeriodReopen({ ...target, modules: [...target.modules], actorId: actors.adminId, reason: "First correction request" }),
-      requestPeriodReopen({ ...target, modules: [...target.modules], actorId: actors.approver1Id, reason: "Second correction request" }),
-    ]);
-    assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
-    const refusal = outcomes.find((outcome) => outcome.status === "rejected") as PromiseRejectedResult;
-    assert.ok(refusal.reason instanceof CloseError);
-    assert.match(refusal.reason.message, /already awaiting a decision/);
-    const saved = (await db.execute<{ n: number }>(sql`select count(*)::int as n from close_reopen_requests where org_id = ${org.orgId} and status = 'requested'`)).rows[0]!;
-    assert.equal(saved.n, 1);
-  } finally { await dropScratchOrg(org.orgId); }
-});
+test(
+  "concurrent overlapping requests accept exactly one pending request",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, modules: ["gl"] as const };
+      const outcomes = await Promise.allSettled([
+        requestReviewedReopenFixture({ ...target, modules: [...target.modules], actorId: actors.adminId, reason: "First correction request" }),
+        requestReviewedReopenFixture({ ...target, modules: [...target.modules], actorId: actors.approver1Id, reason: "Second correction request" }),
+      ]);
+      assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+      const refusal = outcomes.find((outcome) => outcome.status === "rejected") as PromiseRejectedResult;
+      assert.ok(refusal.reason instanceof CloseError);
+      assert.match(refusal.reason.message, /already awaiting a decision/);
+      const saved = (await db.execute<{ n: number }>(sql`select count(*)::int as n from close_reopen_requests where org_id = ${org.orgId} and status = 'requested'`)).rows[0]!;
+      assert.equal(saved.n, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

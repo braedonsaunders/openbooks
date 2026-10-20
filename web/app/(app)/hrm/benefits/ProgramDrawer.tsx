@@ -88,7 +88,10 @@ function retainedFieldOptions(row: Record<string, unknown> | undefined): Retaine
   return fields
 }
 
-function suggestedFieldPointer(fields: readonly RetainedFieldOption[], field: RetainedFieldName): string {
+function suggestedFieldPointer(
+  fields: readonly RetainedFieldOption[],
+  field: RetainedFieldName,
+): string {
   const aliases: Record<RetainedFieldName, readonly string[]> = {
     sourceRowRef: ['sourcerowref', 'sourcecard', 'awardref', 'sourceref', 'externalid', 'card', 'awardid', 'transactionid', 'reference', 'id'],
     amount: ['amount', 'value', 'awardamount', 'grossamount'],
@@ -98,7 +101,9 @@ function suggestedFieldPointer(fields: readonly RetainedFieldOption[], field: Re
     sourceIssueDate: ['sourceissuedate', 'issuedate', 'paiddate', 'checkdate'],
     sourcePaidDate: ['sourcepaiddate', 'paiddate', 'paymentdate', 'checkdate', 'chequedate'],
   }
-  return fields.find((entry) => aliases[field].includes(entry.label.toLowerCase().replace(/[^a-z0-9]/g, '')))?.pointer ?? ''
+  return (
+    fields.find((entry) => aliases[field].includes(entry.label.toLowerCase().replace(/[^a-z0-9]/g, '')))?.pointer ?? ''
+  )
 }
 
 /**
@@ -246,7 +251,7 @@ export function ProgramDrawer({
     void fetch(`/api/file-cabinet/files/${encodeURIComponent(sourceFileId)}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(await readApiErrorMessage(response, t('sourceFirst.fileLookupFailed')))
-        const payload = await response.json() as { file?: { versions?: { id?: unknown; versionNumber?: unknown }[] } }
+        const payload = (await response.json()) as { file?: { versions?: { id?: unknown; versionNumber?: unknown }[] } }
         const versions = (payload.file?.versions ?? []).filter((entry): entry is { id: string; versionNumber?: unknown } => typeof entry.id === 'string')
           .map((entry) => ({ id: entry.id, label: t('sourceFirst.version', { number: String(entry.versionNumber ?? '') }) }))
         const version = versions[0]
@@ -296,7 +301,7 @@ export function ProgramDrawer({
     void fetch(`/api/file-cabinet/files/${encodeURIComponent(corroborationFileId)}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(await readApiErrorMessage(response, t('sourceFirst.fileLookupFailed')))
-        const payload = await response.json() as { file?: { versions?: { id?: unknown; versionNumber?: unknown }[] } }
+        const payload = (await response.json()) as { file?: { versions?: { id?: unknown; versionNumber?: unknown }[] } }
         const versions = (payload.file?.versions ?? []).filter((entry): entry is { id: string; versionNumber?: unknown } => typeof entry.id === 'string')
           .map((entry) => ({ id: entry.id, label: t('sourceFirst.version', { number: String(entry.versionNumber ?? '') }) }))
         const version = versions[0]
@@ -524,7 +529,7 @@ export function ProgramDrawer({
         if (sourceReviewKeyRef.current === reviewedKey) setSourceError(message)
         return
       }
-      const payload = await response.json() as { sourceEvidencePreview?: typeof sourcePreview }
+      const payload = (await response.json()) as { sourceEvidencePreview?: typeof sourcePreview }
       if (!payload.sourceEvidencePreview) throw new Error(t('sourceFirst.previewIncomplete'))
       if (sourceReviewKeyRef.current === reviewedKey) {
         setSourcePreview({ ...payload.sourceEvidencePreview, reviewKey: reviewedKey })
@@ -597,31 +602,35 @@ export function ProgramDrawer({
   }
 
   const manageable = canManage && !drawer.drawerRefusal
-  const headerActions = manageable && program.status !== 'closed' ? (
-    <>
-      {isProgramEditable(program.status) ? (
-        <Button variant="outline" size="sm" disabled={working} onClick={() => router.push(drawer.editHref as never)}>
-          {t('portfolio.editProgram')}
-        </Button>
-      ) : null}
-      {program.status === 'active' ? (
-        <Button variant="outline" size="sm" disabled={working} onClick={() => void closeProgram()}>
-          {t('portfolio.closeProgram')}
-        </Button>
-      ) : null}
-      {program.status === 'draft' ? (
-        <Button size="sm" disabled={working} onClick={() => void act({ action: 'activate' })}>
-          {t('portfolio.activateProgram')}
-        </Button>
-      ) : null}
-    </>
-  ) : null
+  const headerActions =
+    manageable && program.status !== 'closed' ? (
+      <>
+        {isProgramEditable(program.status) ? (
+          <Button variant="outline" size="sm" disabled={working} onClick={() => router.push(drawer.editHref as never)}>
+            {t('portfolio.editProgram')}
+          </Button>
+        ) : null}
+        {program.status === 'active' ? (
+          <Button variant="outline" size="sm" disabled={working} onClick={() => void closeProgram()}>
+            {t('portfolio.closeProgram')}
+          </Button>
+        ) : null}
+        {program.status === 'draft' ? (
+          <Button size="sm" disabled={working} onClick={() => void act({ action: 'activate' })}>
+            {t('portfolio.activateProgram')}
+          </Button>
+        ) : null}
+      </>
+    ) : null
   // The Actions menu renders only when it holds an entry.
-  const menuActions = program.metric === 'transactions' ? (
-    <Button asChild variant="ghost">
-      <Link href={`/hrm/benefits?view=programs&transactionRules=${program.id}` as never}>{t('portfolio.transactionRules')}</Link>
-    </Button>
-  ) : undefined
+  const menuActions =
+    program.metric === 'transactions' ? (
+      <Button asChild variant="ghost">
+        <Link href={`/hrm/benefits?view=programs&transactionRules=${program.id}` as never}>
+          {t('portfolio.transactionRules')}
+        </Link>
+      </Button>
+    ) : undefined
 
   const tableText = {
     program: t('portfolio.columns.program'), recipient: t('portfolio.columns.recipient'),
@@ -632,33 +641,45 @@ export function ProgramDrawer({
 
   // One toolbar row: the table's search sits at the left, then the period
   // pickers, then the run action at the right.
-  const simulateControls = !drawer.drawerRefusal && program.family === 'incentive' ? (
-    <>
-      <div className="flex items-center gap-1.5">
-        <Label htmlFor="program-simulate-from" className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{t('portfolio.simulate.periodFrom')}</Label>
-        <DateField id="program-simulate-from" className="w-40" value={simulateFrom} onChange={(value) => setSimulateFrom(value)} />
-      </div>
-      <div className="flex items-center gap-1.5">
-        <Label htmlFor="program-simulate-to" className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{t('portfolio.simulate.periodTo')}</Label>
-        <DateField id="program-simulate-to" className="w-40" value={simulateTo} onChange={(value) => setSimulateTo(value)} />
-      </div>
-      <Button variant="outline" className="ml-auto" onClick={simulate}>
-        {t('portfolio.simulate.run')}
+  const simulateControls =
+    !drawer.drawerRefusal && program.family === 'incentive' ? (
+      <>
+        <div className="flex items-center gap-1.5">
+          <Label htmlFor="program-simulate-from" className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+            {t('portfolio.simulate.periodFrom')}
+          </Label>
+          <DateField id="program-simulate-from" className="w-40" value={simulateFrom} onChange={(value) => setSimulateFrom(value)} />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Label htmlFor="program-simulate-to" className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
+            {t('portfolio.simulate.periodTo')}
+          </Label>
+          <DateField id="program-simulate-to" className="w-40" value={simulateTo} onChange={(value) => setSimulateTo(value)} />
+        </div>
+        <Button variant="outline" className="ml-auto" onClick={simulate}>
+          {t('portfolio.simulate.run')}
+        </Button>
+      </>
+    ) : null
+  const grantAction =
+    program.family !== 'incentive' && canManage && program.status === 'active' ? (
+      <Button asChild className="ml-auto">
+        <Link href={`${program.programHref}&award=new` as never}>
+          {t(program.family === 'reward' ? 'programWorkspace.giveReward' : 'programWorkspace.createGrant')}
+        </Link>
       </Button>
-    </>
-  ) : null
-  const grantAction = program.family !== 'incentive' && canManage && program.status === 'active' ? (
-    <Button asChild className="ml-auto">
-      <Link href={`${program.programHref}&award=new` as never}>{t(program.family === 'reward' ? 'programWorkspace.giveReward' : 'programWorkspace.createGrant')}</Link>
-    </Button>
-  ) : null
+    ) : null
   const activityToolbar = simulateControls ?? grantAction ?? undefined
 
   const simulation = drawer.simulation ? (
     <section className="flex flex-col gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700" aria-label={t('portfolio.simulate.title')}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('portfolio.simulate.title')}</h3>
-        <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{effectiveRange(drawer.simulation.periodFrom, drawer.simulation.periodTo)}</span>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {t('portfolio.simulate.title')}
+        </h3>
+        <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+          {effectiveRange(drawer.simulation.periodFrom, drawer.simulation.periodTo)}
+        </span>
       </div>
       {drawer.simulation.isEstimate ? (
         <Alert variant="default" className="flex items-start gap-2">
@@ -677,46 +698,76 @@ export function ProgramDrawer({
         {drawer.simulation.measuredLines.map((line) => (
           <div key={line.label} className="flex items-baseline justify-between gap-2">
             <dt className="text-slate-500 dark:text-slate-400">{line.label}</dt>
-            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{line.value}</dd>
+            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+              {line.value}
+            </dd>
           </div>
         ))}
       </dl>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-xs dark:border-slate-800">
         <div className="flex items-baseline justify-between gap-2">
-          <dt className="text-slate-500 dark:text-slate-400">{t('sourceFirst.nativeMeasuredHistory')}</dt>
-          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.reconciliation.nativeMeasuredHistoryTotal}</dd>
+          <dt className="text-slate-500 dark:text-slate-400">
+            {t('sourceFirst.nativeMeasuredHistory')}
+          </dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+            {drawer.simulation.reconciliation.nativeMeasuredHistoryTotal}
+          </dd>
         </div>
         <div className="flex items-baseline justify-between gap-2">
-          <dt className="text-slate-500 dark:text-slate-400">{t('sourceFirst.sourceEvidencedHistory')}</dt>
-          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.reconciliation.sourceEvidencedFirstTotal}</dd>
+          <dt className="text-slate-500 dark:text-slate-400">
+            {t('sourceFirst.sourceEvidencedHistory')}
+          </dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+            {drawer.simulation.reconciliation.sourceEvidencedFirstTotal}
+          </dd>
         </div>
         <div className="flex items-baseline justify-between gap-2">
-          <dt className="text-slate-500 dark:text-slate-400">{t('sourceFirst.obligationVariance')}</dt>
-          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.reconciliation.obligationHistoryMinusCurrentMeasurement}</dd>
+          <dt className="text-slate-500 dark:text-slate-400">
+            {t('sourceFirst.obligationVariance')}
+          </dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+            {drawer.simulation.reconciliation.obligationHistoryMinusCurrentMeasurement}
+          </dd>
         </div>
         <div className="flex items-baseline justify-between gap-2">
-          <dt className="text-slate-500 dark:text-slate-400">{t('portfolio.simulate.processedPayrollTotal')}</dt>
-          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.reconciliation.processedPayrollTotal}</dd>
+          <dt className="text-slate-500 dark:text-slate-400">
+            {t('portfolio.simulate.processedPayrollTotal')}
+          </dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+            {drawer.simulation.reconciliation.processedPayrollTotal}
+          </dd>
         </div>
         <div className="flex items-baseline justify-between gap-2">
-          <dt className="text-slate-500 dark:text-slate-400">{t('portfolio.simulate.payrollMinusCurrentMeasurement')}</dt>
-          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.reconciliation.payrollMinusCurrentMeasurement}</dd>
+          <dt className="text-slate-500 dark:text-slate-400">
+            {t('portfolio.simulate.payrollMinusCurrentMeasurement')}
+          </dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+            {drawer.simulation.reconciliation.payrollMinusCurrentMeasurement}
+          </dd>
         </div>
       </dl>
       {drawer.simulation.recipients.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.simulate.noRecipients')}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {t('portfolio.simulate.noRecipients')}
+        </p>
       ) : (
         <ul className="divide-y divide-slate-100 dark:divide-slate-800">
           {drawer.simulation.recipients.map((recipient) => (
             <li key={recipient.employmentId} className="py-2">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{recipient.employeeLabel}</span>
-                <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{recipient.share}</span>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {recipient.employeeLabel}
+                </span>
+                <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                  {recipient.share}
+                </span>
                 <span className="ml-auto text-sm font-medium tabular-nums text-slate-900 dark:text-slate-100">
                   {recipient.netValue}
                 </span>
               </div>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{recipient.explanation}</p>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                {recipient.explanation}
+              </p>
             </li>
           ))}
         </ul>
@@ -731,9 +782,13 @@ export function ProgramDrawer({
         </ul>
       ) : null}
       <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="text-slate-500 dark:text-slate-400">{t('portfolio.simulate.totalAwarded')}</span>
+        <span className="text-slate-500 dark:text-slate-400">
+          {t('portfolio.simulate.totalAwarded')}
+        </span>
         <span className="flex items-center gap-3">
-          <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.totalAwarded}</span>
+          <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+            {drawer.simulation.totalAwarded}
+          </span>
           {canManage && program.status === 'active' && !drawer.simulation.isEstimate && drawer.simulation.canSettle ? (
             <Button size="sm" disabled={working} onClick={settle}>
               {t('portfolio.simulate.settle')}
@@ -743,51 +798,82 @@ export function ProgramDrawer({
       </div>
       {canManage && program.status === 'active' && !drawer.simulation.isEstimate ? (
         <details className="border-t border-slate-100 pt-3 dark:border-slate-800">
-          <summary className="cursor-pointer text-sm font-medium text-slate-800 dark:text-slate-100">{t('sourceFirst.title')}</summary>
+          <summary className="cursor-pointer text-sm font-medium text-slate-800 dark:text-slate-100">
+            {t('sourceFirst.title')}
+          </summary>
           <div className="mt-3 flex flex-col gap-3 text-sm">
             <p className="text-xs text-slate-600 dark:text-slate-300">
               {isAboveNativeMeasure ? t('sourceFirst.descriptionAboveNativeMeasure') : t('sourceFirst.description')}
             </p>
             <div>
-              <Label htmlFor="source-first-evidence-class">{t('sourceFirst.evidenceClass')}</Label>
+              <Label htmlFor="source-first-evidence-class">
+                {t('sourceFirst.evidenceClass')}
+              </Label>
               <Select id="source-first-evidence-class" value={sourceEvidenceClass} onChange={(event) => setSourceEvidenceClass(event.target.value as SourceEvidenceClass)}>
-                <option value="missing-source-identity">{t('sourceFirst.classMissingIdentity')}</option>
-                <option value="source-paid-above-native-measure">{t('sourceFirst.classPaidAboveMeasure')}</option>
+                <option value="missing-source-identity">
+                  {t('sourceFirst.classMissingIdentity')}
+                </option>
+                <option value="source-paid-above-native-measure">
+                  {t('sourceFirst.classPaidAboveMeasure')}
+                </option>
               </Select>
             </div>
             <div>
-              <Label htmlFor="source-first-native-as-of">{t('sourceFirst.asOf')}</Label>
+              <Label htmlFor="source-first-native-as-of">
+                {t('sourceFirst.asOf')}
+              </Label>
               <DateField id="source-first-native-as-of" value={sourceAsOf} required onChange={(value) => setSourceAsOf(value)} />
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('sourceFirst.asOfHint')}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {t('sourceFirst.asOfHint')}
+              </p>
             </div>
             <div>
-              <Label htmlFor="source-first-employment">{t('sourceFirst.recipient')}</Label>
+              <Label htmlFor="source-first-employment">
+                {t('sourceFirst.recipient')}
+              </Label>
               <Select id="source-first-employment" value={sourceEmploymentId} onChange={(event) => setSourceEmploymentId(event.target.value)}>
                 <option value="">{t('sourceFirst.chooseRecipient')}</option>
-                {employmentOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                {employmentOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </Select>
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300">{t('sourceFirst.legalPayer')}: {drawer.legalEntityLabel ?? t('sourceFirst.payerNotConfigured')}</p>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              {t('sourceFirst.legalPayer')}:{' '}
+              {drawer.legalEntityLabel ?? t('sourceFirst.payerNotConfigured')}
+            </p>
             <div>
-              <Label htmlFor="source-first-file">{t('sourceFirst.issuedFile')}</Label>
+              <Label htmlFor="source-first-file">
+                {t('sourceFirst.issuedFile')}
+              </Label>
               <CabinetFilePicker id="source-first-file" label={t('sourceFirst.issuedFile')} value={sourceFileId} onChange={(value) => {
                 setSourceFileId(value); setSourceVersionId(''); setSourceVersions([]); setSourceRows([]); setSourceRowPointer(''); setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
                 setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
               }} disabled={working} />
               {sourceFileId && sourceVersions.length > 0 ? (
                 <div className="mt-2">
-                  <Label htmlFor="source-first-version">{t('sourceFirst.fileVersion')}</Label>
+                  <Label htmlFor="source-first-version">
+                    {t('sourceFirst.fileVersion')}
+                  </Label>
                   <Select id="source-first-version" value={sourceVersionId} onChange={(event) => {
                     setSourceVersionId(event.target.value); setSourceRowPointer(''); setSourceRows([]); setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
                     setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
                   }}>
-                    {sourceVersions.map((version) => <option key={version.id} value={version.id}>{version.label}</option>)}
+                    {sourceVersions.map((version) => (
+                      <option key={version.id} value={version.id}>
+                        {version.label}
+                      </option>
+                    ))}
                   </Select>
                 </div>
               ) : null}
             </div>
             <div>
-              <Label htmlFor="source-first-row">{t('sourceFirst.issuedRow')}</Label>
+              <Label htmlFor="source-first-row">
+                {t('sourceFirst.issuedRow')}
+              </Label>
               <Select id="source-first-row" value={sourceRowPointer} onChange={(event) => {
                 const pointer = event.target.value
                 setSourceRowPointer(pointer)
@@ -801,7 +887,11 @@ export function ProgramDrawer({
                 })
               }} disabled={!sourceVersionId || sourceRows.length === 0}>
                 <option value="">{t('sourceFirst.chooseRow')}</option>
-                {sourceRows.map((row) => <option key={row.pointer} value={row.pointer}>{row.label}</option>)}
+                {sourceRows.map((row) => (
+                  <option key={row.pointer} value={row.pointer}>
+                    {row.label}
+                  </option>
+                ))}
               </Select>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -811,108 +901,220 @@ export function ProgramDrawer({
                 ...(isAboveNativeMeasure ? [['sourcePaidDate', 'paidDateField'] as const] : []),
               ] as const).map(([field, labelKey]) => (
                 <div key={field}>
-                  <Label htmlFor={`source-first-${field}`}>{t(`sourceFirst.${labelKey}`)}</Label>
+                  <Label htmlFor={`source-first-${field}`}>
+                    {t(`sourceFirst.${labelKey}`)}
+                  </Label>
                   <Select id={`source-first-${field}`} value={sourceFields[field]} onChange={(event) => setSourceFields((current) => ({ ...current, [field]: event.target.value }))} disabled={!sourceRowPointer || sourceFieldOptions.length === 0}>
                     <option value="">{t('sourceFirst.chooseField')}</option>
-                    {sourceFieldOptions.map((option) => <option key={option.pointer} value={option.pointer}>{option.label}{option.sample ? ` · ${option.sample}` : ''}</option>)}
+                    {sourceFieldOptions.map((option) => (
+                      <option key={option.pointer} value={option.pointer}>
+                        {option.label}
+                        {option.sample ? ` · ${option.sample}` : ''}
+                      </option>
+                    ))}
                   </Select>
                 </div>
               ))}
             </div>
             <div>
-              <Label htmlFor="source-first-corroboration">{t('sourceFirst.corroborationFile')}</Label>
+              <Label htmlFor="source-first-corroboration">
+                {t('sourceFirst.corroborationFile')}
+              </Label>
               <CabinetFilePicker id="source-first-corroboration" label={t('sourceFirst.corroborationFile')} value={corroborationFileId} onChange={(value) => {
                 setCorroborationFileId(value); setCorroborationVersionId(''); setCorroborationVersions([]); setCorroborationRows([]); setCorroborationRowPointer('')
               }} disabled={working} />
               {corroborationFileId && corroborationVersions.length > 0 ? (
                 <div className="mt-2">
-                  <Label htmlFor="source-first-corroboration-version">{t('sourceFirst.fileVersion')}</Label>
+                  <Label htmlFor="source-first-corroboration-version">
+                    {t('sourceFirst.fileVersion')}
+                  </Label>
                   <Select id="source-first-corroboration-version" value={corroborationVersionId} onChange={(event) => {
                     setCorroborationVersionId(event.target.value); setCorroborationRows([]); setCorroborationRowPointer('')
                   }}>
-                    {corroborationVersions.map((version) => <option key={version.id} value={version.id}>{version.label}</option>)}
+                    {corroborationVersions.map((version) => (
+                      <option key={version.id} value={version.id}>
+                        {version.label}
+                      </option>
+                    ))}
                   </Select>
                 </div>
               ) : null}
               {corroborationFileId && corroborationVersionId ? (
                 <div className="mt-2">
-                  <Label htmlFor="source-first-corroboration-row">{t('sourceFirst.corroboratingRow')}</Label>
+                  <Label htmlFor="source-first-corroboration-row">
+                    {t('sourceFirst.corroboratingRow')}
+                  </Label>
                   <Select id="source-first-corroboration-row" value={corroborationRowPointer} onChange={(event) => setCorroborationRowPointer(event.target.value)} disabled={corroborationRows.length === 0}>
                     <option value="">{t('sourceFirst.chooseRow')}</option>
-                    {corroborationRows.map((row) => <option key={row.pointer} value={row.pointer}>{row.label}</option>)}
+                    {corroborationRows.map((row) => (
+                      <option key={row.pointer} value={row.pointer}>
+                        {row.label}
+                      </option>
+                    ))}
                   </Select>
                 </div>
               ) : null}
             </div>
             <div className="space-y-3">
-              {pdfEvidence.map((entry, index) => <RetainedPdfEvidence key={entry.key} value={entry.input} disabled={working}
+              {pdfEvidence.map((entry, index) => (
+                <RetainedPdfEvidence key={entry.key} value={entry.input} disabled={working}
                 onChange={input => setPdfEvidence(current => current.map((item, position) => position === index ? { ...item, input } : item))}
-                onRemove={() => setPdfEvidence(current => current.filter((_, position) => position !== index))} />)}
+                onRemove={() => setPdfEvidence(current => current.filter((_, position) => position !== index))} />
+              ))}
               <Button variant="outline" type="button" disabled={working || pdfEvidence.length + (corroborationFileId ? 1 : 0) >= 4}
                 onClick={() => setPdfEvidence(current => [...current, { key: crypto.randomUUID(), input: { fileId: '', versionId: '', rowPointer: '', pdfSelection: { page: 1, anchor: '', fields: {} } } }])}>
                 {t('sourceFirst.addPdfEvidence')}
               </Button>
-              <Label>{t('sourceFirst.currencyBasis')}<Select value={nativeCurrencySelected ? 'native' : 'source'} onChange={event => setNativeCurrencySelected(event.target.value === 'native')}>
-                <option value="source">{t('sourceFirst.currencyFromSource')}</option><option value="native">{t('sourceFirst.currencyFromPayroll')}</option>
-              </Select></Label>
-              {nativeCurrencySelected ? <><p className="text-xs text-slate-500">{t('sourceFirst.currencyBasisHint', { currency: program.currency })}</p>
-                <Label>{t('sourceFirst.currencyBasisReason')}<Textarea value={nativeCurrencyReason} onChange={event => setNativeCurrencyReason(event.target.value)} /></Label></> : null}
+              <Label>
+                {t('sourceFirst.currencyBasis')}
+                <Select value={nativeCurrencySelected ? 'native' : 'source'} onChange={event => setNativeCurrencySelected(event.target.value === 'native')}>
+                  <option value="source">
+                    {t('sourceFirst.currencyFromSource')}
+                  </option>
+                  <option value="native">
+                    {t('sourceFirst.currencyFromPayroll')}
+                  </option>
+                </Select>
+              </Label>
+              {nativeCurrencySelected ? (
+                <>
+                  <p className="text-xs text-slate-500">
+                    {t('sourceFirst.currencyBasisHint', { currency: program.currency })}
+                  </p>
+                  <Label>
+                    {t('sourceFirst.currencyBasisReason')}
+                    <Textarea value={nativeCurrencyReason} onChange={event => setNativeCurrencyReason(event.target.value)} />
+                  </Label>
+                </>
+              ) : null}
             </div>
             {sourcePreview ? (
               <div className="rounded border border-slate-200 p-3 dark:border-slate-700">
                 <h4 className="font-medium">{t('sourceFirst.reviewedRow')}</h4>
                 <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                  <dt>{t('sourceFirst.rowReference')}</dt><dd>{sourcePreview.sourceRowRef}</dd>
-                  <dt>{t('sourceFirst.recipient')}</dt><dd>{employmentOptions.find((option) => option.value === sourceEmploymentId)?.label ?? t('sourceFirst.selectedRecipient')}</dd>
-                  <dt>{t('sourceFirst.legalPayer')}</dt><dd>{drawer.legalEntityLabel ?? t('sourceFirst.payerNotConfigured')}</dd>
-                  <dt>{t('sourceFirst.earningPeriod')}</dt><dd>{sourcePreview.periodFrom} – {sourcePreview.periodTo}</dd>
-                  <dt>{t('sourceFirst.sourceIssueDate')}</dt><dd>{sourcePreview.sourceIssueDate}</dd>
-                  {isAboveNativeMeasure ? <><dt>{t('sourceFirst.sourcePaidDate')}</dt><dd>{sourcePreview.sourcePaidDate ?? ''}</dd></> : null}
-                  <dt>{t('sourceFirst.issuedAmount')}</dt><dd className="font-semibold tabular-nums">{sourcePreview.value} {sourcePreview.currency}</dd>
-                  <dt>{t('sourceFirst.nativeRecipient')}</dt><dd>{sourcePreview.nativePreview.targetRecipient
+                  <dt>{t('sourceFirst.rowReference')}</dt>
+                  <dd>{sourcePreview.sourceRowRef}</dd>
+                  <dt>{t('sourceFirst.recipient')}</dt>
+                  <dd>
+                    {employmentOptions.find((option) => option.value === sourceEmploymentId)?.label ?? t('sourceFirst.selectedRecipient')}
+                  </dd>
+                  <dt>{t('sourceFirst.legalPayer')}</dt>
+                  <dd>
+                    {drawer.legalEntityLabel ?? t('sourceFirst.payerNotConfigured')}
+                  </dd>
+                  <dt>{t('sourceFirst.earningPeriod')}</dt>
+                  <dd>
+                    {sourcePreview.periodFrom} – {sourcePreview.periodTo}
+                  </dd>
+                  <dt>{t('sourceFirst.sourceIssueDate')}</dt>
+                  <dd>{sourcePreview.sourceIssueDate}</dd>
+                  {isAboveNativeMeasure ? (
+                    <>
+                      <dt>{t('sourceFirst.sourcePaidDate')}</dt>
+                      <dd>{sourcePreview.sourcePaidDate ?? ''}</dd>
+                    </>
+                  ) : null}
+                  <dt>{t('sourceFirst.issuedAmount')}</dt>
+                  <dd className="font-semibold tabular-nums">
+                    {sourcePreview.value} {sourcePreview.currency}
+                  </dd>
+                  <dt>{t('sourceFirst.nativeRecipient')}</dt>
+                  <dd>
+                    {sourcePreview.nativePreview.targetRecipient
                     ? t('sourceFirst.nativeRecipientAmount', { value: sourcePreview.nativePreview.targetRecipient.value, currency: sourcePreview.currency })
-                    : t('sourceFirst.noNativeRecipient')}</dd>
-                  {isAboveNativeMeasure
-                    ? <><dt>{t('sourceFirst.nativeCarry')}</dt><dd>{sourcePreview.nativePreview.targetCarryForward ? `${sourcePreview.nativePreview.targetCarryForward} ${sourcePreview.currency}` : t('sourceFirst.noNativeCarry')}</dd></>
-                    : <><dt>{t('sourceFirst.nativePool')}</dt><dd>{sourcePreview.nativePreview.nativePoolAvailable ? t('sourceFirst.positivePool') : t('sourceFirst.noPayablePool')}</dd></>}
-                  <dt>{t('sourceFirst.nativeMeasure')}</dt><dd>{sourcePreview.nativePreview.measuredValue} {sourcePreview.currency}</dd>
-                  <dt>{t('sourceFirst.measurementCutoff')}</dt><dd>{sourcePreview.nativeMeasurementAsOf ?? t('sourceFirst.currentNativeState')}</dd>
+                    : t('sourceFirst.noNativeRecipient')}
+                  </dd>
+                  {isAboveNativeMeasure ? (
+                    <>
+                      <dt>{t('sourceFirst.nativeCarry')}</dt>
+                      <dd>
+                        {sourcePreview.nativePreview.targetCarryForward ? `${sourcePreview.nativePreview.targetCarryForward} ${sourcePreview.currency}` : t('sourceFirst.noNativeCarry')}
+                      </dd>
+                    </>
+                  ) : (
+                    <>
+                      <dt>{t('sourceFirst.nativePool')}</dt>
+                      <dd>
+                        {sourcePreview.nativePreview.nativePoolAvailable ? t('sourceFirst.positivePool') : t('sourceFirst.noPayablePool')}
+                      </dd>
+                    </>
+                  )}
+                  <dt>{t('sourceFirst.nativeMeasure')}</dt>
+                  <dd>
+                    {sourcePreview.nativePreview.measuredValue}{' '}
+                    {sourcePreview.currency}
+                  </dd>
+                  <dt>{t('sourceFirst.measurementCutoff')}</dt>
+                  <dd>
+                    {sourcePreview.nativeMeasurementAsOf ?? t('sourceFirst.currentNativeState')}
+                  </dd>
                 </dl>
                 <details className="mt-2">
-                  <summary className="cursor-pointer text-xs">{t('sourceFirst.showSelectedRow')}</summary>
+                  <summary className="cursor-pointer text-xs">
+                    {t('sourceFirst.showSelectedRow')}
+                  </summary>
                   <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                    {Object.entries(sourcePreview.sourceRow).map(([key, value]) => <div key={key} className="contents"><dt>{humanFieldName(key)}</dt><dd className="break-words">{typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '')}</dd></div>)}
+                    {Object.entries(sourcePreview.sourceRow).map(
+                      ([key, value]) => (
+                        <div key={key} className="contents">
+                          <dt>{humanFieldName(key)}</dt>
+                          <dd className="break-words">
+                            {typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '')}
+                          </dd>
+                        </div>
+                      ),
+                    )}
                   </dl>
                 </details>
-                {sourcePreview.artifacts.length > 1 ? <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('sourceFirst.corroborationSelected', { count: sourcePreview.artifacts.length - 1 })}</p> : null}
-                <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{t('sourceFirst.nativeIdentityUnknown')}</p>
-                {sourcePreview.nativePreview.targetRecipient && sourcePreview.nativePreview.canRecordFirstObligation === false
-                  ? <Alert variant="destructive">{t('sourceFirst.nativeRecipientAlreadyPayable')}</Alert>
-                  : null}
-                {!isAboveNativeMeasure && !sourcePreview.nativePreview.nativePoolAvailable
-                  ? <Alert variant="destructive">{t('sourceFirst.positivePoolRequired')}</Alert>
-                  : null}
-                {isAboveNativeMeasure && !sourcePreview.nativePreview.canRecordFirstObligation && !sourcePreview.nativePreview.targetRecipient
-                  ? <Alert variant="destructive">{t('sourceFirst.negativeMeasureRequired')}</Alert>
-                  : null}
+                {sourcePreview.artifacts.length > 1 ? (
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                    {t('sourceFirst.corroborationSelected', { count: sourcePreview.artifacts.length - 1 })}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                  {t('sourceFirst.nativeIdentityUnknown')}
+                </p>
+                {sourcePreview.nativePreview.targetRecipient && sourcePreview.nativePreview.canRecordFirstObligation === false ? (
+                  <Alert variant="destructive">
+                    {t('sourceFirst.nativeRecipientAlreadyPayable')}
+                  </Alert>
+                ) : null}
+                {!isAboveNativeMeasure && !sourcePreview.nativePreview.nativePoolAvailable ? (
+                  <Alert variant="destructive">
+                    {t('sourceFirst.positivePoolRequired')}
+                  </Alert>
+                ) : null}
+                {isAboveNativeMeasure && !sourcePreview.nativePreview.canRecordFirstObligation && !sourcePreview.nativePreview.targetRecipient ? (
+                  <Alert variant="destructive">
+                    {t('sourceFirst.negativeMeasureRequired')}
+                  </Alert>
+                ) : null}
               </div>
             ) : null}
             <div>
-              <Label htmlFor="source-first-mapping-basis">{t('sourceFirst.mappingBasis')}</Label>
+              <Label htmlFor="source-first-mapping-basis">
+                {t('sourceFirst.mappingBasis')}
+              </Label>
               <Textarea id="source-first-mapping-basis" value={sourceMappingBasis} onChange={(event) => setSourceMappingBasis(event.target.value)} />
             </div>
             <div>
-              <Label htmlFor="source-first-mapping-reason">{t('sourceFirst.mappingReason')}</Label>
+              <Label htmlFor="source-first-mapping-reason">
+                {t('sourceFirst.mappingReason')}
+              </Label>
               <Textarea id="source-first-mapping-reason" value={sourceMappingReason} onChange={(event) => setSourceMappingReason(event.target.value)} />
             </div>
             {isAboveNativeMeasure ? (
               <>
                 <div>
-                  <Label htmlFor="source-first-governing-basis">{t('sourceFirst.governingBasis')}</Label>
+                  <Label htmlFor="source-first-governing-basis">
+                    {t('sourceFirst.governingBasis')}
+                  </Label>
                   <Textarea id="source-first-governing-basis" value={sourceGoverningBasis} onChange={(event) => setSourceGoverningBasis(event.target.value)} />
                 </div>
                 <div>
-                  <Label htmlFor="source-first-governing-reason">{t('sourceFirst.governingReason')}</Label>
+                  <Label htmlFor="source-first-governing-reason">
+                    {t('sourceFirst.governingReason')}
+                  </Label>
                   <Textarea id="source-first-governing-reason" value={sourceGoverningReason} onChange={(event) => setSourceGoverningReason(event.target.value)} />
                 </div>
               </>
@@ -922,13 +1124,23 @@ export function ProgramDrawer({
               <span>{t('sourceFirst.mappingConfirmation')}</span>
             </label>
             <div>
-              <Label htmlFor="source-first-reason">{t('sourceFirst.obligationReason')}</Label>
+              <Label htmlFor="source-first-reason">
+                {t('sourceFirst.obligationReason')}
+              </Label>
               <Textarea id="source-first-reason" value={sourceReason} onChange={(event) => setSourceReason(event.target.value)} />
             </div>
-            {sourceError ? <Alert variant="destructive">{sourceError}</Alert> : null}
+            {sourceError ? (
+              <Alert variant="destructive">{sourceError}</Alert>
+            ) : null}
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" disabled={working || !sourceAsOf || !sourceFileId || !sourceVersionId || !sourceRowPointer || !sourceFieldsComplete} onClick={() => void previewSourceEvidence()}>{t('sourceFirst.verifyRow')}</Button>
-              {sourcePreview ? <Button disabled={working || sourceConfirmedReviewKey !== sourceConfirmationKey || !sourcePreview.nativePreview.canRecordFirstObligation} onClick={() => void recordSourceEvidenceFirst()}>{t('sourceFirst.recordDraft')}</Button> : null}
+              <Button variant="outline" disabled={working || !sourceAsOf || !sourceFileId || !sourceVersionId || !sourceRowPointer || !sourceFieldsComplete} onClick={() => void previewSourceEvidence()}>
+                {t('sourceFirst.verifyRow')}
+              </Button>
+              {sourcePreview ? (
+                <Button disabled={working || sourceConfirmedReviewKey !== sourceConfirmationKey || !sourcePreview.nativePreview.canRecordFirstObligation} onClick={() => void recordSourceEvidenceFirst()}>
+                  {t('sourceFirst.recordDraft')}
+                </Button>
+              ) : null}
             </div>
           </div>
         </details>
@@ -942,15 +1154,23 @@ export function ProgramDrawer({
         <Alert variant="destructive" className="flex items-start gap-2">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" />
           <span>
-            <span className="block font-medium">{drawer.simulationRefusal.title}</span>
-            <span className="block text-xs">{drawer.simulationRefusal.message}</span>
+            <span className="block font-medium">
+              {drawer.simulationRefusal.title}
+            </span>
+            <span className="block text-xs">
+              {drawer.simulationRefusal.message}
+            </span>
           </span>
         </Alert>
       ) : null}
       {!drawer.drawerRefusal ? simulation : null}
       {drawer.activityRefusal ? (
         <>
-          {activityToolbar ? <div className="flex flex-wrap items-center gap-2">{activityToolbar}</div> : null}
+          {activityToolbar ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {activityToolbar}
+            </div>
+          ) : null}
           <Alert variant="destructive">{drawer.activityRefusal.message}</Alert>
         </>
       ) : (
@@ -964,15 +1184,27 @@ export function ProgramDrawer({
     <div className="p-4">
       {!drawer.drawerRefusal ? (
         <>
-          {program.eligibility === 'all_employees' ? <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">{t('portfolio.members.employerWide')}</p> : null}
+          {program.eligibility === 'all_employees' ? (
+            <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+              {t('portfolio.members.employerWide')}
+            </p>
+          ) : null}
           <PreparedPagedTable
             source="hrm_benefit_program_participants"
             rows={drawer.members.map((m) => ({
               id: m.id,
               searchText: `${m.employeeLabel} ${m.role ?? ''}`,
               cells: [
-                m.employeeHref ? <Link key="employee" href={m.employeeHref as never} className="font-medium text-teal-700 hover:underline">{m.employeeLabel}</Link> : m.employeeLabel,
-                <span key="range" className="whitespace-nowrap tabular-nums">{m.rangeLabel}</span>,
+                m.employeeHref ? (
+                  <Link key="employee" href={m.employeeHref as never} className="font-medium text-teal-700 hover:underline">
+                    {m.employeeLabel}
+                  </Link>
+                ) : (
+                  m.employeeLabel
+                ),
+                <span key="range" className="whitespace-nowrap tabular-nums">
+                  {m.rangeLabel}
+                </span>,
                 m.role ?? '—',
                 m.weight ?? '—',
                 memberManageable ? (
@@ -981,15 +1213,19 @@ export function ProgramDrawer({
                     if (removal === null) return
                     if (!removal.trim()) { toast.error(t('portfolio.removeReasonRequired')); return }
                     await act({ action: 'removeMember', membershipId: m.id, reason: removal.trim() }, 'POST')
-                  }}>{t('portfolio.removeMember')}</Button>
+                  }}>
+                    {t('portfolio.removeMember')}
+                  </Button>
                 ) : null,
               ],
             }))}
-            toolbarAfter={memberManageable ? (
-              <div className="ml-auto flex items-center">
-                <SublistAddButton label={t('portfolio.addMember')} onClick={() => setAdding(true)} />
-              </div>
-            ) : undefined}
+            toolbarAfter={
+              memberManageable ? (
+                <div className="ml-auto flex items-center">
+                  <SublistAddButton label={t('portfolio.addMember')} onClick={() => setAdding(true)} />
+                </div>
+              ) : undefined
+            }
             columns={[
               { key: 'employee', header: t('benefits.columns.employee') },
               { key: 'effective', header: t('portfolio.columns.effective'), className: 'whitespace-nowrap tabular-nums' },
@@ -1005,7 +1241,7 @@ export function ProgramDrawer({
             stacked
             size="md"
             title={t('portfolio.addMember')}
-            footer={(
+            footer={
               <>
                 <Button variant="outline" disabled={working} onClick={() => setAdding(false)}>
                   {t('portfolio.builder.cancel')}
@@ -1014,17 +1250,21 @@ export function ProgramDrawer({
                   {t('portfolio.addMember')}
                 </Button>
               </>
-            )}
+            }
           >
             <div className="flex flex-col gap-3">
               <div>
-                <Label htmlFor="program-member-employment">{t('portfolio.awardFields.recipient')}</Label>
+                <Label htmlFor="program-member-employment">
+                  {t('portfolio.awardFields.recipient')}
+                </Label>
                 <Select
                   id="program-member-employment"
                   value={member.employmentId}
                   onChange={(e) => setMember((c) => ({ ...c, employmentId: e.target.value }))}
                 >
-                  <option value="">{t('portfolio.builder.chooseRecipient')}</option>
+                  <option value="">
+                    {t('portfolio.builder.chooseRecipient')}
+                  </option>
                   {employmentOptions.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
@@ -1040,7 +1280,9 @@ export function ProgramDrawer({
               ) : null}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="program-member-from">{t('portfolio.builder.fields.effectiveFrom')}</Label>
+                  <Label htmlFor="program-member-from">
+                    {t('portfolio.builder.fields.effectiveFrom')}
+                  </Label>
                   <DateField
                     id="program-member-from"
                     value={member.effectiveFrom}
@@ -1048,7 +1290,9 @@ export function ProgramDrawer({
                   />
                 </div>
                 <div>
-                  <Label htmlFor="program-member-to">{t('portfolio.builder.fields.effectiveTo')}</Label>
+                  <Label htmlFor="program-member-to">
+                    {t('portfolio.builder.fields.effectiveTo')}
+                  </Label>
                   <DateField
                     id="program-member-to"
                     value={member.effectiveTo}
@@ -1058,7 +1302,9 @@ export function ProgramDrawer({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="program-member-weight">{t('portfolio.members.weight')}</Label>
+                  <Label htmlFor="program-member-weight">
+                    {t('portfolio.members.weight')}
+                  </Label>
                   <Input
                     id="program-member-weight"
                     inputMode="decimal"
@@ -1066,17 +1312,23 @@ export function ProgramDrawer({
                     onChange={(e) => setMember((c) => ({ ...c, weight: e.target.value }))}
                     placeholder={t('portfolio.members.weightPlaceholder')}
                   />
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.members.weightHint')}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {t('portfolio.members.weightHint')}
+                  </p>
                 </div>
                 <div>
-                  <Label htmlFor="program-member-role">{t('portfolio.members.role')}</Label>
+                  <Label htmlFor="program-member-role">
+                    {t('portfolio.members.role')}
+                  </Label>
                   <Input
                     id="program-member-role"
                     value={member.role}
                     onChange={(e) => setMember((c) => ({ ...c, role: e.target.value }))}
                     placeholder={t('portfolio.members.rolePlaceholder')}
                   />
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('portfolio.members.roleHint')}</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {t('portfolio.members.roleHint')}
+                  </p>
                 </div>
               </div>
               {memberError ? (
@@ -1092,61 +1344,131 @@ export function ProgramDrawer({
   )
 
   return (
-    <TransactionDrawer recordId={program.id} targetTable="hrm_benefit_programs" closeHref={closeHref}
-      title={<span className="flex items-center gap-2">{program.name}<Badge variant={program.statusVariant}>{program.statusLabel}</Badge></span>}
-      description={program.code} beforeClose={closeGuard.beforeClose}
-      primaryAction={headerActions} actions={menuActions}
-      showAttachments={false} detailsLabel={t('programWorkspace.rules')} activeTab={tab} onActiveTabChange={setTab} mountAllRecordTabs auditRefreshKey={drawer}
+    <TransactionDrawer
+      recordId={program.id}
+      targetTable="hrm_benefit_programs"
+      closeHref={closeHref}
+      title={
+        <span className="flex items-center gap-2">
+          {program.name}
+          <Badge variant={program.statusVariant}>{program.statusLabel}</Badge>
+        </span>
+      }
+      description={program.code}
+      beforeClose={closeGuard.beforeClose}
+      primaryAction={headerActions}
+      actions={menuActions}
+      showAttachments={false}
+      detailsLabel={t('programWorkspace.rules')}
+      activeTab={tab}
+      onActiveTabChange={setTab}
+      mountAllRecordTabs
+      auditRefreshKey={drawer}
       detailTabs={[
         { key: 'participants', label: t('programWorkspace.participants'), content: participants },
         { key: 'activity', label: t(program.family === 'incentive' ? 'programWorkspace.calculations' : 'programWorkspace.activity'), content: activity },
-      ]}>
+      ]}
+    >
       <div className="flex flex-col gap-4 p-4">
         {drawer.drawerRefusal ? (
           <Alert variant="destructive" className="flex items-start gap-2">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
             <span className="flex flex-col items-start gap-2">
               <span>
-                <span className="block font-medium">{drawer.drawerRefusal.title}</span>
-                <span className="block text-xs">{drawer.drawerRefusal.message}</span>
+                <span className="block font-medium">
+                  {drawer.drawerRefusal.title}
+                </span>
+                <span className="block text-xs">
+                  {drawer.drawerRefusal.message}
+                </span>
               </span>
-              <Button variant="outline" size="sm" onClick={() => router.refresh()}>{tCommon('actions.retry')}</Button>
+              <Button variant="outline" size="sm" onClick={() => router.refresh()}>
+                {tCommon('actions.retry')}
+              </Button>
             </span>
           </Alert>
         ) : null}
-        <InspectorPanel title={program.familyLabel}><dl className="grid gap-x-4 gap-y-4 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.value')}</dt>
-            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{program.valueLabel}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.columns.effective')}</dt>
-            <dd className="whitespace-nowrap font-medium tabular-nums text-slate-900 dark:text-slate-100">
-              {effectiveRange(program.effectiveFrom, program.effectiveTo)}
-            </dd>
-          </div>
-          {drawer.policyLines.map((line) => <div key={`${line.label}:${line.value}`}>
-            <dt className="text-xs text-slate-500 dark:text-slate-400">{line.label}</dt>
-            <dd className="font-medium text-slate-900 dark:text-slate-100">{line.value}</dd>
-          </div>)}
-        </dl></InspectorPanel>
+        <InspectorPanel title={program.familyLabel}>
+          <dl className="grid gap-x-4 gap-y-4 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">
+                {t('portfolio.columns.value')}
+              </dt>
+              <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                {program.valueLabel}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">
+                {t('portfolio.columns.effective')}
+              </dt>
+              <dd className="whitespace-nowrap font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                {effectiveRange(program.effectiveFrom, program.effectiveTo)}
+              </dd>
+            </div>
+            {drawer.policyLines.map((line) => (
+              <div key={`${line.label}:${line.value}`}>
+                <dt className="text-xs text-slate-500 dark:text-slate-400">
+                  {line.label}
+                </dt>
+                <dd className="font-medium text-slate-900 dark:text-slate-100">
+                  {line.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </InspectorPanel>
 
         <InspectorPanel title={t('portfolio.approvalControls.title')}>
-          {program.approvalMode === 'none' ? <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.modes.none')} · {t('portfolio.approvalControls.noneHint')}</p> : drawer.approvalPoliciesRefusal ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{drawer.approvalPoliciesRefusal.message}</p> : <>
-            <p className="text-sm text-slate-500 dark:text-slate-400">{t(drawer.approvalPolicies?.configured ? 'portfolio.approvalControls.policiesHint' : 'portfolio.approvalControls.unconfiguredStatus')}</p>
-            {drawer.approvalPolicies?.policies.map((policy) => drawer.canConfigureApprovalPolicies ? <Link key={policy.id} href={policy.href as never} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">{policy.name}</Link> : <p key={policy.id} className="text-sm font-medium">{policy.name}</p>)}
-            {drawer.canConfigureApprovalPolicies ? <div><Button asChild variant="outline" size="sm"><Link href={(drawer.approvalPolicies?.href ?? '/admin/flows') as never}>{t('portfolio.approvalControls.openFlows')}</Link></Button></div> : <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.approvalControls.administratorRemedy')}</p>}
-          </>}
+          {drawer.approvalPoliciesRefusal ? (
+            <p role="alert" className="text-sm text-red-700 dark:text-red-300">
+              {drawer.approvalPoliciesRefusal.message}
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t(drawer.approvalPolicies?.configured ? 'portfolio.approvalControls.policiesHint' : 'portfolio.approvalControls.unconfiguredStatus')}
+              </p>
+              {drawer.approvalPolicies?.policies.map((policy) =>
+                drawer.canConfigureApprovalPolicies ? (
+                  <Link key={policy.id} href={policy.href as never} className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-300">
+                    {policy.name}
+                  </Link>
+                ) : (
+                  <p key={policy.id} className="text-sm font-medium">
+                    {policy.name}
+                  </p>
+                ),
+              )}
+              {drawer.canConfigureApprovalPolicies ? (
+                <div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={(drawer.approvalPolicies?.href ?? '/admin/flows') as never}>
+                      {t('portfolio.approvalControls.openFlows')}
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {t('portfolio.approvalControls.administratorRemedy')}
+                </p>
+              )}
+            </>
+          )}
         </InspectorPanel>
 
         {!drawer.drawerRefusal && program.family === 'incentive' && program.metric !== 'approved_hours' && program.metric !== 'transactions' ? (
           <InspectorPanel title={t('portfolio.sourcesTitle')}>
             {drawer.sources.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">{drawer.sourcesEmpty}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {drawer.sourcesEmpty}
+              </p>
             ) : (
               <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                 {drawer.sources.map((s) => (
-                  <li key={s.id} className="py-1.5 text-sm text-slate-600 dark:text-slate-300">{s.accountLabel}</li>
+                  <li key={s.id} className="py-1.5 text-sm text-slate-600 dark:text-slate-300">
+                    {s.accountLabel}
+                  </li>
                 ))}
               </ul>
             )}

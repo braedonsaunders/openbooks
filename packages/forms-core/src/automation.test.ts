@@ -834,24 +834,25 @@ describe('lintAutomationGraph', () => {
   })
 })
 
-describe('explicit submission policy', () => {
+describe("zero-gate submission graphs", () => {
   const graph: AutomationGraph = {
-    schemaVersion: 1, ungatedOutcome: 'apply',
-    nodes: [{ id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } }], edges: [],
-  }
-  test('only a matching submission carries permission to apply without gates', () => {
-    assert.equal(planAutomation(graph, { kind: 'on_submit' }, emptyCtx).ungatedOutcome, 'apply')
-    assert.equal(planAutomation(graph, { kind: 'manual' }, emptyCtx).ungatedOutcome, undefined)
-    assert.equal(planAutomation({ ...graph, ungatedOutcome: undefined }, { kind: 'on_submit' }, emptyCtx).ungatedOutcome, undefined)
-    assert.equal(planAutomation({ ...graph, nodes: [] }, { kind: 'on_submit' }, emptyCtx).ungatedOutcome, undefined)
-  })
-  test('an explicit direct policy permits a lone submission trigger and rejects unsupported subjects', () => {
-    assert.equal(lintAutomationGraph(graph, new Set()).length, 0)
-    const unsupported: FlowSubjectProfile = { subjectKind: 'example', label: 'Example', triggers: ['on_submit'], actions: [], fields: [], statuses: [] }
-    assert.match(lintAutomationGraph(graph, new Set(), unsupported).join(' '), /does not support automatic submission/)
-    assert.equal(lintAutomationGraph(graph, new Set(), { ...unsupported, supportsUngatedSubmission: true }).length, 0)
-  })
-})
+    schemaVersion: 1,
+    nodes: [{ id: 'submit', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } }],
+    edges: [],
+  };
+  test("a submission trigger may finish without any approval gate or second policy switch", () => {
+    const profile: FlowSubjectProfile = { subjectKind: 'example', label: 'Example', triggers: ['on_submit'], actions: [], fields: [], statuses: [] };
+    assert.deepEqual(lintAutomationGraph(graph, new Set(), profile), []);
+    assert.deepEqual(planAutomation(graph, { kind: 'on_submit' }, emptyCtx), {
+      actions: [],
+      actionNodes: [],
+      gates: [],
+    });
+  });
+  test("graph admission rejects a second approval policy switch",()=>{
+    assert.equal(automationGraphSchema.safeParse({...graph,ungatedOutcome:"apply"}).success,false);
+  });
+});
 
 describe('flow designer integrity', () => {
   const triggerNode = (id: string, trigger: TriggerData): AutomationNode => ({

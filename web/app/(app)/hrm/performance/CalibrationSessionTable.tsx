@@ -31,7 +31,7 @@ export function CalibrationSessionTable({ detail }: { detail: Detail }) {
           key: 'decision',
           header: detail.gridCols.decide,
           cell: (row) =>
-            detail.status === 'closed' ? (
+            detail.status === 'closed' || detail.approvalPending ? (
               <div className="space-y-1">
                 <div>{row.editor.calibratedRating ?? row.proposed}</div>
                 {row.editor.potentialKey ? (

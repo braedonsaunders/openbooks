@@ -40,7 +40,7 @@ async function fixture() {
   await db.execute(sql`update app_roles set permissions='["time.manage"]'::jsonb where org_id=${org.orgId} and key='studio_member'`)
   await db.execute(sql`update app_roles set permissions='["time.self","time.clock"]'::jsonb where org_id=${org.orgId} and key='field_technician'`)
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
-    features: { projects: true, timeTracking: true }, timesheets: { requireApproval: true },
+    features: { projects: true, timeTracking: true },
   })}::jsonb where id=${org.orgId}`)
   const self = randomUUID(), colleague = randomUUID(), project = randomUUID()
   for (const [id, name] of [[self, 'Own employee'], [colleague, 'Colleague']] as const) {

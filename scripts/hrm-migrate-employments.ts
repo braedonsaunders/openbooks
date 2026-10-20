@@ -101,22 +101,31 @@ function isOperatorMapping(value: unknown): value is OperatorEmploymentMapping {
   if (typeof value !== "object" || value === null) return false;
   const mapping = value as Record<string, unknown>;
   return (
+    Object.keys(mapping).every((key) =>
+      [
+        "partyId",
+        "employerSubsidiaryId",
+        "hiredOn",
+        "terminatedOn",
+        "rationale",
+        "approvalSubmissionId",
+      ].includes(key),
+    ) &&
     typeof mapping.partyId === "string" &&
     (mapping.employerSubsidiaryId === null ||
       typeof mapping.employerSubsidiaryId === "string") &&
     (mapping.hiredOn === null || typeof mapping.hiredOn === "string") &&
-    (mapping.terminatedOn === null || typeof mapping.terminatedOn === "string") &&
-    // Free-text approver metadata is non-authoritative record context: it
-    // may be absent, and it never authorizes. Authority is the Flows
-    // approval gate named by approvalGateId.
-    isOptionalText(mapping.approvedBy) &&
-    isOptionalText(mapping.approvedAt) &&
+    (mapping.terminatedOn === null ||
+      typeof mapping.terminatedOn === "string") &&
+    // Native submission authority is re-resolved in the migration transaction.
     isOptionalText(mapping.rationale) &&
-    isOptionalText(mapping.approvalGateId)
+    isOptionalText(mapping.approvalSubmissionId)
   );
 }
 
-function mappingSetEntries(mappings: readonly OperatorEmploymentMapping[]): MappingSetEntry[] {
+function mappingSetEntries(
+  mappings: readonly OperatorEmploymentMapping[],
+): MappingSetEntry[] {
   return mappings.map((mapping) => ({
     partyId: mapping.partyId,
     employerSubsidiaryId: mapping.employerSubsidiaryId,
@@ -125,7 +134,9 @@ function mappingSetEntries(mappings: readonly OperatorEmploymentMapping[]): Mapp
   }));
 }
 
-function readOperatorMappings(path: string): OperatorEmploymentMapping[] | null {
+function readOperatorMappings(
+  path: string,
+): OperatorEmploymentMapping[] | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
@@ -137,15 +148,17 @@ function readOperatorMappings(path: string): OperatorEmploymentMapping[] | null 
   }
   const list = Array.isArray(parsed)
     ? parsed
-    : typeof parsed === "object" && parsed !== null && Array.isArray((parsed as { mappings?: unknown }).mappings)
+    : typeof parsed === "object" &&
+        parsed !== null &&
+        Array.isArray((parsed as { mappings?: unknown }).mappings)
       ? (parsed as { mappings: unknown[] }).mappings
       : null;
   if (list === null || !list.every(isOperatorMapping)) {
     console.error(
       `hrm-migrate-employments: operator mappings file ${path} must be a JSON array (or ` +
         '{"mappings": [...]} ) of {partyId, employerSubsidiaryId|null, hiredOn|null, ' +
-        'terminatedOn|null, approvalGateId?, approvedBy?, approvedAt?, rationale?} — ' +
-        "free-text approver metadata never authorizes; authority is the Flows approval gate",
+        "terminatedOn|null, approvalSubmissionId?, rationale?} — " +
+        "authority is the native Flow submission receipt",
     );
     return null;
   }
@@ -207,22 +220,31 @@ async function runRequestApproval(options: {
   collectOrg: string | null;
   apply: boolean;
 }): Promise<number> {
-  const { mappingsPath, requestedBy, orgFlag, inputPath, collectOrg, apply } = options;
+  const { mappingsPath, requestedBy, orgFlag, inputPath, collectOrg, apply } =
+    options;
   if (mappingsPath === null) {
     console.error(usage());
-    return fail("refusing --request-approval without --operator-mappings=<map.json>: approval covers an exact mapping set");
+    return fail(
+      "refusing --request-approval without --operator-mappings=<map.json>: approval covers an exact mapping set",
+    );
   }
   if (requestedBy === null || !isUuid(requestedBy)) {
     console.error(usage());
-    return fail("--requested-by=<uuid> is required; refusing to request approval without an explicit requester");
+    return fail(
+      "--requested-by=<uuid> is required; refusing to request approval without an explicit requester",
+    );
   }
   if (orgFlag === null || !isUuid(orgFlag)) {
     console.error(usage());
-    return fail("--org=<uuid> is required; refusing to request approval without an explicit tenant scope");
+    return fail(
+      "--org=<uuid> is required; refusing to request approval without an explicit tenant scope",
+    );
   }
   if (inputPath !== null || collectOrg !== null) {
     console.error(usage());
-    return fail("refusing --request-approval with --input or --collect: one run requests approval or migrates, never both");
+    return fail(
+      "refusing --request-approval with --input or --collect: one run requests approval or migrates, never both",
+    );
   }
   if (apply) {
     return fail(
@@ -243,7 +265,7 @@ async function runRequestApproval(options: {
       `hrm-migrate-employments: mapping set digest ${requested.digest} ` +
         (requested.created
           ? `submitted for Flows approval ${requested.approvalId}; pending gates: ${requested.gateIds.join(", ") || "none"}`
-          : `was already submitted for approval ${requested.approvalId}; reuse its decided gate`),
+          : `was already submitted for approval ${requested.approvalId}; reuse its native submission receipt`),
     );
     return 0;
   } catch (error) {
@@ -262,7 +284,9 @@ export interface HrmMigrationCliOptions {
  * arguments and environment. Importing this module never runs it and never
  * closes the shared pool — only the isEntrypoint block below does that.
  */
-export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promise<number> {
+export async function runHrmMigrationCli(
+  options: HrmMigrationCliOptions,
+): Promise<number> {
   const args = options.argv;
   const env = options.env ?? process.env;
   if (args.includes("--help") || args.includes("-h")) {
@@ -275,20 +299,34 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
         "Export OPENBOOKS_DB_URL (and OPENBOOKS_RUNTIME_DB_URL) for the target database first.",
     );
   }
-  const orgFlag = args.find((a) => a.startsWith("--org="))?.slice("--org=".length) ?? null;
-  const inputPath = args.find((a) => a.startsWith("--input="))?.slice("--input=".length) ?? null;
-  const collectOrg =
-    args.find((a) => a.startsWith("--collect="))?.slice("--collect=".length) ?? null;
-  const mappingsPath =
-    args.find((a) => a.startsWith("--operator-mappings="))?.slice("--operator-mappings=".length) ??
+  const orgFlag =
+    args.find((a) => a.startsWith("--org="))?.slice("--org=".length) ?? null;
+  const inputPath =
+    args.find((a) => a.startsWith("--input="))?.slice("--input=".length) ??
     null;
+  const collectOrg =
+    args.find((a) => a.startsWith("--collect="))?.slice("--collect=".length) ??
+    null;
+  const mappingsPath =
+    args
+      .find((a) => a.startsWith("--operator-mappings="))
+      ?.slice("--operator-mappings=".length) ?? null;
   const apply = args.includes("--apply");
   const allowPartial = args.includes("--allow-partial");
   const allowProduction = args.includes("--allow-production");
   const requestApproval = args.includes("--request-approval");
-  const dryRunHash = args.find((a) => a.startsWith("--dry-run-hash="))?.slice("--dry-run-hash=".length) ?? null;
-  const appliedBy = args.find((a) => a.startsWith("--applied-by="))?.slice("--applied-by=".length) ?? null;
-  const requestedBy = args.find((a) => a.startsWith("--requested-by="))?.slice("--requested-by=".length) ?? null;
+  const dryRunHash =
+    args
+      .find((a) => a.startsWith("--dry-run-hash="))
+      ?.slice("--dry-run-hash=".length) ?? null;
+  const appliedBy =
+    args
+      .find((a) => a.startsWith("--applied-by="))
+      ?.slice("--applied-by=".length) ?? null;
+  const requestedBy =
+    args
+      .find((a) => a.startsWith("--requested-by="))
+      ?.slice("--requested-by=".length) ?? null;
   const unknown = args.filter(
     (a) =>
       !a.startsWith("--org=") &&
@@ -309,18 +347,31 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
   }
   if (appliedBy !== null && !isUuid(appliedBy)) {
     console.error(usage());
-    return fail(`--applied-by=${appliedBy} is not a valid UUID; refusing without an explicit applying actor`);
+    return fail(
+      `--applied-by=${appliedBy} is not a valid UUID; refusing without an explicit applying actor`,
+    );
   }
   if (requestApproval) {
-    return runRequestApproval({ mappingsPath, requestedBy, orgFlag, inputPath, collectOrg, apply });
+    return runRequestApproval({
+      mappingsPath,
+      requestedBy,
+      orgFlag,
+      inputPath,
+      collectOrg,
+      apply,
+    });
   }
   if (collectOrg !== null && inputPath !== null) {
     console.error(usage());
-    return fail("refusing --collect with --input: one run builds rows from the live database or reads them, never both");
+    return fail(
+      "refusing --collect with --input: one run builds rows from the live database or reads them, never both",
+    );
   }
   if (mappingsPath !== null && collectOrg === null) {
     console.error(usage());
-    return fail("refusing --operator-mappings without --collect: operator overrides attach at collection time");
+    return fail(
+      "refusing --operator-mappings without --collect: operator overrides attach at collection time",
+    );
   }
   // --collect carries the tenant scope; --org may repeat it but never
   // override it with a second org.
@@ -333,13 +384,17 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
   }
   if (orgId === null || !isUuid(orgId)) {
     console.error(usage());
-    return fail("--org=<uuid> (or --collect=<uuid>) is required; refusing to migrate without an explicit tenant scope");
+    return fail(
+      "--org=<uuid> (or --collect=<uuid>) is required; refusing to migrate without an explicit tenant scope",
+    );
   }
   let rows: SourcePersonRow[];
   if (collectOrg !== null) {
     if (!isUuid(collectOrg)) {
       console.error(usage());
-      return fail(`--collect=${collectOrg} is not a valid UUID; refusing to collect without an explicit tenant scope`);
+      return fail(
+        `--collect=${collectOrg} is not a valid UUID; refusing to collect without an explicit tenant scope`,
+      );
     }
     let operatorMappings: OperatorEmploymentMapping[] | undefined;
     if (mappingsPath !== null) {
@@ -348,7 +403,9 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
       operatorMappings = read;
     }
     try {
-      const collected = await collectLegacyEmployments(collectOrg, { operatorMappings });
+      const collected = await collectLegacyEmployments(collectOrg, {
+        operatorMappings,
+      });
       rows = [...collected.rows];
       if (operatorMappings !== undefined) {
         console.error(
@@ -377,7 +434,10 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
           `${collectOrg}; evidence hash ${collected.evidenceHash}`,
       );
     } catch (error) {
-      if (error instanceof EmploymentCollectionError || error instanceof MappingApprovalError) {
+      if (
+        error instanceof EmploymentCollectionError ||
+        error instanceof MappingApprovalError
+      ) {
         return fail(error.message);
       }
       throw error;
@@ -385,19 +445,25 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
   } else {
     if (inputPath === null || inputPath.length === 0) {
       console.error(usage());
-      return fail("--input=<rows.json> is required: the collector output array of source person rows");
+      return fail(
+        "--input=<rows.json> is required: the collector output array of source person rows",
+      );
     }
     let raw: string;
     try {
       raw = inputPath === "-" ? readStdin() : readFileSync(inputPath, "utf8");
     } catch (error) {
-      return fail(`cannot read input ${inputPath}: ${(error as Error).message}`);
+      return fail(
+        `cannot read input ${inputPath}: ${(error as Error).message}`,
+      );
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw) as unknown;
     } catch (error) {
-      return fail(`cannot parse input ${inputPath}: ${(error as Error).message}`);
+      return fail(
+        `cannot parse input ${inputPath}: ${(error as Error).message}`,
+      );
     }
     if (!Array.isArray(parsed) || !parsed.every(isSourcePersonRow)) {
       return fail(
@@ -483,7 +549,9 @@ function isEntrypoint(): boolean {
   const invoked = process.argv[1];
   if (!invoked) return false;
   try {
-    return realpathSync(invoked) === realpathSync(fileURLToPath(import.meta.url));
+    return (
+      realpathSync(invoked) === realpathSync(fileURLToPath(import.meta.url))
+    );
   } catch {
     return false;
   }
@@ -492,7 +560,9 @@ function isEntrypoint(): boolean {
 if (isEntrypoint()) {
   void (async () => {
     try {
-      process.exitCode = await runHrmMigrationCli({ argv: process.argv.slice(2) });
+      process.exitCode = await runHrmMigrationCli({
+        argv: process.argv.slice(2),
+      });
     } catch (error) {
       if (
         error instanceof EmploymentMigrationError ||

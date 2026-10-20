@@ -1,3 +1,5 @@
+import { lockApprovalSubject } from "../platform/approval-routing.ts";
+import { requestNativeCommandApproval } from "../platform/approval-routing.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, schema, withBypassContext, withMaintenanceTransaction } from "../platform/db.ts";
@@ -121,7 +123,7 @@ function requireActor(actorId: string | null | undefined, label: string): string
  * Evidence a change-set header transition (review/approve/apply) with the
  * locked before-image and the committed after-image. The per-row apply audit
  * records WHAT changed; these rows record WHO authorized each step of the
- * four-eyes chain. Runs in the caller's maintenance transaction.
+ * configured promotion lifecycle. Runs in the caller's maintenance transaction.
  */
 async function auditChangeSetTransition(
   id: string,
@@ -230,15 +232,6 @@ async function assertPromotionOwner(
     if (counterpart.rows.length) return;
   }
   throw new Error(`${table} promotion requires the record owner`);
-}
-
-async function assertDistinctActors(
-  actorId: string,
-  existing: ReadonlyArray<[string, string | null]>,
-): Promise<void> {
-  for (const [label, prior] of existing) {
-    if (prior === actorId) throw new Error(`${label} and lifecycle actor must be different users`);
-  }
 }
 
 function contentSig(table: string, row: Record<string, unknown> | null): string {
@@ -404,121 +397,192 @@ export async function buildChangeSet(
   }));
 }
 
-/** Mark a complete capture as reviewed by an independent production actor who holds admin.sandboxes.manage. */
-export async function reviewChangeSet(changeSetId: string, reviewerId?: string | null): Promise<void> {
+/** Validate a complete capture and submit it through the production tenant’s Flow policy. */
+export async function reviewChangeSet(
+  changeSetId: string,
+  reviewerId?: string | null,
+): Promise<void> {
   const id = assertUuid(changeSetId);
   const actor = requireActor(reviewerId, "change-set review");
-  await withChangeSetSandboxLock(id, () => withMaintenanceTransaction(null, async () => {
-    const result = await db.execute<ChangeSetRow>(sql`
+  await withChangeSetSandboxLock(id, () =>
+    withMaintenanceTransaction(null, async () => {
+      const identity = (
+        await db.execute<{ org_id: string }>(
+          sql`select org_id from change_sets where id=${id}`,
+        )
+      ).rows[0];
+      if (!identity) throw new Error("The change set is unavailable.");
+      await lockApprovalSubject(identity.org_id, "sandbox_change_set", id);
+      const result = await db.execute<ChangeSetRow>(sql`
       select org_id, sandbox_org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
         from change_sets where id = ${id} for update`);
-    const c = result.rows[0];
-    if (!c) throw new Error(`change set not found: ${id}`);
-    const prod = assertUuid(c.org_id);
-    await assertActiveActor(actor, prod);
-    await promotionAuthority(actor, prod);
-    if (c.status !== "draft") throw new Error(`change set is ${c.status}, not draft`);
-    if (!c.capture_complete) throw new Error("change set capture is incomplete");
-    await assertCapturedSandboxReady(c.sandbox_org_id, prod);
-    await assertDistinctActors(actor, [["creator", c.created_by]]);
-    const count = await db.execute<{ count: string }>(sql`
+      const c = result.rows[0];
+      if (!c) throw new Error(`change set not found: ${id}`);
+      const prod = assertUuid(c.org_id);
+      await assertActiveActor(actor, prod);
+      await promotionAuthority(actor, prod);
+      if (c.status !== "draft") throw new Error(`change set is ${c.status}, not draft`);
+      if (!c.capture_complete) throw new Error("change set capture is incomplete");
+      await assertCapturedSandboxReady(c.sandbox_org_id, prod);
+      const count = await db.execute<{ count: string }>(sql`
       select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`);
-    if (Number(count.rows[0]?.count ?? -1) !== Number(c.item_count)) {
+      if (Number(count.rows[0]?.count ?? -1) !== Number(c.item_count)) {
       throw new Error("change set item count does not match its captured snapshot");
     }
-    await db.execute(sql`
+      const reviewed = await db.execute(sql`
       update change_sets
          set status = 'reviewed', reviewed_at = now(), reviewed_by = ${actor}, updated_at = now(), updated_by = ${actor}
-       where id = ${id} and org_id = ${prod} and status = 'draft'`);
-    await auditChangeSetTransition(id, prod, actor, "review", c);
-  }));
+       where id = ${id} and org_id = ${prod} and status = 'draft' returning id`);
+      if (reviewed.rows.length !== 1)
+        throw new Error("The capture changed during submission. Reload it.");
+      await auditChangeSetTransition(id, prod, actor, "review", c);
+      await approveChangeSetInTransaction(id, actor);
+    }),
+  );
 }
 
-/** Approve a reviewed capture by a second independent production actor who holds admin.sandboxes.manage. */
-export async function approveChangeSet(changeSetId: string, approverId?: string | null): Promise<void> {
-  const id = assertUuid(changeSetId);
-  const actor = requireActor(approverId, "change-set approval");
-  await withChangeSetSandboxLock(id, () => withMaintenanceTransaction(null, async () => {
-    const result = await db.execute<ChangeSetRow>(sql`
+/** Submit the reviewed capture to the production tenant’s Flow policy. */
+export async function approveChangeSet(
+  changeSetId: string,
+  approverId?: string | null,
+  approvalRunId?: string,
+): Promise<void> {
+  const id = assertUuid(changeSetId),
+    actor = requireActor(approverId, "change-set submission");
+  await withChangeSetSandboxLock(id, () =>
+    withMaintenanceTransaction(null, () =>
+      approveChangeSetInTransaction(id, actor, approvalRunId),
+    ),
+  );
+}
+
+async function approveChangeSetInTransaction(
+  id: string,
+  actor: string,
+  approvalRunId?: string,
+): Promise<void> {
+  const identity = (
+    await db.execute<{ org_id: string }>(
+      sql`select org_id from change_sets where id=${id}`,
+    )
+  ).rows[0];
+  if (!identity) throw new Error("The change set is unavailable.");
+  await lockApprovalSubject(identity.org_id, "sandbox_change_set", id);
+  const result = await db.execute<ChangeSetRow>(sql`
       select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
         from change_sets where id = ${id} for update`);
-    const c = result.rows[0];
-    if (!c) throw new Error(`change set not found: ${id}`);
-    const prod = assertUuid(c.org_id);
-    await assertActiveActor(actor, prod);
-    await promotionAuthority(actor, prod);
-    if (c.status !== "reviewed") throw new Error(`change set is ${c.status}, not reviewed`);
-    if (!c.capture_complete) throw new Error("change set capture is incomplete");
-    await assertDistinctActors(actor, [["creator", c.created_by], ["reviewer", c.reviewed_by]]);
-    const count = await db.execute<{ count: string }>(sql`
+  const c = result.rows[0];
+  if (!c) throw new Error(`change set not found: ${id}`);
+  const prod = assertUuid(c.org_id);
+  await assertActiveActor(actor, prod);
+  await promotionAuthority(actor, prod);
+  if (c.status !== "reviewed") throw new Error(`change set is ${c.status}, not reviewed`);
+  if (!c.capture_complete) throw new Error("change set capture is incomplete");
+  const count = await db.execute<{ count: string }>(sql`
       select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`);
-    if (Number(count.rows[0]?.count ?? -1) !== Number(c.item_count)) {
+  if (Number(count.rows[0]?.count ?? -1) !== Number(c.item_count)) {
       throw new Error("change set item count does not match its captured snapshot");
     }
-    await db.execute(sql`
+  if (
+    await requestNativeCommandApproval({
+      orgId: prod,
+      actorId: actor,
+      subjectKind: "sandbox_change_set",
+      subjectId: id,
+      command: {},
+      approvalRunId,
+    })
+  )
+    return;
+  const approved = await db.execute(sql`
       update change_sets
          set status = 'approved', approved_at = now(), approved_by = ${actor}, updated_at = now(), updated_by = ${actor}
-       where id = ${id} and org_id = ${prod} and status = 'reviewed'`);
-    await auditChangeSetTransition(id, prod, actor, "approve", c);
-  }));
+       where id = ${id} and org_id = ${prod} and status = 'reviewed' returning id`);
+  if (approved.rows.length !== 1)
+    throw new Error(
+      "The capture changed before release. Reload its Flow state.",
+    );
+  await auditChangeSetTransition(id, prod, actor, "approve", c);
+}
+
+/** Resolve the frozen production capture within the Flow decision's existing tenant transaction. */
+export async function releasePromotionApproval(args: {
+  subjectId: string;
+  outcome: "approved" | "rejected";
+  approvalRunId?: string;
+  ctx: { orgId: string; userId?: string | null };
+}): Promise<void> {
+  if (args.outcome !== "approved") return;
+  const actor = requireActor(args.ctx.userId, "change-set approval");
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`select id from change_sets where org_id=${args.ctx.orgId} and id=${args.subjectId} for update`,
+    )
+  ).rows[0];
+  if (!row || !args.approvalRunId)
+    throw new Error("The native promotion submission is unavailable.");
+  await approveChangeSetInTransaction(
+    args.subjectId,
+    actor,
+    args.approvalRunId,
+  );
 }
 
 /** Apply an approved change set to production in one transaction. */
-export async function applyChangeSet(changeSetId: string, applierId?: string | null): Promise<void> {
+export async function applyChangeSet(
+  changeSetId: string,
+  applierId?: string | null,
+): Promise<void> {
   const id = assertUuid(changeSetId);
   const actor = requireActor(applierId, "change-set application");
-  await withChangeSetSandboxLock(id, () => withMaintenanceTransaction(null, async () => {
-    await db.execute(sql`set local time zone 'UTC'`);
-    const result = await db.execute<ChangeSetRow>(sql`
+  await withChangeSetSandboxLock(id, () =>
+    withMaintenanceTransaction(null, async () => {
+      await db.execute(sql`set local time zone 'UTC'`);
+      const result = await db.execute<ChangeSetRow>(sql`
       select org_id, sandbox_org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
         from change_sets where id = ${id} for update`);
-    const c = result.rows[0];
-    if (!c) throw new Error(`change set not found: ${id}`);
-    const prod = assertUuid(c.org_id);
-    await assertActiveActor(actor, prod);
-    if (c.status !== "approved") throw new Error(`change set is ${c.status}, not approved`);
-    if (!c.capture_complete) throw new Error("change set capture is incomplete");
-    // The sandbox may have refreshed (or started to) after approval: refuse
-    // to apply while its customization layer is anything but quiescent. The
-    // per-item expected_before check below still guards drift that landed
-    // between two ready states; this guards the mid-rewrite window itself.
-    await assertCapturedSandboxReady(c.sandbox_org_id, prod);
-    await assertDistinctActors(actor, [
-      ["creator", c.created_by],
-      ["reviewer", c.reviewed_by],
-      ["approver", c.approved_by],
-    ]);
+      const c = result.rows[0];
+      if (!c) throw new Error(`change set not found: ${id}`);
+      const prod = assertUuid(c.org_id);
+      await assertActiveActor(actor, prod);
+      if (c.status !== "approved") throw new Error(`change set is ${c.status}, not approved`);
+      if (!c.capture_complete) throw new Error("change set capture is incomplete");
+      // The sandbox may have refreshed (or started to) after approval: refuse
+      // to apply while its customization layer is anything but quiescent. The
+      // per-item expected_before check below still guards drift that landed
+      // between two ready states; this guards the mid-rewrite window itself.
+      await assertCapturedSandboxReady(c.sandbox_org_id, prod);
 
-    const items = await db.execute<ChangeSetItemRow>(sql`
+      const items = await db.execute<ChangeSetItemRow>(sql`
       select table_name, target_id, op, payload, expected_before, base_captured from change_set_items
        where change_set_id = ${id} and org_id = ${prod} order by created_at, id`);
-    if (items.rows.length !== Number(c.item_count)) {
+      if (items.rows.length !== Number(c.item_count)) {
       throw new Error("change set item count does not match its captured snapshot");
     }
-    if (items.rows.some(item => !item.base_captured)) {
+      if (items.rows.some(item => !item.base_captured)) {
       throw new Error("change set has no captured production base; recapture and review it before applying");
     }
 
-    const authority = await promotionAuthority(actor, prod);
+      const authority = await promotionAuthority(actor, prod);
 
-    for (const it of items.rows) {
-      const t = it.table_name;
-      if (!PROMOTABLE.includes(t)) throw new Error(`change set contains non-promotable table: ${t}`);
-      const requiredPermission = PROMOTION_PERMISSIONS[t]!;
-      if (!permissionSetCovers(authority.permissions, requiredPermission)) {
+      for (const it of items.rows) {
+        const t = it.table_name;
+        if (!PROMOTABLE.includes(t)) throw new Error(`change set contains non-promotable table: ${t}`);
+        const requiredPermission = PROMOTION_PERMISSIONS[t]!;
+        if (!permissionSetCovers(authority.permissions, requiredPermission)) {
         throw new Error(`${t} promotion requires ${requiredPermission}`);
       }
-      if (t === "user_scripts" && !(await lockAndCheckOrgFeature(db, prod, "scripts"))) {
+        if (t === "user_scripts" && !(await lockAndCheckOrgFeature(db, prod, "scripts"))) {
         throw new Error("scripts feature is disabled");
       }
-      const target = assertUuid(it.target_id);
-      const table = sql`public.${sql.identifier(t)}`;
-      const runtimeColumns = t === "user_scripts" ? `{${[...SCRIPT_RUNTIME].join(",")}}` : "{}";
-      // Insert captures carry a null base, and jsonb `- text[]` rejects
-      // non-objects — strip runtime cursors only from object bases so new
-      // scripts can still promote.
-      const expectedBefore = JSON.stringify(it.expected_before);
-      const prior = await db.execute<{ row: Record<string, unknown>; matches_base: boolean }>(sql`
+        const target = assertUuid(it.target_id);
+        const table = sql`public.${sql.identifier(t)}`;
+        const runtimeColumns = t === "user_scripts" ? `{${[...SCRIPT_RUNTIME].join(",")}}` : "{}";
+        // Insert captures carry a null base, and jsonb `- text[]` rejects
+        // non-objects — strip runtime cursors only from object bases so new
+        // scripts can still promote.
+        const expectedBefore = JSON.stringify(it.expected_before);
+        const prior = await db.execute<{ row: Record<string, unknown>; matches_base: boolean }>(sql`
         select to_jsonb(existing) as row,
                (to_jsonb(existing) - ${runtimeColumns}::text[]) is not distinct from
                (case when jsonb_typeof(${expectedBefore}::jsonb) = 'object'
@@ -526,16 +590,16 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
                      else ${expectedBefore}::jsonb end) as matches_base
           from ${table} existing
          where id = ${target} and org_id = ${prod} for update`);
-      const before = prior.rows[0]?.row ?? null;
-      if (it.op === "insert" ? before !== null : before === null) {
+        const before = prior.rows[0]?.row ?? null;
+        if (it.op === "insert" ? before !== null : before === null) {
         throw new Error(`promotion target ${t}/${target} ${it.op === "insert" ? "already exists" : "no longer exists"}; recapture the change set`);
       }
-      if (it.op !== "insert" && !prior.rows[0]!.matches_base) {
+        if (it.op !== "insert" && !prior.rows[0]!.matches_base) {
         throw new Error(`promotion target ${t}/${target} changed since capture; recapture and review the change set`);
       }
-      await assertPromotionOwner(t, before, actor, authority.permissions, c.sandbox_org_id, true);
-      let after: Record<string, unknown> | null = null;
-      if (it.op === "delete") {
+        await assertPromotionOwner(t, before, actor, authority.permissions, c.sandbox_org_id, true);
+        let after: Record<string, unknown> | null = null;
+        if (it.op === "delete") {
         if (t === "user_scripts") {
           const history = await db.execute(sql`select id from script_runs where org_id = ${prod} and script_id = ${target} limit 1`);
           if (history.rows.length) throw new Error("This script has run history and cannot be deleted. Deactivate it instead to preserve its audit history.");
@@ -550,43 +614,46 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
         }
         await db.execute(sql`delete from ${table} where id = ${target} and org_id = ${prod}`);
       } else {
-        const payload = it.payload;
-        if (!payload || typeof payload !== "object" || Array.isArray(payload)
+          const payload = it.payload;
+          if (!payload || typeof payload !== "object" || Array.isArray(payload)
           || typeof payload.id !== "string" || payload.id.toLowerCase() !== target.toLowerCase()
           || typeof payload.org_id !== "string" || payload.org_id.toLowerCase() !== prod.toLowerCase()) {
           throw new Error(`promotion payload identity does not match ${t}/${target}`);
         }
-        if (t === "user_scripts") {
-          const invalid = validateScriptConfiguration({
+          if (t === "user_scripts") {
+            const invalid = validateScriptConfiguration({
             name: payload.name, triggerPoint: payload.trigger_point, source: payload.source,
             documentKind: payload.document_kind, endpointSlug: payload.endpoint_slug,
             cron: payload.cron, timeoutMs: payload.timeout_ms, sortOrder: payload.sort_order,
             isActive: payload.is_active,
           });
-          if (invalid) throw new Error(`script promotion: ${invalid.message}`);
-          // Ignore even legacy captures' runtime values. Preserve the current
-          // production cursor unless scheduling policy itself is changing.
-          for (const field of SCRIPT_RUNTIME) delete payload[field];
-          const next = payload.trigger_point === "scheduled"
+            if (invalid) throw new Error(`script promotion: ${invalid.message}`);
+            // Ignore even legacy captures' runtime values. Preserve the current
+            // production cursor unless scheduling policy itself is changing.
+            for (const field of SCRIPT_RUNTIME) delete payload[field];
+            const next = payload.trigger_point === "scheduled"
             ? computeScheduledScriptNextRunAt(typeof payload.cron === "string" ? payload.cron : null)
             : null;
-          const schedulingChanged = !before || ["trigger_point", "cron", "is_active"].some(field => payload[field] !== before[field]);
-          if (schedulingChanged) payload.next_run_at = payload.is_active ? next?.toISOString() ?? null : null;
-          if (!before) payload.last_run_at = null;
-          // Unattended runs act under this user's live permissions, so the
-          // promoter must hold what the script calls, like any saver.
-          const refusal = await scriptSaveRefusal(prod, actor, String(payload.source ?? ""));
-          if (refusal && payload.trigger_point !== "endpoint") throw new Error(`script promotion: ${refusal}`);
-          payload.run_as_user_id = actor;
-        }
-        const userField = USER_REFERENCE_COLUMNS[t];
-        if (userField && payload[userField] !== null) {
+            const schedulingChanged = !before || ["trigger_point", "cron", "is_active"].some(field => payload[field] !== before[field]);
+            if (schedulingChanged)
+              payload.next_run_at = payload.is_active
+                ? (next?.toISOString() ?? null)
+                : null;
+            if (!before) payload.last_run_at = null;
+            // Unattended runs act under this user's live permissions, so the
+            // promoter must hold what the script calls, like any saver.
+            const refusal = await scriptSaveRefusal(prod, actor, String(payload.source ?? ""));
+            if (refusal && payload.trigger_point !== "endpoint") throw new Error(`script promotion: ${refusal}`);
+            payload.run_as_user_id = actor;
+          }
+          const userField = USER_REFERENCE_COLUMNS[t];
+          if (userField && payload[userField] !== null) {
           const ownerId = typeof payload[userField] === "string" ? assertUuid(payload[userField]) : null;
           const owner = (await db.execute(sql`select id from users where org_id=${prod} and id=${ownerId} for key share`)).rows[0];
           if (!owner) throw new Error(`promotion ${t}/${target}: user reference must belong to production; recapture the change set`);
         }
-        await assertPromotionOwner(t, payload, actor, authority.permissions, c.sandbox_org_id, false);
-        if (t === "report_definitions") {
+          await assertPromotionOwner(t, payload, actor, authority.permissions, c.sandbox_org_id, false);
+          if (t === "report_definitions") {
           if (!before && (payload.kind !== "custom" || payload.system)) {
             throw new Error("built-in report identity is managed by setup, not promotion");
           }
@@ -594,36 +661,36 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
             throw new Error("promotion cannot change report identity (kind, system, or report type)");
           }
         }
-        if (t === "app_roles") {
-          const requested = promotedRolePermissions(payload.permissions);
-          const current = new Set(before ? promotedRolePermissions(before.permissions) : []);
-          const missing = permissionsOutsideCeiling(authority.permissions, requested.filter(key => !current.has(key)));
-          if (missing.length) throw new Error(`cannot grant permissions you do not hold: ${missing.join(", ")}`);
-          payload.permissions = requested;
-          // Revalidate a captured scope against live, locked production rows;
-          // the target entity can disappear between capture and application.
-          const subsidiaries = (await db.execute<{ id: string }>(sql`
+          if (t === "app_roles") {
+            const requested = promotedRolePermissions(payload.permissions);
+            const current = new Set(before ? promotedRolePermissions(before.permissions) : []);
+            const missing = permissionsOutsideCeiling(authority.permissions, requested.filter(key => !current.has(key)));
+            if (missing.length) throw new Error(`cannot grant permissions you do not hold: ${missing.join(", ")}`);
+            payload.permissions = requested;
+            // Revalidate a captured scope against live, locked production rows;
+            // the target entity can disappear between capture and application.
+            const subsidiaries = (await db.execute<{ id: string }>(sql`
             select id from subsidiaries where org_id=${prod} order by id for share`)).rows;
-          const nextRestriction = remapRoleRestriction(payload.subsidiary_restriction,
+            const nextRestriction = remapRoleRestriction(payload.subsidiary_restriction,
             new Map(subsidiaries.map(row => [row.id, row.id])), `promotion role ${target}`);
-          const coverage = await loadSubsidiaryGrantCoverage(db, prod, actor);
-          if (!authority.isSuperAdmin) {
-            const previousRestriction: SubsidiaryRestriction | null = before
-              ? before.subsidiary_restriction as SubsidiaryRestriction | null
-              : { mode: "list", subsidiaryIds: [] };
-            const edit = await resolveRestrictionEditScopes(db, prod, previousRestriction, nextRestriction);
-            const outsideCoverage = edit.additions === undefined
+            const coverage = await loadSubsidiaryGrantCoverage(db, prod, actor);
+            if (!authority.isSuperAdmin) {
+              const previousRestriction: SubsidiaryRestriction | null = before
+                ? (before.subsidiary_restriction as SubsidiaryRestriction | null)
+                : { mode: "list", subsidiaryIds: [] };
+              const edit = await resolveRestrictionEditScopes(db, prod, previousRestriction, nextRestriction);
+              const outsideCoverage = edit.additions === undefined
               ? true
               : edit.additions === null
                 ? !grantedRestrictionWithinCoverage(coverage, nextRestriction)
                 : edit.additions.size > 0 && !grantedScopeSetWithinCoverage(coverage, edit.additions);
-            if (outsideCoverage) {
+              if (outsideCoverage) {
               throw new Error("cannot grant subsidiary access beyond your scope: ask an administrator whose scope covers the requested entities to make this change");
             }
-          }
-          payload.subsidiary_restriction = nextRestriction;
-          if (!before && payload.is_built_in) throw new Error("built-in roles are managed by setup, not promotion");
-          if (before) {
+            }
+            payload.subsidiary_restriction = nextRestriction;
+            if (!before && payload.is_built_in) throw new Error("built-in roles are managed by setup, not promotion");
+            if (before) {
             if (before.is_built_in && before.key === "admin") throw new Error("the Administrator role cannot be edited by promotion");
             if (payload.key !== before.key || payload.is_built_in !== before.is_built_in) {
               throw new Error("promotion cannot change a role's key or built-in identity");
@@ -632,22 +699,22 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
               throw new Error("only permissions and subsidiary restrictions can change on a built-in role");
             }
           }
-        }
-        // The payload was captured with row_to_json, so it carries GENERATED
-        // ALWAYS projections too. They are known columns (never "obsolete") but
-        // are recomputed by the target row and can never be SET or inserted.
-        const catalog = (await db.execute<{ column_name: string; is_generated: string }>(sql`
+          }
+          // The payload was captured with row_to_json, so it carries GENERATED
+          // ALWAYS projections too. They are known columns (never "obsolete") but
+          // are recomputed by the target row and can never be SET or inserted.
+          const catalog = (await db.execute<{ column_name: string; is_generated: string }>(sql`
           select column_name, is_generated from information_schema.columns
            where table_schema = 'public' and table_name = ${t} order by ordinal_position`)).rows;
-        const known = catalog.map((row) => row.column_name);
-        const columns = catalog.filter((row) => row.is_generated === "NEVER").map((row) => row.column_name);
-        if (Object.keys(payload).some((key) => !known.includes(key))) {
+          const known = catalog.map((row) => row.column_name);
+          const columns = catalog.filter((row) => row.is_generated === "NEVER").map((row) => row.column_name);
+          if (Object.keys(payload).some((key) => !known.includes(key))) {
           throw new Error(`promotion payload contains obsolete or unknown columns for ${t}; recapture the change set`);
         }
-        refuseInactivePromotedDefault(t, payload, before);
-        const fields = columns.filter((column) => !STRUCTURAL.has(column) && Object.hasOwn(payload, column));
-        const incoming = sql`jsonb_populate_record(null::${table}, ${JSON.stringify(payload)}::jsonb) incoming`;
-        if (it.op === "update") {
+          refuseInactivePromotedDefault(t, payload, before);
+          const fields = columns.filter((column) => !STRUCTURAL.has(column) && Object.hasOwn(payload, column));
+          const incoming = sql`jsonb_populate_record(null::${table}, ${JSON.stringify(payload)}::jsonb) incoming`;
+          if (it.op === "update") {
           const sets = fields.map((column) => sql`${sql.identifier(column)} = incoming.${sql.identifier(column)}`);
           if (columns.includes("updated_at")) sets.push(sql`updated_at = clock_timestamp()`);
           if (columns.includes("updated_by")) sets.push(sql`updated_by = ${actor}`);
@@ -670,15 +737,16 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
             select ${sql.join(values, sql`, `)} from ${incoming} returning to_jsonb(inserted) as row`);
           after = inserted.rows[0]!.row;
         }
-      }
-      await db.execute(sql`insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+        }
+        await db.execute(sql`insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
         values (${prod}, ${t}, ${target}, ${it.op},
           ${JSON.stringify({ operation: "apply_change_set", changeSetId: id, before, after })}::jsonb, ${actor})`);
-    }
-    await db.execute(sql`
+      }
+      await db.execute(sql`
       update change_sets
          set status = 'applied', applied_at = now(), applied_by = ${actor}, updated_at = now(), updated_by = ${actor}
        where id = ${id} and org_id = ${prod} and status = 'approved'`);
-    await auditChangeSetTransition(id, prod, actor, "apply", c);
-  }));
+      await auditChangeSetTransition(id, prod, actor, "apply", c);
+    }),
+  );
 }

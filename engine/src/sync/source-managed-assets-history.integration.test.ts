@@ -1,3 +1,4 @@
+import { before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -26,52 +27,60 @@ test('source-managed depreciation correction preserves posted evidence and resto
     const asset=(await db.execute<{id:string;schedule_id:string}>(sql`
       select a.id,s.id as schedule_id from fixed_assets a join depreciation_schedules s on s.org_id=a.org_id and s.asset_id=a.id
       where a.org_id=${org.orgId} and a.custom->'netsuiteFam'->>'sourceId'='A1' and s.book_id=${org.bookId}`)).rows[0]!;
-    // Retain a native posting made before source ownership was established.
-    await db.execute(sql`update fixed_assets set custom=jsonb_set(custom,'{sourceManaged}','false') where org_id=${org.orgId} and id=${asset.id}`);
-    const posted=await db.transaction(tx=>postEntry(tx,{orgId:org.orgId,bookId:org.bookId,subsidiaryId:org.subsidiaryId,
+      // Retain a native posting made before source ownership was established.
+      await db.execute(sql`update fixed_assets set custom=jsonb_set(custom,'{sourceManaged}','false') where org_id=${org.orgId} and id=${asset.id}`);
+      const posted=await db.transaction(tx=>postEntry(tx,{orgId:org.orgId,bookId:org.bookId,subsidiaryId:org.subsidiaryId,
       periodId:org.periodId,postingDate:'2026-07-31',origin:'depreciation',entryNumber:`DEP-${asset.id}`,actorId,currency:'CAD',
       lines:[{accountId:org.accounts.cogs,amount:'25',departmentId:null},{accountId:org.accounts.adjustment,amount:'-25'}]}));
-    const local=(await db.execute<{id:string}>(sql`insert into depreciation_schedule_lines(org_id,schedule_id,period_id,sequence,planned_amount,posted_amount,journal_entry_id,source,created_by,updated_by)
+      const local=(await db.execute<{id:string}>(sql`insert into depreciation_schedule_lines(org_id,schedule_id,period_id,sequence,planned_amount,posted_amount,journal_entry_id,source,created_by,updated_by)
       values(${org.orgId},${asset.schedule_id},${org.periodId},10,'25','25',${posted.entryId},'formula',${actorId},${actorId}) returning id`)).rows[0]!;
-    await db.execute(sql`update fixed_assets set custom=jsonb_set(custom,'{sourceManaged}','true') where org_id=${org.orgId} and id=${asset.id}`);
-    const original=(await db.execute(sql`select to_jsonb(l) as evidence from depreciation_schedule_lines l where org_id=${org.orgId} and id=${local.id}`)).rows[0];
-    await assert.rejects(()=>syncNetSuiteFixedAssets(stubSource(snapshot()),options),/locally posted depreciation/);
-    await assert.rejects(()=>buildSchedule(asset.id,org.orgId,actorId),/source-managed/);
-    await assert.rejects(()=>previewDepreciation(org.orgId,{asOfDate:'2026-07-31',assetIds:[asset.id]}),/source-managed/);
-    await assert.rejects(()=>runDepreciation(org.orgId,'2026-07-31',actorId,asset.id),/source-managed/);
-    await assert.rejects(()=>db.execute(sql`insert into depreciation_schedule_lines(org_id,schedule_id,period_id,sequence,planned_amount,source) values(${org.orgId},${asset.schedule_id},${org.periodId},11,'2','formula')`),error=>error instanceof Error && error.cause instanceof Error && /source depreciation/.test(error.cause.message));
-    const input={orgId:org.orgId,assetId:asset.id,lineId:local.id,actorId,reason:'Correct local depreciation to preserve the source accounting authority'};
-    await db.transaction(tx=>upsertLock({tx,orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,module:'assets',state:'closed',actorId,reason:'Close the measurement period'}));
-    await assert.rejects(()=>reverseSourceManagedDepreciation(input),/closed/);
-    assert.equal((await db.execute(sql`select status from journal_entries where org_id=${org.orgId} and id=${posted.entryId}`)).rows[0]!.status,'posted');
-    assert.equal((await db.execute(sql`select count(*)::int n from depreciation_schedule_lines where org_id=${org.orgId} and reverses_line_id=${local.id}`)).rows[0]!.n,0);
-    await db.transaction(tx=>upsertLock({tx,orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,module:'assets',state:'open',actorId,reason:'Authorize the accounting correction'}));
-    const denied=await createScratchUser(org.orgId,'Asset reader','correction_reader');
-    await grantScratchPermissions(org.orgId,denied,['assets.manage']);
-    await assert.rejects(()=>reverseSourceManagedDepreciation({...input,actorId:denied}));
-    await assert.rejects(()=>reverseSourceManagedDepreciation({...input,actorId:randomUUID()}));
-    const concurrent=await Promise.all([reverseSourceManagedDepreciation(input),reverseSourceManagedDepreciation(input)]);
-    assert.equal(concurrent.filter(r=>r.created).length,1);
-    const corrected=concurrent.find(r=>r.created)!;
-    const replay=await reverseSourceManagedDepreciation(input);
-    assert.deepEqual(replay,{...corrected,created:false});
-    await assert.rejects(()=>reverseSourceManagedDepreciation({...input,reason:'A different correction request'}),/retained correction/);
-    assert.deepEqual((await db.execute(sql`select to_jsonb(l) as evidence from depreciation_schedule_lines l where org_id=${org.orgId} and id=${local.id}`)).rows[0],original);
-    await assert.rejects(()=>db.execute(sql`update depreciation_schedule_lines set posted_amount=0 where org_id=${org.orgId} and id=${local.id}`),error=>error instanceof Error && error.cause instanceof Error && /immutable/.test(error.cause.message));
-    const journals=(await db.execute(sql`select id,status,reverses_entry_id,posting_date::text from journal_entries where org_id=${org.orgId} and id in(${posted.entryId},${corrected.reversalEntryId}) order by status`)).rows;
-    assert.equal(journals.find(j=>j.id===posted.entryId)!.status,'reversed');
-    assert.equal(journals.find(j=>j.id===corrected.reversalEntryId)!.posting_date,'2026-07-31');
-    assert.equal(journals.find(j=>j.id===corrected.reversalEntryId)!.reverses_entry_id,posted.entryId);
-    const synced=await syncNetSuiteFixedAssets(stubSource(snapshot()),options);
-    assert.deepEqual(synced.mismatches,[]);
-    assert.equal(synced.target.accumulatedDepreciation,'100.0000');
-    assert.equal((await db.execute(sql`select count(*)::int n from depreciation_schedule_lines where org_id=${org.orgId} and id in(${local.id},${corrected.reversalLineId})`)).rows[0]!.n,2);
-    const audits=(await db.execute(sql`select count(*)::int n from audit_log where org_id=${org.orgId} and row_id=${corrected.reversalLineId}`)).rows[0]!;
-    assert.equal(audits.n,1);
-    await syncNetSuiteFixedAssets(stubSource(snapshot()),options);
-    assert.deepEqual((await db.execute(sql`select to_jsonb(l) as evidence from depreciation_schedule_lines l where org_id=${org.orgId} and id=${local.id}`)).rows[0],original);
-  }finally{await dropScratchOrg(org.orgId)}
-});
+      await db.execute(sql`update fixed_assets set custom=jsonb_set(custom,'{sourceManaged}','true') where org_id=${org.orgId} and id=${asset.id}`);
+      const original=(await db.execute(sql`select to_jsonb(l) as evidence from depreciation_schedule_lines l where org_id=${org.orgId} and id=${local.id}`)).rows[0];
+      await assert.rejects(()=>syncNetSuiteFixedAssets(stubSource(snapshot()),options),/locally posted depreciation/);
+      await assert.rejects(()=>buildSchedule(asset.id,org.orgId,actorId),/source-managed/);
+      await assert.rejects(()=>previewDepreciation(org.orgId,{asOfDate:'2026-07-31',assetIds:[asset.id]}),/source-managed/);
+      await assert.rejects(()=>runDepreciation(org.orgId,'2026-07-31',actorId,asset.id),/source-managed/);
+      await assert.rejects(()=>db.execute(sql`insert into depreciation_schedule_lines(org_id,schedule_id,period_id,sequence,planned_amount,source) values(${org.orgId},${asset.schedule_id},${org.periodId},11,'2','formula')`),error=>error instanceof Error && error.cause instanceof Error && /source depreciation/.test(error.cause.message));
+      const input={orgId:org.orgId,assetId:asset.id,lineId:local.id,actorId,reason:'Correct local depreciation to preserve the source accounting authority'};
+      await db.transaction(tx=>upsertLock({tx,orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,module:'assets',state:'closed',actorId,reason:'Close the measurement period'}));
+      await assert.rejects(()=>reverseSourceManagedDepreciation(input),/closed/);
+      assert.equal((await db.execute(sql`select status from journal_entries where org_id=${org.orgId} and id=${posted.entryId}`)).rows[0]!.status,'posted');
+      assert.equal((await db.execute(sql`select count(*)::int n from depreciation_schedule_lines where org_id=${org.orgId} and reverses_line_id=${local.id}`)).rows[0]!.n,0);
+      await db.transaction(tx=>upsertLock({tx,orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,module:'assets',state:'open',actorId,reason:'Authorize the accounting correction'}));
+      const denied=await createScratchUser(org.orgId,'Asset reader','correction_reader');
+      await grantScratchPermissions(org.orgId,denied,['assets.manage']);
+      await assert.rejects(()=>reverseSourceManagedDepreciation({...input,actorId:denied}));
+      await assert.rejects(()=>reverseSourceManagedDepreciation({...input,actorId:randomUUID()}));
+      const concurrent=await Promise.all([reverseSourceManagedDepreciation(input),reverseSourceManagedDepreciation(input)]);
+      for (const result of concurrent) assert.equal(result.status, "applied");
+      const applied = concurrent.filter(
+        (result) => result.status === "applied",
+      );
+      assert.equal(applied.length, 2);
+      assert.equal(applied.filter((r) => r.created).length, 1);
+      const corrected = applied.find((r) => r.created)!;
+      const replay=await reverseSourceManagedDepreciation(input);
+      assert.deepEqual(replay,{...corrected,created:false});
+      await assert.rejects(()=>reverseSourceManagedDepreciation({...input,reason:'A different correction request'}),/request key already belongs to a different financial change/);
+      assert.deepEqual((await db.execute(sql`select to_jsonb(l) as evidence from depreciation_schedule_lines l where org_id=${org.orgId} and id=${local.id}`)).rows[0],original);
+      await assert.rejects(()=>db.execute(sql`update depreciation_schedule_lines set posted_amount=0 where org_id=${org.orgId} and id=${local.id}`),error=>error instanceof Error && error.cause instanceof Error && /immutable/.test(error.cause.message));
+      const journals=(await db.execute(sql`select id,status,reverses_entry_id,posting_date::text from journal_entries where org_id=${org.orgId} and id in(${posted.entryId},${corrected.reversalEntryId}) order by status`)).rows;
+      assert.equal(journals.find(j=>j.id===posted.entryId)!.status,'reversed');
+      assert.equal(journals.find(j=>j.id===corrected.reversalEntryId)!.posting_date,'2026-07-31');
+      assert.equal(journals.find(j=>j.id===corrected.reversalEntryId)!.reverses_entry_id,posted.entryId);
+      const synced=await syncNetSuiteFixedAssets(stubSource(snapshot()),options);
+      assert.deepEqual(synced.mismatches, []);
+      assert.equal(synced.target.accumulatedDepreciation,'100.0000');
+      assert.equal((await db.execute(sql`select count(*)::int n from depreciation_schedule_lines where org_id=${org.orgId} and id in(${local.id},${corrected.reversalLineId})`)).rows[0]!.n,2);
+      const audits=(await db.execute(sql`select count(*)::int n from audit_log where org_id=${org.orgId} and row_id=${corrected.reversalLineId}`)).rows[0]!;
+      assert.equal(audits.n, 1);
+      await syncNetSuiteFixedAssets(stubSource(snapshot()),options);
+      assert.deepEqual((await db.execute(sql`select to_jsonb(l) as evidence from depreciation_schedule_lines l where org_id=${org.orgId} and id=${local.id}`)).rows[0],original);
+    } finally {
+    await dropScratchOrg(org.orgId);
+  }
+  },
+);
 
 function stubSource(snapshot: NetSuiteFixedAssetSnapshot): NetSuiteSource {
   return {
@@ -188,9 +197,11 @@ async function famEvents(orgId: string, sourceAssetId: string) {
 }
 
 async function assetFacts(orgId: string, sourceAssetId: string) {
-  return (await db.execute<{ id: string; acquisition_cost: string; name: string }>(sql`
+  return (
+    (await db.execute<{ id: string; acquisition_cost: string; name: string }>(sql`
     select id, acquisition_cost::text as acquisition_cost, name from fixed_assets
-     where org_id = ${orgId} and custom->'netsuiteFam'->>'sourceId' = ${sourceAssetId}`)).rows[0] ?? null;
+     where org_id = ${orgId} and custom->'netsuiteFam'->>'sourceId' = ${sourceAssetId}`)).rows[0] ?? null
+  );
 }
 
 test("exact FAM replay reuses the admitted acquisition event and audits admission once", { skip: !DB, timeout: 180_000 }, async () => {
@@ -406,4 +417,10 @@ test("native and posted asset history is never rewritten by FAM replay", { skip:
   } finally {
     await dropScratchOrg(org.orgId);
   }
+});
+
+// Exercise the same native Flow composition installed by application entry points.
+before(async () => {
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
 });

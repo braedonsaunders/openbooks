@@ -19,8 +19,6 @@ export const SCHEDULE_BOARD_CAPABILITIES = [
   "patterns",
   /** Employees request to release, change or swap their own shifts. */
   "shift_requests",
-  /** Publication may be governed by an independent approver from an effective date. */
-  "governed_publication",
   /** Time-clock attendance is observed against published shifts. */
   "attendance",
   /** Ended shifts with complete attendance may be formally closed. */
@@ -31,7 +29,7 @@ export const SCHEDULE_BOARD_CAPABILITIES = [
 export type ScheduleBoardCapability = (typeof SCHEDULE_BOARD_CAPABILITIES)[number];
 
 export type ScheduleBoardRowKind = "people" | "tasks" | "resources";
-export type SchedulePublishPolicy = "live" | "staged" | "governed";
+export type SchedulePublishPolicy = "live" | "staged";
 
 export interface ScheduleBoardTypeDefinition {
   readonly key: string;
@@ -63,9 +61,9 @@ export const SCHEDULE_BOARD_TYPES: readonly ScheduleBoardTypeDefinition[] = [
   },
   {
     key: "shift_roster", rowKind: "people",
-    capabilities: ["bookings", "patterns", "shift_requests", "governed_publication", "attendance", "closing"],
+    capabilities: ["bookings", "patterns", "shift_requests", "attendance", "closing"],
     views: PEOPLE_VIEWS, defaultViews: ["timeline", "grid", "calendar"], defaultView: "timeline", defaultGrain: "timed",
-    publishPolicies: ["live", "staged", "governed"], defaultPublishPolicy: "staged",
+    publishPolicies: ["live", "staged"], defaultPublishPolicy: "staged",
   },
   {
     // Dispatch boards publish each assignment at once so technicians see it.
@@ -81,7 +79,6 @@ export const SCHEDULE_CAPABILITY_FEATURES: Readonly<Record<ScheduleBoardCapabili
   bookings: [],
   patterns: [],
   shift_requests: [],
-  governed_publication: [],
   attendance: ["hrmAttendance"],
   closing: ["hrmAttendance", "hrmShiftClosing"],
   dispatch: ["serviceDispatch"],

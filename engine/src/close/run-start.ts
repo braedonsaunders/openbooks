@@ -22,7 +22,6 @@ interface CloseBlueprintStepRow extends Record<string, unknown> {
   evidence_required: boolean;
   sort_order: number;
   default_owner_role_key: string | null;
-  default_reviewer_role_key: string | null;
   applicability: Record<string, unknown> | null;
 }
 
@@ -183,7 +182,7 @@ export async function startCloseRun(args: {
       const steps = (await tx.execute<CloseBlueprintStepRow>(sql`
       select id, key, title, description, workstream, task_type, completion_mode,
              gate_type, due_offset_business_days, evidence_required, sort_order,
-             default_owner_role_key, default_reviewer_role_key, applicability
+             default_owner_role_key, applicability
         from close_blueprint_steps
        where blueprint_id = ${blueprintId} and org_id = ${args.orgId}
        order by sort_order`));
@@ -207,7 +206,6 @@ export async function startCloseRun(args: {
           continue;
         async function userForRole(
           roleKey: string | null,
-          excluding?: string,
         ): Promise<string | null> {
           if (!roleKey) return null;
           const user = (await tx.execute<{ id: string }>(sql`
@@ -215,7 +213,6 @@ export async function startCloseRun(args: {
             join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
             join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id
            where u.org_id = ${args.orgId} and u.is_active and ar.key = ${roleKey}
-             ${excluding ? sql`and u.id <> ${excluding}` : sql``}
            order by u.id limit 1
         `));
           return user.rows[0]?.id ?? null;
@@ -229,15 +226,6 @@ export async function startCloseRun(args: {
           );
         }
         const ownerId = configuredOwnerId ?? args.actorId;
-        const reviewerId = await userForRole(
-          step.default_reviewer_role_key,
-          ownerId,
-        );
-        if (step.default_reviewer_role_key && !reviewerId) {
-          throw new CloseError(
-            `reviewer role ${step.default_reviewer_role_key} has no user independent from the task owner`,
-          );
-        }
         await tx.execute(sql`
         insert into close_run_tasks
           (org_id, run_id, blueprint_step_id, key, title, description, workstream,
@@ -249,9 +237,6 @@ export async function startCloseRun(args: {
                 ${addBusinessDays(period.ends_on, Number(step.due_offset_business_days))},
                 ${step.evidence_required}, ${args.actorId}, ${args.actorId})
         `);
-        if (reviewerId)
-          await tx.execute(sql`update close_run_tasks set reviewer_id = ${reviewerId}
-        where run_id = ${runId} and key = ${step.key} and org_id = ${args.orgId}`);
         materializedSteps++;
       }
       if (materializedSteps === 0)

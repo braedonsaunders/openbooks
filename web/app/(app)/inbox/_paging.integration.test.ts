@@ -5,7 +5,7 @@ import { stubModules } from "../../../testing/stub-modules";
 import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks";
 
 // Approvals worklist paging — the loader must page in SQL (limit/offset per
-// union leg) instead of fetching every pending gate in the org. Seeds more
+// gate query) instead of fetching every pending gate in the org. Seeds more
 // gates than one page holds and asserts the page returns a window plus a
 // total, not everything.
 const stateKey = Symbol.for("openbooks.approvals-paging-test");
@@ -75,59 +75,40 @@ function authzFor(orgId: string, userId: string): Authz {
       envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
       homeUserId: userId, homeOrgId: orgId,
     },
-    permissions: new Set(["flows.approve", "ap.approve", "ar.approve"]),
+    permissions: new Set(["flows.approve", "ap.approve", "ar.approve", "time.approve"]),
     allowedSubsidiaryIds: null,
   };
 }
 
-/** A posted invoice awaiting a gateless document approval (no flow run). */
-async function postedPendingDoc(org: ScratchOrg, submittedBy: string, n: number): Promise<string> {
-  const doc = randomUUID();
-  const entry = randomUUID();
-  const number = `PAGING-${String(n).padStart(3, "0")}-${doc.slice(0, 8)}`;
-  await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,due_date,currency,fx_rate,subtotal,tax_total,total,open_balance,submitted_by)
-    values(${doc},${org.orgId},'customer_invoice','pending_approval',${number},${org.subsidiaryId},${org.customerId},${org.date},'2027-12-31','CAD','1','1000',0,'1000','1000',${submittedBy})`);
-  await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,source_document_id)
-    values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},${entry},${org.date},${org.periodId},'draft',${doc})`);
-  await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id,due_date,is_open_item)
-    values(${randomUUID()},${org.orgId},${entry},1,${org.accounts.ar},${org.subsidiaryId},'1000','CAD','1000','1',${org.customerId},'2027-12-31',true),
-    (${randomUUID()},${org.orgId},${entry},2,${org.accounts.revenue},${org.subsidiaryId},'-1000','CAD','-1000','1',null,'2027-12-31',false)`);
-  await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
-  await db.execute(sql`update documents set posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${doc}`);
-  return number;
-}
+const {seedFlowActors,seedApprovalFlow,seedDraftDocument,grantScratchPermissions}=await import('@openbooks/engine/testing/fixtures');
+const {submitForApproval}=await import('@openbooks/engine/flows/submit');
+const {routeSubjectSubmission}=await import('@openbooks/engine/flows/submission-policy');
+const {withOrgTransaction}=await import('@openbooks/engine/platform/db');
+const {installEngineSeams}=await import('@openbooks/engine/composition/install');
+installEngineSeams();
 
-async function seedPagingOrg(gateCount: number, docCount: number): Promise<{ org: ScratchOrg; approver: string }> {
-  const org = await withBypass(() => createScratchOrg());
-  const submitter = (await withBypass(() => createScratchUser(org.orgId, "Paging Submitter", "accountant"))) as unknown as string;
-  const approver = (await withBypass(() => createScratchUser(org.orgId, "Paging Approver", "approver"))) as unknown as string;
-  await withBypass(async () => {
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,flows}', 'true') where id = ${org.orgId}`);
+async function seedPagingOrg(gateCount:number,docCount:number):Promise<{org:ScratchOrg;approver:string;submitter:string}>{
+ const org=await withBypass(()=>createScratchOrg());
+ try{
+  const actors=await withBypass(()=>seedFlowActors(org.orgId));
+  await withBypass(async()=>{
+   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"flows":true,"timeTracking":true}'::jsonb) where id=${org.orgId}`);
+   await grantScratchPermissions(org.orgId,actors.approver1Id,['time.approve','ar.approve']);
+   for(const subjectKind of ['timesheet_week','customer_invoice'])await seedApprovalFlow(org.orgId,{subjectKind,assignees:[{type:'user',userId:actors.approver1Id}],mode:'all'});
   });
-  // One flow + run, many directly-assigned pending gates with spaced
-  // timestamps so page membership is deterministic (oldest first).
-  const flowId = randomUUID();
-  const runId = randomUUID();
-  await withBypass(async () => {
-    await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
-      values (${flowId}, ${org.orgId}, 'Paging flow', 'timesheet_week', true, '{}'::jsonb)`);
-    await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
-      values (${runId}, ${org.orgId}, ${flowId}, 'timesheet_week', ${randomUUID()}, 'on_submit', 'waiting')`);
-    for (let i = 0; i < gateCount; i++) {
-      const employeeId = randomUUID();
-      const weekId = randomUUID();
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-        values (${employeeId}, ${org.orgId}, 'person', ${`Paging Worker ${i}`}, ${org.subsidiaryId}, true, '{}'::jsonb)`);
-      await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
-        values (${weekId}, ${org.orgId}, ${employeeId}, '2026-07-12', 'submitted', ${submitter}, ${submitter})`);
-      await db.execute(sql`insert into flow_gates
-        (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, assignee_user_id, group_key, quorum, status, created_at)
-        values (${randomUUID()}, ${org.orgId}, ${flowId}, ${runId}, ${`node-${i}`}, 'timesheet_week', ${weekId},
-                ${`Paging gate ${i}`}, ${approver}, ${`g-${i}`}, 'any', 'pending', now() - make_interval(mins => ${gateCount - i}))`);
-    }
-    for (let n = 0; n < docCount; n++) await postedPendingDoc(org, submitter, n);
-  });
-  return { org, approver };
+  for(let i=0;i<gateCount;i++){
+   const employee=randomUUID(),id=randomUUID();await withBypass(async()=>{
+    await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom) values(${employee},${org.orgId},'person',${`Paging worker ${i}`},${org.subsidiaryId},true,'{}'::jsonb)`);
+    await db.execute(sql`insert into timesheet_weeks(id,org_id,employee_party_id,week_start,status,submitted_by,submitted_at,created_by,updated_by) values(${id},${org.orgId},${employee},'2026-07-12','submitted',${actors.submitterId},now(),${actors.submitterId},${actors.submitterId})`);
+   });
+   await withOrgTransaction(org.orgId,()=>routeSubjectSubmission({orgId:org.orgId,actorId:actors.submitterId,subjectKind:'timesheet_week',subjectId:id}));
+  }
+  for(let i=0;i<docCount;i++){
+   const id=await withBypass(()=>seedDraftDocument(org.orgId,{kind:'customer_invoice',createdBy:actors.submitterId,number:`PAGING-${i}`}));
+   await withOrgContext(org.orgId,()=>submitForApproval('customer_invoice',id,actors.submitterId));
+  }
+  return{org,approver:actors.approver1Id,submitter:actors.submitterId};
+ }catch(error){await withBypass(()=>dropScratchOrg(org.orgId));throw error;}
 }
 
 test("approvals mine tab pages in SQL instead of returning every gate", { skip: !DB }, async () => {
@@ -166,46 +147,20 @@ test("approvals mine tab pages in SQL instead of returning every gate", { skip: 
   }
 });
 
-test("approvals submitted tab pages its flow runs in SQL", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const submitter = (await withBypass(() => createScratchUser(org.orgId, "Paging Author", "accountant"))) as unknown as string;
-    const approver = (await withBypass(() => createScratchUser(org.orgId, "Paging Reviewer", "approver"))) as unknown as string;
-    await withBypass(async () => {
-      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,flows}', 'true') where id = ${org.orgId}`);
-      const flowId = randomUUID();
-      await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
-        values (${flowId}, ${org.orgId}, 'Bill approvals', 'vendor_bill', true, '{}'::jsonb)`);
-      for (let n = 0; n < 3; n++) {
-        const doc = randomUUID();
-        const run = randomUUID();
-        const number = `SUBMITTED-${n}-${doc.slice(0, 8)}`;
-        await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,due_date,currency,fx_rate,subtotal,tax_total,total,open_balance,submitted_by,created_by)
-          values(${doc},${org.orgId},'vendor_bill','pending_approval',${number},${org.subsidiaryId},${org.customerId},${org.date},'2027-12-31','CAD','1','100',0,'100','100',${submitter},${submitter})`);
-        await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
-          values (${run}, ${org.orgId}, ${flowId}, 'vendor_bill', ${doc}, 'on_submit', 'waiting')`);
-        await db.execute(sql`insert into flow_gates
-          (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, assignee_user_id, group_key, quorum, status)
-          values (${randomUUID()}, ${org.orgId}, ${flowId}, ${run}, 'node-1', 'vendor_bill', ${doc},
-                  'Manager approval', ${approver}, 'g-1', 'any', 'pending')`);
-      }
-    });
-    state.authz = authzFor(org.orgId, submitter);
-    const data = await withOrgContext(org.orgId, () => loadApprovals({ tab: "submitted" }));
-    assert.ok(data, "loader returns data");
-    assert.equal(data!.submittedTotal, 3, "submitted tab reports its own total");
-    assert.equal(data!.submittedRows.length, 3, "single-page submitted tab returns every row");
-    const empty = await withOrgContext(org.orgId, () => loadApprovals({ tab: "submitted", page: "2" }));
-    assert.equal(empty!.submittedTotal, 3, "total is stable past the last page");
-    assert.equal(empty!.submittedRows.length, 0, "past-the-end page is empty, not an error");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
+test("approvals submitted tab pages native submission runs",{skip:!DB},async()=>{
+ const {org,submitter}=await seedPagingOrg(0,3);
+ try{
+  state.authz=authzFor(org.orgId,submitter);
+  const data=await withOrgContext(org.orgId,()=>loadApprovals({tab:'submitted'}));assert.ok(data);
+  assert.equal(data.submittedTotal,3);assert.equal(data.submittedRows.length,3);
+  const empty=await withOrgContext(org.orgId,()=>loadApprovals({tab:'submitted',page:'2'}));
+  assert.equal(empty?.submittedTotal,3);assert.equal(empty?.submittedRows.length,0);
+ }finally{state.authz=null;await withBypass(()=>dropScratchOrg(org.orgId));}
 });
 
 test("paged worklist agrees with the full worklist the tile counts", { skip: !DB }, async () => {
-  // The center reads windowed legs while the dashboard tile reads the full
-  // union: same legs, same predicates, so walking every page must reproduce
+  // The center and dashboard use the same native gate predicates.
+  // Walking every page must reproduce
   // the full set, the total, and the kind chips exactly.
   const { approvalWorklistForAuthz, approvalWorklistPageForAuthz } = await import("@/lib/application/approvals");
   type Full = Awaited<ReturnType<typeof approvalWorklistForAuthz>>;
@@ -230,11 +185,7 @@ test("paged worklist agrees with the full worklist the tile counts", { skip: !DB
       if (window.items.length < 10) break;
       assert.ok(pageNum < 10, "paging terminates");
     }
-    const keyOf = (item: Full[number]): string => {
-      if (item.kind === "flow_gate") return `flow_gate:${item.id}`;
-      if (item.kind === "document") return `document:${item.id}`;
-      return `budget:${item.id}`;
-    };
+    const keyOf=(item:Full[number]):string=>`flow_gate:${item.id}`;
     assert.deepEqual(
       new Set(seen.map(keyOf)),
       new Set(full.map(keyOf)),
@@ -243,12 +194,7 @@ test("paged worklist agrees with the full worklist the tile counts", { skip: !DB
     assert.equal(total, full.length, "paged total ties the full count");
     const expectedChips = new Map<string, number>();
     for (const item of full) {
-      const kind =
-        item.kind === "flow_gate"
-          ? (item.document?.kind ?? item.subjectKind)
-          : item.kind === "document"
-            ? item.docKind
-            : "budget_scenario";
+      const kind=item.document?.kind??item.subjectKind;
       expectedChips.set(kind, (expectedChips.get(kind) ?? 0) + 1);
     }
     assert.deepEqual(Object.fromEntries(chips), Object.fromEntries(expectedChips), "kind chips tie the full set");
@@ -257,54 +203,16 @@ test("paged worklist agrees with the full worklist the tile counts", { skip: !DB
   }
 });
 
-test("mine bubble ties the listed rows with direct weeks in the union", { skip: !DB }, async () => {
-  // Gateless submitted weeks ride the union itself, so the badge figure the
-  // mine bubble shows always ties the rows the tab lists: one gated week
-  // plus one direct week read bubble 2 with 2 rows, never work on an
-  // empty tab.
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const submitter = (await withBypass(() => createScratchUser(org.orgId, "Bubble Submitter", "accountant"))) as unknown as string;
-    const approver = (await withBypass(() => createScratchUser(org.orgId, "Bubble Approver", "approver"))) as unknown as string;
-    await withBypass(async () => {
-      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,flows}', 'true') where id = ${org.orgId}`);
-      await db.execute(sql`update orgs set settings = settings || '{"features": {"timeTracking": true}}'::jsonb where id = ${org.orgId}`);
-      await db.execute(sql`update app_roles set permissions = '["flows.approve", "time.approve"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
-      const flowId = randomUUID();
-      const runId = randomUUID();
-      await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
-        values (${flowId}, ${org.orgId}, 'Bubble flow', 'timesheet_week', true, '{}'::jsonb)`);
-      const gatedWeek = randomUUID();
-      const gatedEmployee = randomUUID();
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-        values (${gatedEmployee}, ${org.orgId}, 'person', 'Bubble Gated', ${org.subsidiaryId}, true, '{}'::jsonb)`);
-      await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
-        values (${gatedWeek}, ${org.orgId}, ${gatedEmployee}, '2026-07-12', 'submitted', ${submitter}, ${submitter})`);
-      await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
-        values (${runId}, ${org.orgId}, ${flowId}, 'timesheet_week', ${gatedWeek}, 'on_submit', 'waiting')`);
-      await db.execute(sql`insert into flow_gates
-        (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, assignee_user_id, group_key, quorum, status, created_at)
-        values (${randomUUID()}, ${org.orgId}, ${flowId}, ${runId}, 'node-0', 'timesheet_week', ${gatedWeek},
-                'Bubble gate', ${approver}, 'g-0', 'any', 'pending', now())`);
-      // Gateless submitted week: counted by the inbox badge, never a union row.
-      const directEmployee = randomUUID();
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-        values (${directEmployee}, ${org.orgId}, 'person', 'Bubble Direct', ${org.subsidiaryId}, true, '{}'::jsonb)`);
-      await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, submitted_at, created_by, updated_by)
-        values (${randomUUID()}, ${org.orgId}, ${directEmployee}, '2026-07-19', 'submitted', now(), ${submitter}, ${submitter})`);
-    });
-    state.authz = {
-      ...authzFor(org.orgId, approver),
-      permissions: new Set(["flows.approve", "ap.approve", "ar.approve", "time.approve"]),
-    };
-    const data = await withOrgContext(org.orgId, () => loadApprovals({}));
-    assert.ok(data, "loader returns data");
-    assert.equal(data!.total, 2, "union lists the gated week and the direct week");
-    assert.equal(data!.unfilteredTotal, 2, "union totals match the rows");
-    assert.equal(data!.approvalRows.length, 2, "two actionable rows");
-    const mineTab = data!.tabs.find((t) => t.key === "mine");
-    assert.equal(mineTab?.count, 2, "mine bubble ties the listed rows");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
+test("a submitted week without native routing evidence is not an alternate approval",{skip:!DB},async()=>{
+ const {org,approver,submitter}=await seedPagingOrg(1,0);
+ try{
+  await withBypass(async()=>{
+   const employee=randomUUID();await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom) values(${employee},${org.orgId},'person','Unrouted worker',${org.subsidiaryId},true,'{}'::jsonb)`);
+   await db.execute(sql`insert into timesheet_weeks(id,org_id,employee_party_id,week_start,status,submitted_by,submitted_at,created_by,updated_by) values(${randomUUID()},${org.orgId},${employee},'2026-07-19','submitted',${submitter},now(),${submitter},${submitter})`);
+  });
+  state.authz=authzFor(org.orgId,approver);
+  const data=await withOrgContext(org.orgId,()=>loadApprovals({}));assert.ok(data);
+  assert.equal(data.total,1);assert.equal(data.unfilteredTotal,1);assert.equal(data.approvalRows.length,1);
+  assert.equal(data.tabs.find(tab=>tab.key==='mine')?.count,1);
+ }finally{state.authz=null;await withBypass(()=>dropScratchOrg(org.orgId));}
 });

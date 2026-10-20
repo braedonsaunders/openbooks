@@ -1,4 +1,4 @@
-import { accountingPreferences } from "../organization/accounting-preferences.ts";
+import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { and, eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
@@ -10,13 +10,28 @@ import {
 } from "../scripting/scripting.ts";
 import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { consolidationSourceRefusal } from "../records/consolidation-source-policy.ts";
-import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
-import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from "../records/transaction-audit.ts";
-import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
-import { cancelDispatchRuns, dispatchFailureReason, findGatingRun } from "./dispatch-result.ts";
-import { runRecordFlows } from "./run.ts";
-import { isVendorBillApprovalRequired, VENDOR_BILL_KIND, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } from "./vendor-bill-approval.ts";
+import {
+  assertExpenseEmployee,
+  assertExpenseSettlement,
+} from "../records/expense-validation.ts";
+import {
+  documentRevisionCounterSql,
+  isDocumentRevisionToken,
+} from "../records/revision.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "../records/transaction-audit.ts";
+import {
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+} from "../organization/subsidiary-scope.ts";
+import {
+  cancelDispatchRuns,
+  dispatchFailureReason,
+  findGatingRun,
+} from "./dispatch-result.ts";
+import { routeSubjectSubmission } from "./submission-policy.ts";
 
 /**
  * Submit a draft record for approval — the sole approval-routing entry point.
@@ -60,20 +75,12 @@ export interface SubmitResult {
 export interface SubmissionReleaseResult extends SubmitResult {
   /** No approval gate applied, so the engine released the record to approved. */
   autoApproved: boolean;
-  /**
-   * The org requires approval before vendor bills release and no flow gated
-   * this bill, so the engine refused the release by name. The submit stamps
-   * (submitted_by/at) stand — the bill stays submitted, never released — and
-   * the caller must surface VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE.
-   */
-  approvalRequired: boolean;
-  approvalRequiredMessage?: string;
 }
 
 export async function submitForApproval(
   _targetKind: string,
   targetId: string,
-  actorId?: string | null,
+  actorId: string | null,
   options: { source?: FlowEventSource } = {},
 ): Promise<SubmitResult> {
   // Resolve the tenant before opening the transaction. The transaction then
@@ -81,9 +88,14 @@ export async function submitForApproval(
   // creation, and the lifecycle update. A concurrent draft deletion therefore
   // either wins before this lock (submission finds no row) or waits until the
   // pending-approval status is committed and refuses the delete.
-  const [candidate] = await db.select().from(schema.documents).where(eq(schema.documents.id, targetId));
+  const [candidate] = await db
+    .select()
+    .from(schema.documents)
+    .where(eq(schema.documents.id, targetId));
   if (!candidate) throw new Error("target document not found");
-  return withOrgTransaction(candidate.orgId, () => submitForApprovalLocked(targetId, actorId, candidate.orgId, options));
+  return withOrgTransaction(candidate.orgId, () =>
+    submitForApprovalLocked(targetId, actorId, candidate.orgId, options),
+  );
 }
 
 async function submitForApprovalLocked(
@@ -92,16 +104,36 @@ async function submitForApprovalLocked(
   orgId: string,
   options: { source?: FlowEventSource },
 ): Promise<SubmitResult> {
+  const candidate = (
+    await db
+      .select({ kind: schema.documents.kind })
+      .from(schema.documents)
+      .where(
+        and(
+          eq(schema.documents.id, targetId),
+          eq(schema.documents.orgId, orgId),
+        ),
+      )
+  )[0];
+  if (!candidate) throw new SubmitError("The document is unavailable.");
+  await lockApprovalSubject(orgId, candidate.kind, targetId);
   const [doc] = await db
     .select()
     .from(schema.documents)
-    .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, orgId)))
+    .where(
+      and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, orgId)),
+    )
     .for("update");
   if (!doc) throw new Error("target document not found");
-  if (doc.status !== "draft") throw new SubmitError(`document is ${doc.status}, not draft`);
-  const consolidationRefusal = await consolidationSourceRefusal(db, orgId, targetId);
+  if (doc.status !== "draft")
+    throw new SubmitError(`document is ${doc.status}, not draft`);
+  const consolidationRefusal = await consolidationSourceRefusal(
+    db,
+    orgId,
+    targetId,
+  );
   if (consolidationRefusal) throw new SubmitError(consolidationRefusal);
-  const blockedCorrection = (await db.execute<{ document_number: string }>(sql`
+  const blockedCorrection = await db.execute<{ document_number: string }>(sql`
     select source.document_number
       from document_links link
       join documents source on source.id = link.to_document_id and source.org_id = link.org_id
@@ -110,7 +142,7 @@ async function submitForApprovalLocked(
        and link.link_type = 'reverses'
        and source.status <> 'voided'
      limit 1
-  `));
+  `);
   if (blockedCorrection.rows[0]) {
     throw new SubmitError(
       `the correction cannot be submitted until ${blockedCorrection.rows[0].document_number}'s void is approved and completed`,
@@ -118,13 +150,23 @@ async function submitForApprovalLocked(
   }
 
   // -- user scripts: before_submit (veto / mutate) ------------------------
-  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, doc.orgId));
+  const [org] = await db
+    .select()
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, doc.orgId));
   if (org) {
     const lines = await db
       .select()
       .from(schema.documentLines)
-      .where(and(eq(schema.documentLines.documentId, targetId), eq(schema.documentLines.orgId, doc.orgId)));
-    const user = await resolveScriptUser(doc.orgId, actorId ?? null, { required: false });
+      .where(
+        and(
+          eq(schema.documentLines.documentId, targetId),
+          eq(schema.documentLines.orgId, doc.orgId),
+        ),
+      );
+    const user = await resolveScriptUser(doc.orgId, actorId ?? null, {
+      required: false,
+    });
     const scriptCtx: ScriptContext = {
       trigger: "before_submit",
       document: doc as unknown as Record<string, unknown>,
@@ -132,26 +174,40 @@ async function submitForApprovalLocked(
       org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
       ...(user ? { user } : {}),
     };
-    const outcomes = await runTriggerScripts("before_submit", scriptCtx, doc.id);
+    const outcomes = await runTriggerScripts(
+      "before_submit",
+      scriptCtx,
+      doc.id,
+    );
     const bad = outcomes.find((o) => o.status !== "ok");
     if (bad?.status === "aborted") {
       // The script's reason is the operator's remedy: a submission refusal
       // (4xx) that names it, rolled back with the rest of the submission.
-      throw new SubmitError(`submission vetoed by script "${bad.name}": ${bad.abortReason}`);
+      throw new SubmitError(
+        `submission vetoed by script "${bad.name}": ${bad.abortReason}`,
+      );
     }
     if (bad) {
-      throw new Error(`script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`);
+      throw new Error(
+        `script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`,
+      );
     }
-    const mutations = outcomes.reduce<Record<string, unknown>>((merged, outcome) => {
-      for (const [field, value] of Object.entries(outcome.set ?? {})) {
-        if (field === "custom") {
-          merged.custom = mergeBeforePostCustomMutation(merged.custom ?? doc.custom, value);
-        } else {
-          merged[field] = value;
+    const mutations = outcomes.reduce<Record<string, unknown>>(
+      (merged, outcome) => {
+        for (const [field, value] of Object.entries(outcome.set ?? {})) {
+          if (field === "custom") {
+            merged.custom = mergeBeforePostCustomMutation(
+              merged.custom ?? doc.custom,
+              value,
+            );
+          } else {
+            merged[field] = value;
+          }
         }
-      }
-      return merged;
-    }, {});
+        return merged;
+      },
+      {},
+    );
     if (Object.keys(mutations).length > 0) {
       // Script mutations write around applyDocumentEdit: prove shapes and org
       // ownership here, or a well-formed foreign id persists as a silent
@@ -161,15 +217,30 @@ async function submitForApprovalLocked(
         doc.kind,
         Object.entries(mutations).map(([field, value]) => ({ field, value })),
       );
-      await db.update(schema.documents).set(mutations).where(and(eq(schema.documents.id, doc.id), eq(schema.documents.orgId, doc.orgId)));
+      await db
+        .update(schema.documents)
+        .set(mutations)
+        .where(
+          and(
+            eq(schema.documents.id, doc.id),
+            eq(schema.documents.orgId, doc.orgId),
+          ),
+        );
     }
   }
 
   // Scripts may change the draft; validate the persisted employee under the
   // submission row lock before approval routing can release this evidence.
   if (doc.kind === "expense_report") {
-    const [effective] = await db.select().from(schema.documents)
-      .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, orgId)));
+    const [effective] = await db
+      .select()
+      .from(schema.documents)
+      .where(
+        and(
+          eq(schema.documents.id, targetId),
+          eq(schema.documents.orgId, orgId),
+        ),
+      );
     if (!effective) throw new Error("target document not found");
     await assertExpenseEmployee(db, effective);
     await assertExpenseSettlement(db, effective);
@@ -180,10 +251,29 @@ async function submitForApprovalLocked(
   // pending_approval and the flow run id stands in for the request id (the
   // caller only round-trips it as an opaque string). A flow that matched but
   // created no gates (pure automation) already ran its actions.
-  const flowResult = await runRecordFlows({ kind: "on_submit", source: options.source }, doc.kind, doc.id, {
-    orgId: doc.orgId,
-    userId: actorId ?? doc.createdBy,
-  });
+  const submitter = actorId ?? doc.createdBy;
+  if (!submitter)
+    throw new SubmitError(
+      "A named authorized operator must submit this document.",
+    );
+  let flowResult;
+  try {
+    flowResult = (
+      await routeSubjectSubmission({
+        orgId: doc.orgId,
+        subjectKind: doc.kind,
+        subjectId: doc.id,
+        actorId: submitter,
+        source: options.source,
+      })
+    ).dispatch;
+  } catch (error) {
+    throw new SubmitError(
+      error instanceof Error
+        ? error.message
+        : "Submission routing failed; review the record's Flows.",
+    );
+  }
   // Fail closed FIRST, before looking at gates: when ANY flow in the dispatch
   // failed, the submission is refused even if a sibling flow gated. Approving
   // the sibling's gate would release a document whose other approval never
@@ -192,9 +282,17 @@ async function submitForApprovalLocked(
   // behind the refusal; the document stays draft and the caller surfaces the
   // named cause.
   if (flowResult.failed) {
-    await cancelDispatchRuns(doc.orgId, flowResult.runs.map((r) => r.runId));
-    const cause = dispatchFailureReason(flowResult) ?? "approval routing failed";
-    return { gated: false, runId: null, flowError: `submission refused: ${cause}` };
+    await cancelDispatchRuns(
+      doc.orgId,
+      flowResult.runs.map((r) => r.runId),
+    );
+    const cause =
+      dispatchFailureReason(flowResult) ?? "approval routing failed";
+    return {
+      gated: false,
+      runId: null,
+      flowError: `submission refused: ${cause}`,
+    };
   }
   if (flowResult.gatesCreated > 0) {
     const updated = await db
@@ -206,13 +304,22 @@ async function submitForApprovalLocked(
         updatedBy: actorId ?? doc.createdBy,
         updatedAt: new Date(),
       })
-      .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, doc.orgId)))
+      .where(
+        and(
+          eq(schema.documents.id, targetId),
+          eq(schema.documents.orgId, doc.orgId),
+        ),
+      )
       .returning({ id: schema.documents.id });
     if (updated.length !== 1) {
       throw new Error("document changed while submission was being recorded");
     }
     const gatedRun = findGatingRun(flowResult);
-    return { gated: true, runId: gatedRun?.runId ?? flowResult.runs[0]!.runId, flowError: null };
+    return {
+      gated: true,
+      runId: gatedRun?.runId ?? flowResult.runs[0]!.runId,
+      flowError: null,
+    };
   }
 
   const updated = await db
@@ -223,7 +330,12 @@ async function submitForApprovalLocked(
       updatedBy: actorId ?? doc.createdBy,
       updatedAt: new Date(),
     })
-    .where(and(eq(schema.documents.id, targetId), eq(schema.documents.orgId, doc.orgId)))
+    .where(
+      and(
+        eq(schema.documents.id, targetId),
+        eq(schema.documents.orgId, doc.orgId),
+      ),
+    )
     .returning({ id: schema.documents.id });
   if (updated.length !== 1) {
     throw new Error("document changed while submission was being recorded");
@@ -234,10 +346,8 @@ async function submitForApprovalLocked(
 /**
  * Standard transaction submission primitive. Configured on_submit gates pause
  * the record; when none applies, the absence of a gate means no tenant approval
- * policy applies and the engine releases it to approved — UNLESS the org
- * requires approval before vendor bills release (Company Settings → Setup):
- * then an ungated vendor bill is refused by name and stays submitted, never
- * released. Posting permission is still enforced by the calling API.
+ * policy applies and the engine releases it to approved. Posting authority
+ * and all financial validation remain enforced by the calling command.
  */
 export async function submitAndReleaseIfUngated(
   targetKind: string,
@@ -256,23 +366,35 @@ export async function submitAndReleaseIfUngated(
   // Otherwise a deletion could wait for the submit transaction, observe the
   // still-draft status, and remove the document before this final transition.
   return withOrgTransaction(candidate.orgId, async () => {
-    const result = await submitForApproval(targetKind, targetId, actorId, options);
+    const result = await submitForApproval(
+      targetKind,
+      targetId,
+      actorId,
+      options,
+    );
     if (result.gated || result.flowError) {
-      return { ...result, autoApproved: false, approvalRequired: false };
+      return { ...result, autoApproved: false };
     }
-    const approvalDocument = (await db.select({ status:schema.documents.status, subsidiaryId:schema.documents.subsidiaryId, postingDate:schema.documents.postingDate, documentDate:schema.documents.documentDate })
-      .from(schema.documents).where(and(eq(schema.documents.orgId,candidate.orgId),eq(schema.documents.id,targetId))))[0];
+    const approvalDocument = (
+      await db
+        .select({
+          status: schema.documents.status,
+          subsidiaryId: schema.documents.subsidiaryId,
+          postingDate: schema.documents.postingDate,
+          documentDate: schema.documents.documentDate,
+        })
+        .from(schema.documents)
+        .where(
+          and(
+            eq(schema.documents.orgId, candidate.orgId),
+            eq(schema.documents.id, targetId),
+          ),
+        )
+    )[0];
     // An ungated on-submit Flow can release the document itself. Its native
     // transition and audit already belong to this locked transaction.
     if (approvalDocument?.status === "approved") {
-      return { ...result, autoApproved: true, approvalRequired: false };
-    }
-    if ((targetKind === VENDOR_BILL_KIND && (await isVendorBillApprovalRequired(candidate.orgId))) ||
-        (targetKind === 'journal' && approvalDocument?.subsidiaryId && (await accountingPreferences(db,candidate.orgId,approvalDocument.subsidiaryId,approvalDocument.postingDate ?? approvalDocument.documentDate)).requireJournalApproval)) {
-      // A required approval cannot be replaced by an ungated release; submission evidence and the actionable policy refusal remain visible.
-      return { ...result, autoApproved: false, approvalRequired: true, approvalRequiredMessage: targetKind==='journal'
-        ? "This entity requires journal approval. Configure an on-submit journal approval Flow, then submit the journal again."
-        : VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE };
+      return { ...result, autoApproved: true };
     }
     const released = await db
       .update(schema.documents)
@@ -292,7 +414,7 @@ export async function submitAndReleaseIfUngated(
     if (released.length !== 1) {
       throw new Error("document changed while submission was being released");
     }
-    return { ...result, autoApproved: true, approvalRequired: false };
+    return { ...result, autoApproved: true };
   });
 }
 
@@ -308,7 +430,11 @@ export class ReturnToDraftError extends Error {
   constructor(
     message: string,
     readonly status: number = 422,
-    readonly code: "invalid_status" | "stale-revision" | "not-found" | "applied" = "invalid_status",
+    readonly code:
+      | "invalid_status"
+      | "stale-revision"
+      | "not-found"
+      | "applied" = "invalid_status",
   ) {
     super(message);
   }
@@ -336,7 +462,9 @@ export interface ReturnToDraftResult {
 function requireReturnReason(reason: unknown): string {
   const value = typeof reason === "string" ? reason.trim() : "";
   if (value.length < 5 || value.length > 500) {
-    throw new ReturnToDraftError("a return reason between 5 and 500 characters is required");
+    throw new ReturnToDraftError(
+      "a return reason between 5 and 500 characters is required",
+    );
   }
   return value;
 }
@@ -363,14 +491,22 @@ export async function returnDocumentToDraft(
 ): Promise<ReturnToDraftResult> {
   const reason = requireReturnReason(input.reason);
   return withOrgTransaction(input.orgId, async () => {
-    const locked = (await db.execute<{
-      id: string;
-      kind: string;
-      status: string;
-      number: string | null;
-      subsidiaryId: string | null;
-      revision: string;
-    }>(sql`
+    const identity = (
+      await db.execute<{ kind: string }>(
+        sql`select kind from documents where org_id=${input.orgId} and id=${input.documentId}`,
+      )
+    ).rows[0];
+    if (!identity) throw new ScopeNotFoundError();
+    await lockApprovalSubject(input.orgId, identity.kind, input.documentId);
+    const locked = (
+      await db.execute<{
+        id: string;
+        kind: string;
+        status: string;
+        number: string | null;
+        subsidiaryId: string | null;
+        revision: string;
+      }>(sql`
       select id, kind, status,
              document_number as number,
              subsidiary_id as "subsidiaryId",
@@ -378,9 +514,14 @@ export async function returnDocumentToDraft(
         from documents
        where id = ${input.documentId} and org_id = ${input.orgId}
        for update
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!locked) {
-      throw new ReturnToDraftError("document not found in this organization", 404, "not-found");
+      throw new ReturnToDraftError(
+        "document not found in this organization",
+        404,
+        "not-found",
+      );
     }
     if (
       input.allowedSubsidiaryIds !== undefined &&
@@ -390,7 +531,8 @@ export async function returnDocumentToDraft(
     }
     if (
       input.expectedUpdatedAt != null &&
-      (!isDocumentRevisionToken(input.expectedUpdatedAt) || input.expectedUpdatedAt !== locked.revision)
+      (!isDocumentRevisionToken(input.expectedUpdatedAt) ||
+        input.expectedUpdatedAt !== locked.revision)
     ) {
       throw new ReturnToDraftError(
         "this document changed after you opened it; reload and review the latest revision",
@@ -400,7 +542,9 @@ export async function returnDocumentToDraft(
     }
     const name = locked.number ?? "this document";
     if (locked.status === "draft") {
-      throw new ReturnToDraftError(`${name} is already a draft — nothing to return`);
+      throw new ReturnToDraftError(
+        `${name} is already a draft — nothing to return`,
+      );
     }
     if (locked.status === "posted") {
       throw new ReturnToDraftError(
@@ -408,7 +552,9 @@ export async function returnDocumentToDraft(
       );
     }
     if (locked.status === "voided") {
-      throw new ReturnToDraftError(`${name} is voided — voided documents are terminal`);
+      throw new ReturnToDraftError(
+        `${name} is voided — voided documents are terminal`,
+      );
     }
     if (locked.status === "pending_approval") {
       throw new ReturnToDraftError(
@@ -416,16 +562,21 @@ export async function returnDocumentToDraft(
       );
     }
     if (locked.status !== "approved") {
-      throw new ReturnToDraftError(`${name} is ${locked.status} — only an approved document returns to draft`);
+      throw new ReturnToDraftError(
+        `${name} is ${locked.status} — only an approved document returns to draft`,
+      );
     }
     // Partial application refuses by name: money already moving against
     // these details must settle first, or the redraft would strand it.
-    const applied = (await db.execute<{ n: number }>(sql`
+    const applied =
+      (
+        await db.execute<{ n: number }>(sql`
       select count(*)::int as n from payment_instructions instruction
        where instruction.org_id = ${input.orgId}
          and instruction.payment_document_id = ${input.documentId}
          and instruction.status in ('pending', 'approved', 'generated', 'sent')
-    `)).rows[0]?.n ?? 0;
+    `)
+      ).rows[0]?.n ?? 0;
     if (applied > 0) {
       throw new ReturnToDraftError(
         `${name} has live payment instructions against it — settle or cancel the payments before returning to draft`,
@@ -438,11 +589,14 @@ export async function returnDocumentToDraft(
     // strand that evidence. Amend the remaining quantities instead, or void
     // the receipt first.
     if (locked.kind === "purchase_order") {
-      const consumed = (await db.execute<{ n: number }>(sql`
+      const consumed =
+        (
+          await db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines
          where org_id = ${input.orgId} and document_id = ${input.documentId}
            and (quantity_fulfilled > 0 or quantity_billed > 0)
-      `)).rows[0]?.n ?? 0;
+      `)
+        ).rows[0]?.n ?? 0;
       if (consumed > 0) {
         throw new ReturnToDraftError(
           `${name} already has received or billed lines — amend the order for the remaining quantities, or void the receipt before returning to draft`,
@@ -454,31 +608,53 @@ export async function returnDocumentToDraft(
     // In-flight runs and pending gates cancel natively; completed runs
     // stay as history (superseded, never deleted), so a resubmission starts
     // a new run and the returned document must be re-approved.
-    const runs = (await db.execute<{ id: string; status: string }>(sql`
+    const runs = (
+      await db.execute<{ id: string; status: string }>(sql`
       select id::text as id, status from flow_runs
        where org_id = ${input.orgId} and subject_id = ${input.documentId}
-    `)).rows;
-    const liveRunIds = runs.filter((run) => run.status === "running" || run.status === "waiting").map((run) => run.id);
-    await cancelDispatchRuns(input.orgId, liveRunIds, { actorId: input.actorId });
-    const supersededRunIds = runs.filter((run) => run.status === "completed").map((run) => run.id);
-    const before = await captureTransactionAuditSnapshot(db, input.documentId, input.orgId);
+    `)
+    ).rows;
+    const liveRunIds = runs
+      .filter((run) => run.status === "running" || run.status === "waiting")
+      .map((run) => run.id);
+    await cancelDispatchRuns(input.orgId, liveRunIds, {
+      actorId: input.actorId,
+    });
+    const supersededRunIds = runs
+      .filter((run) => run.status === "completed")
+      .map((run) => run.id);
+    const before = await captureTransactionAuditSnapshot(
+      db,
+      input.documentId,
+      input.orgId,
+    );
     if (!before) {
-      throw new ReturnToDraftError("document not found in this organization", 404, "not-found");
+      throw new ReturnToDraftError(
+        "document not found in this organization",
+        404,
+        "not-found",
+      );
     }
-    const flipped = (await db.execute<{ id: string }>(sql`
+    const flipped = (
+      await db.execute<{ id: string }>(sql`
       update documents
          set status = 'draft',
              submitted_by = null, submitted_at = null,
              updated_at = now(), updated_by = ${input.actorId}
        where id = ${input.documentId} and org_id = ${input.orgId} and status = 'approved'
       returning id
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!flipped) {
       throw new ReturnToDraftError(
         `${name} changed while it was being returned to draft; reload and try again`,
       );
     }
-    const after = await captureTransactionAuditSnapshot(db, input.documentId, input.orgId);
+    const after = await captureTransactionAuditSnapshot(
+      db,
+      input.documentId,
+      input.orgId,
+    );
     if (!after) {
       throw new ReturnToDraftError(
         `${name} changed while it was being returned to draft; reload and try again`,
@@ -494,7 +670,11 @@ export async function returnDocumentToDraft(
       before,
       after,
     });
-    return { status: "draft" as const, supersededRunIds, cancelledRunIds: liveRunIds };
+    return {
+      status: "draft" as const,
+      supersededRunIds,
+      cancelledRunIds: liveRunIds,
+    };
   });
 }
 
@@ -510,7 +690,12 @@ export class WithdrawSubmissionError extends Error {
   constructor(
     message: string,
     readonly status: number = 422,
-    readonly code: "invalid_status" | "invalid_reason" | "forbidden" | "stale-revision" | "not-found" = "invalid_status",
+    readonly code:
+      | "invalid_status"
+      | "invalid_reason"
+      | "forbidden"
+      | "stale-revision"
+      | "not-found" = "invalid_status",
   ) {
     super(message);
   }
@@ -560,15 +745,23 @@ export async function withdrawDocumentSubmission(
 ): Promise<WithdrawSubmissionResult> {
   const reason = requireWithdrawReason(input.reason);
   return withOrgTransaction(input.orgId, async () => {
-    const locked = (await db.execute<{
-      id: string;
-      kind: string;
-      status: string;
-      number: string | null;
-      subsidiaryId: string | null;
-      submittedBy: string | null;
-      revision: string;
-    }>(sql`
+    const identity = (
+      await db.execute<{ kind: string }>(
+        sql`select kind from documents where org_id=${input.orgId} and id=${input.documentId}`,
+      )
+    ).rows[0];
+    if (!identity) throw new ScopeNotFoundError();
+    await lockApprovalSubject(input.orgId, identity.kind, input.documentId);
+    const locked = (
+      await db.execute<{
+        id: string;
+        kind: string;
+        status: string;
+        number: string | null;
+        subsidiaryId: string | null;
+        submittedBy: string | null;
+        revision: string;
+      }>(sql`
       select id, kind, status,
              document_number as number,
              subsidiary_id as "subsidiaryId",
@@ -577,9 +770,14 @@ export async function withdrawDocumentSubmission(
         from documents
        where id = ${input.documentId} and org_id = ${input.orgId}
        for update
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!locked) {
-      throw new WithdrawSubmissionError("document not found in this organization", 404, "not-found");
+      throw new WithdrawSubmissionError(
+        "document not found in this organization",
+        404,
+        "not-found",
+      );
     }
     if (
       input.allowedSubsidiaryIds !== undefined &&
@@ -589,7 +787,8 @@ export async function withdrawDocumentSubmission(
     }
     if (
       input.expectedUpdatedAt != null &&
-      (!isDocumentRevisionToken(input.expectedUpdatedAt) || input.expectedUpdatedAt !== locked.revision)
+      (!isDocumentRevisionToken(input.expectedUpdatedAt) ||
+        input.expectedUpdatedAt !== locked.revision)
     ) {
       throw new WithdrawSubmissionError(
         "this document changed after you opened it; reload and review the latest revision",
@@ -599,7 +798,9 @@ export async function withdrawDocumentSubmission(
     }
     const name = locked.number ?? "this document";
     if (locked.status === "draft") {
-      throw new WithdrawSubmissionError(`${name} is already a draft — nothing to withdraw`);
+      throw new WithdrawSubmissionError(
+        `${name} is already a draft — nothing to withdraw`,
+      );
     }
     if (locked.status === "approved") {
       throw new WithdrawSubmissionError(
@@ -612,42 +813,69 @@ export async function withdrawDocumentSubmission(
       );
     }
     if (locked.status === "voided") {
-      throw new WithdrawSubmissionError(`${name} is voided — voided documents are terminal`);
+      throw new WithdrawSubmissionError(
+        `${name} is voided — voided documents are terminal`,
+      );
     }
     if (locked.status !== "pending_approval") {
-      throw new WithdrawSubmissionError(`${name} is ${locked.status} — only a pending submission withdraws`);
+      throw new WithdrawSubmissionError(
+        `${name} is ${locked.status} — only a pending submission withdraws`,
+      );
     }
-    if (!input.actorIsApprover && (input.actorId == null || locked.submittedBy !== input.actorId)) {
+    if (
+      !input.actorIsApprover &&
+      (input.actorId == null || locked.submittedBy !== input.actorId)
+    ) {
       throw new WithdrawSubmissionError(
         `only the submitter or an approver withdraws ${name}`,
         403,
         "forbidden",
       );
     }
-    const runs = (await db.execute<{ id: string; status: string }>(sql`
+    const runs = (
+      await db.execute<{ id: string; status: string }>(sql`
       select id::text as id, status from flow_runs
        where org_id = ${input.orgId} and subject_id = ${input.documentId}
-    `)).rows;
-    const liveRunIds = runs.filter((run) => run.status === "running" || run.status === "waiting").map((run) => run.id);
-    await cancelDispatchRuns(input.orgId, liveRunIds, { actorId: input.actorId });
-    const before = await captureTransactionAuditSnapshot(db, input.documentId, input.orgId);
+    `)
+    ).rows;
+    const liveRunIds = runs
+      .filter((run) => run.status === "running" || run.status === "waiting")
+      .map((run) => run.id);
+    await cancelDispatchRuns(input.orgId, liveRunIds, {
+      actorId: input.actorId,
+    });
+    const before = await captureTransactionAuditSnapshot(
+      db,
+      input.documentId,
+      input.orgId,
+    );
     if (!before) {
-      throw new WithdrawSubmissionError("document not found in this organization", 404, "not-found");
+      throw new WithdrawSubmissionError(
+        "document not found in this organization",
+        404,
+        "not-found",
+      );
     }
-    const flipped = (await db.execute<{ id: string }>(sql`
+    const flipped = (
+      await db.execute<{ id: string }>(sql`
       update documents
          set status = 'draft',
              submitted_by = null, submitted_at = null,
              updated_at = now(), updated_by = ${input.actorId}
        where id = ${input.documentId} and org_id = ${input.orgId} and status = 'pending_approval'
       returning id
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!flipped) {
       throw new WithdrawSubmissionError(
         `${name} changed while its submission was being withdrawn; reload and try again`,
       );
     }
-    const after = await captureTransactionAuditSnapshot(db, input.documentId, input.orgId);
+    const after = await captureTransactionAuditSnapshot(
+      db,
+      input.documentId,
+      input.orgId,
+    );
     if (!after) {
       throw new WithdrawSubmissionError(
         `${name} changed while its submission was being withdrawn; reload and try again`,

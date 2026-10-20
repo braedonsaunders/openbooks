@@ -138,7 +138,7 @@
     "discard": "Änderungen verwerfen",
     "submit": "Zur Veröffentlichung einreichen",
     "submitted": "{count, plural, one {Eine Änderung zur Veröffentlichung eingereicht.} other {# Änderungen zur Veröffentlichung eingereicht.}}",
-    "governedExplain": "Gesteuerte Plantafel: Beim Veröffentlichen entsteht eine Veröffentlichung. Gilt ein Freigabe-Flow, werden die Änderungen nach der Freigabe veröffentlicht.",
+    "flowExplain": "Die Veröffentlichung übermittelt diese Änderungen an die Flows Ihrer Organisation. Ohne Freigabeschritte werden sie sofort veröffentlicht.",
     "awaiting": "{count, plural, one {# Änderung wartet} other {# Änderungen warten}} auf die Entscheidung über die Veröffentlichung.",
     "awaitingFlow": "Ein Freigabe-Flow entscheidet diese Veröffentlichung unter Freigaben. Bis dahin bleiben die eingereichten Änderungen gesperrt.",
     "openApprovals": "Freigaben öffnen"

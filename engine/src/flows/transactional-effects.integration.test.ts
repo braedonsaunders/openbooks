@@ -74,12 +74,13 @@ function gatePlan(assignees: EmailTarget[]): AutomationPlan {
 async function createRun(
   orgId: string,
   submitterId: string,
+  plan: AutomationPlan = {actions:[],actionNodes:[],gates:[]},
 ): Promise<{ runId: string; flowId: string; subjectId: string }> {
   const flowId = randomUUID();
   const subjectId = await seedDraftDocument(orgId, { kind: "vendor_bill", createdBy: submitterId });
-  await db.execute(sql`
-    insert into flows (id, org_id, name, subject_kind, enabled, graph)
-    values (${flowId}, ${orgId}, ${"Transactional email probe"}, 'vendor_bill', true, '{"nodes":[],"edges":[]}'::jsonb)`);
+  const graph={schemaVersion:1,nodes:plan.gates.map(({nodeId,gate})=>({id:nodeId,position:{x:0,y:0},data:{kind:"gate",gate}})),edges:[]};
+  await db.execute(sql`insert into flows(id,org_id,name,subject_kind,enabled,graph)
+    values(${flowId},${orgId},'Effect transaction coverage','vendor_bill',true,${JSON.stringify(graph)}::jsonb)`);
   const [run] = await db
     .insert(schema.flowRuns)
     .values({
@@ -89,7 +90,8 @@ async function createRun(
       subjectId,
       trigger: "before_void",
       status: "running",
-      context: {},
+      createdBy:submitterId,
+      context: {submissionPolicy:{flowId,graph}},
     })
     .returning({ id: schema.flowRuns.id });
   return { runId: run!.id, flowId, subjectId };
@@ -223,15 +225,13 @@ test("committed flow emails drain through the outbox exactly once", { skip: !DB 
 
 test("gate approval requests defer per assignee through the outbox", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
-    const run = await createRun(org.orgId, actors.submitterId);
+    const plan=gatePlan([{type:"user",userId:actors.approver1Id},{type:"user",userId:actors.approver2Id}]);
+    const run = await createRun(org.orgId, actors.submitterId,plan);
     const res = await executeFlowPlan({ orgId: org.orgId }, adapter, {
       flow: { id: run.flowId, name: "Gate deferral probe", subjectKind: "vendor_bill", graph: {} },
       runId: run.runId,
       subjectId: run.subjectId,
-      plan: gatePlan([
-        { type: "user", userId: actors.approver1Id },
-        { type: "user", userId: actors.approver2Id },
-      ]),
+      plan,
       evalCtx: { values: {}, rows: {} },
     });
     assert.equal(res.gatesCreated, 2);

@@ -1,3 +1,4 @@
+import { before } from "node:test";
 import { createManufacturingOperator, createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -6,13 +7,18 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { createScratchOrg, dropScratchOrg, seedApprovalFlow, type ScratchOrg } from "../testing/fixtures.ts";
-import { submitFinancialChange, FinancialChangeSubmitError } from "../flows/financial-changes-adapter.ts";
+import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
 import { decideGate } from "../flows/gates.ts";
 import { BomPolicyError, applyBomRevision, readBomPolicyVersion, saveBomPolicy } from "./bom-policy.ts";
 import { submitBomRevision } from "../flows/financial-changes-adapter.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createWorkCenter } from "../manufacturing/work-centers.ts";
-import { activateRoutingDirect, createRouting, createRoutingOperation } from "../manufacturing/routings.ts";
+import {
+  activateRouting,
+  proposeRoutingActivation,
+  createRouting,
+  createRoutingOperation,
+} from "../manufacturing/routings.ts";
 import { applyStandardRollup, previewStandardRollup, proposeStandardRollup } from "../manufacturing/standard-rollup.ts";
 import { createWorkOrder, releaseWorkOrder } from "../manufacturing/work-orders.ts";
 import { explodeBom } from "../manufacturing/bom-explode.ts";
@@ -62,8 +68,11 @@ test("BOM proposal applies with no Flow", { skip: !DB }, async () => {
     const proposed = await changeRow(f, changeId);
     assert.equal(proposed?.status, "draft");
     const decision = (proposed?.payload as { decision?: { mode?: unknown; policy?: { flowConfigured?: unknown } } }).decision;
-    assert.equal(decision?.mode, "automatic");
-    assert.equal(decision?.policy?.flowConfigured, false);
+    assert.equal(
+      decision,
+      undefined,
+      "routing is decided at submission, not proposal creation",
+    );
     await withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, f.actorId, changeId));
     const applied = await changeRow(f, changeId);
     assert.equal(applied?.status, "applied");
@@ -73,7 +82,9 @@ test("BOM proposal applies with no Flow", { skip: !DB }, async () => {
     assert.equal(lines.rows[0]?.n, "3");
     const audit = await run(f.org.orgId, (tx) => tx.execute<{ changes: unknown }>(sql`select changes from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${f.org.items.assembly} order by id desc limit 1`));
     assert.equal((audit.rows[0]?.changes as { approvalChangeId?: string }).approvalChangeId, changeId);
-  } finally { await dropScratchOrg(f.org.orgId); }
+  } finally {
+    await dropScratchOrg(f.org.orgId);
+  }
 });
 
 test("kit recipes accept unprofiled kits and commercial-only components", { skip: !DB }, async () => {
@@ -130,32 +141,56 @@ test("BOM routes through gates when a Flow exists", { skip: !DB }, async () => {
   } finally { await dropScratchOrg(f.org.orgId); }
 });
 
-test("submit without a governing Flow is a 4xx refusal with text", { skip: !DB }, async () => {
-  const f = await setup();
-  try {
-    const { changeId } = await propose(f);
-    const failure = await withOrgContext(f.org.orgId, () => submitFinancialChange(f.org.orgId, changeId, f.actorId)).then(() => null, (error: unknown) => error);
-    assert.ok(failure instanceof FinancialChangeSubmitError);
-    assert.equal((failure as FinancialChangeSubmitError).status, 422);
-    assert.equal((failure as FinancialChangeSubmitError).code, "financial_change_flow_required");
-    assert.match((failure as Error).message, /configure an enabled Accounting event approval flow/);
-    assert.ok((failure as FinancialChangeSubmitError).remedy?.trim());
-    assert.equal((await changeRow(f, changeId))?.status, "draft");
-  } finally { await dropScratchOrg(f.org.orgId); }
-});
+test(
+  "an Accounting event with no applicable gate releases through the canonical submission",
+  { skip: !DB },
+  async () => {
+    const f = await setup();
+    try {
+      const { changeId } = await propose(f);
+      await withOrgContext(f.org.orgId, () => submitFinancialChange(f.org.orgId, changeId, f.actorId));
+      assert.equal((await changeRow(f, changeId))?.status, "approved");
+      const receipts = (
+        await run(f.org.orgId, (tx) =>
+          tx.execute<{ policy: { kind: string } }>(
+            sql`select policy from flow_submissions where org_id=${f.org.orgId} and subject_id=${changeId}`,
+          ),
+        )
+      ).rows;
+      assert.equal(receipts.length, 1);
+      assert.equal(receipts[0]?.policy.kind, "ungated");
+    } finally {
+    await dropScratchOrg(f.org.orgId);
+  }
+  },
+);
 
-test("submit under a silent configured Flow is a 4xx refusal with text", { skip: !DB }, async () => {
-  const f = await setup();
-  try {
-    const approver = await withBypassContext(() => createWorkOperator(f.org.orgId, "Recipe decision", ["manufacturing.manage", "admin.setup.manage"]));
-    await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: approver }], mode: "any", trigger: "on_create" }));
-    const { changeId } = await propose(f);
-    const failure = await withOrgContext(f.org.orgId, () => submitFinancialChange(f.org.orgId, changeId, f.actorId)).then(() => null, (error: unknown) => error);
-    assert.ok(failure instanceof FinancialChangeSubmitError);
-    assert.equal((failure as FinancialChangeSubmitError).status, 422);
-    assert.match((failure as Error).message, /configure an enabled Accounting event approval flow/);
-  } finally { await dropScratchOrg(f.org.orgId); }
-});
+test(
+  "a Flow for a different lifecycle event does not impose a submission gate",
+  { skip: !DB },
+  async () => {
+    const f = await setup();
+    try {
+      const approver = await withBypassContext(() => createWorkOperator(f.org.orgId, "Recipe decision", ["manufacturing.manage", "admin.setup.manage"]));
+      await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: approver }], mode: "any", trigger: "on_create" }));
+      const { changeId } = await propose(f);
+      await withOrgContext(f.org.orgId, () => submitFinancialChange(f.org.orgId, changeId, f.actorId));
+      assert.equal((await changeRow(f, changeId))?.status, "approved");
+      assert.equal(
+        (
+          await run(f.org.orgId, (tx) =>
+            tx.execute(
+              sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${changeId}`,
+            ),
+          )
+        ).rows.length,
+        0,
+      );
+    } finally {
+    await dropScratchOrg(f.org.orgId);
+  }
+  },
+);
 
 function pastDate(today: string, days: number) {
   const date = new Date(today + "T00:00:00Z");
@@ -188,7 +223,13 @@ async function emptyAssemblyItem(f: Fixture) {
   throw new Error("the scratch catalog carries no line-free assembly-capable item");
 }
 
-async function activeRoute(f: Fixture, itemId: string, from: string, departmentId: string, operations: Array<{ sequence: number; backflushAt: "none" | "start" | "finish" }> = [{ sequence: 10, backflushAt: "none" }]) {
+async function activeRoute(
+  f: Fixture,
+  itemId: string,
+  from: string,
+  departmentId: string,
+  operations: Array<{ sequence: number; backflushAt: "none" | "start" | "finish" }> = [{ sequence: 10, backflushAt: "none" }],
+) {
   const code = `WC-${randomUUID()}`;
   const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
     code, name: code, kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false, departmentId,
@@ -203,9 +244,21 @@ async function activeRoute(f: Fixture, itemId: string, from: string, departmentI
       setupMinutes: "5", runMinutesPerUnit: "1", backflushAt: operation.backflushAt,
     }));
   }
-  await run(f.org.orgId, (tx) => activateRoutingDirect(tx, f.org.orgId, f.actorId, String(routing.id), {
+  const proposal = await run(f.org.orgId, (tx) =>
+    proposeRoutingActivation(tx, f.org.orgId, f.actorId, String(routing.id), {
     subsidiaryId: f.org.subsidiaryId, reason: "Activate the configured production revision", idempotencyKey: randomUUID(),
-  }));
+  }),
+  );
+  await submitFinancialChange(f.org.orgId, proposal.changeId, f.actorId);
+  await run(f.org.orgId, (tx) =>
+    activateRouting(
+      tx,
+      f.org.orgId,
+      f.actorId,
+      String(routing.id),
+      proposal.changeId,
+    ),
+  );
   return routing;
 }
 
@@ -348,52 +401,77 @@ test("back-dated revision of an existing recipe refuses naming posted production
   } finally { await dropScratchOrg(f.org.orgId); }
 });
 
-test("back-dated revision refuses naming an applied standard-cost roll-up", { skip: !DB }, async () => {
-  const f = await setup();
-  try {
-    const departmentId = await releaseReady(f);
-    // The standard-costed widget carries the roll-up; its component needs a
-    // standard cost for the preview to measure.
-    const itemId = f.org.items.standard;
-    const today = await run(f.org.orgId, (tx) => businessTodayInTx(tx, f.org.orgId));
-    const past = pastDate(today, 60);
-    const first = await run(f.org.orgId, (tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+test(
+  "back-dated revision refuses naming an applied standard-cost roll-up",
+  { skip: !DB },
+  async () => {
+    const f = await setup();
+    try {
+      const departmentId = await releaseReady(f);
+      // The standard-costed widget carries the roll-up; its component needs a
+      // standard cost for the preview to measure.
+      const itemId = f.org.items.standard;
+      const today = await run(f.org.orgId, (tx) => businessTodayInTx(tx, f.org.orgId));
+      const past = pastDate(today, 60);
+      const first = await run(f.org.orgId, (tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
       assemblyItemId: itemId, expectedVersion: null, reason: "Record the opening recipe for converting historical production",
       subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(),
       components: [{ componentItemId: f.org.items.component, quantityPer: "1", effectiveFrom: today, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false }],
     }));
-    assert.ok("changeId" in first);
-    await withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, f.actorId, first.changeId as string));
-    await withBypassContext(async () => {
+      assert.ok("changeId" in first);
+      await withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, f.actorId, first.changeId as string));
+      await withBypassContext(async () => {
       await db.execute(sql`update item_inventory_profiles set standard_cost='3' where org_id=${f.org.orgId} and item_id=${f.org.items.component}`);
     });
-    const code = `WC-${randomUUID()}`;
-    const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+      const code = `WC-${randomUUID()}`;
+      const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
       code, name: code, kind: "labor", capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false, departmentId,
     }));
-    const routing = await run(f.org.orgId, (tx) => createRouting(tx, f.org.orgId, f.actorId, {
+      const routing = await run(f.org.orgId, (tx) => createRouting(tx, f.org.orgId, f.actorId, {
       producedItemId: itemId, code: `RT-${randomUUID()}`, name: "Assembly route", effectiveFrom: past,
       defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "units",
     }));
-    await run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
+      await run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
       sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "1",
     }));
-    await run(f.org.orgId, (tx) => activateRoutingDirect(tx, f.org.orgId, f.actorId, String(routing.id), {
-      subsidiaryId: f.org.subsidiaryId, reason: "Activate the configured production revision", idempotencyKey: randomUUID(),
-    }));
-    const basis = { itemId, subsidiaryId: f.org.subsidiaryId, onDate: today, batchQuantity: "10" };
-    const preview = await run(f.org.orgId, (tx) => previewStandardRollup(tx, f.org.orgId, f.actorId, basis));
-    const proposal = await run(f.org.orgId, (tx) => proposeStandardRollup(tx, f.org.orgId, f.actorId, {
+      const routingApproval = await run(f.org.orgId, (tx) =>
+        proposeRoutingActivation(
+          tx,
+          f.org.orgId,
+          f.actorId,
+          String(routing.id),
+          {
+    subsidiaryId: f.org.subsidiaryId, reason: "Activate the configured production revision", idempotencyKey: randomUUID(),
+  },
+        ),
+      );
+      await submitFinancialChange(
+        f.org.orgId,
+        routingApproval.changeId,
+        f.actorId,
+      );
+      await run(f.org.orgId, (tx) =>
+        activateRouting(
+          tx,
+          f.org.orgId,
+          f.actorId,
+          String(routing.id),
+          routingApproval.changeId,
+        ),
+      );
+      const basis = { itemId, subsidiaryId: f.org.subsidiaryId, onDate: today, batchQuantity: "10" };
+      const preview = await run(f.org.orgId, (tx) => previewStandardRollup(tx, f.org.orgId, f.actorId, basis));
+      const proposal = await run(f.org.orgId, (tx) => proposeStandardRollup(tx, f.org.orgId, f.actorId, {
       ...basis, reason: "Review standard material and cell conversion costs", idempotencyKey: randomUUID(), expectedDigest: preview.digest,
     }));
-    const approver = await withBypassContext(() => createWorkOperator(f.org.orgId, "Cost approver", ["manufacturing.manage", "items.manage"]));
-    await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: approver }], mode: "any", preventSelfApproval: true }));
-    await withOrgContext(f.org.orgId, () => submitFinancialChange(f.org.orgId, proposal.changeId, f.actorId));
-    const gate = await run(f.org.orgId, async (tx) => (await tx.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`)).rows[0]!);
-    await withBypassContext(() => decideGate({ gateId: gate.id, userId: approver, decision: "approved" }));
-    await withOrgContext(f.org.orgId, () => applyStandardRollup(f.org.orgId, f.actorId, proposal.changeId));
-    const version = await run(f.org.orgId, (tx) => readBomPolicyVersion(tx, f.org.orgId, itemId));
-    await assert.rejects(run(f.org.orgId, (tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
+      const approver = await withBypassContext(() => createWorkOperator(f.org.orgId, "Cost approver", ["manufacturing.manage", "items.manage"]));
+      await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: approver }], mode: "any", preventSelfApproval: true }));
+      await withOrgContext(f.org.orgId, () => submitFinancialChange(f.org.orgId, proposal.changeId, f.actorId));
+      const gate = await run(f.org.orgId, async (tx) => (await tx.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`)).rows[0]!);
+      await withBypassContext(() => decideGate({ gateId: gate.id, userId: approver, decision: "approved" }));
+      await withOrgContext(f.org.orgId, () => applyStandardRollup(f.org.orgId, f.actorId, proposal.changeId));
+      const version = await run(f.org.orgId, (tx) => readBomPolicyVersion(tx, f.org.orgId, itemId));
+      await assert.rejects(run(f.org.orgId, (tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
       assemblyItemId: itemId, expectedVersion: version, reason: "Record the opening recipe for converting historical production",
       subsidiaryId: f.org.subsidiaryId, requestKey: randomUUID(),
       components: [
@@ -401,8 +479,11 @@ test("back-dated revision refuses naming an applied standard-cost roll-up", { sk
         { componentItemId: f.org.items.fifo, quantityPer: "1", effectiveFrom: past, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false },
       ],
     })), (error: unknown) => error instanceof BomPolicyError && error.code === "bom_backdated_revision" && /roll-up/.test(error.message) && error.message.includes(today));
-  } finally { await dropScratchOrg(f.org.orgId); }
-});
+    } finally {
+    await dropScratchOrg(f.org.orgId);
+  }
+  },
+);
 
 test("recipe revision round-trips per-line fields through propose, submit and apply", { skip: !DB }, async () => {
   const f = await setup();
@@ -512,4 +593,10 @@ test("BOM direct submit refusals are typed", { skip: !DB }, async () => {
     await assert.rejects(withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, stranger, changeId)), (error: unknown) => error instanceof ScopeNotFoundError);
     await assert.rejects(withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, randomUUID(), changeId)), (error: unknown) => error instanceof ScopeNotFoundError);
   } finally { await dropScratchOrg(f.org.orgId); }
+});
+
+// Exercise the same native Flow composition installed by application entry points.
+before(async () => {
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
 });

@@ -1,3 +1,67 @@
+import { withdrawCloseRunSubmission } from "../close/approvals.ts";
+import { closeCalibrationSession } from "../hrm/performance/calibration.ts";
+import { releaseCloseTaskApproval, withdrawCloseTaskSubmission } from "../close/tasks.ts";
+import { documentPostingPermission } from "../records/document-kind-permissions.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { transitionTrainingCourse } from "../hrm/training/store.ts";
+import { signOffFromSourceEvidence } from "../banking/source-evidence.ts";
+import { markReconciled } from "../banking/reconciliation.ts";
+import { revalidateReconciliationSignOff } from "../banking/reconciliation-revalidation.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import {
+  approveDisputeReview,
+  rejectDisputeReview,
+} from "../payments/psp-refund-automation.ts";
+import { registerDocumentApprovalFacts } from "../flows/document-approval-facts.ts";
+import { loadQuoteTerms, valueQuoteTerms } from "../billing/quote-to-cash.ts";
+import { submitCertificateVerification } from "../compliance/certificate-verification.ts";
+import { submitComplianceWaiver } from "../compliance/waivers.ts";
+import { releasePromotionApproval } from "../sandbox/promote.ts";
+import {
+  approvePlan,
+  approvePlanLine,
+} from "../hrm/compensation/headcount-plans.ts";
+import { approveLine, rejectLine } from "../hrm/compensation/cycles.ts";
+import { approveEntry } from "../hrm/construction/per-diem.ts";
+import {
+  approveSubcontract,
+  approveSubcontractChangeOrder,
+  approveVendorPayApplication,
+} from "../projects/subcontracts.ts";
+import {
+  approvePayApplication,
+  submitCustomerChangeOrder,
+} from "../projects/construction-billing.ts";
+import {
+  approveRebateAgreement,
+  approveRebateClaim,
+} from "../revenue/rebates.ts";
+import {
+  correctEmploymentChange,
+  rescindEmploymentChange,
+} from "../hrm/change-event-actions.ts";
+import { routeApprovalCommand } from "../flows/command-approval.ts";
+import { releaseOfferApproval } from "../hrm/recruiting/offers.ts";
+import { releaseNormalizationApproval } from "../billing/metrics/metrics-normalization-service.ts";
+import { releaseQuotaApproval } from "../crm/sales.ts";
+import { cancelDispatchRuns } from "../flows/dispatch-result.ts";
+import { completedGateDecisionPolicy } from "../flows/approval-decision-policy.ts";
+import {
+  registerApprovalRouter,
+  registerApprovalDecisionReader,
+  registerApprovalCanceller,
+  registerApprovalCommandRouter,
+} from "../platform/approval-routing.ts";
+import { registerFinancialChangeSubmission } from "../platform/financial-changes.ts";
+import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
+import {
+  registerStockCountRouting,
+  releaseStockCountReview,
+} from "../inventory/stock-count-approval.ts";
+import { STOCK_COUNT_SUBJECT_KIND } from "../flows/stock-counts-adapter.ts";
+import { routeSubjectSubmission } from "../flows/submission-policy.ts";
+import { CLOSE_REOPEN_SUBJECT_KIND } from "../flows/close-reopen-requests-adapter.ts";
+import { finalizePeriodReopenApproval } from "../close/reopen-lifecycle.ts";
 import {sql} from 'drizzle-orm';
 import {automationGraphSchema} from '@openbooks/forms-core';
 import {db,withTransactionSavepoint} from '../platform/db.ts';
@@ -22,7 +86,7 @@ import { releaseChecklistStepApproval } from "../hrm/processes.ts";
 import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { registerScriptJournalWriter } from "../scripting/journal-writer.ts";
-import { registerFlowApprovalReleaseHandler, registerFlowSubmissionResumeHandler } from "../flows/approval-release-hook.ts";
+import { registerFlowApprovalReleaseHandler, registerFlowSubmissionResumeHandler, registerFlowCommandWithdrawalHandler } from "../flows/approval-release-hook.ts";
 import { registerFlowDocumentEffects } from "../flows/document-effects-hook.ts";
 import { postPaymentWithApplications } from "../payments/payment-posting.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -94,6 +158,15 @@ import { releaseWorkOrderApproval } from "../manufacturing/flow-release.ts";
  * check:test-mock-surface).
  */
 export function installEngineSeams(): void {
+  registerDocumentApprovalFacts("quote", async (orgId, id) => {
+    const terms = await loadQuoteTerms(db, orgId, id);
+    const value = valueQuoteTerms(terms);
+    return {
+      subscriptionDiscountPercent: value.discountPct,
+      subscriptionFloorBreached: value.floorBreached,
+      subscriptionTotalContractValue: value.tcv,
+    };
+  });
   registerAutomaticScheduleHandler(async ({ boardId, runId, ctx }) => {
     if (!ctx.userId || !ctx.scheduledOccurrence)
       throw new Error(
@@ -111,6 +184,362 @@ export function installEngineSeams(): void {
     if(!ctx.userId)throw new Error('Schedule delivery needs its original acting user.');
     return enqueueReviewedSchedule({orgId:ctx.orgId,actorId:ctx.userId,requestId,runId});
   });
+  for (const side of ["customer", "vendor"]) {
+    for (const type of ["agreement", "claim"]) {
+      registerFlowApprovalReleaseHandler(
+        `${side}_rebate_${type}`,
+        async (args) => {
+          if (args.outcome !== "approved") return;
+          if (
+            !args.ctx.userId ||
+            !args.approvalRunId ||
+            typeof args.command?.reason !== "string"
+          )
+            throw new Error("The rebate submission command is incomplete.");
+          if (type === "agreement")
+            await approveRebateAgreement(
+              args.ctx.orgId,
+              args.ctx.userId,
+              args.subjectId,
+              args.command.reason,
+              args.approvalRunId,
+            );
+          else
+            await approveRebateClaim(
+              args.ctx.orgId,
+              args.ctx.userId,
+              args.subjectId,
+              args.command.reason,
+              args.approvalRunId,
+            );
+        },
+      );
+    }
+  }
+  registerFlowApprovalReleaseHandler(
+    "employment_change_action",
+    async (args) => {
+      if (args.outcome !== "approved") return;
+      if (!args.ctx.userId || typeof args.command?.reason !== "string")
+        throw new Error("The employment correction command is incomplete.");
+      const input = {
+        orgId: args.ctx.orgId,
+        actorId: args.ctx.userId,
+        changeId: args.subjectId,
+        reason: args.command.reason,
+        approvalRunId: args.approvalRunId,
+      };
+      if (args.command.action === "rescind")
+        await rescindEmploymentChange(input);
+      else if (
+        args.command.action === "correct" &&
+        args.command.correctedFields &&
+        typeof args.command.correctedFields === "object" &&
+        !Array.isArray(args.command.correctedFields)
+      )
+        await correctEmploymentChange({
+          ...input,
+          correctedFields: args.command.correctedFields as Record<
+            string,
+            unknown
+          >,
+        });
+      else
+        throw new Error("The submitted employment correction is unsupported.");
+    },
+  );
+  for (const kind of [
+    "subcontract",
+    "subcontract_change_order",
+    "vendor_pay_application",
+    "customer_pay_application",
+  ]) {
+    registerFlowApprovalReleaseHandler(kind, async (args) => {
+      if (args.outcome !== "approved") return;
+      if (!args.ctx.userId || !args.approvalRunId)
+        throw new Error(
+          "The native construction approval command is incomplete.",
+        );
+      const orgId = args.ctx.orgId,
+        actorId = args.ctx.userId,
+        id = args.subjectId;
+      if (kind === "subcontract")
+        await approveSubcontract(orgId, actorId, id, args.approvalRunId);
+      else if (kind === "vendor_pay_application")
+        await approveVendorPayApplication(
+          orgId,
+          actorId,
+          id,
+          args.approvalRunId,
+        );
+      else if (kind === "customer_pay_application") {
+        const { actorAllowedSubsidiaryIds } =
+          await import("../organization/actor-subsidiaries.ts");
+        await approvePayApplication(
+          orgId,
+          actorId,
+          id,
+          await actorAllowedSubsidiaryIds(db, orgId, actorId),
+          args.approvalRunId,
+        );
+      } else if (typeof args.command?.approvedOn === "string")
+        await approveSubcontractChangeOrder(
+          orgId,
+          actorId,
+          id,
+          args.command.approvedOn,
+          args.approvalRunId,
+        );
+      else throw new Error("The submitted change order has no approval date.");
+    });
+  }
+  for (const kind of [
+    "headcount_plan",
+    "headcount_plan_line",
+    "compensation_cycle_line",
+    "per_diem_entry",
+    "travel_pay_entry",
+  ]) {
+    registerFlowApprovalReleaseHandler(kind, async (args) => {
+      if (!args.ctx.userId || !args.approvalRunId)
+        throw new Error("The workforce approval command is incomplete.");
+      const input = {
+        orgId: args.ctx.orgId,
+        actorId: args.ctx.userId,
+        approvalRunId: args.approvalRunId,
+      };
+      if (kind === "compensation_cycle_line") {
+        if (args.outcome === "rejected")
+          await rejectLine({
+            ...input,
+            lineId: args.subjectId,
+            reason:
+              args.comment?.trim() ||
+              "Rejected through the configured Flow gate.",
+          });
+        else
+          await approveLine({
+            ...input,
+            lineId: args.subjectId,
+            reason:
+              typeof args.command?.reason === "string"
+                ? args.command.reason
+                : null,
+          });
+      } else if (args.outcome === "approved") {
+        if (kind === "headcount_plan")
+          await approvePlan({ ...input, planId: args.subjectId });
+        else if (kind === "headcount_plan_line")
+          await approvePlanLine({
+            ...input,
+            lineId: args.subjectId,
+            reason:
+              typeof args.command?.reason === "string"
+                ? args.command.reason
+                : null,
+          });
+        else
+          await approveEntry(db, {
+            ...input,
+            entryId: args.subjectId,
+            kind: kind === "per_diem_entry" ? "per_diem" : "travel",
+          });
+      }
+    });
+  }
+  registerFlowApprovalReleaseHandler(
+    "sandbox_change_set",
+    releasePromotionApproval,
+  );
+  registerFlowApprovalReleaseHandler("compliance_waiver", async (args) => {
+    if (args.outcome !== "approved") return;
+    if (!args.ctx.userId || !args.approvalRunId)
+      throw new Error("The exception submission is incomplete.");
+    await submitComplianceWaiver({
+      orgId: args.ctx.orgId,
+      actorId: args.ctx.userId,
+      id: args.subjectId,
+      approvalRunId: args.approvalRunId,
+    });
+  });
+  registerFlowApprovalReleaseHandler("customer_change_order", async (args) => {
+    if (args.outcome !== "approved") return;
+    if (
+      !args.ctx.userId ||
+      !args.approvalRunId ||
+      typeof args.command?.approvedOn !== "string"
+    )
+      throw new Error("The customer change-order command is incomplete.");
+    await submitCustomerChangeOrder({
+      orgId: args.ctx.orgId,
+      actorId: args.ctx.userId,
+      id: args.subjectId,
+      approvedOn: args.command.approvedOn,
+      approvalRunId: args.approvalRunId,
+    });
+  });
+  registerFlowApprovalReleaseHandler("compliance_certificate", async (args) => {
+    if (args.outcome !== "approved") return;
+    if (
+      !args.ctx.userId ||
+      !args.approvalRunId ||
+      typeof args.command?.revision !== "number"
+    )
+      throw new Error("The certificate submission is incomplete.");
+    await submitCertificateVerification({
+      orgId: args.ctx.orgId,
+      actorId: args.ctx.userId,
+      id: args.subjectId,
+      revision: args.command.revision,
+      approvalRunId: args.approvalRunId,
+    });
+  });
+  registerFlowApprovalReleaseHandler("payment_dispute_review", async (args) => {
+    if (!args.ctx.userId || !args.approvalRunId)
+      throw new Error(
+        "Provider return decisions require a native Flow gate and acting user.",
+      );
+    const scope = await actorAllowedSubsidiaryIds(
+      db,
+      args.ctx.orgId,
+      args.ctx.userId,
+    );
+    if (args.outcome === "approved")
+      await approveDisputeReview(
+        args.ctx.orgId,
+        args.subjectId,
+        args.ctx.userId,
+        scope,
+        args.approvalRunId,
+      );
+    else
+      await rejectDisputeReview(
+        args.ctx.orgId,
+        args.subjectId,
+        args.ctx.userId,
+        args.comment ?? "Rejected through the tenant's Flow",
+        scope,
+        args.approvalRunId,
+      );
+  });
+  for (const kind of [
+    "bank_reconciliation_sign_off",
+    "bank_reconciliation_review",
+  ]) {
+    registerFlowApprovalReleaseHandler(kind, async (args) => {
+      if (args.outcome !== "approved") return;
+      if (!args.ctx.userId || !args.approvalRunId)
+        throw new Error(
+          "Bank reconciliation release requires its native Flow decision.",
+        );
+      const ctx = {
+        orgId: args.ctx.orgId,
+        userId: args.ctx.userId,
+        allowedSubsidiaryIds: await actorAllowedSubsidiaryIds(
+          db,
+          args.ctx.orgId,
+          args.ctx.userId,
+        ),
+      };
+      if (kind === "bank_reconciliation_sign_off") {
+        if (args.command?.sourceEvidence === true) {
+          const record = (
+            await db.execute<{ account_id: string }>(
+              sql`select account_id from reconciliations where org_id=${ctx.orgId} and id=${args.subjectId}`,
+            )
+          ).rows[0];
+          if (!record)
+            throw new Error("The source reconciliation is unavailable.");
+          const result = await signOffFromSourceEvidence(
+            {
+              accountId: record.account_id,
+              reconciliationId: args.subjectId,
+              approvalRunId: args.approvalRunId,
+            },
+            ctx,
+          );
+          if (!result.signed)
+            throw new Error(
+              "The source evidence no longer admits this sign-off. Recall the submission and review the source reconciliation.",
+            );
+        } else await markReconciled(args.subjectId, ctx, args.approvalRunId);
+      } else {
+        if (
+          typeof args.command?.expectedDigest !== "string" ||
+          typeof args.command.reason !== "string"
+        )
+          throw new Error(
+            "The reconciliation review has no complete frozen evidence.",
+          );
+        await revalidateReconciliationSignOff(
+          args.subjectId,
+          {
+            expectedDigest: args.command.expectedDigest,
+            reason: args.command.reason,
+            approvalRunId: args.approvalRunId,
+          },
+          ctx,
+        );
+      }
+    });
+  }
+  registerFlowApprovalReleaseHandler("hrm_calibration_session",async args=>{
+    if(args.outcome!=="approved")return;
+    if(!args.ctx.userId || !args.approvalRunId || args.command?.action!=="close")throw new Error("The calibration publication command is incomplete; recall and resubmit it.");
+    await closeCalibrationSession({orgId:args.ctx.orgId,actorId:args.ctx.userId,id:args.subjectId,approvalRunId:args.approvalRunId});
+  });
+  registerFlowCommandWithdrawalHandler("close_task",withdrawCloseTaskSubmission);
+  registerFlowCommandWithdrawalHandler("close_run",withdrawCloseRunSubmission);
+  registerFlowApprovalReleaseHandler("close_task",async args=>{
+    if(!args.ctx.userId || !args.approvalRunId || !args.command)throw new Error("The close task submission is incomplete; recall and resubmit it.");
+    await releaseCloseTaskApproval({orgId:args.ctx.orgId,actorId:args.ctx.userId,taskId:args.subjectId,
+      approvalRunId:args.approvalRunId,outcome:args.outcome,command:args.command});
+  });
+  registerFlowApprovalReleaseHandler("training_course", async (args) => {
+    if (args.outcome !== "approved") return;
+    if (
+      !args.ctx.userId ||
+      !args.approvalRunId ||
+      typeof args.command?.expectedRevision !== "number" ||
+      typeof args.command.reason !== "string"
+    )
+      throw new Error(
+        "The training course submission is incomplete. Recall it and submit its current revision.",
+      );
+    await transitionTrainingCourse({
+      orgId: args.ctx.orgId,
+      actorId: args.ctx.userId,
+      courseId: args.subjectId,
+      action: "submit",
+      expectedRevision: args.command.expectedRevision,
+      reason: args.command.reason,
+      approvalRunId: args.approvalRunId,
+    });
+  });
+  registerApprovalRouter(routeSubjectSubmission);
+  registerApprovalCommandRouter(routeApprovalCommand);
+  registerApprovalCanceller(async (input) => {
+    const rows = (
+      await db.execute<{
+        id: string;
+      }>(sql`select id from flow_runs where org_id=${input.orgId}
+      and subject_kind=${input.subjectKind} and subject_id=${input.subjectId} and status in ('running','waiting') order by id for update`)
+    ).rows;
+    await cancelDispatchRuns(
+      input.orgId,
+      rows.map((row) => row.id),
+      { actorId: input.actorId },
+    );
+  });
+  registerFlowApprovalReleaseHandler("sales_quota", releaseQuotaApproval);
+  registerFlowApprovalReleaseHandler("recruiting_offer", releaseOfferApproval);
+  registerFlowApprovalReleaseHandler(
+    "metrics_normalization",
+    releaseNormalizationApproval,
+  );
+  registerApprovalDecisionReader((input) =>
+    completedGateDecisionPolicy(db, input),
+  );
   registerScheduleDistributionHooks(async({event,requestId,actor})=> {
     const result=await runRecordFlows({kind:event,occurrenceKey:`schedule:${requestId}:${event}`},'schedule_distribution',requestId,{orgId:actor.orgId,userId:actor.actorId});
       return {
@@ -148,27 +577,56 @@ export function installEngineSeams(): void {
   // Shift requests and governed schedule publications submit to optional
   // Flows; a gating Flow owns the decision and releases it through the
   // scheduling service, otherwise the submission applies at once.
-  const submitToFlows = (subjectKind: string) => async (actor: { orgId: string; actorId: string }, subjectId: string) => {
-    const result = await runRecordFlows({ kind: "on_submit", occurrenceKey: `${subjectKind}:${subjectId}:on_submit` }, subjectKind, subjectId,
-      { orgId: actor.orgId, userId: actor.actorId });
-    const failedRun = result.runs.find((run) => run.status === "failed");
-    return {
+  const submitToFlows =
+    (subjectKind: string) =>
+    async (actor: { orgId: string; actorId: string }, subjectId: string) => {
+      const result = (
+        await routeSubjectSubmission({
+          orgId: actor.orgId,
+          actorId: actor.actorId,
+          subjectKind,
+          subjectId,
+          source: "api",
+        })
+      ).dispatch;
+      const failedRun = result.runs.find((run) => run.status === "failed");
+      return {
       gated: result.gatesCreated > 0,
       runId: result.runs.find((run) => run.gatesCreated > 0)?.runId ?? null,
       failed: result.failed || Boolean(failedRun),
       error: result.error ?? failedRun?.error ?? null,
     };
-  };
+    };
   registerShiftRequestRouting(submitToFlows(SHIFT_REQUEST_SUBJECT_KIND));
   registerSchedulePublicationRouting(submitToFlows(SCHEDULE_PUBLICATION_SUBJECT_KIND));
-  registerFlowApprovalReleaseHandler(SHIFT_REQUEST_SUBJECT_KIND, async ({ subjectId, outcome, comment, ctx }) => {
-    if (!ctx.userId) throw new Error("Shift request decisions need the deciding user.");
-    await releaseShiftRequestApproval({ orgId: ctx.orgId, actorId: ctx.userId, requestId: subjectId, outcome, comment });
-  });
-  registerFlowApprovalReleaseHandler(SCHEDULE_PUBLICATION_SUBJECT_KIND, async ({ subjectId, outcome, comment, ctx }) => {
-    if (!ctx.userId) throw new Error("Schedule publication decisions need the deciding user.");
-    await releasePublicationApproval({ orgId: ctx.orgId, actorId: ctx.userId, publicationId: subjectId, outcome, comment });
-  });
+  registerFlowApprovalReleaseHandler(
+    SHIFT_REQUEST_SUBJECT_KIND,
+    async ({ subjectId, outcome, comment, ctx, approvalRunId }) => {
+      if (!ctx.userId) throw new Error("Shift request decisions need the deciding user.");
+      await releaseShiftRequestApproval({
+        orgId: ctx.orgId,
+        actorId: ctx.userId,
+        requestId: subjectId,
+        outcome,
+        comment,
+        approvalRunId,
+      });
+    },
+  );
+  registerFlowApprovalReleaseHandler(
+    SCHEDULE_PUBLICATION_SUBJECT_KIND,
+    async ({ subjectId, outcome, comment, ctx, approvalRunId }) => {
+      if (!ctx.userId) throw new Error("Schedule publication decisions need the deciding user.");
+      await releasePublicationApproval({
+        orgId: ctx.orgId,
+        actorId: ctx.userId,
+        publicationId: subjectId,
+        outcome,
+        comment,
+        approvalRunId,
+      });
+    },
+  );
   // A service visit completion review is decided in its Flow; the service
   // module applies the decision inside the gate's transaction.
   registerFlowApprovalReleaseHandler(SERVICE_VISIT_COMPLETION_SUBJECT_KIND, async ({ subjectId, outcome, comment, ctx }) => {
@@ -187,7 +645,72 @@ export function installEngineSeams(): void {
   // releaseFlowApproval; the handlers run inside decideGate's transaction.
   registerFlowApprovalReleaseHandler(ALLOCATION_RUN_SUBJECT_KIND, releaseAllocationRunApproval);
   registerFlowApprovalReleaseHandler(FUND_RELEASE_SUBJECT_KIND, releaseFundReleaseFlowApproval);
+  registerFinancialChangeSubmission(submitFinancialChange);
+  registerStockCountRouting(async ({ orgId, actorId, countId, cancel }) => {
+    if (cancel) {
+      const runs = (
+        await db.execute<{
+          id: string;
+        }>(sql`select id from flow_runs where org_id=${orgId}
+        and subject_kind=${STOCK_COUNT_SUBJECT_KIND} and subject_id=${countId}`)
+      ).rows;
+      await cancelDispatchRuns(
+        orgId,
+        runs.map((run) => run.id),
+        { actorId },
+      );
+      return;
+    }
+    return (
+      await routeSubjectSubmission({
+        orgId,
+        actorId,
+        subjectId: countId,
+        subjectKind: STOCK_COUNT_SUBJECT_KIND,
+      })
+    ).policy;
+  });
+  registerFlowApprovalReleaseHandler(
+    STOCK_COUNT_SUBJECT_KIND,
+    async ({ subjectId, outcome, approvalRunId, ctx }) => {
+      if (!ctx.userId)
+        throw new Error("A stock count decision requires its native actor.");
+      const proof = await completedGateDecisionPolicy(db, {
+        orgId: ctx.orgId,
+        subjectKind: STOCK_COUNT_SUBJECT_KIND,
+        subjectId,
+        approvalRunId,
+        actorId: ctx.userId,
+        outcome,
+      });
+      if (!proof)
+        throw new Error(
+          "Complete the stock count Flow gates before releasing review.",
+        );
+      await releaseStockCountReview({
+        orgId: ctx.orgId,
+        countId: subjectId,
+        actorId: ctx.userId,
+        outcome,
+      });
+    },
+  );
   registerFlowApprovalReleaseHandler(CLOSE_RUN_SUBJECT_KIND, releaseCloseRunApproval);
+  registerFlowApprovalReleaseHandler(
+    CLOSE_REOPEN_SUBJECT_KIND,
+    async ({ subjectId, outcome, comment, approvalRunId, ctx }) => {
+      if (!ctx.userId)
+        throw new Error("Period reopen decisions require a signed-in actor.");
+      await finalizePeriodReopenApproval({
+        orgId: ctx.orgId,
+        requestId: subjectId,
+        actorId: ctx.userId,
+        outcome,
+        comment,
+        approvalRunId,
+      });
+    },
+  );
   registerFlowApprovalReleaseHandler(BENEFIT_AWARD_SUBJECT_KIND, releaseBenefitAwardFlowApproval);
   registerFlowApprovalReleaseHandler(BENEFIT_ENROLLMENT_SUBJECT_KIND, releaseBenefitEnrollmentFlowApproval);
   registerFlowApprovalReleaseHandler(HRM_COMP_CYCLE_SUBJECT_KIND, releaseCompCycleApproval);
@@ -224,6 +747,40 @@ export function installEngineSeams(): void {
   // that `db` routes to does not change.
   registerFlowDocumentEffects({
     async postSubject({ subjectKind, subjectId, ctx }) {
+      const identity = (
+        await db.execute<{
+          subsidiary_id: string | null;
+          status: string;
+          posted_entry_id: string | null;
+        }>(sql`
+        select subsidiary_id,status,posted_entry_id from documents where org_id=${ctx.orgId} and id=${subjectId} and kind=${subjectKind} for update`)
+      ).rows[0];
+      const permission = documentPostingPermission(subjectKind);
+      if (!identity || !ctx.userId || !permission)
+        throw new Error(
+          "Flow posting requires its native document and authorized acting user.",
+        );
+      await lockActorCommandAuthority(
+        db,
+        ctx.orgId,
+        ctx.userId,
+        identity.subsidiary_id,
+        permission,
+      );
+      if (identity.status === "posted") {
+        const retained = (
+          await db.execute<{
+            id: string;
+          }>(sql`select id from journal_entries where org_id=${ctx.orgId} and id=${identity.posted_entry_id}
+          -- Live entries only: posting replay requires the retained journal to remain effective.
+          and source_document_id=${subjectId} and status='posted'`)
+        ).rows[0];
+        if (!retained)
+          throw new Error(
+            "The posted document has no intact native journal. Review its accounting history before retrying.",
+          );
+        return retained.id;
+      }
       if (
         subjectKind === "vendor_payment" ||
         subjectKind === "customer_payment"

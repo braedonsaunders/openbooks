@@ -25,16 +25,25 @@ test('failed subscription terms load shows the refusal and a working retry', asy
   let requests = 0
   globalThis.fetch = (async () => {
     requests += 1
-    if (requests === 1) return Response.json({ error: 'Subscription terms are not available to this user' }, { status: 403 })
+    if (requests === 1)
+      return Response.json(
+        { error: 'Subscription terms are not available to this user' },
+        { status: 403 },
+      )
     return Response.json({
-      quote: { id: 'quote-1', documentNumber: 'EST-1', status: 'draft', currency: 'USD' },
+      quote: {
+        id: 'quote-1',
+        documentNumber: 'EST-1',
+        status: 'draft',
+        currency: 'USD',
+      },
       terms: [],
       tcv: '0.0000',
       listTcv: '0.0000',
       discountPct: '0.00',
       floorBreached: false,
       signature: null,
-      settings: { maxDiscountPercent: '10', autoActivateOnSign: false },
+      settings: { autoActivateOnSign: false },
       advancedSubscriptions: false,
       revenueContracts: false,
     })
@@ -48,7 +57,13 @@ test('failed subscription terms load shows the refusal and a working retry', asy
       root.render(
         <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
           <MoneyProvider currency="USD">
-            <QuoteCashSection quoteId="quote-1" currency="USD" canManage={false} docStatus="draft" lines={[]} />
+            <QuoteCashSection
+              quoteId="quote-1"
+              currency="USD"
+              canManage={false}
+              docStatus="draft"
+              lines={[]}
+            />
           </MoneyProvider>
         </NextIntlClientProvider>,
       )
@@ -56,9 +71,13 @@ test('failed subscription terms load shows the refusal and a working retry', asy
       await tick()
     })
 
-    assert.match(host.querySelector('[role="alert"]')?.textContent ?? '', /Subscription terms are not available/)
-    const retry = [...host.querySelectorAll<HTMLButtonElement>('button')]
-      .find((button) => button.textContent?.trim() === 'Retry')
+    assert.match(
+      host.querySelector('[role="alert"]')?.textContent ?? '',
+      /Subscription terms are not available/,
+    )
+    const retry = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Retry',
+    )
     assert.ok(retry, 'a failed load must offer a retry')
     await act(async () => {
       retry.click()

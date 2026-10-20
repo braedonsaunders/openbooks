@@ -15,7 +15,7 @@ import {
 } from "../testing/fixtures.ts";
 import { submitForApproval } from "./submit.ts";
 import { retryFlowRun } from "./run.ts";
-import { decideGate, delegateGate, escalateDueGate, gateDecisionCapability, worklistGates } from "./gates.ts";
+import { decideGate, delegateGate, escalateDueGate, GateError, gateDecisionCapability, worklistGates } from "./gates.ts";
 import { createDelegation } from "./delegations.ts";
 
 /**
@@ -37,15 +37,17 @@ import { createDelegation } from "./delegations.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function docStatus(id: string): Promise<string | null> {
-  const r = (await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`));
+  const r = await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`);
   return r.rows[0]?.status ?? null;
 }
 
-async function gateRows(runOrSubject: { subjectId: string }): Promise<{ id: string; status: string; assigneeUserId: string | null }[]> {
-  const r = (await db.execute<{ id: string; status: string; assigneeUserId: string | null }>(sql`
+async function gateRows(runOrSubject: {
+  subjectId: string;
+}): Promise<{ id: string; status: string; assigneeUserId: string | null }[]> {
+  const r = await db.execute<{ id: string; status: string; assigneeUserId: string | null }>(sql`
     select id, status, assignee_user_id as "assigneeUserId"
       from flow_gates where subject_id = ${runOrSubject.subjectId} order by created_at
-  `));
+  `);
   return r.rows;
 }
 
@@ -68,7 +70,7 @@ test("engine releases the document to approved with NO authored change_status (s
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
 
-    const res = await submitForApproval("vendor_bill", docId);
+    const res = await submitForApproval("vendor_bill", docId, actors.submitterId);
     assert.equal(res.gated, true, "submit created a gate");
     assert.equal(res.flowError, null);
     assert.equal(await docStatus(docId), "pending_approval");
@@ -93,7 +95,7 @@ test("reject returns the document to draft (engine-enforced)", { skip: !DB }, as
       mode: "any",
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const [gate] = await gateRows({ subjectId: docId });
 
     const decision = await decideGate({ gateId: gate!.id, decision: "rejected", userId: actors.approver1Id, comment: "over budget" });
@@ -113,7 +115,7 @@ test("quorum 'all' requires every approver before release", { skip: !DB }, async
       ],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const gates = await gateRows({ subjectId: docId });
     assert.equal(gates.length, 2, "one gate row per approver");
 
@@ -141,7 +143,7 @@ test("quorum 'any' releases on the first approval and cancels the sibling", { sk
       ],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const gates = await gateRows({ subjectId: docId });
     const first = gates.find((g) => g.assigneeUserId === actors.approver1Id)!;
 
@@ -153,131 +155,40 @@ test("quorum 'any' releases on the first approval and cancels the sibling", { sk
   });
 });
 
-test("submit FAILS CLOSED when an enabled flow has an invalid graph", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    // Raw SQL bypasses the validated flow writer: the stored graph cannot parse.
-    await db.execute(sql`
-      insert into flows (id, org_id, name, subject_kind, enabled, graph)
-      values (${randomUUID()}, ${org.orgId}, 'Broken flow', 'vendor_bill', true, ${JSON.stringify({ nodes: "not-an-array" })}::jsonb)`);
-    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+test("submit FAILS CLOSED when an enabled flow has an invalid graph",{skip:!DB},async()=>withOrgFixture(async(org,actors)=>{
+ await db.execute(sql`insert into flows(id,org_id,name,subject_kind,enabled,graph) values(${randomUUID()},${org.orgId},'Invalid approval','vendor_bill',true,'{"nodes":"invalid"}'::jsonb)`);
+ const id=await seedDraftDocument(org.orgId,{kind:'vendor_bill',createdBy:actors.submitterId});
+ await assert.rejects(submitForApproval('vendor_bill',id,actors.submitterId),/invalid|cannot run/i);
+ assert.equal(await docStatus(id),'draft');assert.deepEqual(await gateRows({subjectId:id}),[]);
+ assert.equal((await db.execute(sql`select id from flow_runs where org_id=${org.orgId} and subject_id=${id}`)).rows.length,0,'refused submission leaves no incomplete routing transaction');
+}));
 
-    const res = await submitForApproval("vendor_bill", docId);
-    assert.equal(res.gated, false, "an unparseable flow must never read as approval granted");
-    assert.ok(res.flowError, "a flowError is surfaced so the caller fails closed");
-    assert.equal(await docStatus(docId), "draft");
-    const gates = await gateRows({ subjectId: docId });
-    assert.equal(gates.length, 0, "no gate may dangle from a refused dispatch");
-    // The failure is recorded on its own failed run row, so fixing the graph
-    // unblocks the retry path instead of stranding the subject.
-    const runs = (await db.execute<{ status: string; error: string | null }>(sql`
-      select status, error from flow_runs where subject_id = ${docId}`)).rows;
-    assert.equal(runs.length, 1);
-    assert.equal(runs[0]!.status, "failed");
-    assert.match(runs[0]!.error ?? "", /Broken flow/);
-  });
-});
+test("submit is REFUSED when one flow gates and another fails",{skip:!DB},async()=>withOrgFixture(async(org,actors)=>{
+ await seedApprovalFlow(org.orgId,{subjectKind:'vendor_bill',assignees:[{type:'user',userId:actors.approver1Id}],mode:'all'});
+ await seedApprovalFlow(org.orgId,{subjectKind:'vendor_bill',assignees:[{type:'role',role:'missing_reviewers'}],mode:'all'});
+ const id=await seedDraftDocument(org.orgId,{kind:'vendor_bill',createdBy:actors.submitterId});
+ await assert.rejects(submitForApproval('vendor_bill',id,actors.submitterId),/zero assignees/);
+ assert.equal(await docStatus(id),'draft');assert.deepEqual(await gateRows({subjectId:id}),[]);
+ assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`)).rows.length,0);
+}));
 
-test("submit is REFUSED when one flow gates and another fails", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    const good = await seedApprovalFlow(org.orgId, {
-      subjectKind: "vendor_bill",
-      mode: "any",
-      gateTitle: "Working approval",
-      assignees: [{ type: "user", userId: actors.approver1Id }],
-    });
-    const bad = await seedApprovalFlow(org.orgId, {
-      subjectKind: "vendor_bill",
-      mode: "any",
-      gateTitle: "Broken approval",
-      assignees: [{ type: "role", role: "nonexistent_role" }],
-    });
-    // Distinct names so the refusal can tell the two flows apart.
-    await db.execute(sql`update flows set name = 'Working flow' where id = ${good.flowId}`);
-    await db.execute(sql`update flows set name = 'Broken flow' where id = ${bad.flowId}`);
-    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+test("submit FAILS CLOSED when the approval flow resolves to zero approvers",{skip:!DB},async()=>withOrgFixture(async(org,actors)=>{
+ await seedApprovalFlow(org.orgId,{subjectKind:'vendor_bill',assignees:[{type:'role',role:'missing_reviewers'}],mode:'all'});
+ const id=await seedDraftDocument(org.orgId,{kind:'vendor_bill',createdBy:actors.submitterId});
+ await assert.rejects(submitForApproval('vendor_bill',id,actors.submitterId),/zero assignees/);
+ assert.equal(await docStatus(id),'draft');assert.deepEqual(await gateRows({subjectId:id}),[]);
+}));
 
-    const res = await submitForApproval("vendor_bill", docId);
-    assert.equal(res.gated, false, "a sibling gate must not carry a failed dispatch into pending_approval");
-    assert.ok(res.flowError, "a flowError is surfaced so the caller fails closed");
-    assert.match(res.flowError, /Broken flow/, "the refusal names the failed flow");
-    assert.match(res.flowError, /zero assignees/, "the refusal names the cause");
-    assert.equal(await docStatus(docId), "draft");
-    // The sibling's gate was created by the dispatch, then cancelled by the
-    // refusal — nothing live may dangle behind it.
-    const gates = await gateRows({ subjectId: docId });
-    assert.ok(gates.length > 0, "the dispatch really did gate before failing");
-    assert.ok(gates.every((g) => g.status === "cancelled"),
-      `every gate from the refused dispatch is cancelled, got ${JSON.stringify(gates.map((g) => g.status))}`);
-    // The failed run stays failed as retry evidence (only live runs cancel).
-    const failed = (await db.execute<{ id: string }>(sql`
-      select id from flow_runs where subject_id = ${docId} and status = 'failed'`)).rows;
-    assert.equal(failed.length, 1);
-  });
-});
-
-test("submit FAILS CLOSED when the approval flow resolves to zero approvers", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    // A role with no members → createGate throws → run failed → gatesCreated 0.
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "vendor_bill",
-      mode: "any",
-      assignees: [{ type: "role", role: "nonexistent_role" }],
-    });
-    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-
-    const res = await submitForApproval("vendor_bill", docId);
-    assert.equal(res.gated, false);
-    assert.ok(res.flowError, "a flowError is surfaced so the caller fails closed");
-    // The document must NOT have been auto-approved — it stays draft.
-    assert.equal(await docStatus(docId), "draft");
-  });
-});
-
-/** A run that failed on a zero-assignee gate strands its subject
- * with no path forward. Retrying the failed run after the gate becomes
- * satisfiable must re-resolve assignees live and park the run at a gate —
- * the same run row. Once the run leaves failed, further retries are refused
- * (pinned by the test below), so a retry can never double-fan-out gates. */
-test("a failed run can be retried once its gate resolves", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    await grantScratchPermissions(org.orgId, actors.adminId, ["flows.manage"]);
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "vendor_bill",
-      mode: "any",
-      assignees: [{ type: "role", role: "nonexistent_role" }],
-    });
-    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-
-    const submit = await submitForApproval("vendor_bill", docId);
-    assert.ok(submit.flowError, "the zero-assignee submit must fail its run");
-    const failedRun = (await db.execute<{ id: string }>(sql`
-      select id from flow_runs where subject_id = ${docId} and status = 'failed' order by started_at desc limit 1
-    `)).rows[0];
-    assert.ok(failedRun, "the failed run must be recorded");
-
-    // The tenant fixes the gate (the QA story: granting the Approver role).
-    await db.execute(sql`
-      update flows set graph = jsonb_set(graph, '{nodes,1,data,gate,assignees}',
-        ${JSON.stringify([{ type: "user", userId: actors.approver1Id }])}::jsonb)
-       where org_id = ${org.orgId} and subject_kind = 'vendor_bill'`);
-
-    const retried = await retryFlowRun(failedRun.id, { orgId: org.orgId, userId: actors.adminId });
-    assert.equal(retried.runId, failedRun.id, "a retry re-drives the same run row");
-    assert.equal(retried.status, "waiting", "the retried run must park at the now-satisfiable gate");
-    assert.equal(retried.gatesCreated, 1);
-    const gates = await gateRows({ subjectId: docId });
-    assert.equal(gates.length, 1, "exactly one live gate must exist after the retry");
-    assert.equal(gates[0]!.assigneeUserId, actors.approver1Id);
-    // Submit parity: a retry that gates must park the subject awaiting
-    // approval, or the engine-enforced (pending_approval-only) release no-ops.
-    assert.equal(await docStatus(docId), "pending_approval");
-
-    // The approval now completes through the retried run.
-    const decision = await decideGate({ gateId: gates[0]!.id, decision: "approved", userId: actors.approver1Id });
-    assert.equal(decision.runStatus, "completed");
-    assert.equal(await docStatus(docId), "approved");
-  });
-});
+test("a refused initial submission can be resubmitted after its tenant corrects the Flow",{skip:!DB},async()=>withOrgFixture(async(org,actors)=>{
+ const flow=await seedApprovalFlow(org.orgId,{subjectKind:'vendor_bill',assignees:[{type:'role',role:'missing_reviewers'}],mode:'all'});
+ const id=await seedDraftDocument(org.orgId,{kind:'vendor_bill',createdBy:actors.submitterId});
+ await assert.rejects(submitForApproval('vendor_bill',id,actors.submitterId),/zero assignees/);
+ await db.execute(sql`update flows set graph=jsonb_set(graph,'{nodes,1,data,gate,assignees}',${JSON.stringify([{type:'user',userId:actors.approver1Id}])}::jsonb) where org_id=${org.orgId} and id=${flow.flowId}`);
+ const submitted=await submitForApproval('vendor_bill',id,actors.submitterId);assert.equal(submitted.gated,true);
+ const gates=await gateRows({subjectId:id});assert.equal(gates.length,1);
+ await decideGate({gateId:gates[0]!.id,decision:'approved',userId:actors.approver1Id});assert.equal(await docStatus(id),'approved');
+ const receipts=await db.execute(sql`select id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`);assert.equal(receipts.rows.length,1);
+}));
 
 test("retrying a non-failed run is refused", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
@@ -287,7 +198,7 @@ test("retrying a non-failed run is refused", { skip: !DB }, async () => {
       mode: "any",
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const waitingRun = (await db.execute<{ id: string }>(sql`
       select id from flow_runs where subject_id = ${docId} and status = 'waiting' order by started_at desc limit 1
     `)).rows[0];
@@ -309,20 +220,21 @@ test("the maker cannot approve their document even after a gate is assigned to t
       assignees: [{ type: "user", userId: actors.approver1Id }],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const [gate] = await gateRows({ subjectId: docId });
     assert.ok(gate, "an independent approver receives the gate");
+    await grantScratchPermissions(org.orgId,actors.submitterId,["ap.approve"]);
     await db.execute(sql`update flow_gates set assignee_user_id = ${actors.submitterId} where id = ${gate.id}`);
 
     await assert.rejects(
       () => decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId }),
-      /your own submission/,
+      (error:unknown)=>error instanceof GateError && error.code === "self_approval_forbidden",
     );
     assert.equal(await docStatus(docId), "pending_approval", "still gated, not self-approved");
   });
 });
 
-test("an admin still cannot approve a document they submitted", { skip: !DB }, async () => {
+test("an unassigned administrator cannot decide a document gate", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
     // Gate assigned to a role the admin holds; the admin is also the submitter.
     await seedApprovalFlow(org.orgId, {
@@ -331,13 +243,13 @@ test("an admin still cannot approve a document they submitted", { skip: !DB }, a
       assignees: [{ type: "user", userId: actors.approver1Id }],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.adminId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const [gate] = await gateRows({ subjectId: docId });
 
     // Admin (not the assignee, but privileged) is the submitter → refused.
     await assert.rejects(
       () => decideGate({ gateId: gate!.id, decision: "approved", userId: actors.adminId }),
-      /your own submission/,
+      (error:unknown)=>error instanceof GateError,
     );
   });
 });
@@ -350,7 +262,7 @@ test("a non-approver is refused", { skip: !DB }, async () => {
       assignees: [{ type: "user", userId: actors.approver1Id }],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const [gate] = await gateRows({ subjectId: docId });
 
     await assert.rejects(
@@ -368,7 +280,7 @@ test("a deactivated approver cannot decide, even through a live one-click link",
       assignees: [{ type: "user", userId: actors.approver1Id }],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const [gate] = await gateRows({ subjectId: docId });
 
     // The approver is deactivated after the gate (and its email link) went
@@ -394,7 +306,7 @@ test("concurrent decisions on an 'any' gate release exactly once", { skip: !DB }
       ],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const gates = await gateRows({ subjectId: docId });
     const g1 = gates.find((g) => g.assigneeUserId === actors.approver1Id)!;
     const g2 = gates.find((g) => g.assigneeUserId === actors.approver2Id)!;
@@ -423,7 +335,7 @@ async function gateProvenance(id: string): Promise<{
   delegatedFromUserId: string | null;
   onBehalfOfUserId: string | null;
 }> {
-  const r = (await db.execute<{
+  const r = await db.execute<{
     assigneeUserId: string | null;
     decidedBy: string | null;
     delegatedFromUserId: string | null;
@@ -432,7 +344,7 @@ async function gateProvenance(id: string): Promise<{
     select assignee_user_id as "assigneeUserId", decided_by as "decidedBy",
            delegated_from_user_id as "delegatedFromUserId", on_behalf_of_user_id as "onBehalfOfUserId"
       from flow_gates where id = ${id}
-  `));
+  `);
   return r.rows[0]!;
 }
 
@@ -444,7 +356,7 @@ test("delegateGate reassigns and records structured provenance (not a comment)",
       assignees: [{ type: "user", userId: actors.approver1Id }],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const [gate] = await gateRows({ subjectId: docId });
 
     await delegateGate(gate!.id, actors.approver1Id, actors.approver2Id);
@@ -469,7 +381,7 @@ test("an out-of-office delegate decides on behalf of the principal", { skip: !DB
       assignees: [{ type: "user", userId: actors.approver1Id }],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const [gate] = await gateRows({ subjectId: docId });
 
     // approver1 is out of office; approver2 covers (active window over now).
@@ -499,7 +411,7 @@ test("worklistGates surfaces a pending gate to its assignee only", { skip: !DB }
       assignees: [{ type: "user", userId: actors.approver1Id }],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
 
     const mine = await worklistGates(org.orgId, actors.approver1Id);
     assert.equal(mine.filter((g) => g.subjectId === docId).length, 1);
@@ -514,53 +426,56 @@ test("worklistGates surfaces a pending gate to its assignee only", { skip: !DB }
  * which may skew from the database in shared environments.
  */
 async function dbNow(): Promise<number> {
-  const r = (await db.execute<{ now: Date | string }>(sql`select now() as now`));
+  const r = await db.execute<{ now: Date | string }>(sql`select now() as now`);
   const v = r.rows[0]!.now;
   return (v instanceof Date ? v : new Date(v)).getTime();
 }
 
 /** Point a seeded flow's gate node at an escalation target (seed helper has no escalateTo). */
-async function setGateEscalateTo(flowId: string, escalateTo: unknown): Promise<void> {
-  const r = (await db.execute<{ graph: { nodes: Array<{ id: string; data: { gate?: Record<string, unknown> } }> } }>(sql`
-    select graph from flows where id = ${flowId}`));
+async function setGateEscalateTo(
+  flowId: string,
+  escalateTo: unknown,
+): Promise<void> {
+  const r = await db.execute<{ graph: { nodes: Array<{ id: string; data: { gate?: Record<string, unknown> } }> } }>(sql`
+    select graph from flows where id = ${flowId}`);
   const graph = r.rows[0]!.graph;
   const node = graph.nodes.find((n) => n.id === "gate");
   node!.data.gate!.escalateTo = escalateTo as never;
   await db.execute(sql`update flows set graph = ${JSON.stringify(graph)}::jsonb where id = ${flowId}`);
 }
 
-test("escalation skips the submitter (SoD) and falls through to an eligible approver", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    const { flowId } = await seedApprovalFlow(org.orgId, {
-      subjectKind: "vendor_bill",
-      mode: "any",
-      assignees: [{ type: "user", userId: actors.approver1Id }],
+test(
+  "an escalation excluded by the tenant separation policy leaves the assigned gate actionable",
+  { skip: !DB },
+  async () => {
+    await withOrgFixture(async (org, actors) => {
+      const { flowId } = await seedApprovalFlow(org.orgId, {
+        subjectKind: "vendor_bill",
+        mode: "any",
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        preventSelfApproval: true,
+      });
+      await setGateEscalateTo(flowId, { type: "user", userId: actors.submitterId });
+      const id = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+      await submitForApproval("vendor_bill", id, actors.submitterId);
+      const [gate] = await gateRows({ subjectId: id });
+      assert.equal(await escalateDueGate(gate!.id), false);
+      const retained = await gateRows({ subjectId: id });
+      assert.equal(retained.length, 1);
+      assert.equal(retained[0]?.status, "pending");
+      await assert.rejects(
+        decideGate({ gateId: gate!.id, decision: "approved", userId: actors.adminId }),
+        /not an approver|not assigned/,
+      );
+      await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id });
+      assert.equal(await docStatus(id), "approved");
     });
-    // Escalation aimed at the submitter — who could never decide their own
-    // gate. Scratch actors have no supervisor chain, so the eligible fallback
-    // is the org admin.
-    await setGateEscalateTo(flowId, { type: "user", userId: actors.submitterId });
-    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
-    const [gate] = await gateRows({ subjectId: docId });
-
-    assert.equal(await escalateDueGate(gate!.id), true, "escalation fires");
-    const after = await gateRows({ subjectId: docId });
-    assert.equal(after.find((g) => g.id === gate!.id)!.status, "escalated");
-    const replacements = after.filter((g) => g.status === "pending");
-    assert.equal(replacements.length, 1, "exactly one live replacement");
-    assert.notEqual(replacements[0]!.assigneeUserId, actors.submitterId, "never stranded on the submitter");
-    assert.equal(replacements[0]!.assigneeUserId, actors.adminId, "falls through to the admin");
-
-    // The eligible replacement decides; the run completes instead of stranding.
-    const decision = await decideGate({ gateId: replacements[0]!.id, decision: "approved", userId: actors.adminId });
-    assert.equal(decision.resumed, "approve");
-    assert.equal(await docStatus(docId), "approved");
-  });
-});
+  },
+);
 
 test("explicit self-approval opt-out still lets an escalation reach the submitter", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
+    await grantScratchPermissions(org.orgId,actors.submitterId,["ap.approve"]);
     const { flowId } = await seedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
       mode: "any",
@@ -569,7 +484,7 @@ test("explicit self-approval opt-out still lets an escalation reach the submitte
     });
     await setGateEscalateTo(flowId, { type: "user", userId: actors.submitterId });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const [gate] = await gateRows({ subjectId: docId });
 
     assert.equal(await escalateDueGate(gate!.id), true, "escalation fires");
@@ -591,7 +506,7 @@ test("a delegate who is the submitter still cannot decide (SoD survives delegati
       assignees: [{ type: "user", userId: actors.approver1Id }],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
+    await submitForApproval("vendor_bill", docId, actors.submitterId);
     const [gate] = await gateRows({ subjectId: docId });
 
     // approver1 hands coverage to the submitter — the grant travels, but the
@@ -667,28 +582,36 @@ test("default SoD excludes maker and submitter and blocks them through delegated
   });
 });
 
-
-test("escalation skips its current assignee before falling through to admins", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    const { flowId } = await seedApprovalFlow(org.orgId, {
-      subjectKind: "vendor_bill", mode: "any",
+test(
+  "an escalation to the existing assignee does not invent an administrator approval",
+  { skip: !DB },
+  async () => {
+    await withOrgFixture(async (org, actors) => {
+      const { flowId } = await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      mode: "any",
       assignees: [{ type: "user", userId: actors.approver1Id }],
     });
-    await setGateEscalateTo(flowId, {type:"user",userId:actors.approver1Id});
-    const docId=await seedDraftDocument(org.orgId,{kind:"vendor_bill",createdBy:actors.submitterId});
-    await submitForApproval("vendor_bill",docId);
-    const [gate]=await gateRows({subjectId:docId});
-    assert.equal(await escalateDueGate(gate!.id),true);
-    const replacement=(await gateRows({subjectId:docId})).find(g=>g.status==='pending');
-    assert.equal(replacement?.assigneeUserId,actors.adminId);
-    await decideGate({gateId:replacement!.id,decision:'approved',userId:actors.adminId});
-    assert.equal(await docStatus(docId),'approved');
-  });
-});
+      await setGateEscalateTo(flowId, {type:"user",userId:actors.approver1Id});
+      const id = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+      await submitForApproval("vendor_bill", id, actors.submitterId);
+      const [gate] = await gateRows({ subjectId: id });
+      assert.equal(await escalateDueGate(gate!.id), false);
+      const retained = await gateRows({ subjectId: id });
+      assert.equal(retained.length, 1);
+      assert.equal(retained[0]?.assigneeUserId, actors.approver1Id);
+      await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id });
+      assert.equal(await docStatus(id), "approved");
+    });
+  },
+);
 
-test("escalation skips every existing sibling assignee without losing the open approval", { skip: !DB }, async () => {
-  await withOrgFixture(async (org, actors) => {
-    const { flowId } = await seedApprovalFlow(org.orgId, {
+test(
+  "an all-gate escalation honors the frozen target and records the replaced approval lineage",
+  { skip: !DB },
+  async () => {
+    await withOrgFixture(async (org, actors) => {
+      const { flowId } = await seedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
       mode: "all",
       assignees: [
@@ -696,24 +619,42 @@ test("escalation skips every existing sibling assignee without losing the open a
         { type: "user", userId: actors.approver2Id },
       ],
     });
-    await setGateEscalateTo(flowId, { type: "user", userId: actors.approver2Id });
-    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await submitForApproval("vendor_bill", docId);
-    const initial = await gateRows({ subjectId: docId });
-    const approvedSibling = initial.find((gate) => gate.assigneeUserId === actors.approver2Id)!;
-    const overdue = initial.find((gate) => gate.assigneeUserId === actors.approver1Id)!;
-
-    await decideGate({ gateId: approvedSibling.id, decision: "approved", userId: actors.approver2Id });
-    assert.equal((await gateRows({ subjectId: docId })).find((gate) => gate.id === approvedSibling.id)?.status, "approved");
-
-    assert.equal(await escalateDueGate(overdue.id), true);
-    const afterEscalation = await gateRows({ subjectId: docId });
-    assert.equal(afterEscalation.find((gate) => gate.id === overdue.id)?.status, "escalated");
-    const replacement = afterEscalation.filter((gate) => gate.status === "pending");
-    assert.equal(replacement.length, 1);
-    assert.notEqual(replacement[0]!.assigneeUserId, actors.approver2Id, "approved sibling cannot be reused as replacement");
-
-    await decideGate({ gateId: replacement[0]!.id, decision: "approved", userId: replacement[0]!.assigneeUserId! });
-    assert.equal(await docStatus(docId), "approved");
-  });
-});
+      await setGateEscalateTo(flowId, { type: "user", userId: actors.adminId });
+      const id = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+      await submitForApproval("vendor_bill", id, actors.submitterId);
+      const initial = await gateRows({ subjectId: id }),
+        first = initial.find((g) => g.assigneeUserId === actors.approver1Id)!,
+        second = initial.find((g) => g.assigneeUserId === actors.approver2Id)!;
+      await decideGate({
+        gateId: second.id,
+        userId: actors.approver2Id,
+        decision: "approved",
+      });
+      assert.equal(await docStatus(id), "pending_approval");
+      await setGateEscalateTo(flowId, { type: "user", userId: actors.submitterId });
+      assert.equal(await escalateDueGate(first.id), true);
+      const replacement = (await gateRows({ subjectId: id })).find(
+        (g) => g.status === "pending",
+      )!;
+      assert.equal(replacement.assigneeUserId, actors.adminId);
+      const lineage = (
+        await db.execute<{ escalated_from_gate_id: string }>(
+          sql`select escalated_from_gate_id from flow_gates where org_id=${org.orgId} and id=${replacement.id}`,
+        )
+      ).rows[0];
+      assert.equal(lineage?.escalated_from_gate_id, first.id);
+      await decideGate({
+        gateId: replacement.id,
+        userId: actors.adminId,
+        decision: "approved",
+      });
+      assert.equal(await docStatus(id), "approved");
+      const proof = (
+        await db.execute<{ allowed: boolean }>(
+          sql`select public.flow_submission_approved(org_id,subject_kind,subject_id,id) as allowed from flow_submissions where org_id=${org.orgId} and subject_id=${id}`,
+        )
+      ).rows[0];
+      assert.equal(proof?.allowed, true);
+    });
+  },
+);

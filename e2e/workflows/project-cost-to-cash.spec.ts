@@ -382,9 +382,9 @@ test.describe('project cost-to-cash (construction billing, retainage, WIP)', () 
     return { context, page };
   }
 
-/** SOV financial policy: the builtin schedule_of_values profile, which the
- * custom type below carries unchanged (the cockpit basis under test). */
-function sovFinancialProfile(): Json {
+  /** SOV financial policy: the builtin schedule_of_values profile, which the
+   * custom type below carries unchanged (the cockpit basis under test). */
+  function sovFinancialProfile(): Json {
   const line = (measure: string, variant: string) => ({ measure, variant });
   return {
     invoicedToDate: { docKinds: ['customer_invoice'], creditKinds: ['customer_credit'] },
@@ -411,15 +411,18 @@ function sovFinancialProfile(): Json {
   };
 }
 
-  test('project cost to cash: build cost, bill with retainage, collect, release', async ({ browser, baseURL }) => {
+  test('project cost to cash: build cost, bill with retainage, collect, release', async ({
+    browser,
+    baseURL,
+  }) => {
     const { context, page } = await freshPage(browser, baseURL);
     const approver = await approverPage(browser, baseURL);
     const apage = approver.page;
     try {
-      const t = tag('W1');
+      const t = tag("W1");
       let app1AgingTotal = 0n;
       let finalAgingTotal = 0n;
-      let chargeDate = '';
+      let chargeDate = "";
       const MO = attemptMonth();
       const PERIOD = `period=custom&from=${MO.from}&to=${MO.to}`;
       const D = (day: string) => `${MO.ym}-${day}`;
@@ -642,7 +645,6 @@ function sovFinancialProfile(): Json {
         }],
       });
       await apiOk(page, 'POST', '/api/timesheets/submit', { employee: employeeId, week: D('12') });
-      await apiOk(page, 'POST', '/api/timesheets/approve', { employee: employeeId, week: D('12') });
       const week = await apiOk(page, 'GET', `/api/timesheets?employee=${employeeId}&week=${D('12')}`);
       {
         const rows = (week.rows ?? []) as { hours: string[]; entryStatuses: string[] }[];
@@ -734,7 +736,7 @@ function sovFinancialProfile(): Json {
       const app1 = await apiOk(page, 'POST', '/api/construction', {
         action: 'createPayApp', projectId, periodEnd: D('12'), retainagePercent: '10',
       });
-      const app1Id = str(app1.id, 'app1 id');
+      const app1Id = str(app1.id, "app1 id");
       // A second application cannot start while one is open.
       {
         const blocked = await api(page, 'POST', '/api/construction', {
@@ -775,7 +777,7 @@ function sovFinancialProfile(): Json {
         await expect(drawer.getByText('Open').first()).toBeVisible();
         await expect(drawer.getByText('Less retainage held').first()).toBeVisible();
       }
-      await page.goto('/ar/invoices');
+      await page.goto("/ar/invoices");
       await dismissSetupWizard(page);
       {
         const row = page.locator('tr', { hasText: inv1Number }).first();
@@ -838,7 +840,7 @@ function sovFinancialProfile(): Json {
         expectedUpdatedAt: payToken,
       });
       await uiAllocateAndPostReceipt(page, payId, inv1Number, M.receipt1);
-      await page.goto('/ar/invoices');
+      await page.goto("/ar/invoices");
       {
         const row = page.locator('tr', { hasText: inv1Number }).first();
         await expect(row.getByText(fmtUSD(toCents(M.bal1))).first()).toBeVisible();
@@ -857,7 +859,7 @@ function sovFinancialProfile(): Json {
       const app2 = await apiOk(page, 'POST', '/api/construction', {
         action: 'createPayApp', projectId, periodEnd: D('15'), retainagePercent: '10',
       });
-      const app2Id = str(app2.id, 'app2 id');
+      const app2Id = str(app2.id, "app2 id");
       // Billing one dollar past the scheduled value is refused (cumulative cap).
       {
         const over = await api(page, 'POST', '/api/construction', {

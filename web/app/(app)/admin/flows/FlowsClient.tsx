@@ -1,11 +1,19 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Button, Drawer, Input, Label, SearchSelect, Select, cn } from '@openbooks/ui'
+import {
+  Button,
+  Drawer,
+  Input,
+  Label,
+  SearchSelect,
+  Select,
+  cn,
+} from '@openbooks/ui'
 import { ApiResponseError, apiJson } from '../../../../lib/api-error'
 import { confirmDialog } from '../../../../lib/confirm'
 
@@ -14,7 +22,12 @@ import { confirmDialog } from '../../../../lib/confirm'
  * from the profiles API) and per-row enable/delete controls.
  */
 
-type ProfileOption = { subjectKind: string; label?: string; labelKey?: string; group?: string; supportsUngatedSubmission?: boolean }
+type ProfileOption = {
+  subjectKind: string
+  label?: string
+  labelKey?: string
+  group?: string
+}
 
 export function NewFlowButton() {
   const t = useTranslations('admin.flows')
@@ -22,16 +35,11 @@ export function NewFlowButton() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
-  const params = useSearchParams();
-  const [subjectKind, setSubjectKind] = useState(params.get("subject") ?? "");
-  const [ungatedOutcome, setUngatedOutcome] = useState<"apply" | undefined>();
-  const [weekdayPreset, setWeekdayPreset] = useState(false);
+  const params = useSearchParams()
+  const [subjectKind, setSubjectKind] = useState(params.get('subject') ?? '')
+  const [weekdayPreset, setWeekdayPreset] = useState(false)
   const [profiles, setProfiles] = useState<ProfileOption[] | null>(null)
   const [busy, setBusy] = useState(false)
-  const supportsDirect =
-    profiles?.find((profile) => profile.subjectKind === subjectKind)
-      ?.supportsUngatedSubmission === true;
-
   function openDrawer() {
     setOpen(true)
     if (profiles === null) {
@@ -44,7 +52,6 @@ export function NewFlowButton() {
               label: p.label,
               labelKey: p.labelKey,
               group: p.group,
-              supportsUngatedSubmission: p.supportsUngatedSubmission,
             })),
           ),
         )
@@ -63,22 +70,23 @@ export function NewFlowButton() {
           body: JSON.stringify({
             name: name.trim(),
             subjectKind,
-            ...(subjectKind === "schedule_board" && params.get("board")
+            ...(subjectKind === 'schedule_board' && params.get('board')
               ? {
-                  boardId: params.get("board"),
+                  boardId: params.get('board'),
                   ...(weekdayPreset
-                    ? { schedulePreset: "weekday-morning-afternoon" }
+                    ? { schedulePreset: 'weekday-morning-afternoon' }
                     : {}),
                 }
               : {}),
-            ...(supportsDirect && ungatedOutcome ? { ungatedOutcome } : {}),
           }),
         },
         t('new.failed'),
       )
       router.push(`/admin/flows/${data.id}`)
     } catch (error) {
-      toast.error(error instanceof ApiResponseError ? error.message : t('new.failed'))
+      toast.error(
+        error instanceof ApiResponseError ? error.message : t('new.failed'),
+      )
     } finally {
       setBusy(false)
     }
@@ -97,7 +105,10 @@ export function NewFlowButton() {
         description={t('new.description')}
         footer={
           <div className="flex w-full justify-end gap-2">
-            <Button disabled={busy || !name.trim() || !subjectKind} onClick={create}>
+            <Button
+              disabled={busy || !name.trim() || !subjectKind}
+              onClick={create}
+            >
               {t('new.create')}
             </Button>
           </div>
@@ -113,14 +124,14 @@ export function NewFlowButton() {
               autoFocus
             />
           </div>
-          {subjectKind === "schedule_board" && params.get("board") ? (
+          {subjectKind === 'schedule_board' && params.get('board') ? (
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={weekdayPreset}
                 onChange={(event) => setWeekdayPreset(event.target.checked)}
               />
-              {t("new.scheduleWeekdayPreset")}
+              {t('new.scheduleWeekdayPreset')}
             </label>
           ) : null}
           <div className="space-y-1.5">
@@ -132,31 +143,27 @@ export function NewFlowButton() {
                   const groupKey = `new.groups.${p.group ?? 'other'}` as const
                   return {
                     value: p.subjectKind,
-                    label: p.labelKey && tSubjects.has(p.labelKey as never)
-                      ? tSubjects(p.labelKey as never)
-                      : (p.label ?? p.subjectKind),
+                    label:
+                      p.labelKey && tSubjects.has(p.labelKey as never)
+                        ? tSubjects(p.labelKey as never)
+                        : (p.label ?? p.subjectKind),
                     // Unknown future groups fall back to Other so the picker
                     // never renders an ungrouped row.
-                    group: t.has(groupKey as never) ? t(groupKey as never) : t('new.groups.other'),
+                    group: t.has(groupKey as never)
+                      ? t(groupKey as never)
+                      : t('new.groups.other'),
                   }
                 })
-                .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label))}
+                .sort(
+                  (a, b) =>
+                    a.group.localeCompare(b.group) ||
+                    a.label.localeCompare(b.label),
+                )}
               placeholder={t('new.subjectPlaceholder')}
               loading={profiles === null}
-              onChange={(value) => { setSubjectKind(value); setUngatedOutcome(undefined) }}
+              onChange={setSubjectKind}
             />
           </div>
-          {supportsDirect && (
-            <div className="space-y-1.5">
-              <Label htmlFor="new-flow-ungated">
-                {t("builder.ungatedOutcomeLabel")}
-              </Label>
-            <Select id="new-flow-ungated" value={ungatedOutcome ?? ''} onChange={(event) => setUngatedOutcome(event.target.value === 'apply' ? 'apply' : undefined)}>
-              <option value="">{t('builder.ungatedRequireApproval')}</option>
-              <option value="apply">{t('builder.ungatedApply')}</option>
-            </Select>
-            </div>
-          )}
         </div>
       </Drawer>
     </>
@@ -202,7 +209,11 @@ export function FlowRowActions({
       setRevision(data.updatedAt)
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof ApiResponseError ? error.message : t('actions.updateFailed'))
+      toast.error(
+        error instanceof ApiResponseError
+          ? error.message
+          : t('actions.updateFailed'),
+      )
     } finally {
       saving.current = false
       setBusy(false)
@@ -233,7 +244,11 @@ export function FlowRowActions({
       toast.success(t('actions.deleted'))
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof ApiResponseError ? error.message : t('actions.deleteFailed'))
+      toast.error(
+        error instanceof ApiResponseError
+          ? error.message
+          : t('actions.deleteFailed'),
+      )
     } finally {
       saving.current = false
       setBusy(false)

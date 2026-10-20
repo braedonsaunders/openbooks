@@ -12,7 +12,7 @@ import {
   type FlowActors,
 } from "../testing/fixtures.ts";
 import { submitForApproval } from "./submit.ts";
-import { decideGate, decideGateAsSystem, GateError } from "./gates.ts";
+import { decideGate } from "./gates.ts";
 
 /**
  * Gate-decision audit: approving or rejecting a flow gate releases or returns
@@ -25,7 +25,12 @@ import { decideGate, decideGateAsSystem, GateError } from "./gates.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function withGatedDocument(
-  fn: (org: ScratchOrg, actors: FlowActors, docId: string, gateId: string) => Promise<void>,
+  fn: (
+    org: ScratchOrg,
+    actors: FlowActors,
+    docId: string,
+    gateId: string,
+  ) => Promise<void>,
 ): Promise<void> {
   const org = await createScratchOrg();
   try {
@@ -35,8 +40,15 @@ async function withGatedDocument(
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
     });
-    const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    const res = await submitForApproval("vendor_bill", docId);
+    const docId = await seedDraftDocument(org.orgId, {
+      kind: "vendor_bill",
+      createdBy: actors.submitterId,
+    });
+    const res = await submitForApproval(
+      "vendor_bill",
+      docId,
+      actors.submitterId,
+    );
     assert.equal(res.gated, true, "submit created a gate");
     const gate = (
       await db.execute<{ id: string }>(sql`
@@ -62,101 +74,106 @@ async function decisionAudit(orgId: string, gateId: string) {
   ).rows;
 }
 
-test("an approval decision writes actor-attributed before/after audit evidence", { skip: !DB }, async () => {
-  await withGatedDocument(async (org, actors, _docId, gateId) => {
-    const decision = await decideGate({ gateId, decision: "approved", userId: actors.approver1Id });
-    assert.equal(decision.resumed, "approve");
-    const rows = await decisionAudit(org.orgId, gateId);
-    assert.equal(rows.length, 1, "approval must leave exactly one audit row for the gate");
-    assert.equal(rows[0]!.action, "update");
-    assert.equal(rows[0]!.actorId, actors.approver1Id);
-    const changes = rows[0]!.changes as {
-      event: string;
-      actor: { kind: string; userId: string };
-      before: { status: string };
-      after: { status: string };
-      subjectId: string;
-    };
-    assert.equal(changes.event, "approved");
-    assert.deepEqual(changes.actor, { kind: "user", userId: actors.approver1Id });
-    assert.equal(changes.before.status, "pending");
-    assert.equal(changes.after.status, "approved");
-    assert.equal(changes.subjectId, _docId);
-  });
-});
-
-test("a rejection decision records the reason, and a refused re-decision adds nothing", { skip: !DB }, async () => {
-  await withGatedDocument(async (org, actors, _docId, gateId) => {
-    const decision = await decideGate({
-      gateId,
-      decision: "rejected",
-      userId: actors.approver1Id,
-      comment: "over budget",
+test(
+  "an approval decision writes actor-attributed before/after audit evidence",
+  { skip: !DB },
+  async () => {
+    await withGatedDocument(async (org, actors, _docId, gateId) => {
+      const decision = await decideGate({
+        gateId,
+        decision: "approved",
+        userId: actors.approver1Id,
+      });
+      assert.equal(decision.resumed, "approve");
+      const rows = await decisionAudit(org.orgId, gateId);
+      assert.equal(
+        rows.length,
+        1,
+        "approval must leave exactly one audit row for the gate",
+      );
+      assert.equal(rows[0]!.action, "update");
+      assert.equal(rows[0]!.actorId, actors.approver1Id);
+      const changes = rows[0]!.changes as {
+        event: string;
+        actor: { kind: string; userId: string };
+        before: { status: string };
+        after: { status: string };
+        subjectId: string;
+      };
+      assert.equal(changes.event, "approved");
+      assert.deepEqual(changes.actor, {
+        kind: "user",
+        userId: actors.approver1Id,
+      });
+      assert.equal(changes.before.status, "pending");
+      assert.equal(changes.after.status, "approved");
+      assert.equal(changes.subjectId, _docId);
     });
-    assert.equal(decision.resumed, "reject");
-    const rows = await decisionAudit(org.orgId, gateId);
-    assert.equal(rows.length, 1, "rejection must leave exactly one audit row for the gate");
-    assert.equal(rows[0]!.actorId, actors.approver1Id);
-    const changes = rows[0]!.changes as {
-      event: string;
-      before: { status: string };
-      after: { status: string };
-      reason: string;
-    };
-    assert.equal(changes.event, "rejected");
-    assert.equal(changes.before.status, "pending");
-    assert.equal(changes.after.status, "rejected");
-    assert.equal(changes.reason, "over budget");
-    await assert.rejects(decideGate({ gateId, decision: "approved", userId: actors.approver1Id }));
-    assert.equal(
-      (await decisionAudit(org.orgId, gateId)).length,
-      1,
-      "the refused second decision must not add evidence",
-    );
-  });
-});
+  },
+);
 
-test("a system approval writes the same audit row with actor system and named threshold values", { skip: !DB }, async () => {
-  await withGatedDocument(async (org, _actors, _docId, gateId) => {
-    // Fail-closed preconditions: no reason or no checks never decide.
-    await assert.rejects(
-      decideGateAsSystem({ gateId, reason: "", checked: ["max_amount: threshold 500, actual 100"] }),
-      GateError,
-    );
-    await assert.rejects(
-      decideGateAsSystem({ gateId, reason: "exception-only auto-approval", checked: [] }),
-      GateError,
-    );
-    const checked = ["max_amount: threshold 500, actual 100"];
-    const decision = await decideGateAsSystem({
-      gateId,
-      reason: `exception-only auto-approval: within thresholds (${checked.join(", ")})`,
-      checked,
+test(
+  "a rejection decision records the reason, and a refused re-decision adds nothing",
+  { skip: !DB },
+  async () => {
+    await withGatedDocument(async (org, actors, _docId, gateId) => {
+      const decision = await decideGate({
+        gateId,
+        decision: "rejected",
+        userId: actors.approver1Id,
+        comment: "over budget",
+      });
+      assert.equal(decision.resumed, "reject");
+      const rows = await decisionAudit(org.orgId, gateId);
+      assert.equal(
+        rows.length,
+        1,
+        "rejection must leave exactly one audit row for the gate",
+      );
+      assert.equal(rows[0]!.actorId, actors.approver1Id);
+      const changes = rows[0]!.changes as {
+        event: string;
+        before: { status: string };
+        after: { status: string };
+        reason: string;
+      };
+      assert.equal(changes.event, "rejected");
+      assert.equal(changes.before.status, "pending");
+      assert.equal(changes.after.status, "rejected");
+      assert.equal(changes.reason, "over budget");
+      await assert.rejects(
+        decideGate({
+          gateId,
+          decision: "approved",
+          userId: actors.approver1Id,
+        }),
+      );
+      assert.equal(
+        (await decisionAudit(org.orgId, gateId)).length,
+        1,
+        "the refused second decision must not add evidence",
+      );
     });
-    assert.equal(decision.resumed, "approve");
-    const rows = await decisionAudit(org.orgId, gateId);
-    assert.equal(rows.length, 1, "the system approval must leave exactly one audit row for the gate");
-    assert.equal(rows[0]!.actorId, null, "a system decision impersonates no user");
-    const changes = rows[0]!.changes as {
-      event: string;
-      actor: { kind: string; reason: string; checked: string[] };
-      before: { status: string };
-      after: { status: string };
-      subjectId: string;
-    };
-    assert.equal(changes.event, "approved");
-    assert.equal(changes.actor.kind, "system");
-    assert.match(changes.actor.reason, /exception-only auto-approval/);
-    assert.deepEqual(changes.actor.checked, checked, "every threshold with its value rides the audit row");
-    assert.equal(changes.before.status, "pending");
-    assert.equal(changes.after.status, "approved");
-    assert.equal(changes.subjectId, _docId);
-    // The gate row itself carries no human decider.
-    const gate = (
-      await db.execute<{ decidedBy: string | null }>(sql`
-        select decided_by as "decidedBy" from flow_gates where id = ${gateId}
-      `)
-    ).rows[0]!;
-    assert.equal(gate.decidedBy, null);
-  });
-});
+  },
+);
+
+test(
+  "an unidentified actor cannot decide a tenant gate or create decision evidence",
+  { skip: !DB },
+  async () => {
+    await withGatedDocument(async (org, _actors, _docId, gateId) => {
+      await assert.rejects(
+        decideGate({ gateId, decision: "approved", userId: "" }),
+      );
+      assert.equal((await decisionAudit(org.orgId, gateId)).length, 0);
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from flow_gates where org_id=${org.orgId} and id=${gateId}`,
+          )
+        ).rows[0]?.status,
+        "pending",
+      );
+    });
+  },
+);

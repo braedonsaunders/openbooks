@@ -244,20 +244,7 @@ const expenseApprovals: AssistantToolDef = {
           assigneeRole: item.assigneeRole,
           signatureRequired: item.signatureRequired,
         });
-      } else if (item.kind === "document") {
-        if (item.docKind !== "expense_report") continue;
-        approvals.push({
-          kind: "document",
-          documentId: item.id,
-          documentNumber: item.documentNumber,
-          status: item.status,
-          currency: item.currency,
-          total: decimalText(item.total),
-          documentDate: item.documentDate,
-          employeeName: item.partyName,
-          submittedBy: item.submittedBy,
-          submittedAt: item.submittedAt,
-        });
+
       }
     }
     const capped = capList(approvals, 50);

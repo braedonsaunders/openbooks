@@ -3,7 +3,10 @@ import test from 'node:test'
 import { stubModules } from '../../../../testing/stub-modules'
 
 interface RouteState {
-  authz: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null
+  authz: {
+    user: { orgId: string; id: string }
+    allowedSubsidiaryIds: Set<string> | null
+  } | null
   writes: string[]
 }
 
@@ -33,13 +36,20 @@ stubModules({
   },
 })
 
-const settingsRouteUrl = new URL('./route.ts?quote-to-cash-scope-test', import.meta.url).href
-const currentSettingsRouteUrl = new URL('./[id]/route.ts?quote-to-cash-scope-test', import.meta.url).href
+const settingsRouteUrl = new URL(
+  './route.ts?quote-to-cash-scope-test',
+  import.meta.url,
+).href
+const currentSettingsRouteUrl = new URL(
+  './[id]/route.ts?quote-to-cash-scope-test',
+  import.meta.url,
+).href
 const { POST } = (await import(settingsRouteUrl)) as typeof import('./route.ts')
-const { PATCH, DELETE } = (await import(currentSettingsRouteUrl)) as typeof import('./[id]/route.ts')
+const { PATCH, DELETE } = (await import(
+  currentSettingsRouteUrl
+)) as typeof import('./[id]/route.ts')
 
 const body = JSON.stringify({
-  maxDiscountPercent: '10',
   autoActivateOnSign: false,
   defaultBillingTiming: 'arrears',
   defaultStartRule: 'quote_date',
@@ -48,22 +58,39 @@ const body = JSON.stringify({
 })
 
 test('restricted subsidiary callers cannot write the organization-wide quote-to-cash policy', async () => {
-  state.authz = { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: new Set(['sub-a']) }
+  state.authz = {
+    user: { orgId: 'org-1', id: 'user-1' },
+    allowedSubsidiaryIds: new Set(['sub-a']),
+  }
   state.writes.length = 0
   try {
-    const post = await POST(new Request('http://openbooks.test/api/quote-to-cash/settings', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body,
-    }))
-    const patch = await PATCH(new Request('http://openbooks.test/api/quote-to-cash/settings/current', {
-      method: 'PATCH', headers: { 'content-type': 'application/json' }, body,
-    }), { params: Promise.resolve({ id: 'current' }) })
-    const remove = await DELETE(new Request('http://openbooks.test/api/quote-to-cash/settings/current', {
-      method: 'DELETE',
-    }), { params: Promise.resolve({ id: 'current' }) })
+    const post = await POST(
+      new Request('http://openbooks.test/api/quote-to-cash/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      }),
+    )
+    const patch = await PATCH(
+      new Request('http://openbooks.test/api/quote-to-cash/settings/current', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body,
+      }),
+      { params: Promise.resolve({ id: 'current' }) },
+    )
+    const remove = await DELETE(
+      new Request('http://openbooks.test/api/quote-to-cash/settings/current', {
+        method: 'DELETE',
+      }),
+      { params: Promise.resolve({ id: 'current' }) },
+    )
 
     for (const response of [post, patch, remove]) {
       assert.equal(response.status, 403)
-      assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
+      assert.deepEqual(await response.json(), {
+        error: 'requires unrestricted subsidiary access',
+      })
     }
     assert.deepEqual(state.writes, [])
   } finally {

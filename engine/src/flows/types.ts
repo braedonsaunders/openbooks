@@ -15,6 +15,7 @@ import type { FlowSubjectProfile } from "@openbooks/forms-core";
 
 /** Who is executing the flow (the hook site's request identity). */
 export interface FlowExecCtx {
+  submissionCommand?: Record<string, unknown>;
   orgId: string;
   /** Native timer identity, retained from the durable occurrence rather than wallclock. */
   scheduledOccurrence?: {
@@ -48,6 +49,8 @@ export interface FlowSubjectContext {
    * stays legal — only the maker's DECISION is refused.
    */
   makerUserId?: string | null;
+  /** Additional authors of a composite proposal, governed by the same gate policy. */
+  makerUserIds?: readonly string[];
 }
 
 /** Grants generic flow endpoints check: read, edit short of a decision, and post/approve. */
@@ -98,10 +101,18 @@ export interface FlowSubjectCustomScope {
 }
 
 export interface FlowSubjectAdapter {
+  nativeCommandApproval?: boolean;
   /** Subject discriminator this adapter instance serves (a document kind). */
   subjectKind: string;
   /** Grants for generic endpoints; null (fail closed) when no single grant exists. */
   permissions: FlowSubjectPermissions | null;
+  /** Native subjects with several domains resolve the decision grant from the persisted record. */
+  decisionPermission?(
+    subjectId: string,
+    actorId: string,
+  ): Promise<string | null>;
+  /** Polymorphic subjects resolve their record's native read grant before disclosure. */
+  readPermission?(subjectId:string,actorId:string):Promise<string|null>;
   /** Where this kind's legal entity lives (subsidiary scope and locking). */
   scope: FlowSubjectScope;
   /** The author-time vocabulary for this subject (triggers/actions/fields). */
@@ -109,12 +120,9 @@ export interface FlowSubjectAdapter {
   /** Header fields a flow may persist into via set_field. */
   writableFields: Set<string>;
   /**
-   * Some governed subjects never permit the submitter to decide a gate,
-   * even when an authored gate opts out of the normal self-approval guard.
-   * Period close uses this because independent approval is an accounting
-   * invariant, not a tenant preference.
+   * Gate self-approval follows the tenant's frozen Flow policy. Subjects
+   * declare configurable policy so the same engine handles every decision.
    */
-  selfApprovalPolicy?: "configurable" | "forbidden";
 
   /** Acquire domain resource fences before subject and run locks. This hook
    * changes no lifecycle state and confers no decision authority; ordinary
@@ -137,7 +145,7 @@ export interface FlowSubjectAdapter {
    * approval fully resolves — `approved` when no gates remain open across all
    * runs, `rejected` when any gate rejected — so release is a deterministic
    * engine outcome, NOT an optional authored change_status side-effect. Must be
-   * idempotent (a no-op when the record is no longer awaiting approval).
+   * refuse unexpected lifecycle changes; replay is resolved by native commands.
    * Optional: subjects without an approval lifecycle omit it.
    */
   releaseApproval?(
@@ -175,7 +183,12 @@ export interface FlowSubjectAdapter {
    */
   markAwaitingApproval?(subjectId: string, ctx: FlowExecCtx): Promise<void>;
   /** set_field action — writableFields only, throws on violation. */
-  setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void>;
+  setField(
+    subjectId: string,
+    field: string,
+    value: unknown,
+    ctx: FlowExecCtx,
+  ): Promise<void>;
   /**
    * Recent candidate record ids for scheduled record fan-out (`scheduled`
    * triggers with a `select`). The scheduler loads each candidate's context

@@ -1116,14 +1116,8 @@
     },
     "approvals": {
       "title": "承認",
-      "description": "請求書（仕入）の送信後にリリースされるタイミングを管理します。",
-      "requireVendorBillApproval": "請求書（仕入）のリリース前に承認を必須にする",
-      "requireVendorBillApprovalHint": "オンの場合、請求書（仕入）は承認フロー経由でのみリリースされます。一致するフローのない請求書は送信済みのままとなり、送信者にはフローの設定またはこのオプションの無効化が案内されます。",
-      "requireStockCountReview": "棚卸の計上には別のユーザーが必要",
-      "requireStockCountReviewHint": "オンの場合、棚卸を記録または送信したユーザーは計上できません — 計上権限を持つ別のユーザーが行う必要があります。オフの場合、計上権限を持つユーザーであれば自身の棚卸を計上できます。",
-      "noFlowTitle": "請求書（仕入）の承認フローがありません",
-      "noFlowWarningAuto": "請求書（仕入）の承認フローが設定されていません。<flows>フローで設定してください</flows> — 設定されるまで、送信された請求書は承認者なしで自動的にリリースされます。",
-      "noFlowWarningRequired": "請求書（仕入）の承認フローが設定されていません。<flows>フローで設定してください</flows> — 設定されるまで、請求書（仕入）の送信はすべて拒否されます。"
+      "description": "フローによって、申請に承認が必要か、誰が承認するか、何件の承認が必要かを設定します。適用される承認ステップがない場合、承認者なしで処理が進みます。",
+      "manageFlows": "承認フローを管理"
     },
     "documentKinds": {
       "vendorBill": "仕入請求書",
@@ -1921,7 +1915,10 @@
       "keyRemoved": "書類プロバイダーのキーを削除しました。",
       "model": "請求書モデル",
       "provider": "書類の読み取り方法",
-      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "AIモデル（{provider}）"},
+      "providers": {
+        "azure_document_intelligence": "Azure Document Intelligence",
+        "llm_vision": "AIモデル（{provider}）"
+      },
       "azureHint": "Azure Document Intelligence のリソースとキーで請求書と領収書を読み取ります。",
       "llmHint": "下で設定したAIプロバイダー、キー、モデル（{provider}）で請求書と領収書を読み取ります。各項目にモデルの信頼度が付き、しきい値未満の項目は確認用に空欄のままになります。",
       "llmNoVision": "{provider} は画像を読み取れません。下で画像対応モデルのあるプロバイダーを選ぶか、Azure Document Intelligence を使用してください。",
@@ -3022,14 +3019,14 @@
       "saveFailed": "構成を保存できませんでした。"
     },
     "usFilingLineage": {
-          "stateAccount": "州申告口座",
-          "employer": "元の法的雇用主",
-          "federalAccount": "元の連邦EIN",
-          "federalHelp": "廃止済みのEINも過去の証拠の確認に使用できます。",
-          "datesHelp": "元の登録の開始日と終了日を含みます。確定済み給与の日付より前に終了できません。",
-          "sourceReference": "元の登録証拠の参照",
-          "sourceHelp": "このEINと期間を裏付ける登録通知書や保存済みの記録を指定してください。",
-          "reason": "変更理由"
+      "stateAccount": "州申告口座",
+      "employer": "元の法的雇用主",
+      "federalAccount": "元の連邦EIN",
+      "federalHelp": "廃止済みのEINも過去の証拠の確認に使用できます。",
+      "datesHelp": "元の登録の開始日と終了日を含みます。確定済み給与の日付より前に終了できません。",
+      "sourceReference": "元の登録証拠の参照",
+      "sourceHelp": "このEINと期間を裏付ける登録通知書や保存済みの記録を指定してください。",
+      "reason": "変更理由"
     },
     "entities": {
       "schedule-patterns": {
@@ -3522,9 +3519,9 @@
         "singular": "欄ルール"
       },
       "payroll-us-filing-account-employer-lineage": {
-              "title": "雇用主EIN履歴",
-              "singularTitle": "雇用主EINの所属",
-              "description": "州登録の元の所有者、両端を含む日付、保存された証拠。"
+        "title": "雇用主EIN履歴",
+        "singularTitle": "雇用主EINの所属",
+        "description": "州登録の元の所有者、両端を含む日付、保存された証拠。"
       },
       "payroll-filing-accounts": {
         "title": "申告口座",
@@ -4094,8 +4091,14 @@
         "title": "サブスクリプション更新方針",
         "description": "有効日付きの更新条件、担当者、および期限前のリマインダー。"
       },
-      "project-loss-policies": {"title": "損失プロジェクト方針", "description": "損失が見込まれるプロジェクトを決算時に警告するか、また損失評価まで決算を保留するかを定めます。"},
-      "expense-fx-policies": {"title": "経費の為替方針", "description": "外貨建ての経費明細を、日付の為替レートではなく理由付きの指定レートで換算できるかどうか。"},
+      "project-loss-policies": {
+        "title": "損失プロジェクト方針",
+        "description": "損失が見込まれるプロジェクトを決算時に警告するか、また損失評価まで決算を保留するかを定めます。"
+      },
+      "expense-fx-policies": {
+        "title": "経費の為替方針",
+        "description": "外貨建ての経費明細を、日付の為替レートではなく理由付きの指定レートで換算できるかどうか。"
+      },
       "service-dispatch-policies": {
         "title": "サービス配員ポリシー",
         "singularTitle": "サービス配員ポリシーのバージョン",
@@ -5950,7 +5953,11 @@
         "fiscal_year": "会計年度ごと",
         "never": "リセットなし"
       },
-      "projectLossPolicy": {"off": "オフ", "warn": "決算時に警告", "require": "決算前に評価を必須"}
+      "projectLossPolicy": {
+        "off": "オフ",
+        "warn": "決算時に警告",
+        "require": "決算前に評価を必須"
+      }
     },
     "invoicing": {
       "navTitle": "請求書"
@@ -7410,7 +7417,7 @@
       "chooseApprovedVersion": "承認済み方針の版",
       "chooseVersionHint": "従業員を割り当てる前に承認済みの版を選択してください。各割り当ては、その版と有効日を保持します。",
       "review": "確認と判断",
-      "reviewHint": "提出された条件は、関連付けられた独立した担当者の承認が必要です。承認済み条件は保持され、変更には新しい版または後継の割り当てを使用します。",
+      "reviewHint": "承認段階はテナントのFlowsで決まります。承認段階がない場合、有効な申請は直ちに処理されます。承認済みの条件は保持され、変更には新しいバージョンまたは後継の割り当てを使用します。",
       "noActions": "現在の権限とレコードの状態では、実行できる状態遷移はありません。",
       "actions": {
         "submit": "承認申請",
@@ -7490,7 +7497,7 @@
       "reason": "理由",
       "reasonHint": "方針、日程、結果の変更理由を記録してください。",
       "review": "確認と操作",
-      "reviewHint": "操作は現在の改訂版を使用します。承認者は作成者と異なる必要があります。",
+      "reviewHint": "操作にはレコードの現在の改訂を使用します。承認段階と承認できる担当者は、テナントのFlowsで決まります。",
       "history": "履歴",
       "result": "出席と評価",
       "resultHint": "実際の出席と評価を記録します。資格確認は別途行い、無効化しても元の結果は保持されます。",
@@ -8096,10 +8103,7 @@
         "connectAction": "接続",
         "connectPlaceholder": "ステップを選択…",
         "connectEmpty": "他のステップはまだありません — 先にノードを追加してください。"
-      },
-      "ungatedOutcomeLabel": "承認ステップが適用されない場合",
-      "ungatedApply": "即時適用",
-      "ungatedRequireApproval": "承認ステップを必須にする"
+      }
     },
     "node": {
       "trigger": "トリガー",
@@ -9482,7 +9486,7 @@
     "changeSetDefaultName": "サンドボックスの変更",
     "captureChanges": "変更を記録",
     "captureFailed": "記録を完了できませんでした。再試行する前に変更セット一覧を確認してください。",
-    "captureTitle": "独立したレビューと承認のために設定変更を記録"
+    "captureTitle": "Flowsに申請する設定変更を記録"
   },
   "sandboxes": {
     "changeSets": {
@@ -9512,7 +9516,7 @@
       "capturedFrom": "{name} から取得",
       "retained": "保持された構成変更セット",
       "listTitle": "変更セット",
-      "listDescription": "取得した構成変更を確認し、独立したレビューと承認を記録して、承認済みの変更を本番に適用します。",
+      "listDescription": "記録された設定変更を確認し、テナントのFlowsに申請して、処理が許可された変更を本番環境に適用します。",
       "listBack": "環境",
       "requestFailed": "リクエストが完了しませんでした。再試行する前に最新の状態を確認してください。",
       "working": "処理中…",
@@ -9549,8 +9553,7 @@
       "reasons": {
         "incomplete": "このキャプチャは不完全です。環境から新しい変更セットを取得してください。",
         "noSnapshot": "この古いキャプチャには本番スナップショットがありません。適用する前に新しい変更セットを取得してレビューしてください。",
-        "empty": "構成変更は取得されませんでした。",
-        "segregation": "作成者、レビュー担当者、承認者、適用者は4人の異なるユーザーである必要があります。次のステップは別の権限のあるユーザーが実行してください。"
+        "empty": "構成変更は取得されませんでした。"
       }
     }
   }

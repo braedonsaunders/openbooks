@@ -26,11 +26,10 @@ async function seedElections(org: Awaited<ReturnType<typeof createScratchOrg>>, 
   await grantPermissions(org.orgId, actorId, ["hrm.benefits.read", "hrm.benefits.manage"]);
   const approverId = await createScratchUser(org.orgId, "Coverage approver", `coverage_${randomUUID()}`);
   await grantPermissions(org.orgId, approverId, ["hrm.benefits.read", "hrm.benefits.manage"]);
-  await seedApprovalFlow(org.orgId, { subjectKind: "hrm_benefit_enrollment", assignees: [{ type: "user", userId: approverId }], mode: "any", preventSelfApproval: true });
   const windowId = await seedWindow(org.orgId);
   const elections: string[] = [];
-  for (const approvalMode of ["none", "flows"] as const) {
-    const employment = await seedEmployment(org.orgId, org.subsidiaryId, { displayName: `Coverage ${approvalMode}` });
+  for (const reviewed of [false,true]) {
+    const employment = await seedEmployment(org.orgId, org.subsidiaryId, { displayName: `Coverage ${reviewed?"reviewed":"ungated"}` });
     const assignment = (await db.execute<{ id: string }>(sql`insert into employment_assignments
       (org_id,employment_id,assignment_key) values(${org.orgId},${employment.employmentId},'primary') returning id`)).rows[0]!.id;
     assert.equal((await db.execute(sql`insert into employment_assignment_versions
@@ -39,12 +38,13 @@ async function seedElections(org: Awaited<ReturnType<typeof createScratchOrg>>, 
     assert.equal((await db.execute(sql`insert into employment_changes
       (org_id,employment_id,assignment_id,revision,change_kind,prior_snapshot,reason,recorded_by)
       values(${org.orgId},${employment.employmentId},${assignment},1,'created','{}','Declared primary assignment',${actorId}) returning id`)).rows.length, 1);
-    const plan = await seedPlan(org.orgId, { currency: "CAD", approval_mode: approvalMode });
+    const plan = await seedPlan(org.orgId, { currency: "CAD" });
     const terms = (await seededContributionTerms(org.orgId, plan.planId)).map(term => ({ ...term,
       sourceDecimal: term.electedRate, provenance: { reason: "Signed coverage election", sourceIdentity: "private-election-reference" } }));
+    if(reviewed)await seedApprovalFlow(org.orgId, { subjectKind: "hrm_benefit_enrollment", assignees: [{ type: "user", userId: approverId }], mode: "any", preventSelfApproval: true });
     const election = await electEnrollment({ orgId: org.orgId, actorId, employmentId: employment.employmentId,
       planId: plan.planId, windowId, effectiveFrom: "2026-03-01", contributionTerms: terms });
-    if (approvalMode === "flows") {
+    if (reviewed) {
       assert.equal(election.status, "pending_approval");
       const gates = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId}
         and subject_kind='hrm_benefit_enrollment' and subject_id=${election.id} and status='pending'`)).rows;
@@ -202,11 +202,11 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
       await assertCopy();
     }
     const inserts = [
-      { table: "hrm_benefit_enrollments", patch: { id: randomUUID() }, refusal: /Create a benefit election.*plan approval setting/ },
-      { table: "hrm_benefit_enrollments", patch: { employment_id: randomUUID() }, refusal: /Create a benefit election.*plan approval setting/ },
-      { table: "hrm_benefit_enrollments", patch: { plan_id: randomUUID() }, refusal: /Create a benefit election.*plan approval setting/ },
-      { table: "hrm_benefit_enrollments", patch: { effective_from: "2026-04-01" }, refusal: /Create a benefit election.*plan approval setting/ },
-      { table: "hrm_benefit_enrollments", patch: { decision_snapshot: { outcome: "approved", mode: "human", runId: randomUUID() } }, refusal: /Create a benefit election.*plan approval setting/ },
+      { table: "hrm_benefit_enrollments", patch: { id: randomUUID() }, refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/ },
+      { table: "hrm_benefit_enrollments", patch: { employment_id: randomUUID() }, refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/ },
+      { table: "hrm_benefit_enrollments", patch: { plan_id: randomUUID() }, refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/ },
+      { table: "hrm_benefit_enrollments", patch: { effective_from: "2026-04-01" }, refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/ },
+      { table: "hrm_benefit_enrollments", patch: { decision_snapshot: { outcome: "approved", mode: "human", runId: randomUUID() } }, refusal: /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/ },
       { table: "hrm_benefit_enrollment_terms", patch: { elected_rate: "251.0000000000" }, refusal: /Submitted contribution elections are immutable.*record action/ },
       { table: "hrm_benefit_enrollment_terms", patch: { rule_id: randomUUID() }, refusal: /Submitted contribution elections are immutable.*record action/ },
       { table: "hrm_benefit_payroll_inputs", patch: { amount: "251.0000" }, refusal: /Monthly benefit input generation has been replaced.*contribution terms/ },
@@ -224,14 +224,14 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
         await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
         await db.execute(sql`insert into hrm_benefit_enrollments select (jsonb_populate_record(null::hrm_benefit_enrollments,
           (select to_jsonb(e) from hrm_benefit_enrollments e where org_id=${scope} order by id limit 1) || jsonb_build_object('id',${randomUUID()}::uuid))).*`);
-      }), error => errorChainMatches(error, /Create a benefit election.*plan approval setting/));
+      }), error => errorChainMatches(error, /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/));
     }
     await assert.rejects(withMaintenanceTransaction(null, async () => {
       await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
       await db.execute(sql`insert into hrm_benefit_enrollments select (jsonb_populate_record(null::hrm_benefit_enrollments,
         (select to_jsonb(e) from hrm_benefit_enrollments e where org_id=${org.orgId} order by id limit 1)
         || jsonb_build_object('id',${randomUUID()}::uuid))).*`);
-    }), error => errorChainMatches(error, /Create a benefit election.*plan approval setting/));
+    }), error => errorChainMatches(error, /Create a benefit election.*tenant Flows.*active coverage cannot be supplied/));
     for (const { table, refusal } of [
       { table: "hrm_benefit_enrollment_terms", refusal: /Submitted contribution elections are immutable.*record action/ },
       { table: "hrm_benefit_payroll_inputs", refusal: /Monthly benefit input generation has been replaced.*contribution terms/ },

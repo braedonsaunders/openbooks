@@ -17,7 +17,7 @@ import { resolvePayrollProfileEmploymentLinks } from '@openbooks/engine/payroll/
 import {
   assertPayRunApprovalReleased, payRunApprovalState, recalculateStaleApprovedPayRun,
 } from '@openbooks/engine/payroll/approval'
-import { submitForApproval } from '@openbooks/engine/flows/module'
+import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
 import { rendererStatusResponse } from '../../../../../lib/api/pdf-renderer'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
@@ -236,7 +236,7 @@ async function submitPayRunForApproval(
   // evidence the commit gate would later reject.
   await assertPayRunNotStale(orgId, documentId, db, allowedSubsidiaryIds)
   const evidence = await assemblePayRunEvidence(orgId, userId, documentId, allowedSubsidiaryIds)
-  const submission = await submitForApproval('pay_run', documentId, userId)
+  const submission = await submitAndReleaseIfUngated('pay_run', documentId, userId)
   if (submission.flowError) return { ok: false, error: submission.flowError }
   return { ok: true, evidence, gated: submission.gated }
 }
@@ -770,7 +770,7 @@ export const POST = defineRoute({
       }
       // Submit for approval: assemble the evidence package (payroll journal +
       // register + GL preview) onto the run, then route it through Flows. A
-      // tenant with no pay_run flow gets `gated: false` and nothing is parked.
+      // tenant with no pay_run flow gets `gated: false` and releases immediately.
       if (body.action === 'submit-approval') {
         const submitted = await submitPayRunForApproval(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
         if (!submitted.ok) return NextResponse.json({ error: submitted.error }, { status: 422 })

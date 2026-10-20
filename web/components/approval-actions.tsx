@@ -11,13 +11,13 @@
 // useRecordApprovalState below: every mounted hook refetches when
 // refreshApprovalState() fires after a decision.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { TriangleAlert, Users } from 'lucide-react'
-import { readApiErrorMessage, refusalMessageFromBody } from '../lib/api-error'
+import { readApiErrorMessage } from '../lib/api-error'
 import { promptDialog } from '../lib/prompt'
 import type { RecordApprovalState } from '../app/api/flows/record-state/route'
 import { documentActionAvailable } from '../lib/document-action-availability'
@@ -65,6 +65,17 @@ export interface RecordApprovalLoad {
   unavailable: boolean
 }
 
+function isRecordApprovalState(value:unknown):value is RecordApprovalState {
+  if(!value || typeof value!=='object')return false
+  const record=value as Record<string,unknown>,approval=record.approvalState
+  if(!approval || typeof approval!=='object')return false
+  const state=approval as Record<string,unknown>
+  if(typeof state.status!=='string' || !Array.isArray(state.pendingWith) || !state.pendingWith.every(entry=>entry && typeof entry==='object' && typeof entry.name==='string' && typeof entry.since==='string'))return false
+  const action=state.myActions
+  if(action!==null && (!action || typeof action!=='object' || typeof (action as Record<string,unknown>).gateId!=='string' || typeof (action as Record<string,unknown>).signatureRequired!=='boolean'))return false
+  return Array.isArray(record.history) && typeof record.canRetry==='boolean' && (record.failedRun===null || !!record.failedRun && typeof record.failedRun==='object' && typeof (record.failedRun as Record<string,unknown>).id==='string')
+}
+
 export function useRecordApprovalState(
   subjectKind: string,
   subjectId: string,
@@ -100,18 +111,25 @@ export function useRecordApprovalState(
           // A bare machine code ("not_found", "invalid_subject") is never
           // operator copy: show the translated load failure with its status.
           const message = /^[a-z][a-z0-9_]*$/.test(named)
-            ? await readApiErrorMessage(new Response(null, { status }), t('feedback.loadFailed'))
+            ? await readApiErrorMessage(
+                new Response(null, { status }),
+                t('feedback.loadFailed'),
+              )
             : named
           if (!cancelled) setLoadError(message)
           return
         }
-        const data = (await res.json().catch(() => null)) as RecordApprovalState | null
+        const data = (await res
+          .json()
+          .catch(() => null)) as RecordApprovalState | null
         if (!cancelled) {
-          if (data) {
+          if (isRecordApprovalState(data)) {
             setState(data)
             setUnavailable(false)
             setLoadError(null)
           } else {
+            setState(null)
+            setUnavailable(false)
             setLoadError(t('feedback.loadFailed'))
           }
         }
@@ -141,6 +159,9 @@ export function ApprovalActions({
   subjectKind,
   subjectId,
   submitApprovalHref,
+  submitApprovalBody,
+  submitApprovalMethod = 'POST',
+  submissionStatuses = ['pending'],
   withdraw,
 }: {
   subjectKind: string
@@ -151,6 +172,10 @@ export function ApprovalActions({
    * surfaces that own such a path — the row stays quiet without it.
    */
   submitApprovalHref?: string
+  submitApprovalMethod?: 'POST' | 'PATCH'
+  submitApprovalBody?: Record<string, unknown>
+  /** Native pending lifecycle states admitted by this subject’s submit command. */
+  submissionStatuses?: readonly string[]
   /**
    * Native "Withdraw submission" recall for document surfaces. Passed only
    * by surfaces whose kind routes withdrawals through the documents action
@@ -162,118 +187,79 @@ export function ApprovalActions({
 }) {
   const t = useTranslations('common')
   const router = useRouter()
-  const { state, loadError, reload, unavailable } = useRecordApprovalState(subjectKind, subjectId)
-  const [busy, setBusy] = useState(false)
-
-  const decide = useCallback(
-    async (decision: 'approved' | 'rejected') => {
-      const my = state?.approvalState.myActions
-      if (!my) return
-      let comment: string | undefined
-      let signature: string | undefined
-      if (decision === 'rejected') {
-        const reason = await promptDialog({
-          title: t('approvalFlow.rejectTitle'),
-          label: t('approvalFlow.rejectReasonLabel'),
-          confirmLabel: t('actions.reject'),
-        })
-        if (!reason) return
-        comment = reason
-      } else if (my.signatureRequired) {
-        const signed = await promptDialog({
-          title: t('approvalFlow.signTitle'),
-          label: t('approvalFlow.signLabel'),
-          confirmLabel: t('actions.approve'),
-        })
-        if (!signed?.trim()) return
-        signature = signed.trim()
-      }
-      if (!my.gateId) return
-      setBusy(true)
-      const res = await fetch('/api/flows/gates/decide', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gateId: my.gateId, decision, comment, signature }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (res.status === 409) {
-        toast.info(t('approvalFlow.alreadyDecided'))
-      } else if (!res.ok) {
-        // The refusal reads through the shared helper so message, remedy and
-        // code render instead of the bare `error` field.
-        toast.error(refusalMessageFromBody(data, { fallback: t('approvalFlow.decisionFailed') }) ?? t('approvalFlow.decisionFailed'))
-      } else if (data.resumed === null) {
-        toast.success(t('approvalFlow.waitingOthers'))
-      } else {
-        toast.success(decision === 'approved' ? t('status.approved') : t('status.rejected'))
-      }
-      setBusy(false)
-      refreshApprovalState()
-      router.refresh()
-    },
-    [state, router, t],
+  const { state, loadError, reload, unavailable } = useRecordApprovalState(
+    subjectKind,
+    subjectId,
   )
+  const [busy, setBusy] = useState(false)
+  const deciding = useRef(false)
+  const [notice,setNotice] = useState<{kind:'success'|'error';message:string}|null>(null)
+  const decisionNotice=notice?<span role={notice.kind==='error'?'alert':'status'} className={notice.kind==='error'?'text-sm text-red-700 dark:text-red-300':'text-sm text-emerald-700 dark:text-emerald-300'}>{notice.message}</span>:null
 
-  const retryRun = useCallback(async () => {
-    const run = state?.failedRun
-    if (!run) return
+  const decide = useCallback(async(decision:'approved'|'rejected')=>{
+    const my=state?.approvalState.myActions
+    if(!my?.gateId||deciding.current)return
+    deciding.current=true
     setBusy(true)
-    try {
-      const res = await fetch(`/api/flows/runs/${run.id}/retry`, { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      // The refusal reads through the shared helper (see the decide branch).
-      if (!res.ok) {
-        toast.error(
-          refusalMessageFromBody(data, { fallback: t('approvalFlow.retryFailed') }) ?? t('approvalFlow.retryFailed'),
-        )
-      } else {
-        toast.success(t('approvalFlow.retried'))
+    setNotice(null)
+    try{
+      let comment:string|undefined,signature:string|undefined
+      if(decision==='rejected'){
+        const reason=await promptDialog({title:t('approvalFlow.rejectTitle'),label:t('approvalFlow.rejectReasonLabel'),confirmLabel:t('actions.reject')})
+        if(!reason)return
+        comment=reason
+      }else if(my.signatureRequired){
+        const signed=await promptDialog({title:t('approvalFlow.signTitle'),label:t('approvalFlow.signLabel'),confirmLabel:t('actions.approve')})
+        if(!signed?.trim())return
+        signature=signed.trim()
       }
-    } catch {
-      toast.error(t('approvalFlow.retryFailed'))
-    } finally {
-      setBusy(false)
+      const res=await fetch('/api/flows/gates/decide',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gateId:my.gateId,decision,comment,signature})})
+      if(!res.ok){
+        const message=await readApiErrorMessage(res,t('approvalFlow.decisionFailed'))
+        setNotice({kind:'error',message});toast.error(message);return
+      }
+      const data=await res.json().catch(()=>null) as {resumed?:unknown}|null
+      const message=t(data?.resumed===null?'approvalFlow.waitingOthers':'approvalFlow.decisionRecorded')
+      setNotice({kind:'success',message});toast.success(message)
+    }catch{
+      const message=t('approvalFlow.decisionFailed');setNotice({kind:'error',message});toast.error(message)
+    }finally{
+      deciding.current=false;setBusy(false);refreshApprovalState();router.refresh()
     }
-    refreshApprovalState()
-    router.refresh()
-  }, [state, router, t])
+  },[state,router,t])
 
-  const submitForApproval = useCallback(async () => {
-    if (!submitApprovalHref) return
-    setBusy(true)
-    try {
-      const res = await fetch(submitApprovalHref, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      // Check the status before parsing: the refusal rides in the body, and
-      // parsing an error body first turns refusals into parse errors.
-      // The refusal reads through the shared helper (see the decide branch).
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        toast.error(
-          refusalMessageFromBody(data, { fallback: t('approvalFlow.submitFailed') }) ?? t('approvalFlow.submitFailed'),
-        )
-      } else {
-        toast.success(t('approvalFlow.submitted'))
-      }
-    } catch {
-      toast.error(t('approvalFlow.submitFailed'))
-    } finally {
-      setBusy(false)
-    }
-    refreshApprovalState()
-    router.refresh()
-  }, [submitApprovalHref, router, t])
+  const retryRun=useCallback(async()=>{
+    const run=state?.failedRun;if(!run||deciding.current)return
+    deciding.current=true;setBusy(true)
+    try{
+      const res=await fetch(`/api/flows/runs/${run.id}/retry`,{method:'POST'})
+      if(!res.ok)toast.error(await readApiErrorMessage(res,t('approvalFlow.retryFailed')))
+      else toast.success(t('approvalFlow.retried'))
+    }catch{toast.error(t('approvalFlow.retryFailed'))}
+    finally{deciding.current=false;setBusy(false);refreshApprovalState();router.refresh()}
+  },[state,router,t])
+
+  const submitForApproval=useCallback(async()=>{
+    if(!submitApprovalHref||deciding.current)return
+    deciding.current=true;setBusy(true)
+    try{
+      const res=await fetch(submitApprovalHref,{method:submitApprovalMethod,headers:{'Content-Type':'application/json'},body:JSON.stringify(submitApprovalBody??{})})
+      if(!res.ok)toast.error(await readApiErrorMessage(res,t('approvalFlow.submitFailed')))
+      else toast.success(t('approvalFlow.submitted'))
+    }catch{toast.error(t('approvalFlow.submitFailed'))}
+    finally{deciding.current=false;setBusy(false);refreshApprovalState();router.refresh()}
+  },[submitApprovalHref,submitApprovalBody,submitApprovalMethod,router,t])
 
   // The submitter's own recall of a submission still awaiting decision
   // (or a holder of the kind's approve grant): collect the mandatory reason,
   // withdraw through the documents action route, then refresh the approval
   // state so the drawer shows the draft again.
+  const commandWithdrawHref = state?.canWithdrawCommand
+    ? `/api/flows/commands/${encodeURIComponent(subjectKind)}/${encodeURIComponent(subjectId)}/withdraw`
+    : null
   const withdrawDocumentId = withdraw?.documentId
   const withdrawSubmission = useCallback(async () => {
-    if (!withdrawDocumentId) return
+    if (!withdrawDocumentId && !commandWithdrawHref) return
     const reason = await promptDialog({
       title: t('approvalFlow.withdrawTitle'),
       label: t('approvalFlow.withdrawReasonLabel'),
@@ -282,15 +268,27 @@ export function ApprovalActions({
     if (!reason) return
     setBusy(true)
     try {
-      const res = await fetch('/api/documents/actions', {
+      const res = await fetch(commandWithdrawHref ?? '/api/documents/actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'withdraw', documentId: withdrawDocumentId, reason }),
+        body: JSON.stringify(
+          commandWithdrawHref
+            ? { reason }
+            : { action: 'withdraw', documentId: withdrawDocumentId, reason },
+        ),
       })
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('approvalFlow.withdrawFailed')))
+        toast.error(
+          await readApiErrorMessage(res, t('approvalFlow.withdrawFailed')),
+        )
       } else {
-        toast.success(t('approvalFlow.withdrawn'))
+        toast.success(
+          t(
+            commandWithdrawHref
+              ? 'approvalFlow.commandWithdrawn'
+              : 'approvalFlow.withdrawn',
+          ),
+        )
       }
     } catch {
       toast.error(t('approvalFlow.withdrawFailed'))
@@ -299,15 +297,20 @@ export function ApprovalActions({
     }
     refreshApprovalState()
     router.refresh()
-  }, [withdrawDocumentId, router, t])
+  }, [withdrawDocumentId, commandWithdrawHref, router, t])
 
-  const showWithdraw = !!withdraw && !!state && state.approvalState.status === 'pending_approval' && documentActionAvailable('withdraw', {
-    status: withdraw.status,
-    directPost: false,
-    canCreate: withdraw.canCreate,
-    canPost: withdraw.canApprove,
-    submittedByViewer: state.submittedByViewer,
-  })
+  const showWithdraw =
+    !!commandWithdrawHref ||
+    (!!withdraw &&
+      !!state &&
+      state.approvalState.status === 'pending_approval' &&
+      documentActionAvailable('withdraw', {
+        status: withdraw.status,
+        directPost: false,
+        canCreate: withdraw.canCreate,
+        canPost: withdraw.canApprove,
+        submittedByViewer: state.submittedByViewer,
+      }))
 
   const withdrawButton = showWithdraw ? (
     <Button variant="outline" disabled={busy} onClick={withdrawSubmission}>
@@ -322,8 +325,8 @@ export function ApprovalActions({
   // status check keeps the button off records that are not awaiting anything.
   const showSubmit =
     !!submitApprovalHref &&
-    !!state?.neverSubmitted &&
-    state.approvalState.status === 'pending' &&
+    !!state &&
+    submissionStatuses.includes(state.approvalState.status) &&
     !state.approvalState.myActions &&
     state.approvalState.pendingWith.length === 0 &&
     !state.failedRun
@@ -355,8 +358,13 @@ export function ApprovalActions({
   }
   if (
     !state ||
-    (!state.approvalState.myActions && state.approvalState.pendingWith.length === 0 && !showRetry && !showSubmit && !showWithdraw)
-  ) return null
+    (!state.approvalState.myActions &&
+      state.approvalState.pendingWith.length === 0 &&
+      !showRetry &&
+      !showSubmit &&
+      !showWithdraw)
+  )
+    return null
 
   // A failed run strands the record with no live gate: offer a
   // retry that re-drives the stored trigger through the current graph. It
@@ -378,24 +386,36 @@ export function ApprovalActions({
       <>
         <Button
           disabled={busy}
+          aria-busy={busy}
           onClick={() => decide('approved')}
           className="bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800"
         >
           {t('actions.approve')}
         </Button>
-        <Button variant="outline" disabled={busy} onClick={() => decide('rejected')}>
+        <Button
+          variant="outline"
+          disabled={busy}
+          aria-busy={busy}
+          onClick={() => decide('rejected')}
+        >
           {t('actions.reject')}
         </Button>
         {withdrawButton}
+        {decisionNotice}
       </>
     )
   }
+
+  if(notice)return <>{decisionNotice}{withdrawButton}</>
 
   // Separation of duties resolved in advance: a gate that reaches this
   // viewer but blocks them as submitter/maker renders "Awaiting another
   // approver" — never an Approve that refuses on click. The generic
   // "Pending with" chip below stays for viewers who were never assigned.
-  if (!state.approvalState.myActions && state.approvalState.awaitingAnotherApprover) {
+  if (
+    !state.approvalState.myActions &&
+    state.approvalState.awaitingAnotherApprover
+  ) {
     return (
       <>
         <span
@@ -420,7 +440,9 @@ export function ApprovalActions({
           title={t('approvalFlow.pendingWith', { names })}
         >
           <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          <span className="truncate">{t('approvalFlow.pendingWith', { names })}</span>
+          <span className="truncate">
+            {t('approvalFlow.pendingWith', { names })}
+          </span>
         </span>
         {withdrawButton}
         {retryButton}

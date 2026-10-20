@@ -3320,15 +3320,11 @@
       "title": "Controles de aprobación",
       "openFlows": "Abrir Flows",
       "hint": "Flows aplica las etapas de aprobación y condiciones configuradas para este programa.",
-      "unconfigured": "No hay una política de aprobación de beneficios configurada. Configure Flows antes de enviar recompensas.",
+      "unconfigured": "No hay ningún Flow de beneficios habilitado. Los envíos válidos de recompensas se liberan inmediatamente sin aprobador.",
       "policiesHint": "Las políticas activas se evalúan al enviar una recompensa.",
       "openApprovals": "Abrir aprobaciones",
       "administratorRemedy": "Pida al administrador de flujos de trabajo de su empresa que configure o modifique las políticas de aprobación.",
-      "unconfiguredStatus": "No hay una política de aprobación de beneficios configurada.",
-      "modes": {
-        "none": "No se requieren aprobaciones",
-        "flows": "Usar aprobaciones de Flows"
-      },
+      "unconfiguredStatus": "No hay ningún Flow de beneficios habilitado. Los envíos válidos de recompensas se liberan inmediatamente sin aprobador.",
       "noneHint": "Los envíos autorizados quedan listos para nómina. No se requiere configurar un flujo ni asignar un aprobador."
     },
     "externalPayrollProcessed": "Procesado en nómina · entrega pendiente",

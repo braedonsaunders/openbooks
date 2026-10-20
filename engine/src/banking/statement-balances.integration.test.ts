@@ -1,3 +1,4 @@
+import { before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -26,7 +27,10 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-type CsvImportInput = Omit<Parameters<typeof importStatement>[0], "source" | "sourceEvidence"> & {
+type CsvImportInput = Omit<
+  Parameters<typeof importStatement>[0],
+  "source" | "sourceEvidence"
+> & {
   source: "csv";
 };
 
@@ -46,7 +50,12 @@ function importCsv(
     [
       "date,amount,description,bank_transaction_id",
       ...input.lines.map((line) =>
-        [line.postedOn, line.amount, quote(line.description ?? ""), line.bankTransactionId ?? ""].join(","),
+        [
+          line.postedOn,
+          line.amount,
+          quote(line.description ?? ""),
+          line.bankTransactionId ?? "",
+        ].join(","),
       ),
     ].join("\n") + "\n";
   return importStatement(
@@ -57,7 +66,12 @@ function importCsv(
         content,
         filename: "statement.csv",
         contentType: "text/csv",
-        csvMapping: { date: 0, amount: 1, description: 2, bankTransactionId: 3 },
+        csvMapping: {
+          date: 0,
+          amount: 1,
+          description: 2,
+          bankTransactionId: 3,
+        },
       },
     },
     ctx,
@@ -82,8 +96,11 @@ async function postBankLine(
          ${`BAL-${label}-${entryId.slice(0, 8)}`}, ${date ?? org.date}, ${org.periodId},
          ${`Balance ${label}`}, 'draft', 'manual', ${actorId}, ${actorId})
     `);
-    const offsetAmount = bankAmount.startsWith("-") ? bankAmount.slice(1) : `-${bankAmount}`;
-    const [bankLine] = (await tx.execute<{ id: string }>(sql`
+    const offsetAmount = bankAmount.startsWith("-")
+      ? bankAmount.slice(1)
+      : `-${bankAmount}`;
+    const [bankLine] = (
+      await tx.execute<{ id: string }>(sql`
       insert into journal_lines
         (id, org_id, entry_id, line_number, account_id, subsidiary_id,
          amount, currency, txn_amount, fx_rate, memo)
@@ -95,7 +112,8 @@ async function postBankLine(
          ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offsetAmount}, 'CAD',
          ${offsetAmount}, 1, ${label})
       returning id
-    `)).rows;
+    `)
+    ).rows;
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
@@ -113,14 +131,23 @@ async function setup() {
        set reconcilable = true, currency_restriction = 'CAD'
      where id = ${org.accounts.bank} and org_id = ${org.orgId}
   `);
-  return { org, actor, ctx: { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null } };
+  return {
+    org,
+    actor,
+    ctx: { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null },
+  };
 }
 
 async function storedBalances(orgId: string, statementId: string) {
-  return (await db.execute<{ opening_balance: string | null; closing_balance: string | null }>(sql`
+  return (
+    await db.execute<{
+      opening_balance: string | null;
+      closing_balance: string | null;
+    }>(sql`
     select opening_balance::text as opening_balance, closing_balance::text as closing_balance
       from bank_statements where id = ${statementId} and org_id = ${orgId}
-  `)).rows[0]!;
+  `)
+  ).rows[0]!;
 }
 
 test(
@@ -138,7 +165,12 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "100.00", description: "Client receipt", bankTransactionId: "receipt" },
+            {
+              postedOn: org.date,
+              amount: "100.00",
+              description: "Client receipt",
+              bankTransactionId: "receipt",
+            },
           ],
         },
         ctx,
@@ -152,18 +184,27 @@ test(
         { openingBalance: "1000.00", closingBalance: "1100.00" },
         ctx,
       );
-      assert.deepEqual(after, { openingBalance: "1000.0000", closingBalance: "1100.0000" });
+      assert.deepEqual(after, {
+        openingBalance: "1000.0000",
+        closingBalance: "1100.0000",
+      });
       assert.deepEqual(await storedBalances(org.orgId, imported.statementId!), {
         opening_balance: "1000.0000",
         closing_balance: "1100.0000",
       });
-      const audits = (await db.execute<{ n: number }>(sql`
+      const audits = (
+        await db.execute<{ n: number }>(sql`
         select count(*)::int as n from audit_log
          where org_id = ${org.orgId} and table_name = 'bank_statements'
            and row_id = ${imported.statementId!} and action = 'update'
            and changes->>'operation' = 'correct_balances'
-      `)).rows[0]!.n;
-      assert.equal(audits, 1, "the balance correction is audited with a before/after image");
+      `)
+      ).rows[0]!.n;
+      assert.equal(
+        audits,
+        1,
+        "the balance correction is audited with a before/after image",
+      );
       await assert.rejects(
         correctStatementBalances(imported.statementId!, {}, ctx),
         /No balance supplied/,
@@ -188,25 +229,44 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "100.00", description: "Client receipt", bankTransactionId: "receipt" },
+            {
+              postedOn: org.date,
+              amount: "100.00",
+              description: "Client receipt",
+              bankTransactionId: "receipt",
+            },
           ],
         },
         ctx,
       );
-      const [receipt] = (await db.execute<{ id: string }>(sql`
+      const [receipt] = (
+        await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `)).rows.map((row) => row.id);
+      `)
+      ).rows.map((row) => row.id);
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "100.00",
+        },
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [receipt!], journalLineIds: [journal!] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [receipt!],
+          journalLineIds: [journal!],
+        },
         ctx,
       );
       await assert.rejects(
-        correctStatementBalances(imported.statementId!, { closingBalance: "100.00" }, ctx),
+        correctStatementBalances(
+          imported.statementId!,
+          { closingBalance: "100.00" },
+          ctx,
+        ),
         /unmatch them first/,
       );
     } finally {
@@ -224,9 +284,27 @@ test(
       // A 5,000.00 book opening with no bank line predates the statement
       // coverage, as does a voided 200.00 deposit and its correction.
       await postBankLine(org, actor, "5000.00", "book-opening", "2026-10-01");
-      const voided = await postBankLine(org, actor, "200.00", "voided-deposit", "2026-10-02");
-      const correction = await postBankLine(org, actor, "-200.00", "correction", "2026-10-03");
-      const receipt = await postBankLine(org, actor, "300.00", "receipt", "2026-11-05");
+      const voided = await postBankLine(
+        org,
+        actor,
+        "200.00",
+        "voided-deposit",
+        "2026-10-02",
+      );
+      const correction = await postBankLine(
+        org,
+        actor,
+        "-200.00",
+        "correction",
+        "2026-10-03",
+      );
+      const receipt = await postBankLine(
+        org,
+        actor,
+        "300.00",
+        "receipt",
+        "2026-11-05",
+      );
       const imported = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -235,21 +313,36 @@ test(
           currency: "CAD",
           openingBalance: "5000.00",
           lines: [
-            { postedOn: "2026-11-05", amount: "300.00", description: "Client receipt", bankTransactionId: "receipt" },
+            {
+              postedOn: "2026-11-05",
+              amount: "300.00",
+              description: "Client receipt",
+              bankTransactionId: "receipt",
+            },
           ],
         },
         ctx,
       );
-      const [receiptLine] = (await db.execute<{ id: string }>(sql`
+      const [receiptLine] = (
+        await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `)).rows.map((row) => row.id);
+      `)
+      ).rows.map((row) => row.id);
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: "2026-11-30", statementBalance: "5300.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: "2026-11-30",
+          statementBalance: "5300.00",
+        },
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [receiptLine!], journalLineIds: [receipt!] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [receiptLine!],
+          journalLineIds: [receipt!],
+        },
         ctx,
       );
       // The pre-carry pair nets to zero, so clearing it cannot double-count
@@ -259,7 +352,20 @@ test(
         ctx,
       );
       const signed = await markReconciled(recon.id, ctx);
-      assert.equal(signed.journalLinesReconciled, 3, "receipt plus both cleared lines stamp");
+      assert.equal(
+        signed.status,
+        "signed_off",
+        "The zero-gate submission must complete its native outcome",
+      );
+      if (signed.status !== "signed_off")
+        throw new Error(
+          "The zero-gate submission unexpectedly awaits approval.",
+        );
+      assert.equal(
+        signed.journalLinesReconciled,
+        3,
+        "receipt plus both cleared lines stamp",
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -281,23 +387,43 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "100.00", description: "First receipt", bankTransactionId: "first" },
-            { postedOn: org.date, amount: "200.00", description: "Second receipt", bankTransactionId: "second" },
+            {
+              postedOn: org.date,
+              amount: "100.00",
+              description: "First receipt",
+              bankTransactionId: "first",
+            },
+            {
+              postedOn: org.date,
+              amount: "200.00",
+              description: "Second receipt",
+              bankTransactionId: "second",
+            },
           ],
         },
         ctx,
       );
-      const lineIds = (await db.execute<{ id: string }>(sql`
+      const lineIds = (
+        await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
          order by line_number
-      `)).rows.map((row) => row.id);
+      `)
+      ).rows.map((row) => row.id);
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "300.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "300.00",
+        },
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: lineIds, journalLineIds: [first!, second!] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: lineIds,
+          journalLineIds: [first!, second!],
+        },
         ctx,
       );
       await assert.rejects(
@@ -315,7 +441,11 @@ test(
   },
 );
 
-async function typedDeleteRefusal(promise: Promise<unknown>, pattern: RegExp, label: string) {
+async function typedDeleteRefusal(
+  promise: Promise<unknown>,
+  pattern: RegExp,
+  label: string,
+) {
   // QA-154: every guarded state must refuse with a typed BankingError (the
   // route renders those as 422 with a remedy). Anything else — a bare
   // TypeError, a trigger raise — reaches the operator as a 500.
@@ -323,7 +453,10 @@ async function typedDeleteRefusal(promise: Promise<unknown>, pattern: RegExp, la
     () => null,
     (e: unknown) => e,
   );
-  assert.ok(error instanceof BankingError, `${label} must refuse typed, got ${String(error)}`);
+  assert.ok(
+    error instanceof BankingError,
+    `${label} must refuse typed, got ${String(error)}`,
+  );
   assert.match((error as Error).message, pattern);
 }
 
@@ -344,7 +477,12 @@ test(
           statementDate: a.org.date,
           currency: "CAD",
           lines: [
-            { postedOn: a.org.date, amount: "100.00", description: "Matched receipt", bankTransactionId: "m1" },
+            {
+              postedOn: a.org.date,
+              amount: "100.00",
+              description: "Matched receipt",
+              bankTransactionId: "m1",
+            },
           ],
         },
         a.ctx,
@@ -356,24 +494,45 @@ test(
           statementDate: a.org.date,
           currency: "CAD",
           lines: [
-            { postedOn: a.org.date, amount: "200.00", description: "Excluded receipt", bankTransactionId: "x1" },
+            {
+              postedOn: a.org.date,
+              amount: "200.00",
+              description: "Excluded receipt",
+              bankTransactionId: "x1",
+            },
           ],
         },
         a.ctx,
       );
       const lineId = async (orgId: string, statementId: string) =>
-        (await db.execute<{ id: string }>(sql`
+        (
+          await db.execute<{ id: string }>(sql`
           select id from bank_statement_lines
            where org_id = ${orgId} and statement_id = ${statementId}
-        `)).rows[0]!.id;
-      const matchedLineId = await lineId(a.org.orgId, matchedImport.statementId!);
-      const excludedLineId = await lineId(a.org.orgId, excludedImport.statementId!);
+        `)
+        ).rows[0]!.id;
+      const matchedLineId = await lineId(
+        a.org.orgId,
+        matchedImport.statementId!,
+      );
+      const excludedLineId = await lineId(
+        a.org.orgId,
+        excludedImport.statementId!,
+      );
       const recon = await startReconciliation(
-        { accountId: a.org.accounts.bank, throughDate: a.org.date, statementBalance: "100.00" },
+        {
+          accountId: a.org.accounts.bank,
+          throughDate: a.org.date,
+          statementBalance: "100.00",
+        },
         a.ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [matchedLineId!], journalLineIds: [first!] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [matchedLineId!],
+          journalLineIds: [first!],
+        },
         a.ctx,
       );
       // Matched in an open session: unmatch first.
@@ -383,7 +542,11 @@ test(
         "matched-open",
       );
       // Excluded lines carry a review decision: restore first.
-      await excludeStatementLine(excludedLineId!, "opening-balance row, not a transaction", a.ctx);
+      await excludeStatementLine(
+        excludedLineId!,
+        "opening-balance row, not a transaction",
+        a.ctx,
+      );
       await typedDeleteRefusal(
         deleteStatementImport(excludedImport.statementId!, a.ctx),
         /restore them first/,
@@ -418,18 +581,34 @@ test(
           statementDate: b.org.date,
           currency: "CAD",
           lines: [
-            { postedOn: b.org.date, amount: "100.00", description: "Client receipt", bankTransactionId: "r1" },
+            {
+              postedOn: b.org.date,
+              amount: "100.00",
+              description: "Client receipt",
+              bankTransactionId: "r1",
+            },
           ],
         },
         b.ctx,
       );
-      const receiptLineId = await lineId(b.org.orgId, closedImport.statementId!);
+      const receiptLineId = await lineId(
+        b.org.orgId,
+        closedImport.statementId!,
+      );
       const closed = await startReconciliation(
-        { accountId: b.org.accounts.bank, throughDate: b.org.date, statementBalance: "100.00" },
+        {
+          accountId: b.org.accounts.bank,
+          throughDate: b.org.date,
+          statementBalance: "100.00",
+        },
         b.ctx,
       );
       await createMatch(
-        { reconciliationId: closed.id, statementLineIds: [receiptLineId!], journalLineIds: [journal!] },
+        {
+          reconciliationId: closed.id,
+          statementLineIds: [receiptLineId!],
+          journalLineIds: [journal!],
+        },
         b.ctx,
       );
       await markReconciled(closed.id, b.ctx);
@@ -462,7 +641,13 @@ test(
       // Close July cleanly, then import an August line: the import fence
       // keeps it out of July, and correction refuses to move it back in —
       // the loop into closed history stays shut at every verb.
-      const july = await postBankLine(org, actor, "100.00", "july", "2026-07-15");
+      const july = await postBankLine(
+        org,
+        actor,
+        "100.00",
+        "july",
+        "2026-07-15",
+      );
       const julyImport = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -470,21 +655,36 @@ test(
           statementDate: "2026-07-15",
           currency: "CAD",
           lines: [
-            { postedOn: "2026-07-15", amount: "100.00", description: "July receipt", bankTransactionId: "j1" },
+            {
+              postedOn: "2026-07-15",
+              amount: "100.00",
+              description: "July receipt",
+              bankTransactionId: "j1",
+            },
           ],
         },
         ctx,
       );
-      const julyLineId = (await db.execute<{ id: string }>(sql`
+      const julyLineId = (
+        await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${julyImport.statementId!}
-      `)).rows[0]!.id;
+      `)
+      ).rows[0]!.id;
       const julyRecon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: "2026-07-15", statementBalance: "100.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: "2026-07-15",
+          statementBalance: "100.00",
+        },
         ctx,
       );
       await createMatch(
-        { reconciliationId: julyRecon.id, statementLineIds: [julyLineId!], journalLineIds: [july!] },
+        {
+          reconciliationId: julyRecon.id,
+          statementLineIds: [julyLineId!],
+          journalLineIds: [july!],
+        },
         ctx,
       );
       await markReconciled(julyRecon.id, ctx);
@@ -495,16 +695,27 @@ test(
           statementDate: "2026-08-05",
           currency: "CAD",
           lines: [
-            { postedOn: "2026-08-05", amount: "200.00", description: "August receipt", bankTransactionId: "a1" },
+            {
+              postedOn: "2026-08-05",
+              amount: "200.00",
+              description: "August receipt",
+              bankTransactionId: "a1",
+            },
           ],
         },
         ctx,
       );
-      const augustLineId = (await db.execute<{ id: string }>(sql`
+      const augustLineId = (
+        await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${augustImport.statementId!}
-      `)).rows[0]!.id;
-      const correction = await correctStatementLine(augustLineId!, { postedOn: "2026-07-01" }, ctx).then(
+      `)
+      ).rows[0]!.id;
+      const correction = await correctStatementLine(
+        augustLineId!,
+        { postedOn: "2026-07-01" },
+        ctx,
+      ).then(
         () => null,
         (e: unknown) => e,
       );
@@ -512,7 +723,10 @@ test(
         correction instanceof BankingError,
         `backdating into history must refuse typed, got ${String(correction)}`,
       );
-      assert.match((correction as Error).message, /signed-off history is immutable/);
+      assert.match(
+        (correction as Error).message,
+        /signed-off history is immutable/,
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -533,21 +747,36 @@ test(
           statementDate: org.date,
           currency: "CAD",
           lines: [
-            { postedOn: org.date, amount: "100.00", description: "Client receipt", bankTransactionId: "receipt" },
+            {
+              postedOn: org.date,
+              amount: "100.00",
+              description: "Client receipt",
+              bankTransactionId: "receipt",
+            },
           ],
         },
         ctx,
       );
-      const [receipt] = (await db.execute<{ id: string }>(sql`
+      const [receipt] = (
+        await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `)).rows.map((row) => row.id);
+      `)
+      ).rows.map((row) => row.id);
       const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: org.date,
+          statementBalance: "100.00",
+        },
         ctx,
       );
       await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [receipt!], journalLineIds: [journal!] },
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [receipt!],
+          journalLineIds: [journal!],
+        },
         ctx,
       );
       await markReconciled(recon.id, ctx);
@@ -570,7 +799,13 @@ test(
       // July closes at 100.00 and signs off: the August preview defaults
       // its opening from that closing, and a different typed opening flags
       // instead of refusing.
-      const journal = await postBankLine(org, actor, "100.00", "july", "2026-07-15");
+      const journal = await postBankLine(
+        org,
+        actor,
+        "100.00",
+        "july",
+        "2026-07-15",
+      );
       const july = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -579,21 +814,36 @@ test(
           currency: "CAD",
           closingBalance: "100.00",
           lines: [
-            { postedOn: "2026-07-15", amount: "100.00", description: "July receipt", bankTransactionId: "j1" },
+            {
+              postedOn: "2026-07-15",
+              amount: "100.00",
+              description: "July receipt",
+              bankTransactionId: "j1",
+            },
           ],
         },
         ctx,
       );
-      const [julyLine] = (await db.execute<{ id: string }>(sql`
+      const [julyLine] = (
+        await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${july.statementId!}
-      `)).rows.map((row) => row.id);
+      `)
+      ).rows.map((row) => row.id);
       const closed = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: "2026-07-31", statementBalance: "100.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: "2026-07-31",
+          statementBalance: "100.00",
+        },
         ctx,
       );
       await createMatch(
-        { reconciliationId: closed.id, statementLineIds: [julyLine!], journalLineIds: [journal!] },
+        {
+          reconciliationId: closed.id,
+          statementLineIds: [julyLine!],
+          journalLineIds: [journal!],
+        },
         ctx,
       );
       await markReconciled(closed.id, ctx);
@@ -603,18 +853,37 @@ test(
         statementDate: "2026-08-31",
         currency: "CAD",
         lines: [
-          { postedOn: "2026-08-05", amount: "50.00", description: "August receipt", bankTransactionId: "a1" },
+          {
+            postedOn: "2026-08-05",
+            amount: "50.00",
+            description: "August receipt",
+            bankTransactionId: "a1",
+          },
         ],
       };
       const chained = await importCsv({ ...augustLines }, ctx, true);
       assert.deepEqual(
-        { balance: chained.suggestedOpening?.balance, date: chained.suggestedOpening?.sourceStatementDate },
+        {
+          balance: chained.suggestedOpening?.balance,
+          date: chained.suggestedOpening?.sourceStatementDate,
+        },
         { balance: "100.0000", date: "2026-07-31" },
         "the August opening defaults from the July closing",
       );
-      assert.equal(chained.suggestedOpening?.sourceStatementId, july.statementId);
-      assert.equal(chained.openingMismatch, null, "no supplied opening, no mismatch");
-      const drifted = await importCsv({ ...augustLines, openingBalance: "90.00" }, ctx, true);
+      assert.equal(
+        chained.suggestedOpening?.sourceStatementId,
+        july.statementId,
+      );
+      assert.equal(
+        chained.openingMismatch,
+        null,
+        "no supplied opening, no mismatch",
+      );
+      const drifted = await importCsv(
+        { ...augustLines, openingBalance: "90.00" },
+        ctx,
+        true,
+      );
       assert.deepEqual(
         drifted.openingMismatch,
         { expected: "100.0000", supplied: "90.0000" },
@@ -641,16 +910,31 @@ test(
           currency: "CAD",
           closingBalance: "500.00",
           lines: [
-            { postedOn: "2026-07-15", amount: "100.00", description: "July receipt", bankTransactionId: "j1" },
+            {
+              postedOn: "2026-07-15",
+              amount: "100.00",
+              description: "July receipt",
+              bankTransactionId: "j1",
+            },
           ],
         },
         ctx,
         true,
       );
-      assert.equal(bare.suggestedOpening, null, "an unproven closing seeds nothing");
+      assert.equal(
+        bare.suggestedOpening,
+        null,
+        "an unproven closing seeds nothing",
+      );
       // Close June at 300 while July stays open with its own 500 closing:
       // August chains from covered June, skipping uncovered July.
-      const journal = await postBankLine(org, actor, "300.00", "june", "2026-06-15");
+      const journal = await postBankLine(
+        org,
+        actor,
+        "300.00",
+        "june",
+        "2026-06-15",
+      );
       const june = await importCsv(
         {
           accountId: org.accounts.bank,
@@ -659,21 +943,36 @@ test(
           currency: "CAD",
           closingBalance: "300.00",
           lines: [
-            { postedOn: "2026-06-15", amount: "300.00", description: "June receipt", bankTransactionId: "g1" },
+            {
+              postedOn: "2026-06-15",
+              amount: "300.00",
+              description: "June receipt",
+              bankTransactionId: "g1",
+            },
           ],
         },
         ctx,
       );
-      const [juneLine] = (await db.execute<{ id: string }>(sql`
+      const [juneLine] = (
+        await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${june.statementId!}
-      `)).rows.map((row) => row.id);
+      `)
+      ).rows.map((row) => row.id);
       const closed = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: "2026-06-30", statementBalance: "300.00" },
+        {
+          accountId: org.accounts.bank,
+          throughDate: "2026-06-30",
+          statementBalance: "300.00",
+        },
         ctx,
       );
       await createMatch(
-        { reconciliationId: closed.id, statementLineIds: [juneLine!], journalLineIds: [journal!] },
+        {
+          reconciliationId: closed.id,
+          statementLineIds: [juneLine!],
+          journalLineIds: [journal!],
+        },
         ctx,
       );
       await markReconciled(closed.id, ctx);
@@ -684,14 +983,22 @@ test(
           statementDate: "2026-08-31",
           currency: "CAD",
           lines: [
-            { postedOn: "2026-08-05", amount: "50.00", description: "August receipt", bankTransactionId: "a1" },
+            {
+              postedOn: "2026-08-05",
+              amount: "50.00",
+              description: "August receipt",
+              bankTransactionId: "a1",
+            },
           ],
         },
         ctx,
         true,
       );
       assert.deepEqual(
-        { balance: august.suggestedOpening?.balance, date: august.suggestedOpening?.sourceStatementDate },
+        {
+          balance: august.suggestedOpening?.balance,
+          date: august.suggestedOpening?.sourceStatementDate,
+        },
         { balance: "300.0000", date: "2026-06-30" },
         "the chain skips the uncovered July closing for covered June",
       );
@@ -700,3 +1007,9 @@ test(
     }
   },
 );
+
+// Exercise the same native Flow composition installed by application entry points.
+before(async () => {
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
+});

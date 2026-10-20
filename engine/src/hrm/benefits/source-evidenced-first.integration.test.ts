@@ -63,29 +63,32 @@ function sourceTest(name: string, body: (h: Harness) => Promise<void>) {
 
 async function seedSourceAwardCase(h: Harness, targetHours = "0") {
   const component = await seedComponent(h.org.orgId, { kind: "earning", code: `SRC_${randomUUID().slice(0, 6)}` });
-  const program = await seedPayrollBenefitProgram({
+  const program = await seedPayrollBenefitProgram(
+    {
     orgId: h.org.orgId,
     actorId: h.authorId,
     subsidiaryId: h.org.subsidiaryId,
     componentId: component,
     currency: "USD",
-  }, {
-    code: `SRC_${randomUUID().slice(0, 6)}`,
-    name: "Measured work incentive",
-    family: "incentive",
-    approvalMode: "flows",
-    deliveryMethod: "payroll",
-    valuation: "per_unit",
-    metric: "approved_hours",
-    metricScope: "company",
-    allocation: "hours",
-    percentRate: null,
-    fixedAmount: "2.0000",
-    sourceAccountIds: [],
-    frequency: "manual",
-    periodBasis: "calendar",
-    paymentDelayDays: 0,
-  }, { activate: true });
+  },
+    {
+      code: `SRC_${randomUUID().slice(0, 6)}`,
+      name: "Measured work incentive",
+      family: "incentive",
+      deliveryMethod: "payroll",
+      valuation: "per_unit",
+      metric: "approved_hours",
+      metricScope: "company",
+      allocation: "hours",
+      percentRate: null,
+      fixedAmount: "2.0000",
+      sourceAccountIds: [],
+      frequency: "manual",
+      periodBasis: "calendar",
+      paymentDelayDays: 0,
+    },
+    { activate: true },
+  );
   const targetParty = await linkPerson(h.org.orgId, h.employeeId, "Source-recipient employee");
   const target = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: targetParty });
   const contributor = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Measured contributor" });
@@ -93,7 +96,9 @@ async function seedSourceAwardCase(h: Harness, targetHours = "0") {
   await addProgramMembership({ orgId: h.org.orgId, actorId: h.authorId, programId: program.id, employmentId: contributor.employmentId, effectiveFrom: "2026-01-01" });
   for (const [employment, hours, day] of [
     [contributor, "8", "2026-07-13"],
-    ...(targetHours === "0" ? [] : [[target, targetHours, "2026-07-14"]] as const),
+    ...(targetHours === "0"
+      ? []
+      : ([[target, targetHours, "2026-07-14"]] as const)),
   ] as const) {
     await db.execute(sql`insert into time_entries (id,org_id,employee_party_id,worked_on,hours,status,approved_at)
       values (${randomUUID()},${h.org.orgId},${employment.workerPartyId},${day}::date,${hours},'approved',now())`);
@@ -204,101 +209,107 @@ async function replaceRetainedJsonBytes(
   return { ...artifact, sha256: contentHash, sizeBytes: bytes.length };
 }
 
-sourceTest("source-evidenced first obligations stay separate, redact to self-service, and use normal payroll lifecycle", async (h) => {
-  const { program, target, contributor, query } = await seedSourceAwardCase(h);
-  const timeRowsBefore = (await db.execute(sql`select id,employee_party_id,worked_on,hours,status from time_entries
+sourceTest(
+  "source-evidenced first obligations stay separate, redact to self-service, and use normal payroll lifecycle",
+  async (h) => {
+    const { program, target, contributor, query } = await seedSourceAwardCase(h);
+    const timeRowsBefore = (await db.execute(sql`select id,employee_party_id,worked_on,hours,status from time_entries
     where org_id=${h.org.orgId} and employee_party_id in (${target.workerPartyId},${contributor.workerPartyId}) order by id`)).rows;
-  const projectRowsBefore = (await db.execute(sql`select id from projects where org_id=${h.org.orgId} order by id`)).rows;
-  const ticketRowsBefore = (await db.execute(sql`select document_id,foreman_party_id,superintendent_party_id from field_tickets where org_id=${h.org.orgId} order by document_id`)).rows;
-  const award = await recordSourceEvidencedFirstIncentiveAward(query);
-  const awardDto = await getBenefitAward(db, h.org.orgId, h.authorId, award.id);
-  assert.equal("sourceSnapshot" in awardDto, false);
-  assert.equal(award.value, "32.0000");
-  assert.equal(award.status, "draft");
-  assert.equal(award.sourceKey?.startsWith("source-first:"), true);
-  const retained = (await db.execute<{source_snapshot: Record<string, unknown>; evidence: Record<string, unknown>}>(sql`
+    const projectRowsBefore = (await db.execute(sql`select id from projects where org_id=${h.org.orgId} order by id`)).rows;
+    const ticketRowsBefore = (await db.execute(sql`select document_id,foreman_party_id,superintendent_party_id from field_tickets where org_id=${h.org.orgId} order by document_id`)).rows;
+    const award = await recordSourceEvidencedFirstIncentiveAward(query);
+    const awardDto = await getBenefitAward(db, h.org.orgId, h.authorId, award.id);
+    assert.equal("sourceSnapshot" in awardDto, false);
+    assert.equal(award.value, "32.0000");
+    assert.equal(award.status, "draft");
+    assert.equal(award.sourceKey?.startsWith("source-first:"), true);
+    const retained = (await db.execute<{source_snapshot: Record<string, unknown>; evidence: Record<string, unknown>}>(sql`
     select source_snapshot,evidence from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!;
-  const evidence = retained.source_snapshot.sourceEvidence as Record<string, unknown>;
-  assert.equal(retained.source_snapshot.payComponentId, program.payComponentId);
-  assert.equal(evidence.sourceEvidenceClass, "missing-source-identity");
-  assert.deepEqual(evidence.sourcePolicyEvidence, { status: "not-established-by-this-source-recording", sourceIssueDate: query.sourceIssueDate });
-  assert.equal(evidence.currentProgramRevision, query.expectedProgramRevision);
-  assert.equal((evidence.effectivePolicy as Record<string, unknown>).policyRevisionId, evidence.effectivePolicyRevisionId);
-  assert.equal((evidence.nativeIdentity as Record<string, unknown>).ticketId, null);
-  assert.equal((evidence.nativeIdentity as Record<string, unknown>).timeEntryIds, null);
-  assert.equal(((evidence.missingAnchor as Record<string, unknown>).nativeRecipientState), "no-native-recipient-row");
-  assert.equal(retained.evidence.sourceIssueDate, "2026-07-22");
-  assert.equal("sourceArtifacts" in retained.evidence, false);
-  const audit = (await db.execute<{ actor_id: string; reason: string; source_row_ref: string; source_digest: string | null }>(sql`
+    const evidence = retained.source_snapshot.sourceEvidence as Record<string, unknown>;
+    assert.equal(retained.source_snapshot.payComponentId, program.payComponentId);
+    assert.equal(evidence.sourceEvidenceClass, "missing-source-identity");
+    assert.deepEqual(evidence.sourcePolicyEvidence, { status: "not-established-by-this-source-recording", sourceIssueDate: query.sourceIssueDate });
+    assert.equal(evidence.currentProgramRevision, query.expectedProgramRevision);
+    assert.equal((evidence.effectivePolicy as Record<string, unknown>).policyRevisionId, evidence.effectivePolicyRevisionId);
+    assert.equal((evidence.nativeIdentity as Record<string, unknown>).ticketId, null);
+    assert.equal((evidence.nativeIdentity as Record<string, unknown>).timeEntryIds, null);
+    assert.equal(
+      (evidence.missingAnchor as Record<string, unknown>).nativeRecipientState,
+      "no-native-recipient-row",
+    );
+    assert.equal(retained.evidence.sourceIssueDate, "2026-07-22");
+    assert.equal("sourceArtifacts" in retained.evidence, false);
+    const audit = (await db.execute<{ actor_id: string; reason: string; source_row_ref: string; source_digest: string | null }>(sql`
     select actor_id::text as actor_id,changes->>'reason' as reason,
            changes#>>'{after,sourceContext,sourceRowRef}' as source_row_ref,
            changes#>>'{after,sourceContext,nativePreview,digest}' as source_digest
       from audit_log where org_id=${h.org.orgId} and table_name='hrm_benefit_awards' and row_id=${award.id}
        order by at desc,id desc limit 1`)).rows[0]!;
-  assert.equal(audit.actor_id, h.authorId);
-  assert.equal(audit.reason, query.reason);
-  assert.equal(audit.source_row_ref, query.sourceRowRef);
-  assert.equal(typeof audit.source_digest, "string");
-  assert.equal((await db.execute(sql`select id from hrm_benefit_award_events where org_id=${h.org.orgId} and award_id=${award.id} and kind='created'`)).rows.length, 1);
-  assert.deepEqual((await db.execute(sql`select id,employee_party_id,worked_on,hours,status from time_entries
+    assert.equal(audit.actor_id, h.authorId);
+    assert.equal(audit.reason, query.reason);
+    assert.equal(audit.source_row_ref, query.sourceRowRef);
+    assert.equal(typeof audit.source_digest, "string");
+    assert.equal((await db.execute(sql`select id from hrm_benefit_award_events where org_id=${h.org.orgId} and award_id=${award.id} and kind='created'`)).rows.length, 1);
+    assert.deepEqual((await db.execute(sql`select id,employee_party_id,worked_on,hours,status from time_entries
     where org_id=${h.org.orgId} and employee_party_id in (${target.workerPartyId},${contributor.workerPartyId}) order by id`)).rows, timeRowsBefore);
-  assert.deepEqual((await db.execute(sql`select id from projects where org_id=${h.org.orgId} order by id`)).rows, projectRowsBefore);
-  assert.deepEqual((await db.execute(sql`select document_id,foreman_party_id,superintendent_party_id from field_tickets where org_id=${h.org.orgId} order by document_id`)).rows, ticketRowsBefore);
+    assert.deepEqual((await db.execute(sql`select id from projects where org_id=${h.org.orgId} order by id`)).rows, projectRowsBefore);
+    assert.deepEqual((await db.execute(sql`select document_id,foreman_party_id,superintendent_party_id from field_tickets where org_id=${h.org.orgId} order by document_id`)).rows, ticketRowsBefore);
 
-  const reconciliation = await reconcileIncentivePeriod({
+    const reconciliation = await reconcileIncentivePeriod({
     orgId: h.org.orgId, actorId: h.authorId, programId: program.id,
     periodFrom: query.periodFrom, periodTo: query.periodTo,
   });
-  assert.equal(reconciliation.nativeMeasuredHistoryTotal, "0.0000");
-  assert.equal(reconciliation.sourceEvidencedFirstTotal, "32.0000");
-  assert.equal(reconciliation.preview?.computation.totalAwarded, "16.0000");
-  assert.equal(reconciliation.obligationHistoryMinusCurrentMeasurement, "16.0000");
+    assert.equal(reconciliation.nativeMeasuredHistoryTotal, "0.0000");
+    assert.equal(reconciliation.sourceEvidencedFirstTotal, "32.0000");
+    assert.equal(reconciliation.preview?.computation.totalAwarded, "16.0000");
+    assert.equal(reconciliation.obligationHistoryMinusCurrentMeasurement, "16.0000");
 
-  const statement = await myBenefitStatement({ orgId: h.org.orgId, actorId: h.employeeId });
-  const statementJson = JSON.stringify(statement);
-  assert.ok(statementJson.includes("source-evidenced-first-obligation"));
-  assert.equal(statementJson.includes(query.sourceRowRef), false);
-  assert.equal(statementJson.includes(query.sourceArtifacts[0]!.sha256), false);
-  assert.equal(statementJson.includes(query.sourceArtifacts[0]!.bytesBase64), false);
-  assert.equal(statementJson.includes(contributor.employmentId), false);
+    const statement = await myBenefitStatement({ orgId: h.org.orgId, actorId: h.employeeId });
+    const statementJson = JSON.stringify(statement);
+    assert.ok(statementJson.includes("source-evidenced-first-obligation"));
+    assert.equal(statementJson.includes(query.sourceRowRef), false);
+    assert.equal(statementJson.includes(query.sourceArtifacts[0]!.sha256), false);
+    assert.equal(statementJson.includes(query.sourceArtifacts[0]!.bytesBase64), false);
+    assert.equal(statementJson.includes(contributor.employmentId), false);
 
-  await submitBenefitAward({ orgId: h.org.orgId, actorId: h.authorId, awardId: award.id });
-  await approveBenefitFixture({ orgId: h.org.orgId, actorId: h.approverId, awardId: award.id });
-  const runDocumentId = await seedRun(h, target.employmentId, target.workerPartyId);
-  const queued = await queueAwardForPayRun({ orgId: h.org.orgId, actorId: h.financeId, awardId: award.id, runDocumentId });
-  await seedCommittedBenefitRunWithoutStubs(h.org.orgId, runDocumentId);
-  const stubId = randomUUID();
-  await db.execute(sql`insert into pay_stubs
+    await submitBenefitAward({ orgId: h.org.orgId, actorId: h.authorId, awardId: award.id });
+    await approveBenefitFixture({ orgId: h.org.orgId, actorId: h.approverId, awardId: award.id });
+    const runDocumentId = await seedRun(h, target.employmentId, target.workerPartyId);
+    const queued = await queueAwardForPayRun({ orgId: h.org.orgId, actorId: h.financeId, awardId: award.id, runDocumentId });
+    await seedCommittedBenefitRunWithoutStubs(h.org.orgId, runDocumentId);
+    const stubId = randomUUID();
+    await db.execute(sql`insert into pay_stubs
     (id,org_id,pay_run_document_id,employee_party_id,employment_id,province,periods_per_year,pay_date,tax_year,country,country_source,currency_code,gross,net_pay)
     values (${stubId},${h.org.orgId},${runDocumentId},${target.workerPartyId},${target.employmentId},'TX',26,'2026-08-05',2026,'US','calculation','USD',${award.value},${award.value})`);
-  const adjustment = (await db.execute<{component_id: string; note: string; amount: string}>(sql`
+    const adjustment = (await db.execute<{component_id: string; note: string; amount: string}>(sql`
     select component_id::text as component_id,note,amount::text as amount from pay_run_adjustments
     where org_id=${h.org.orgId} and id=${queued.adjustmentId}`)).rows[0]!;
-  assert.equal(adjustment.component_id, program.payComponentId, "the native approval and queue path uses the program's configured component");
-  await db.execute(sql`insert into pay_stub_lines (org_id,stub_id,component_id,kind,description,amount,payment_kind,created_by,updated_by)
+    assert.equal(adjustment.component_id, program.payComponentId, "the native approval and queue path uses the program's configured component");
+    await db.execute(sql`insert into pay_stub_lines (org_id,stub_id,component_id,kind,description,amount,payment_kind,created_by,updated_by)
     values (${h.org.orgId},${stubId},${adjustment.component_id},'earning',${adjustment.note},${adjustment.amount},'cash',${h.financeId},${h.financeId})`);
-  const delivered = await confirmAwardPayrollDelivery({
+    const delivered = await confirmAwardPayrollDelivery({
     orgId: h.org.orgId, actorId: h.financeId, awardId: award.id, runDocumentId, adjustmentId: queued.adjustmentId,
   });
-  assert.equal(delivered.status, "delivered");
-  const original = (await db.execute<{source_snapshot: unknown; program_snapshot: unknown; value: string}>(sql`
+    assert.equal(delivered.status, "delivered");
+    const original = (await db.execute<{source_snapshot: unknown; program_snapshot: unknown; value: string}>(sql`
     select source_snapshot,program_snapshot,value::text as value from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!;
-  const correction = await createAdjustingAward({
+    const correction = await createAdjustingAward({
     orgId: h.org.orgId, actorId: h.authorId, awardId: award.id,
     correctionId: randomUUID(), value: "1.00", reason: "Correct the retained source amount after review",
     sourceReference: "retained-source-correction-001", periodFrom: query.periodFrom, periodTo: query.periodTo,
   });
-  assert.equal(correction.adjustsAwardId, award.id);
-  assert.equal(correction.status, "draft");
-  assert.deepEqual((await db.execute(sql`select source_snapshot,program_snapshot,value::text as value from hrm_benefit_awards
+    assert.equal(correction.adjustsAwardId, award.id);
+    assert.equal(correction.status, "draft");
+    assert.deepEqual((await db.execute(sql`select source_snapshot,program_snapshot,value::text as value from hrm_benefit_awards
     where org_id=${h.org.orgId} and id=${award.id}`)).rows[0], original);
-  const correctedReconciliation = await reconcileIncentivePeriod({
+    const correctedReconciliation = await reconcileIncentivePeriod({
     orgId: h.org.orgId, actorId: h.authorId, programId: program.id,
     periodFrom: query.periodFrom, periodTo: query.periodTo,
   });
-  assert.equal(correctedReconciliation.sourceEvidencedFirstTotal, "32.0000");
-  assert.equal(correctedReconciliation.nativeMeasuredHistoryTotal, "0.0000");
-});
+    assert.equal(correctedReconciliation.sourceEvidencedFirstTotal, "32.0000");
+    assert.equal(correctedReconciliation.nativeMeasuredHistoryTotal, "0.0000");
+  },
+);
 
 sourceTest("source first retries serialize, reject alternate evidence and overlaps, and refuse native-payable recipients", async (h) => {
   const { program, target, contributor, row, query } = await seedSourceAwardCase(h);
@@ -510,34 +521,52 @@ sourceTest("source-first admission binds one immutable award to its command tran
   })), /locked native retained-source service/);
 });
 
-sourceTest("a native loss cannot use the missing-identity first-obligation exception", async (h) => {
-  const component = await seedComponent(h.org.orgId, { kind: "earning", code: `LOSS_${randomUUID().slice(0, 6)}` });
-  const program = await seedPayrollBenefitProgram({
-    orgId: h.org.orgId, actorId: h.authorId, subsidiaryId: h.org.subsidiaryId,
-    componentId: component, currency: "USD",
-  }, {
-    code: `LOSS_${randomUUID().slice(0, 6)}`, name: "Period profit share", family: "incentive",
-    approvalMode: "flows", deliveryMethod: "payroll", valuation: "percent", metric: "net_profit",
-    metricScope: "company", allocation: "equal", percentRate: "10", fixedAmount: null,
-    sourceAccountIds: [h.org.accounts.revenue, h.org.accounts.cogs], frequency: "manual", periodBasis: "calendar",
-  }, { activate: true });
-  const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Profit-share recipient" });
-  await addProgramMembership({ orgId: h.org.orgId, actorId: h.authorId, programId: program.id, employmentId: worker.employmentId, effectiveFrom: "2026-01-01" });
-  const current = await getBenefitProgram(db, h.org.orgId, h.authorId, program.id);
-  await seedBenefitIncentivePosting(h, [
+sourceTest(
+  "a native loss cannot use the missing-identity first-obligation exception",
+  async (h) => {
+    const component = await seedComponent(h.org.orgId, { kind: "earning", code: `LOSS_${randomUUID().slice(0, 6)}` });
+    const program = await seedPayrollBenefitProgram(
+      {
+    orgId: h.org.orgId,
+    actorId: h.authorId,
+    subsidiaryId: h.org.subsidiaryId,
+    componentId: component,
+    currency: "USD",
+  },
+      {
+        code: `LOSS_${randomUUID().slice(0, 6)}`,
+        name: "Period profit share",
+        family: "incentive",
+        deliveryMethod: "payroll",
+        valuation: "percent",
+        metric: "net_profit",
+        metricScope: "company",
+        allocation: "equal",
+        percentRate: "10",
+        fixedAmount: null,
+        sourceAccountIds: [h.org.accounts.revenue, h.org.accounts.cogs],
+        frequency: "manual",
+        periodBasis: "calendar",
+      },
+      { activate: true },
+    );
+    const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Profit-share recipient" });
+    await addProgramMembership({ orgId: h.org.orgId, actorId: h.authorId, programId: program.id, employmentId: worker.employmentId, effectiveFrom: "2026-01-01" });
+    const current = await getBenefitProgram(db, h.org.orgId, h.authorId, program.id);
+    await seedBenefitIncentivePosting(h, [
     { account: h.org.accounts.revenue, amount: neg("10000") },
     { account: h.org.accounts.bank, amount: "10000.0000" },
   ], { date: "2026-07-10" });
-  await seedBenefitIncentivePosting(h, [
+    await seedBenefitIncentivePosting(h, [
     { account: h.org.accounts.cogs, amount: "12000.0000" },
     { account: h.org.accounts.bank, amount: neg("12000") },
   ], { date: "2026-07-20" });
-  const row = { sourceCard: "issued-profit-card-001", amount: "1205.77", currency: "USD", earningFrom: "2026-07-01", earningTo: "2026-07-31", issueDate: "2026-09-16" };
-  const artifact = await retainRows(h, [row], "retained-profit-award.json");
-  const preview = await reconcileIncentivePeriod({ orgId: h.org.orgId, actorId: h.authorId, programId: program.id, periodFrom: row.earningFrom, periodTo: row.earningTo, asOf: "2026-07-31" });
-  const nativeSnapshot = preview.preview?.sourceSnapshot ?? preview.nativeMeasureOnly?.sourceSnapshot;
-  assert.ok(nativeSnapshot);
-  await assert.rejects(recordSourceEvidencedFirstIncentiveAward({
+    const row = { sourceCard: "issued-profit-card-001", amount: "1205.77", currency: "USD", earningFrom: "2026-07-01", earningTo: "2026-07-31", issueDate: "2026-09-16" };
+    const artifact = await retainRows(h, [row], "retained-profit-award.json");
+    const preview = await reconcileIncentivePeriod({ orgId: h.org.orgId, actorId: h.authorId, programId: program.id, periodFrom: row.earningFrom, periodTo: row.earningTo, asOf: "2026-07-31" });
+    const nativeSnapshot = preview.preview?.sourceSnapshot ?? preview.nativeMeasureOnly?.sourceSnapshot;
+    assert.ok(nativeSnapshot);
+    await assert.rejects(recordSourceEvidencedFirstIncentiveAward({
     orgId: h.org.orgId, actorId: h.authorId, programId: program.id,
     expectedProgramRevision: current.revision, requestKey: randomUUID(), employmentId: worker.employmentId,
     periodFrom: row.earningFrom, periodTo: row.earningTo, value: row.amount, currency: row.currency,
@@ -550,15 +579,16 @@ sourceTest("a native loss cannot use the missing-identity first-obligation excep
     mappingAttestation: { employmentId: worker.employmentId, basis: "The retained issued row and the reviewed employee employment crosswalk identify this recipient and program payer.", reason: "I reviewed both retained records and attest the source row maps to this employment and legal payer.", confirmed: true },
     reason: "The current native period measure is a loss, so this historical obligation needs a separately reviewed source-evidence exception.",
   }), /positive native incentive pool|loss or threshold miss/i);
-  assert.equal((await db.execute(sql`select id from hrm_benefit_awards where org_id=${h.org.orgId} and program_id=${program.id}`)).rows.length, 0);
-  const reconciliation = await reconcileIncentivePeriod({ orgId: h.org.orgId, actorId: h.authorId, programId: program.id, periodFrom: row.earningFrom, periodTo: row.earningTo, asOf: "2026-07-31" });
-  assert.equal(reconciliation.preview, null);
-  assert.ok(reconciliation.nativeMeasureOnly && "value" in reconciliation.nativeMeasureOnly.measured);
-  assert.equal(reconciliation.nativeMeasureOnly.measured.value, "-2000.0000");
-  assert.equal(reconciliation.nativeMeasuredHistoryTotal, "0.0000");
-  assert.equal(reconciliation.sourceEvidencedFirstTotal, "0.0000");
-  assert.equal(reconciliation.obligationHistoryMinusCurrentMeasurement, "0.0000");
-});
+    assert.equal((await db.execute(sql`select id from hrm_benefit_awards where org_id=${h.org.orgId} and program_id=${program.id}`)).rows.length, 0);
+    const reconciliation = await reconcileIncentivePeriod({ orgId: h.org.orgId, actorId: h.authorId, programId: program.id, periodFrom: row.earningFrom, periodTo: row.earningTo, asOf: "2026-07-31" });
+    assert.equal(reconciliation.preview, null);
+    assert.ok(reconciliation.nativeMeasureOnly && "value" in reconciliation.nativeMeasureOnly.measured);
+    assert.equal(reconciliation.nativeMeasureOnly.measured.value, "-2000.0000");
+    assert.equal(reconciliation.nativeMeasuredHistoryTotal, "0.0000");
+    assert.equal(reconciliation.sourceEvidencedFirstTotal, "0.0000");
+    assert.equal(reconciliation.obligationHistoryMinusCurrentMeasurement, "0.0000");
+  },
+);
 
 sourceTest("source paid above a negative project-margin measure records a draft under normal approval and queue controls", async (h) => {
   const { program, target, contributor, lossProjectId, query, native } = await seedProjectMarginLossCase(h);
@@ -763,56 +793,75 @@ sourceTest("missing-identity project history does not poison or consume later pr
   assert.equal(augustPreview.computation.totalAwarded, "500.0000", "later native settlement measures normally after source-first history");
 });
 
-sourceTest("source-paid-above-native-measure predicate refuses each non-loss and shared shape", async (h) => {
-  const loss = await seedProjectMarginLossCase(h);
-  await assert.rejects(recordSourceEvidencedFirstIncentiveAward(loss.missingQuery),
+sourceTest(
+  "source-paid-above-native-measure predicate refuses each non-loss and shared shape",
+  async (h) => {
+    const loss = await seedProjectMarginLossCase(h);
+    await assert.rejects(recordSourceEvidencedFirstIncentiveAward(loss.missingQuery),
     /positive native incentive pool/, "the missing-identity class still refuses a native loss");
 
-  const otherManager = await seedProjectMarginLossCase(h, { otherManager: true });
-  await assert.rejects(recordSourceEvidencedFirstIncentiveAward(otherManager.query),
+    const otherManager = await seedProjectMarginLossCase(h, { otherManager: true });
+    await assert.rejects(recordSourceEvidencedFirstIncentiveAward(otherManager.query),
     /negative project-margin carry-forward for this employment/, "an absent target carry refuses");
 
-  const shared = await seedProjectMarginLossCase(h, { sharedRole: true });
-  await assert.rejects(recordSourceEvidencedFirstIncentiveAward(shared.query),
+    const shared = await seedProjectMarginLossCase(h, { sharedRole: true });
+    await assert.rejects(recordSourceEvidencedFirstIncentiveAward(shared.query),
     /cannot partially consume project/, "shared-recipient projects refuse with a governed-review remedy");
 
-  const payable = await seedProjectMarginLossCase(h, { mixedProfit: true });
-  await assert.rejects(recordSourceEvidencedFirstIncentiveAward({
+    const payable = await seedProjectMarginLossCase(h, { mixedProfit: true });
+    await assert.rejects(recordSourceEvidencedFirstIncentiveAward({
     ...payable.query,
     employmentId: payable.contributor.employmentId,
     mappingAttestation: { ...payable.query.mappingAttestation, employmentId: payable.contributor.employmentId },
   }), /already has a payable recipient/, "a native-payable target settles natively instead");
 
-  const component = await seedComponent(h.org.orgId, { kind: "earning", code: `NP_${randomUUID().slice(0, 6)}` });
-  const moneyProgram = await seedPayrollBenefitProgram({
-    orgId: h.org.orgId, actorId: h.authorId, subsidiaryId: h.org.subsidiaryId, componentId: component, currency: "USD",
-  }, {
-    code: `NP_${randomUUID().slice(0, 6)}`, name: "Period profit share", family: "incentive",
-    approvalMode: "flows", deliveryMethod: "payroll", valuation: "percent", metric: "net_profit",
-    metricScope: "company", allocation: "equal", percentRate: "10", fixedAmount: null,
-    sourceAccountIds: [h.org.accounts.revenue, h.org.accounts.cogs], frequency: "manual", periodBasis: "calendar",
-  }, { activate: true });
-  const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Profit-share recipient" });
-  await addProgramMembership({ orgId: h.org.orgId, actorId: h.authorId, programId: moneyProgram.id, employmentId: worker.employmentId, effectiveFrom: "2026-01-01" });
-  await seedBenefitIncentivePosting(h, [
+    const component = await seedComponent(h.org.orgId, { kind: "earning", code: `NP_${randomUUID().slice(0, 6)}` });
+    const moneyProgram = await seedPayrollBenefitProgram(
+      {
+    orgId: h.org.orgId,
+    actorId: h.authorId,
+    subsidiaryId: h.org.subsidiaryId,
+    componentId: component,
+    currency: "USD",
+  },
+      {
+        code: `NP_${randomUUID().slice(0, 6)}`,
+        name: "Period profit share",
+        family: "incentive",
+        deliveryMethod: "payroll",
+        valuation: "percent",
+        metric: "net_profit",
+        metricScope: "company",
+        allocation: "equal",
+        percentRate: "10",
+        fixedAmount: null,
+        sourceAccountIds: [h.org.accounts.revenue, h.org.accounts.cogs],
+        frequency: "manual",
+        periodBasis: "calendar",
+      },
+      { activate: true },
+    );
+    const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Profit-share recipient" });
+    await addProgramMembership({ orgId: h.org.orgId, actorId: h.authorId, programId: moneyProgram.id, employmentId: worker.employmentId, effectiveFrom: "2026-01-01" });
+    await seedBenefitIncentivePosting(h, [
     { account: h.org.accounts.revenue, amount: neg("10000") },
     { account: h.org.accounts.bank, amount: "10000.0000" },
   ], { date: "2026-07-10" });
-  await seedBenefitIncentivePosting(h, [
+    await seedBenefitIncentivePosting(h, [
     { account: h.org.accounts.cogs, amount: "12000.0000" },
     { account: h.org.accounts.bank, amount: neg("12000") },
   ], { date: "2026-07-20" });
-  const moneyRow = { sourceCard: "issued-profit-card-above", amount: "300.00", currency: "USD", earningFrom: "2026-07-01", earningTo: "2026-07-31", issueDate: "2026-09-16", paidDate: "2026-09-18" };
-  const moneyRetained = await retainRows(h, [moneyRow], "retained-profit-above.json");
-  const moneyArtifact = { ...moneyRetained, sourceFields: { ...moneyRetained.sourceFields, sourcePaidDatePointer: "/paidDate" } };
-  const moneyNative = await reconcileIncentivePeriod({
+    const moneyRow = { sourceCard: "issued-profit-card-above", amount: "300.00", currency: "USD", earningFrom: "2026-07-01", earningTo: "2026-07-31", issueDate: "2026-09-16", paidDate: "2026-09-18" };
+    const moneyRetained = await retainRows(h, [moneyRow], "retained-profit-above.json");
+    const moneyArtifact = { ...moneyRetained, sourceFields: { ...moneyRetained.sourceFields, sourcePaidDatePointer: "/paidDate" } };
+    const moneyNative = await reconcileIncentivePeriod({
     orgId: h.org.orgId, actorId: h.authorId, programId: moneyProgram.id,
     periodFrom: moneyRow.earningFrom, periodTo: moneyRow.earningTo, asOf: "2026-07-31",
   });
-  const moneySnapshot = moneyNative.preview?.sourceSnapshot ?? moneyNative.nativeMeasureOnly?.sourceSnapshot;
-  assert.ok(moneySnapshot);
-  const moneyCurrent = await getBenefitProgram(db, h.org.orgId, h.authorId, moneyProgram.id);
-  await assert.rejects(recordSourceEvidencedFirstIncentiveAward({
+    const moneySnapshot = moneyNative.preview?.sourceSnapshot ?? moneyNative.nativeMeasureOnly?.sourceSnapshot;
+    assert.ok(moneySnapshot);
+    const moneyCurrent = await getBenefitProgram(db, h.org.orgId, h.authorId, moneyProgram.id);
+    await assert.rejects(recordSourceEvidencedFirstIncentiveAward({
     orgId: h.org.orgId, actorId: h.authorId, programId: moneyProgram.id,
     expectedProgramRevision: moneyCurrent.revision, requestKey: randomUUID(), employmentId: worker.employmentId,
     periodFrom: moneyRow.earningFrom, periodTo: moneyRow.earningTo, asOf: "2026-07-31",
@@ -835,9 +884,10 @@ sourceTest("source-paid-above-native-measure predicate refuses each non-loss and
     },
     reason: "Record the issued source obligation directed above the negative native measure.",
   }), /project-margin programs only/, "generic money-metric losses are deferred to governed review");
-  assert.equal((await db.execute(sql`select id from hrm_benefit_awards
+    assert.equal((await db.execute(sql`select id from hrm_benefit_awards
     where org_id=${h.org.orgId} and source_snapshot#>>'{sourceEvidence,sourceEvidenceClass}' = 'source-paid-above-native-measure'`)).rows.length, 0);
-});
+  },
+);
 
 sourceTest("source-paid loss admission preserves other recipients' payable native measures", async (h) => {
   const mixed = await seedProjectMarginLossCase(h, { mixedProfit: true });
@@ -943,21 +993,40 @@ sourceTest("source-paid-above-native-measure retains cap, budget, precision and 
   }), /closed program periods/);
 });
 
-async function seedProjectMarginProgram(h: Harness, terms: Partial<CreateBenefitProgramQuery> = {}) {
+async function seedProjectMarginProgram(
+  h: Harness,
+  terms: Partial<CreateBenefitProgramQuery> = {},
+) {
   const component = await seedComponent(h.org.orgId, { kind: "earning", code: `MGN_${randomUUID().slice(0, 6)}` });
-  return seedPayrollBenefitProgram({
-    orgId: h.org.orgId, actorId: h.authorId, subsidiaryId: h.org.subsidiaryId,
-    componentId: component, currency: "USD",
-  }, {
-    code: `MGN_${randomUUID().slice(0, 6)}`, name: "Project margin share", family: "incentive",
-    approvalMode: "flows", deliveryMethod: "payroll", valuation: "percent",
-    metric: "project_margin", metricScope: "company", allocation: "responsibility",
-    percentRate: "5", lossPercentRate: "10", fixedAmount: null,
-    includeOpenCommitments: false,
-    sourceAccountIds: [h.org.accounts.revenue, h.org.accounts.cogs],
-    frequency: "monthly", periodBasis: "calendar", paymentDelayDays: 0,
-    ...terms,
-  }, { activate: false });
+  return seedPayrollBenefitProgram(
+    {
+    orgId: h.org.orgId,
+    actorId: h.authorId,
+    subsidiaryId: h.org.subsidiaryId,
+    componentId: component,
+    currency: "USD",
+  },
+    {
+      code: `MGN_${randomUUID().slice(0, 6)}`,
+      name: "Project margin share",
+      family: "incentive",
+      deliveryMethod: "payroll",
+      valuation: "percent",
+      metric: "project_margin",
+      metricScope: "company",
+      allocation: "responsibility",
+      percentRate: "5",
+      lossPercentRate: "10",
+      fixedAmount: null,
+      includeOpenCommitments: false,
+      sourceAccountIds: [h.org.accounts.revenue, h.org.accounts.cogs],
+      frequency: "monthly",
+      periodBasis: "calendar",
+      paymentDelayDays: 0,
+      ...terms,
+    },
+    { activate: false },
+  );
 }
 
 async function seedMarginProject(h: Harness, managerPartyId: string, name: string) {

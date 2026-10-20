@@ -1,8 +1,15 @@
-import { enrollmentContributionProjection, type EnrollmentContributionSummary } from "../benefits/benefits-read.ts";
+import {
+  enrollmentContributionProjection,
+  type EnrollmentContributionSummary,
+} from "../benefits/benefits-read.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
-import { loadOwnEmploymentIds, requireHrmSelfRead, requireHrmSelfRequest } from "../authorization.ts";
+import {
+  loadOwnEmploymentIds,
+  requireHrmSelfRead,
+  requireHrmSelfRequest,
+} from "../authorization.ts";
 import { actorPartyOf, assertHrmFeatureOn, SelfServiceError } from "./actor.ts";
 import { resolveTeamEmploymentIds } from "./team-read.ts";
 import {
@@ -58,7 +65,9 @@ import { inputGuards } from "../input-guards.ts";
 
 /** Shared HRM feature gate (actor.ts): audience-aware when HRM is off. */
 
-const { requireOrgId, requireActorId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
+const { requireOrgId, requireActorId } = inputGuards(
+  (message) => new SelfServiceError("REFUSED", message),
+);
 
 // --- Reviews ---------------------------------------------------------------
 
@@ -106,7 +115,12 @@ export interface MyReviewWorkspace {
   readonly goals: MyGoalRow[];
 }
 
-function toSlice(review: ReviewDTO, cycleName: string, selfDueOn: string | null, managerDueOn: string | null): MyReviewSlice {
+function toSlice(
+  review: ReviewDTO,
+  cycleName: string,
+  selfDueOn: string | null,
+  managerDueOn: string | null,
+): MyReviewSlice {
   if (review.kind !== "self" && review.kind !== "manager") {
     throw new SelfServiceError(
       "REFUSED",
@@ -154,8 +168,21 @@ export async function getMyReviewWorkspace(query: {
     const mine = await listMyReviews({ orgId, actorId });
     const cycles = await listCycleProgress({ orgId, actorId });
     const byId = new Map(cycles.map((cycle) => [cycle.id, cycle]));
-    const groups = new Map<string, { group: MyReviewCycleGroup; mySelf: MyReviewSlice | null; sharedWithMe: MyReviewSlice[] }>();
-    const groupFor = (cycleId: string): { group: MyReviewCycleGroup; mySelf: MyReviewSlice | null; sharedWithMe: MyReviewSlice[] } | null => {
+    const groups = new Map<
+      string,
+      {
+        group: MyReviewCycleGroup;
+        mySelf: MyReviewSlice | null;
+        sharedWithMe: MyReviewSlice[];
+      }
+    >();
+    const groupFor = (
+      cycleId: string,
+    ): {
+      group: MyReviewCycleGroup;
+      mySelf: MyReviewSlice | null;
+      sharedWithMe: MyReviewSlice[];
+    } | null => {
       const cycle = byId.get(cycleId);
       if (!cycle) return null;
       let entry = groups.get(cycleId);
@@ -184,7 +211,12 @@ export async function getMyReviewWorkspace(query: {
       const entry = groupFor(review.cycleId);
       if (!entry || entry.mySelf) continue;
       const cycle = byId.get(review.cycleId);
-      entry.mySelf = toSlice(review, entry.group.name, cycle?.selfDueOn ?? null, cycle?.managerDueOn ?? null);
+      entry.mySelf = toSlice(
+        review,
+        entry.group.name,
+        cycle?.selfDueOn ?? null,
+        cycle?.managerDueOn ?? null,
+      );
     }
     // asSubject holds only shared/acknowledged reviews by construction;
     // the kind guard in toSlice keeps peer reviews out of the workspace.
@@ -193,7 +225,14 @@ export async function getMyReviewWorkspace(query: {
       const entry = groupFor(review.cycleId);
       if (!entry) continue;
       const cycle = byId.get(review.cycleId);
-      entry.sharedWithMe.push(toSlice(review, entry.group.name, cycle?.selfDueOn ?? null, cycle?.managerDueOn ?? null));
+      entry.sharedWithMe.push(
+        toSlice(
+          review,
+          entry.group.name,
+          cycle?.selfDueOn ?? null,
+          cycle?.managerDueOn ?? null,
+        ),
+      );
     }
     const own = await loadOwnEmploymentIds(db, orgId, actorId);
     const goals: MyGoalRow[] = [];
@@ -211,9 +250,15 @@ export async function getMyReviewWorkspace(query: {
     }
     return {
       cycles: [...groups.values()]
-        .map((entry) => ({ ...entry.group, mySelf: entry.mySelf, sharedWithMe: entry.sharedWithMe }))
+        .map((entry) => ({
+          ...entry.group,
+          mySelf: entry.mySelf,
+          sharedWithMe: entry.sharedWithMe,
+        }))
         .sort((a, b) => (a.periodEndOn < b.periodEndOn ? 1 : -1)),
-      goals: goals.sort((a, b) => (a.dueOn ?? "9999-12-31") < (b.dueOn ?? "9999-12-31") ? -1 : 1),
+      goals: goals.sort((a, b) =>
+        (a.dueOn ?? "9999-12-31") < (b.dueOn ?? "9999-12-31") ? -1 : 1,
+      ),
     };
   });
 }
@@ -279,7 +324,11 @@ export async function updateMyGoalProgress(query: {
       progressPercent: query.progressPercent,
       note: query.note,
     });
-    return { id: goal.id, status: goal.status, progressPercent: goal.progressPercent };
+    return {
+      id: goal.id,
+      status: goal.status,
+      progressPercent: goal.progressPercent,
+    };
   });
 }
 
@@ -318,16 +367,17 @@ export async function loadManagerOwedReviews(query: {
     const reports = await resolveTeamEmploymentIds(db, orgId, actorId, today);
     if (reports.length === 0) return [];
     const params = reports.map((id) => sql`${id}::uuid`);
-    const rows = (await db.execute<{
-      employmentId: string;
-      workerName: string;
-      cycleId: string;
-      cycleName: string;
-      reviewId: string;
-      kind: string;
-      status: string;
-      managerDueOn: string | null;
-    }>(sql`
+    const rows = (
+      await db.execute<{
+        employmentId: string;
+        workerName: string;
+        cycleId: string;
+        cycleName: string;
+        reviewId: string;
+        kind: string;
+        status: string;
+        managerDueOn: string | null;
+      }>(sql`
       select r.employment_id as "employmentId",
              p.display_name as "workerName",
              c.id as "cycleId", c.name as "cycleName",
@@ -347,7 +397,8 @@ export async function loadManagerOwedReviews(query: {
          and r.reviewer_party_id = ${partyId}
          and r.employment_id in (${sql.join(params, sql`, `)})
        order by c.period_end_on desc, p.display_name
-    `)).rows;
+    `)
+    ).rows;
     return rows.map((row) => ({
       employmentId: row.employmentId,
       workerName: row.workerName,
@@ -356,7 +407,8 @@ export async function loadManagerOwedReviews(query: {
       reviewId: row.reviewId,
       kind: row.kind,
       status: row.status,
-      managerDueOn: row.managerDueOn != null ? String(row.managerDueOn).slice(0, 10) : null,
+      managerDueOn:
+        row.managerDueOn != null ? String(row.managerDueOn).slice(0, 10) : null,
       drawerHref: `/hrm/performance?cycle=${encodeURIComponent(row.cycleId)}&review=${encodeURIComponent(row.reviewId)}`,
     }));
   });
@@ -404,7 +456,6 @@ export interface MyPlanRow {
   readonly currency: string;
   readonly effectiveFrom: string;
   readonly effectiveTo: string | null;
-  readonly approvalMode: "none" | "flows";
   readonly contributionRules: EnrollmentContributionRuleOption[];
   readonly classes: { value: string; label: string }[];
 }
@@ -418,26 +469,38 @@ export interface MyBenefitsWorkspace {
 
 type OwnEmployment = { id: string; subsidiaryId: string };
 
-async function loadOwnEmployments(exec: SqlExecutor, orgId: string, actorId: string): Promise<OwnEmployment[]> {
-  const rows = (await exec.execute<{ id: string; subsidiaryId: string }>(sql`
+async function loadOwnEmployments(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<OwnEmployment[]> {
+  const rows = (
+    await exec.execute<{ id: string; subsidiaryId: string }>(sql`
     select e.id, e.employer_subsidiary_id as "subsidiaryId"
       from worker_employments e
       join users u on u.org_id = e.org_id and u.id = ${actorId}
      where e.org_id = ${orgId} and e.worker_party_id = u.party_id and u.party_id is not null
-  `)).rows;
+  `)
+  ).rows;
   // Zero rows is a fact the caller reports (no employment yet), never a
   // forged id: every downstream predicate runs over these trusted rows.
   return rows.map((row) => ({ id: row.id, subsidiaryId: row.subsidiaryId }));
 }
 
-async function liveDepartmentIds(exec: SqlExecutor, orgId: string, employmentId: string): Promise<string[]> {
-  const rows = (await exec.execute<{ department_id: string | null }>(sql`
+async function liveDepartmentIds(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+): Promise<string[]> {
+  const rows = (
+    await exec.execute<{ department_id: string | null }>(sql`
     select v.department_id
       from employment_assignment_versions v
       join employment_assignments s on s.org_id = v.org_id and s.id = v.assignment_id
      where v.org_id = ${orgId} and s.employment_id = ${employmentId}
        and v.recorded_until is null and v.department_id is not null
-  `)).rows;
+  `)
+  ).rows;
   return [...new Set(rows.map((row) => String(row.department_id)))];
 }
 
@@ -446,8 +509,12 @@ type WindowScope = { subsidiaryId: string | null; departmentId: string | null };
 function windowScope(appliesTo: unknown): WindowScope {
   const applies = (appliesTo ?? {}) as Record<string, unknown>;
   return {
-    subsidiaryId: typeof applies.employer_subsidiary_id === "string" ? applies.employer_subsidiary_id : null,
-    departmentId: typeof applies.department_id === "string" ? applies.department_id : null,
+    subsidiaryId:
+      typeof applies.employer_subsidiary_id === "string"
+        ? applies.employer_subsidiary_id
+        : null,
+    departmentId:
+      typeof applies.department_id === "string" ? applies.department_id : null,
   };
 }
 
@@ -472,7 +539,8 @@ export async function getMyBenefitsWorkspace(query: {
     const elections: MyElectionRow[] = [];
     const dependents: MyDependentRow[] = [];
     for (const employment of own) {
-      const rows = (await db.execute<Record<string, unknown>>(sql`
+      const rows = (
+        await db.execute<Record<string, unknown>>(sql`
         select e.id, e.employment_id as "employmentId",
                plan.id as "planId", plan.code as "planCode", plan.name as "planName",
                e.class_key as "classKey", e.match_eligible as "matchEligible",
@@ -493,7 +561,8 @@ export async function getMyBenefitsWorkspace(query: {
             on cls.org_id = e.org_id and cls.plan_id = e.plan_id and cls.class_key = e.class_key
          where e.org_id = ${orgId} and e.employment_id = ${employment.id}
          order by e.effective_from desc, plan.code
-      `)).rows;
+      `)
+      ).rows;
       for (const row of rows) {
         elections.push({
           id: String(row.id),
@@ -501,23 +570,31 @@ export async function getMyBenefitsWorkspace(query: {
           planId: String(row.planId),
           planCode: String(row.planCode),
           classKey: row.classKey == null ? null : String(row.classKey),
-          matchEligible: row.matchEligible == null ? null : row.matchEligible === true,
-          contributionTerms: (row.contributionTerms ?? []) as EnrollmentContributionInput[],
+          matchEligible:
+            row.matchEligible == null ? null : row.matchEligible === true,
+          contributionTerms: (row.contributionTerms ??
+            []) as EnrollmentContributionInput[],
           planName: String(row.planName),
-          coverageLabel: row.coverageLabel != null ? String(row.coverageLabel) : null,
+          coverageLabel:
+            row.coverageLabel != null ? String(row.coverageLabel) : null,
           status: String(row.status),
           effectiveFrom: String(row.effectiveFrom).slice(0, 10),
-          effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
+          effectiveTo:
+            row.effectiveTo != null
+              ? String(row.effectiveTo).slice(0, 10)
+              : null,
           contributions: row.contributions as EnrollmentContributionSummary[],
           currency: String(row.currency),
         });
       }
-      const deps = (await db.execute<Record<string, unknown>>(sql`
+      const deps = (
+        await db.execute<Record<string, unknown>>(sql`
         select id, display_name as "displayName", relationship
           from hrm_benefit_dependents
          where org_id = ${orgId} and employment_id = ${employment.id} and is_active
          order by display_name
-      `)).rows;
+      `)
+      ).rows;
       for (const row of deps) {
         dependents.push({
           id: String(row.id),
@@ -527,7 +604,8 @@ export async function getMyBenefitsWorkspace(query: {
       }
     }
     const subsidiaries = [...new Set(own.map((e) => e.subsidiaryId))];
-    const windows = (await db.execute<Record<string, unknown>>(sql`
+    const windows = (
+      await db.execute<Record<string, unknown>>(sql`
       select id, name, kind,
              opens_on::text as "opensOn", closes_on::text as "closesOn",
              status, applies_to as "appliesTo"
@@ -535,16 +613,29 @@ export async function getMyBenefitsWorkspace(query: {
        where org_id = ${orgId} and status = 'open'
          and opens_on <= ${today}::date and closes_on >= ${today}::date
        order by closes_on
-    `)).rows;
+    `)
+    ).rows;
     const openWindows: MyWindowRow[] = [];
     for (const row of windows) {
       const scope = windowScope(row.appliesTo);
-      if (scope.subsidiaryId !== null && !subsidiaries.includes(scope.subsidiaryId)) continue;
+      if (
+        scope.subsidiaryId !== null &&
+        !subsidiaries.includes(scope.subsidiaryId)
+      )
+        continue;
       if (scope.departmentId !== null) {
         let covered = false;
         for (const employment of own) {
-          if (scope.subsidiaryId !== null && employment.subsidiaryId !== scope.subsidiaryId) continue;
-          if ((await liveDepartmentIds(db, orgId, employment.id)).includes(scope.departmentId)) {
+          if (
+            scope.subsidiaryId !== null &&
+            employment.subsidiaryId !== scope.subsidiaryId
+          )
+            continue;
+          if (
+            (await liveDepartmentIds(db, orgId, employment.id)).includes(
+              scope.departmentId,
+            )
+          ) {
             covered = true;
             break;
           }
@@ -563,29 +654,43 @@ export async function getMyBenefitsWorkspace(query: {
     const plans: MyPlanRow[] = [];
     if (subsidiaries.length > 0) {
       const subParams = subsidiaries.map((id) => sql`${id}::uuid`);
-      const planRows = (await db.execute<Record<string, unknown>>(sql`
+      const planRows = (
+        await db.execute<Record<string, unknown>>(sql`
         select id, code, name, kind, currency,
                effective_from::text as "effectiveFrom",
-               effective_to::text as "effectiveTo",
-               approval_mode as "approvalMode"
+               effective_to::text as "effectiveTo"
           from hrm_benefit_plans
          where org_id = ${orgId} and is_active
            and effective_from <= ${today}::date
            and (effective_to is null or effective_to >= ${today}::date)
            and (employer_subsidiary_id is null or employer_subsidiary_id in (${sql.join(subParams, sql`, `)}))
          order by code
-      `)).rows;
+      `)
+      ).rows;
       for (const row of planRows) {
-        const contributionRules = (await db.execute<{ value: string; label: string; basis: string; rate: string; rateFormula: string; requiresMatchEligibility: boolean; effectiveFrom: string; effectiveTo: string | null }>(sql`
+        const contributionRules = (
+          await db.execute<{
+            value: string;
+            label: string;
+            basis: string;
+            rate: string;
+            rateFormula: string;
+            requiresMatchEligibility: boolean;
+            effectiveFrom: string;
+            effectiveTo: string | null;
+          }>(sql`
           select id::text as value,name as label,basis,rate::text,rate_formula as "rateFormula",requires_match_eligibility as "requiresMatchEligibility",effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo"
             from hrm_benefit_contribution_rules
            where org_id=${orgId} and plan_id=${String(row.id)} and is_active
            order by position,id
-        `)).rows;
-        const classes = (await db.execute<{ value: string; label: string }>(sql`
+        `)
+        ).rows;
+        const classes = (
+          await db.execute<{ value: string; label: string }>(sql`
           select class_key as value,name as label from hrm_benefit_contribution_classes
            where org_id=${orgId} and plan_id=${String(row.id)} order by class_key,id
-        `)).rows;
+        `)
+        ).rows;
         plans.push({
           id: String(row.id),
           code: String(row.code),
@@ -593,8 +698,10 @@ export async function getMyBenefitsWorkspace(query: {
           kind: String(row.kind),
           currency: String(row.currency),
           effectiveFrom: String(row.effectiveFrom).slice(0, 10),
-          effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
-          approvalMode: row.approvalMode === "flows" ? "flows" : "none",
+          effectiveTo:
+            row.effectiveTo != null
+              ? String(row.effectiveTo).slice(0, 10)
+              : null,
           contributionRules,
           classes,
         });
@@ -665,11 +772,14 @@ export async function changeMyBenefit(query: {
     await assertHrmFeatureOn(db, orgId, actorId);
     await requireHrmSelfRequest(db, orgId, actorId);
     await actorPartyOf(db, orgId, actorId);
-    const changeDate = typeof query.changeDate === "string" ? query.changeDate.slice(0, 10) : "";
-    const enrollment = (await db.execute<{ employmentId: string }>(sql`
+    const changeDate =
+      typeof query.changeDate === "string" ? query.changeDate.slice(0, 10) : "";
+    const enrollment = (
+      await db.execute<{ employmentId: string }>(sql`
       select employment_id as "employmentId" from hrm_benefit_enrollments
        where org_id = ${orgId} and id = ${query.enrollmentId}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!enrollment) {
       throw new SelfServiceError(
         "NOT_FOUND",
@@ -684,18 +794,29 @@ export async function changeMyBenefit(query: {
         "that enrollment belongs to another employment — the Me workspace changes only your own elections",
       );
     }
-    const windows = (await db.execute<Record<string, unknown>>(sql`
+    const windows = (
+      await db.execute<Record<string, unknown>>(sql`
       select applies_to as "appliesTo"
         from hrm_enrollment_windows
        where org_id = ${orgId} and status = 'open'
          and opens_on <= ${changeDate}::date and closes_on >= ${changeDate}::date
-    `)).rows;
+    `)
+    ).rows;
     let covered = false;
     for (const row of windows) {
       const scope = windowScope(row.appliesTo);
-      if (scope.subsidiaryId !== null && scope.subsidiaryId !== mine.subsidiaryId) continue;
+      if (
+        scope.subsidiaryId !== null &&
+        scope.subsidiaryId !== mine.subsidiaryId
+      )
+        continue;
       if (scope.departmentId !== null) {
-        if (!(await liveDepartmentIds(db, orgId, mine.id)).includes(scope.departmentId)) continue;
+        if (
+          !(await liveDepartmentIds(db, orgId, mine.id)).includes(
+            scope.departmentId,
+          )
+        )
+          continue;
       }
       covered = true;
       break;
@@ -735,12 +856,19 @@ export async function selfWorkspaceCapabilities(orgId: string): Promise<{
 }> {
   const org = requireOrgId(orgId);
   return withOrgTransaction(org, async () => {
-    const cycles = (await db.execute<{ n: string }>(sql`
+    const cycles = (
+      await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_review_cycles where org_id = ${org}
-    `)).rows[0]?.n;
-    const plans = (await db.execute<{ n: string }>(sql`
+    `)
+    ).rows[0]?.n;
+    const plans = (
+      await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_benefit_plans where org_id = ${org}
-    `)).rows[0]?.n;
-    return { hasReviewCycles: Number(cycles ?? "0") > 0, hasBenefitPlans: Number(plans ?? "0") > 0 };
+    `)
+    ).rows[0]?.n;
+    return {
+      hasReviewCycles: Number(cycles ?? "0") > 0,
+      hasBenefitPlans: Number(plans ?? "0") > 0,
+    };
   });
 }

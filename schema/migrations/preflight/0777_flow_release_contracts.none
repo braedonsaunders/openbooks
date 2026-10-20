@@ -1,0 +1,1 @@
+Current writes require canonical Flow submission receipts. Historical applied employment decisions remain immutable and are retained without validation against the new receipt shape. Editable close reviewer configuration is retired with before/after audit evidence; tenant Flow graphs and existing gate decisions remain unchanged.

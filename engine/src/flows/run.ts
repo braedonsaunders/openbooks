@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { resumeFlowSubmission } from "./approval-release-hook.ts";
-import { lockFlowSubjectDecision } from "./decision-lock.ts";
+import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { lockSubjectScope } from "./subject-scope.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -40,8 +40,6 @@ import { lockFlowSubjectAdmission } from "./subject-admission.ts";
  */
 
 export interface RecordFlowRun {
-  /** A successful matched flow explicitly permits release when the dispatch has no approval gates. */
-  ungatedOutcome?: 'apply';
   runId: string;
   flowId: string;
   /** Display name of the flow — refusals name the flow, never a bare uuid. */
@@ -179,7 +177,7 @@ function mergePlans(a: AutomationPlan, b: AutomationPlan): AutomationPlan {
   const seenGates = new Set(a.gates.map((g) => g.nodeId));
   const actionNodes = [...a.actionNodes, ...b.actionNodes.filter((n) => !seenActions.has(n.nodeId))];
   const gates = [...a.gates, ...b.gates.filter((g) => !seenGates.has(g.nodeId))];
-  return { actions: actionNodes.map((n) => n.action), actionNodes, gates, ...(a.ungatedOutcome ? { ungatedOutcome: a.ungatedOutcome } : {}) };
+  return { actions: actionNodes.map((n) => n.action), actionNodes, gates };
 }
 
 /** Lifecycle events that also co-fire a graph's on_field_value triggers. */
@@ -338,15 +336,34 @@ export async function runRecordFlows(
           evalCtx.values[`old_${k}`] = v as never;
         }
       }
+      if (ctx.submissionCommand)
+        evalCtx.values.commandAction = ctx.submissionCommand.action ?? null;
       let plan = planAutomation(graph, event, evalCtx);
       if (RECORD_LIFECYCLE_KINDS.has(event.kind)) {
         // on_field_value fires ALONGSIDE lifecycle events when its rule
         // matches (the flow execution contract); merged so converging nodes dedupe.
         plan = mergePlans(plan, planAutomation(graph, { kind: "on_field_value" }, evalCtx));
       }
-      const automaticSubmission = event.kind === 'on_submit' && plan.ungatedOutcome === 'apply' && adapter.profile.supportsUngatedSubmission === true;
+      const automaticSubmission =
+        event.kind === "on_submit" &&
+        plan.gates.length === 0 &&
+        adapter.profile.supportsUngatedSubmission === true;
       if (planIsEmpty(plan) && !automaticSubmission) continue;
-      const dispatchValues = { ...subject.values, event_source: event.source ?? "api", ...((adapter.profile.supportsUngatedSubmission || adapter.profile.pinsSubmissionPolicy) ? { submissionPolicy: { ungatedOutcome: graph.ungatedOutcome ?? 'require_approval', graph, flowId: flow.id } } : {}) };
+      const dispatchValues = {
+        ...evalCtx.values,
+        ...(ctx.submissionCommand
+          ? {
+              command: ctx.submissionCommand,
+              commandAction: ctx.submissionCommand.action ?? null,
+            }
+          : {}),
+        event_source: event.source ?? "api",
+        submissionPolicy: {
+          graph,
+          flowId: flow.id,
+          rows: subject.rows ?? {},
+        },
+      };
 
       // Deterministic dispatch identity: when the caller supplies an
       // occurrenceKey (close automations use their execution id), every flow
@@ -417,9 +434,10 @@ export async function runRecordFlows(
             // The subject may not have submitted_by stamped until the owning
             // submit command returns. During on_submit, the command actor is
             // the authoritative submitter for separation-of-duties routing.
-            submitterUserId: event.kind === "on_submit"
-              ? ctx.userId ?? subject.submitterUserId
-              : subject.submitterUserId,
+            submitterUserId:
+              event.kind === "on_submit"
+                ? (ctx.userId ?? subject.submitterUserId)
+                : subject.submitterUserId,
           });
           gatesCreated = res.gatesCreated;
           status = res.failed.length > 0 ? "failed" : res.gatesCreated > 0 ? "waiting" : "completed";
@@ -448,7 +466,14 @@ export async function runRecordFlows(
         }
       }
 
-      result.runs.push({ runId, flowId: flow.id, flowName: flow.name, status, gatesCreated, error: runError, ...(!adoptedStatus && automaticSubmission && status === 'completed' && gatesCreated === 0 ? { ungatedOutcome: 'apply' as const } : {}) });
+      result.runs.push({
+        runId,
+        flowId: flow.id,
+        flowName: flow.name,
+        status,
+        gatesCreated,
+        error: runError,
+      });
       result.gatesCreated += gatesCreated;
       if (status === "failed") result.failed = true;
     }
@@ -502,8 +527,8 @@ function retryEvent(trigger: string): TriggerEvent {
 /**
  * Re-drive a FAILED run after its failure cause is fixed (a gate
  * that resolved to zero assignees strands its subject with no path forward).
- * The stored trigger is re-planned against the CURRENT flow graph and CURRENT
- * subject values — assignees, conditions and recipients all resolve live —
+ * The stored trigger is re-planned against its frozen Flow and subject facts;
+ * acting authority and recipient availability are rechecked at execution.
  * and re-executed on the SAME run row, so effect checkpoints make the resume
  * idempotent (completed effects are skipped, the failed node re-runs).
  *
@@ -518,13 +543,20 @@ export async function retryFlowRun(runId: string, ctx: FlowExecCtx): Promise<Ret
   return withOrgTransaction(ctx.orgId, () => retryFlowRunLocked(runId, ctx));
 }
 
-async function retryFlowRunLocked(runId: string, ctx: FlowExecCtx): Promise<RetryFlowRunResult> {
+async function retryFlowRunLocked(
+  runId: string,
+  ctx: FlowExecCtx,
+): Promise<RetryFlowRunResult> {
   // Read only the fence identity first. Decisions always take the subject
   // fence before row locks, including when submission resumes its writer.
   const [identity] = await db.select({ subjectKind: schema.flowRuns.subjectKind, subjectId: schema.flowRuns.subjectId })
     .from(schema.flowRuns).where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
   if (!identity) throw new FlowRetryError("flow run not found");
-  await lockFlowSubjectDecision(ctx.orgId, identity.subjectKind, identity.subjectId);
+  await lockApprovalSubject(
+    ctx.orgId,
+    identity.subjectKind,
+    identity.subjectId,
+  );
   const [run] = await db
     .select()
     .from(schema.flowRuns)
@@ -553,21 +585,36 @@ async function retryFlowRunLocked(runId: string, ctx: FlowExecCtx): Promise<Retr
   const allowed = callerScope === undefined || callerScope === null ? liveScope
     : liveScope === null ? callerScope : new Set([...callerScope].filter(id => liveScope.has(id)));
   await lockSubjectScope(ctx.orgId, run.subjectKind, adapter.scope, run.subjectId, allowed);
-  if (!await lockAndCheckOrgFeature(db, ctx.orgId, "flows")) throw new FlowRetryError("Flows is disabled; enable it in Company Settings before retrying.");
+  if (!(await lockAndCheckOrgFeature(db, ctx.orgId, "flows")))
+    throw new FlowRetryError("Flows is disabled; enable it in Company Settings before retrying.");
   ctx = { ...ctx, allowedSubsidiaryIds: allowed };
   const [flow] = await db
     .select()
     .from(schema.flows)
     .where(and(eq(schema.flows.id, run.flowId), eq(schema.flows.orgId, ctx.orgId))).for("share");
   if (!flow) throw new FlowRetryError("the flow for this run no longer exists");
-  if (!flow.enabled) throw new FlowRetryError("the flow for this run is disabled");
-  const graph = parseFlowGraph(flow.id, flow.graph);
-  if (!graph) throw new FlowRetryError("the flow for this run has an invalid graph");
+  const retainedPolicy = run.context?.submissionPolicy as
+    { flowId?: unknown; graph?: unknown; rows?: unknown } | undefined;
+  if (
+    retainedPolicy?.flowId !== run.flowId ||
+    !retainedPolicy.graph ||
+    !retainedPolicy.rows ||
+    typeof retainedPolicy.rows !== "object" ||
+    Array.isArray(retainedPolicy.rows)
+  )
+    throw new FlowRetryError(
+      "This run has no complete frozen submission. Recall its pending work and submit the current record again.",
+    );
+  const graph = parseFlowGraph(flow.id, retainedPolicy.graph);
+  if (!graph)
+    throw new FlowRetryError(
+      "The run's frozen Flow is invalid. Recall its pending work and submit again.",
+    );
   const subject = await adapter.loadContext(run.subjectId);
   if (!subject) throw new FlowRetryError("the run's subject no longer exists");
 
-  // The graph's legal-entity scope is re-judged against the subject's
-  // CURRENT resolved entity: a flow scoped away from this record (or a
+  // The frozen graph's legal-entity scope is checked against the subject's
+  // current resolved entity: a subject moved outside that scope (or a
   // record whose entity can no longer be proven) must not be re-driven.
   // Refusing here leaves the failed run — and any pending approval linkage
   // on the subject — exactly as it was, never silently completed or
@@ -583,12 +630,20 @@ async function retryFlowRunLocked(runId: string, ctx: FlowExecCtx): Promise<Retr
   const event = retryEvent(run.trigger);
   const source = run.context?.event_source;
   if (typeof source !== "string" || source.length === 0) throw new FlowRetryError("The run has no retained event source; re-fire it through the record action rather than inferring its original authority.");
-  const evalCtx = { values: { ...subject.values, event_source: source }, rows: subject.rows ?? {} };
+  const evalCtx = {
+    values: { ...run.context, event_source: source },
+    rows: retainedPolicy.rows as NonNullable<typeof subject.rows>,
+  };
   let plan = planAutomation(graph, event, evalCtx);
   if (RECORD_LIFECYCLE_KINDS.has(event.kind)) {
-    plan = mergePlans(plan, planAutomation(graph, { kind: "on_field_value" }, evalCtx));
-  }
-  const automaticSubmission = event.kind === "on_submit" && plan.ungatedOutcome === "apply" && adapter.profile.supportsUngatedSubmission === true;
+        // on_field_value fires ALONGSIDE lifecycle events when its rule
+        // matches (the flow execution contract); merged so converging nodes dedupe.
+        plan = mergePlans(plan, planAutomation(graph, { kind: "on_field_value" }, evalCtx));
+      }
+  const automaticSubmission =
+    event.kind === "on_submit" &&
+    plan.gates.length === 0 &&
+    adapter.profile.supportsUngatedSubmission === true;
   if (planIsEmpty(plan) && !automaticSubmission) {
     throw new FlowRetryError("the run's trigger no longer matches its flow; re-fire it from the record");
   }
@@ -602,7 +657,12 @@ async function retryFlowRunLocked(runId: string, ctx: FlowExecCtx): Promise<Retr
   let gatesCreated = 0;
   try {
     const res = await executeFlowPlan(ctx, adapter, {
-      flow: { id: flow.id, name: flow.name, subjectKind: run.subjectKind, graph: flow.graph },
+      flow: {
+        id: flow.id,
+        name: flow.name,
+        subjectKind: run.subjectKind,
+        graph,
+      },
       runId,
       subjectId: run.subjectId,
       plan,
@@ -626,24 +686,33 @@ async function retryFlowRunLocked(runId: string, ctx: FlowExecCtx): Promise<Retr
     if (failures.length === 0 && gatesCreated === 0 && automaticSubmission) {
       try {
         await withTransactionSavepoint(db, async () => {
-        const routingProof = { version: 1, runId, flowId: flow.id, subjectKind: run.subjectKind, subjectId: run.subjectId,
+          const routingProof = { version: 1, runId, flowId: flow.id, subjectKind: run.subjectKind, subjectId: run.subjectId,
           eventSource: source, outcome: "apply", gatesCreated: 0, failures: [],
           graphDigest: createHash("sha256").update(canonicalJson(graph)).digest("hex"), actorId: ctx.userId ?? null };
-        // Preserve the original proposal identity. Fresh values drive routing,
-        // but cannot replace the frozen evidence the owning writer checks.
-        const dispatchValues = { ...run.context, event_source: source,
-          submissionPolicy: { ungatedOutcome: "apply", graph, flowId: flow.id }, submissionRouting: routingProof };
-        const updated = await db.update(schema.flowRuns).set({ context: dispatchValues, status: "completed", error: null, finishedAt: new Date() })
+          // Preserve the original proposal identity. Fresh values drive routing,
+          // but cannot replace the frozen evidence the owning writer checks.
+          const dispatchValues = {
+            ...run.context,
+            event_source: source,
+            submissionPolicy: {
+              ...retainedPolicy,
+              graph,
+              flowId: flow.id,
+            },
+            submissionRouting: routingProof,
+          };
+          const updated = await db.update(schema.flowRuns).set({ context: dispatchValues, status: "completed", error: null, finishedAt: new Date() })
           .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId))).returning({ id: schema.flowRuns.id });
-        if (updated.length !== 1) throw new FlowRetryError("flow run changed during automatic submission");
-        await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,actor_id,changes)
+          if (updated.length !== 1) throw new FlowRetryError("flow run changed during automatic submission");
+          await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,actor_id,changes)
           values(${ctx.orgId},'flow_runs',${runId},'update',${ctx.userId ?? null},
-            ${JSON.stringify({ reason: "Retry submission under the current flow policy", before: { context: run.context }, after: { context: dispatchValues } })}::jsonb)`);
-        // The owner validates live actor/scope and the exact successful run,
-        // then completes its native submission policy without inventing a
-        // human approval decision or dispatching another flow run.
-        const resumed = await resumeFlowSubmission({ subjectKind: run.subjectKind, subjectId: run.subjectId, runId, mode: "automatic", ctx });
-        if (await adapter.getStatus(run.subjectId) !== resumed.status) throw new FlowRetryError("The submission outcome is not visible through its native record reader");
+            ${JSON.stringify({ reason: "Retry the frozen Flow submission", before: { context: run.context }, after: { context: dispatchValues } })}::jsonb)`);
+          // The owner validates live actor/scope and the exact successful run,
+          // then completes its native submission policy without inventing a
+          // human approval decision or dispatching another flow run.
+          const resumed = await resumeFlowSubmission({ subjectKind: run.subjectKind, subjectId: run.subjectId, runId, mode: "automatic", ctx });
+          if ((await adapter.getStatus(run.subjectId)) !== resumed.status)
+            throw new FlowRetryError("The submission outcome is not visible through its native record reader");
         });
       } catch (error) {
         failures.push(`automatic submission (${error instanceof Error ? error.message : String(error)})`);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { pinnedGateAllowsSelfApproval } from "./gate-policy.ts";
 import { documentSubjectProfile } from "./subject-profiles.ts";
 import { lintFlowGraphForSubject } from "./lint.ts";
 import {
@@ -196,5 +197,6 @@ test("self-approval prevention stays on unless the author explicitly opts out", 
   const gate = off.graph.nodes.find((node) => node.id === "gate");
   assert.equal(gate?.data.kind, "gate");
   if (gate?.data.kind !== "gate") return;
-  assert.equal(gate.data.gate.preventSelfApproval, undefined);
+  assert.equal(gate.data.gate.preventSelfApproval, false);
+  assert.equal(pinnedGateAllowsSelfApproval({ submissionPolicy: { graph: off.graph } }, gate.id), true);
 });

@@ -1,8 +1,10 @@
+import { sanitizeDecisionCause } from "./decision-cause.ts";
+import { hasFlowDecisionAuthority } from "./decision-authority.ts";
 import {
   sendAutomaticSchedule,
   sendReviewedSchedule,
 } from "./schedule-distribution-hook.ts";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   flowFieldValueError,
   interpolateTemplate,
@@ -13,13 +15,17 @@ import {
   type GateData,
 } from "@openbooks/forms-core";
 import { businessToday } from "../platform/business-date.ts";
-import { db, schema, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
+import {
+  db,
+  schema,
+  withOrgTransaction,
+  withTransactionSavepoint,
+} from "../platform/db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter } from "./types.ts";
 import {
   resolveAssigneeUsers,
   resolveRecipientEmails,
   resolveRecipientUsers,
-  supervisorOf,
 } from "./targets.ts";
 import { emailActionUrls } from "./email-tokens.ts";
 import { lockRecord, unlockRecord } from "./locks.ts";
@@ -27,8 +33,11 @@ import { flowPdfTemplateMeta, renderFlowPdf } from "./pdf-hook.ts";
 import { flowDocumentEffects } from "./document-effects-hook.ts";
 import { enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import { flowSubjectProfileForOrg } from "./registry.ts";
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { sodBlockedIds } from "./sod.ts";
+import {
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+} from "../organization/org-feature-lock.ts";
+import { resolveSodBlockedIds } from "./sod-identities.ts";
 
 /**
  * The subject-agnostic flows executor. Runs a planned graph (actions + gates)
@@ -60,7 +69,12 @@ import { sodBlockedIds } from "./sod.ts";
  */
 
 export interface ExecuteFlowPlanParams {
-  flow: { id: string; name: string; subjectKind: string; graph: Record<string, unknown> };
+  flow: {
+    id: string;
+    name: string;
+    subjectKind: string;
+    graph: Record<string, unknown>;
+  };
   runId: string;
   subjectId: string;
   plan: AutomationPlan;
@@ -73,12 +87,17 @@ export interface ExecuteFlowPlanResult {
   completed: string[];
   /** `${action} (${reason})` entries; non-empty ⇒ the chain broke. */
   failed: string[];
+  /** Retained only in-process so API boundaries can render typed native refusals safely. */
+  failureCauses: unknown[];
   gatesCreated: number;
 }
 
 /** Org display name for email shells (best-effort). */
 async function orgName(orgId: string): Promise<string> {
-  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
+  const [org] = await db
+    .select()
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, orgId));
   return org?.name ?? "OpenBooks";
 }
 
@@ -101,24 +120,38 @@ export async function executeFlowPlan(
         (await businessToday(ctx.orgId)),
     },
   };
-  const targetCtx = { orgId: ctx.orgId, submitterUserId: params.submitterUserId, values };
+  const targetCtx = {
+    orgId: ctx.orgId,
+    submitterUserId: params.submitterUserId,
+    values,
+  };
 
   const completed: string[] = [];
   const failed: string[] = [];
+  const failureCauses:unknown[]=[];
   let gatesCreated = 0;
 
   // --- Effect checkpoints ---------------------------------------------------
   const completedEffects = new Set<string>();
   {
     const rows = await db
-      .select({ effectKey: schema.flowRunEffects.effectKey, detail: schema.flowRunEffects.detail })
+      .select({
+        effectKey: schema.flowRunEffects.effectKey,
+        detail: schema.flowRunEffects.detail,
+      })
       .from(schema.flowRunEffects)
-      .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.orgId, ctx.orgId)));
+      .where(
+        and(
+          eq(schema.flowRunEffects.runId, runId),
+          eq(schema.flowRunEffects.orgId, ctx.orgId),
+        ),
+      );
     // A claim is inserted before its side effect. An empty detail therefore
     // means the process may have died in that gap, not that the effect is
     // complete; only a stamped outcome suppresses a resumed attempt.
     for (const row of rows) {
-      if (row.detail && Object.keys(row.detail).length > 0) completedEffects.add(row.effectKey);
+      if (row.detail && Object.keys(row.detail).length > 0)
+        completedEffects.add(row.effectKey);
     }
   }
 
@@ -141,17 +174,30 @@ export async function executeFlowPlan(
     const [existing] = await db
       .select({ detail: schema.flowRunEffects.detail })
       .from(schema.flowRunEffects)
-      .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.effectKey, effectKey)))
+      .where(
+        and(
+          eq(schema.flowRunEffects.runId, runId),
+          eq(schema.flowRunEffects.effectKey, effectKey),
+        ),
+      )
       .for("update");
     return Boolean(existing && Object.keys(existing.detail ?? {}).length === 0);
   };
 
   // Stamp the outcome onto the already-claimed checkpoint (never inserts).
-  const markEffectComplete = async (effectKey: string, detail: Record<string, unknown>) => {
+  const markEffectComplete = async (
+    effectKey: string,
+    detail: Record<string, unknown>,
+  ) => {
     await db
       .update(schema.flowRunEffects)
       .set({ detail })
-      .where(and(eq(schema.flowRunEffects.runId, runId), eq(schema.flowRunEffects.effectKey, effectKey)));
+      .where(
+        and(
+          eq(schema.flowRunEffects.runId, runId),
+          eq(schema.flowRunEffects.effectKey, effectKey),
+        ),
+      );
   };
 
   // Every claim and its database side effect share one transaction. When the
@@ -173,7 +219,10 @@ export async function executeFlowPlan(
 
   // --- Action handlers --------------------------------------------------------
 
-  const runAction = async (nodeId: string, action: ActionData): Promise<string> => {
+  const runAction = async (
+    nodeId: string,
+    action: ActionData,
+  ): Promise<string> => {
     switch (action.action) {
       case "send_board_schedule": {
         if (flow.subjectKind !== "schedule_board" || !ctx.scheduledOccurrence)
@@ -182,22 +231,34 @@ export async function executeFlowPlan(
           );
         return `send_board_schedule→${await sendAutomaticSchedule({ boardId: subjectId, runId, ctx })}`;
       }
-      case 'distribute_schedule': {
-        if(flow.subjectKind!=='schedule_distribution'||!ctx.userId)throw new Error('Schedule email requires its reviewed native subject and acting user.');
-        const sent=await sendReviewedSchedule({requestId:subjectId,runId,ctx});
+      case "distribute_schedule": {
+        if (flow.subjectKind !== "schedule_distribution" || !ctx.userId)
+          throw new Error(
+            "Schedule email requires its reviewed native subject and acting user.",
+          );
+        const sent = await sendReviewedSchedule({
+          requestId: subjectId,
+          runId,
+          ctx,
+        });
         return `distribute_schedule→${sent}`;
       }
       case "send_email": {
         const to = await resolveRecipientEmails(action.to, targetCtx);
         if (to.length === 0) throw new Error("no recipients resolved");
-        const subject = interpolateTemplate(action.subject, evalCtx) || "Notification";
+        const subject =
+          interpolateTemplate(action.subject, evalCtx) || "Notification";
         const body = interpolateTemplate(action.body, evalCtx);
         // attachPdf: render the record's PDF via the hook the web process
         // registers at boot; a process without a renderer (standalone worker)
         // still sends the email, minus the attachment, with a warning noted
         // on the effect. A renderer FAILURE also degrades the same way — a
         // remittance email without its PDF beats no email.
-        let attachments: Array<{ filename: string; content: string; contentType: string }> = [];
+        let attachments: Array<{
+          filename: string;
+          content: string;
+          contentType: string;
+        }> = [];
         let pdfNote = "";
         let pdfTemplateMeta: Record<string, string> = {};
         if (action.attachPdf) {
@@ -219,7 +280,9 @@ export async function executeFlowPlan(
               // The outbox payload is the durable issuance record for this
               // attachment: pin which template design produced it there.
               pdfTemplateMeta = flowPdfTemplateMeta(pdf.template);
-            } else pdfNote = " (pdf unavailable in this process, sent without attachment)";
+            } else
+              pdfNote =
+                " (pdf unavailable in this process, sent without attachment)";
           } catch (e) {
             console.error(`[flows] attachPdf render failed (run ${runId}):`, e);
             pdfNote = " (pdf render failed, sent without attachment)";
@@ -250,7 +313,10 @@ export async function executeFlowPlan(
           // The outbox is the durable transport. If its insert fails, keep the
           // effect claim retryable: the action loop releases the claim and
           // stops the chain, so a later run can persist and deliver the email.
-          console.error(`[flows] send_email deferral failed (run ${runId}):`, e);
+          console.error(
+            `[flows] send_email deferral failed (run ${runId}):`,
+            e,
+          );
           throw e;
         }
         return `send_email→${to.length}${pdfNote}`;
@@ -259,9 +325,14 @@ export async function executeFlowPlan(
       case "notify": {
         const users = await resolveRecipientUsers(action.to, targetCtx);
         if (users.length === 0) throw new Error("no users resolved");
-        const title = interpolateTemplate(action.title, evalCtx) || "Notification";
-        const body = action.body ? interpolateTemplate(action.body, evalCtx) : null;
-        const href = action.href ? interpolateTemplate(action.href, evalCtx) : adapter.deepLink(subjectId);
+        const title =
+          interpolateTemplate(action.title, evalCtx) || "Notification";
+        const body = action.body
+          ? interpolateTemplate(action.body, evalCtx)
+          : null;
+        const href = action.href
+          ? interpolateTemplate(action.href, evalCtx)
+          : adapter.deepLink(subjectId);
         await db.insert(schema.notifications).values(
           users.map((u) => ({
             orgId: ctx.orgId,
@@ -282,7 +353,10 @@ export async function executeFlowPlan(
         // definition before the adapter persists either a header or custom
         // field. The adapter remains authoritative for write permission and
         // reference ownership.
-        const profile = await flowSubjectProfileForOrg(ctx.orgId, adapter.subjectKind);
+        const profile = await flowSubjectProfileForOrg(
+          ctx.orgId,
+          adapter.subjectKind,
+        );
         const def = profile?.fields.find((field) => field.key === action.field);
         const typeError = def ? flowFieldValueError(def, v ?? null) : null;
         if (typeError) throw new Error(typeError);
@@ -333,7 +407,9 @@ export async function executeFlowPlan(
           subjectKind: flow.subjectKind,
           subjectId,
           flowId: flow.id,
-          reason: action.reason ? interpolateTemplate(action.reason, evalCtx) : null,
+          reason: action.reason
+            ? interpolateTemplate(action.reason, evalCtx)
+            : null,
           exemptRoles: action.exemptRoles ?? [],
           userId: ctx.userId ?? null,
         });
@@ -359,9 +435,13 @@ export async function executeFlowPlan(
       // winner's transaction and then gets zero rows, so the effect fires
       // exactly once.
       const outcome = await runEffectTransaction(async () => {
-        if (!(await claimEffect(effectKey))) return { claimed: false, desc: "" };
+        if (!(await claimEffect(effectKey)))
+          return { claimed: false, desc: "" };
         const desc = await runAction(nodeId, action);
-        await markEffectComplete(effectKey, { action: action.action, detail: desc });
+        await markEffectComplete(effectKey, {
+          action: action.action,
+          detail: desc,
+        });
         return { claimed: true, desc };
       });
       if (!outcome.claimed) continue;
@@ -371,7 +451,8 @@ export async function executeFlowPlan(
       // The effect transaction/savepoint rolled back the claim and any
       // partial side effect. Record the failure and STOP the chain — later
       // actions likely depend on this one; a retry can claim it again.
-      const reason = e instanceof Error ? e.message : String(e);
+      const reason = sanitizeDecisionCause(e);
+      failureCauses.push(e);
       failed.push(`${action.action} (${reason})`);
       break;
     }
@@ -386,7 +467,8 @@ export async function executeFlowPlan(
       if (completedEffects.has(effectKey)) continue;
       try {
         const outcome = await runEffectTransaction(async () => {
-          if (!(await claimEffect(effectKey))) return { claimed: false, count: 0 };
+          if (!(await claimEffect(effectKey)))
+            return { claimed: false, count: 0 };
           const count = await createGate(ctx, adapter, {
             flow,
             runId,
@@ -397,7 +479,10 @@ export async function executeFlowPlan(
             submitterUserId: params.submitterUserId,
             brand,
           });
-          await markEffectComplete(effectKey, { gate: gate.title, assignees: count });
+          await markEffectComplete(effectKey, {
+            gate: gate.title,
+            assignees: count,
+          });
           return { claimed: true, count };
         });
         if (!outcome.claimed) continue;
@@ -407,14 +492,15 @@ export async function executeFlowPlan(
       } catch (e) {
         // The effect transaction/savepoint rolled back the claim and any
         // partial gate fan-out; a retry can claim it again.
-        const reason = e instanceof Error ? e.message : String(e);
+        const reason = sanitizeDecisionCause(e);
+        failureCauses.push(e);
         failed.push(`gate (${reason})`);
         break;
       }
     }
   }
 
-  return { completed, failed, gatesCreated };
+  return { completed, failed, failureCauses, gatesCreated };
 }
 
 /**
@@ -444,37 +530,50 @@ async function createGate(
     values: evalCtx.values,
   });
 
-  // Keep the submitter and maker off their own gate by default. If removing
-  // them empties the assignment, route to an eligible submitter supervisor;
-  // if none exists, fail the run instead of creating an unapprovable gate.
-  const preventSelfApproval =
-    adapter.selfApprovalPolicy === "forbidden" ||
-    gate.preventSelfApproval !== false;
-  if (preventSelfApproval) {
-    const blocked = new Set(sodBlockedIds(await adapter.loadContext(args.subjectId)));
-    if (args.submitterUserId) blocked.add(args.submitterUserId);
-    const hadBlockedAssignee = assignees.some((user) => blocked.has(user.id));
-    assignees = assignees.filter((user) => !blocked.has(user.id));
-    if (hadBlockedAssignee && assignees.length === 0) {
-      const sup = args.submitterUserId
-        ? await supervisorOf(ctx.orgId, args.submitterUserId)
-        : null;
-      if (sup && !blocked.has(sup.id)) assignees = [sup];
-      else {
-        throw new Error(
-          `gate "${gate.title}" only resolved to the submitter or maker (self-approval is prevented) and no eligible supervisor was found`,
-        );
-      }
-    }
+  // Only the tenant's configured recipients may decide. A self-approval
+  // restriction never substitutes an unconfigured supervisor or administrator.
+  if (gate.preventSelfApproval !== false) {
+    const run = (await db.execute<{ created_by: string | null }>(sql`
+      select created_by from flow_runs where org_id=${ctx.orgId} and id=${runId}
+        and flow_id=${flow.id} and subject_kind=${adapter.subjectKind} and subject_id=${subjectId}
+      for share
+    `)).rows[0];
+    if (!run) throw new Error("The gate has no retained native submission run.");
+    const blocked = await resolveSodBlockedIds(
+      ctx.orgId,
+      await adapter.loadContext(args.subjectId),
+      run.created_by ? [run.created_by] : [],
+    );
+    assignees = assignees.filter(
+      (user) => !blocked.has(user.id) && user.id !== args.submitterUserId,
+    );
   }
   if (assignees.length === 0) {
     throw new Error(`gate "${gate.title}" resolved to zero assignees`);
   }
 
+  for (const assignee of assignees) {
+    if (
+      !(await hasFlowDecisionAuthority({
+        orgId: ctx.orgId,
+        subjectKind: adapter.subjectKind,
+        subjectId,
+        userId: assignee.id,
+      }))
+    )
+      throw new Error(
+        `Gate "${gate.title}" names ${assignee.name}, who cannot approve this record in its legal entity. Update the tenant's native role permissions or the Flow assignment before resubmitting.`,
+      );
+  }
+
   const title = interpolateTemplate(gate.title, evalCtx) || gate.title;
   const now = Date.now();
-  const remindAt = gate.reminderAfterHours ? new Date(now + gate.reminderAfterHours * 3_600_000) : null;
-  const escalateAt = gate.escalateAfterHours ? new Date(now + gate.escalateAfterHours * 3_600_000) : null;
+  const remindAt = gate.reminderAfterHours
+    ? new Date(now + gate.reminderAfterHours * 3_600_000)
+    : null;
+  const escalateAt = gate.escalateAfterHours
+    ? new Date(now + gate.escalateAfterHours * 3_600_000)
+    : null;
 
   await db
     .insert(schema.flowGates)
@@ -520,7 +619,10 @@ async function createGate(
     // skipped by onConflictDoNothing on replay) and send one email per
     // assignee instead of a shared blast.
     const rows = await db
-      .select({ id: schema.flowGates.id, assigneeUserId: schema.flowGates.assigneeUserId })
+      .select({
+        id: schema.flowGates.id,
+        assigneeUserId: schema.flowGates.assigneeUserId,
+      })
       .from(schema.flowGates)
       .where(
         and(
@@ -528,10 +630,15 @@ async function createGate(
           eq(schema.flowGates.runId, runId),
           eq(schema.flowGates.nodeId, nodeId),
           eq(schema.flowGates.status, "pending"),
-          inArray(schema.flowGates.assigneeUserId, assignees.map((u) => u.id)),
+          inArray(
+            schema.flowGates.assigneeUserId,
+            assignees.map((u) => u.id),
+          ),
         ),
       );
-    const gateRowByAssignee = new Map(rows.map((r) => [r.assigneeUserId, r.id]));
+    const gateRowByAssignee = new Map(
+      rows.map((r) => [r.assigneeUserId, r.id]),
+    );
     for (const u of assignees) {
       if (!u.email.includes("@")) continue;
       const gateRowId = gateRowByAssignee.get(u.id);

@@ -1,13 +1,8 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
-import type {
-  FlowSubjectAdapter,
-  FlowSubjectContext,
-} from "./types.ts";
-import {
-  EVENT_SOURCE_OPTIONS,
-} from "./subject-profiles.ts";
+import type { FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
+import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -40,6 +35,7 @@ const TIMESHEET_WEEK_STATUSES = [
 export const timesheetWeekSubjectProfile: FlowSubjectProfile = {
   subjectKind: TIMESHEET_WEEK_SUBJECT_KIND,
   label: "Timesheet week",
+  pinsSubmissionPolicy: true,
   triggers: ["on_submit"],
   actions: ["send_email", "notify"],
   statuses: [...TIMESHEET_WEEK_STATUSES],
@@ -69,14 +65,22 @@ export const timesheetWeekSubjectProfile: FlowSubjectProfile = {
 export async function resolveTimesheetWeek(
   subjectId: string,
   orgId?: string,
-): Promise<{ employeePartyId: string; weekStart: string; orgId: string } | null> {
+): Promise<{
+  employeePartyId: string;
+  weekStart: string;
+  orgId: string;
+} | null> {
   if (!isUuid(subjectId)) return null;
-  const result = (await db.execute<{ org_id: string; employee_party_id: string; week_start: string }>(sql`
+  const result = await db.execute<{
+    org_id: string;
+    employee_party_id: string;
+    week_start: string;
+  }>(sql`
     select org_id, employee_party_id, week_start::text as week_start
       from timesheet_weeks
      where id = ${subjectId}
        ${orgId ? sql`and org_id = ${orgId}` : sql``}
-  `));
+  `);
   const row = result.rows[0];
   if (!row) return null;
   return {
@@ -99,13 +103,14 @@ type WeekRow = {
   entry_count: number;
   department_id: string | null;
   submitted_by: string | null;
+  submitted_at: string | null;
 };
 
 async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
   if (!isUuid(subjectId)) return null;
   // Status comes from the header — the record's own lifecycle — while the
   // measures aggregate the hours the header covers.
-  const result = (await db.execute<WeekRow>(sql`
+  const result = await db.execute<WeekRow>(sql`
     select tw.org_id,
            employee.display_name as employee_name,
            tw.employee_party_id as employee_party_id,
@@ -122,7 +127,7 @@ async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
                 then min(te.department_id::text)
                 else null
            end as department_id,
-           coalesce(tw.submitted_by, tw.created_by)::text as submitted_by
+           coalesce(tw.submitted_by, tw.created_by)::text as submitted_by,tw.submitted_at::text
       from timesheet_weeks tw
       left join parties employee
         on employee.id = tw.employee_party_id and employee.org_id = tw.org_id
@@ -133,29 +138,34 @@ async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
        and te.worked_on <= tw.week_start + 6
      where tw.id = ${subjectId}
      group by tw.org_id, employee.display_name, tw.employee_party_id, tw.week_start,
-              tw.status, tw.submitted_by, tw.created_by
-  `));
+              tw.status, tw.submitted_by, tw.created_by,tw.submitted_at
+  `);
   return result.rows[0] ?? null;
 }
 
-export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
-  subjectKind: TIMESHEET_WEEK_SUBJECT_KIND,
-  // /timesheets reads through time.read and writes through time.manage; a
-  // week belongs to its employee's legal entity.
-  permissions: { read: "time.read", edit: "time.manage", approve: "time.manage" },
-  scope: tableScope("party", "timesheet_weeks", "employee_party_id"),
-  profile: timesheetWeekSubjectProfile,
-  // releaseApproval below delegates to the registered handler: this kind
-  // needs a handler registered at web boot (see handlerReleasedSubjectKinds).
-  releaseViaHandler: true,
-  // Nothing on a week is a flow-writable header field: the hours are the
-  // record, and a flow must not rewrite the thing it is approving.
+export const timesheetWeeksFlowAdapter: FlowSubjectAdapter =
+  defineTableSubjectAdapter({
+    subjectKind: TIMESHEET_WEEK_SUBJECT_KIND,
+    // /timesheets reads through time.read and writes through time.manage; a
+    // week belongs to its employee's legal entity.
+    permissions: {
+      read: "time.read",
+      edit: "time.manage",
+      approve: "time.approve",
+    },
+    scope: tableScope("party", "timesheet_weeks", "employee_party_id"),
+    profile: timesheetWeekSubjectProfile,
+    // releaseApproval below delegates to the registered handler: this kind
+    // needs a handler registered at web boot (see handlerReleasedSubjectKinds).
+    releaseViaHandler: true,
+    // Nothing on a week is a flow-writable header field: the hours are the
+    // record, and a flow must not rewrite the thing it is approving.
 
-  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-    const week = await loadWeekSummary(subjectId);
-    if (!week) return null;
+    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+      const week = await loadWeekSummary(subjectId);
+      if (!week) return null;
 
-    const entries = (await db.execute<Record<string, unknown>>(sql`
+      const entries = await db.execute<Record<string, unknown>>(sql`
       select te.worked_on::text as "workedOn", te.hours::text as "hours",
              te.project_id as "projectId", project.code as "projectCode",
              project.name as "projectName", te.item_id as "itemId",
@@ -170,100 +180,107 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = defineTableSubjectA
          and te.worked_on >= ${week.week_start}::date
          and te.worked_on <= ${week.week_start}::date + 6
        order by te.worked_on, te.id
-    `));
+    `);
 
-    const total = Number(week.total_hours);
-    // The week's maker for separation of duties: the single user who wrote
-    // its hours, distinct from whoever submitted it. Mixed authorship leaves
-    // no single maker — the submitter still cannot decide, and any direct
-    // approval path re-checks its own authority.
-    const makers = (await db.execute<{ created_by: string | null }>(sql`
-      select distinct te.created_by
-        from time_entries te
-       where te.org_id = ${week.org_id}
-         and te.employee_party_id = ${week.employee_party_id}
-         and te.worked_on >= ${week.week_start}::date
-         and te.worked_on <= ${week.week_start}::date + 6
-    `)).rows.map((row) => row.created_by);
-    const makerUserId = makers.length === 1 ? (makers[0] ?? null) : null;
-    return {
-      values: {
-        id: subjectId,
-        employeeId: week.employee_party_id,
-        employeeName: week.employee_name,
-        weekStart: week.week_start,
-        weekEnd: week.week_end,
-        status: week.status,
-        totalHours: week.total_hours,
-        billableHours: week.billable_hours,
-        // Surfaced so a tenant can route long weeks to a second approver
-        // without writing SQL in a condition.
-        overtimeHours: total > 40 ? Number((total - 40).toFixed(4)) : 0,
-        projectCount: week.project_count,
-        entryCount: week.entry_count,
-        departmentId: week.department_id,
-        submittedBy: week.submitted_by,
-      },
-      rows: { timeEntries: entries.rows },
-      submitterUserId: week.submitted_by,
-      makerUserId,
-    };
-  },
+      const total = Number(week.total_hours);
+      // The week's maker for separation of duties: the single user who wrote
+      // its hours, distinct from whoever submitted it. Every author and the
+      // employee retain their identity under the frozen tenant separation policy.
+      const makers = (
+        await db.execute<{ id: string }>(sql`
+      select distinct actor as id from (
+        select te.created_by as actor from time_entries te
+         where te.org_id=${week.org_id} and te.employee_party_id=${week.employee_party_id}
+           and te.worked_on>=${week.week_start}::date and te.worked_on<${week.week_start}::date+7
+        union select u.id from users u
+         where u.org_id=${week.org_id} and u.party_id=${week.employee_party_id}
+      ) authors where actor is not null
+    `)
+      ).rows.map((row) => row.id);
+      return {
+        values: {
+          id: subjectId,
+          employeeId: week.employee_party_id,
+          employeeName: week.employee_name,
+          weekStart: week.week_start,
+          weekEnd: week.week_end,
+          status: week.status,
+          totalHours: week.total_hours,
+          billableHours: week.billable_hours,
+          // Surfaced so a tenant can route long weeks to a second approver
+          // without writing SQL in a condition.
+          overtimeHours: total > 40 ? Number((total - 40).toFixed(4)) : 0,
+          projectCount: week.project_count,
+          entryCount: week.entry_count,
+          departmentId: week.department_id,
+          submittedBy: week.submitted_by,
+          submittedAt: week.submitted_at,
+        },
+        rows: { timeEntries: entries.rows },
+        submitterUserId: week.submitted_by,
+        makerUserIds: makers,
+      };
+    },
 
-  label(subjectId: string, values: Record<string, unknown>): string {
-    const who = values.employeeName ? String(values.employeeName) : "Timesheet";
-    return `${who} — week of ${String(values.weekStart ?? subjectId)}`;
-  },
+    label(subjectId: string, values: Record<string, unknown>): string {
+      const who = values.employeeName
+        ? String(values.employeeName)
+        : "Timesheet";
+      return `${who} — week of ${String(values.weekStart ?? subjectId)}`;
+    },
 
-  deepLink(subjectId: string): string {
-    return `/timesheets?timesheet=${subjectId}`;
-  },
+    deepLink(subjectId: string): string {
+      return `/timesheets?timesheet=${subjectId}`;
+    },
 
-  async getStatus(subjectId: string): Promise<string | null> {
-    return (await loadWeekSummary(subjectId))?.status ?? null;
-  },
+    async getStatus(subjectId: string): Promise<string | null> {
+      return (await loadWeekSummary(subjectId))?.status ?? null;
+    },
 
-  async changeStatus(): Promise<void> {
-    throw new Error(
-      "timesheet status is released by the approval engine, not a flow action",
-    );
-  },
-
-  async releaseApproval(subjectId, outcome, ctx, detail): Promise<void> {
-    await releaseFlowApproval({
-      subjectKind: TIMESHEET_WEEK_SUBJECT_KIND,
-      subjectId,
-      outcome,
-      comment: detail?.comment,
-      ctx,
-    });
-  },
-
-  async setField(): Promise<void> {
-    throw new Error("timesheet hours are not writable by flows; edit the week");
-  },
-
-  /** Recent weeks awaiting a decision, for scheduled fan-out (reminders). */
-  async findCandidateIds(limit: number): Promise<string[]> {
-    // The explicit org_id predicate is the tenant boundary — NOT the RLS
-    // GUCs withOrg pins on its own client: pooled sibling connections (and
-    // any bypass-ambient resolver, e.g. the test harness's) can otherwise
-    // see every tenant, which would fan one flow's firing out across orgs.
-    // Fails closed when no ambient tenant is active rather than reading
-    // unscoped. (Parity with the documents and budget-scenario adapters.)
-    const orgId = ambientTenantOrgId();
-    if (!orgId) {
+    async changeStatus(): Promise<void> {
       throw new Error(
-        `findCandidateIds for "${TIMESHEET_WEEK_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
+        "timesheet status is released by the approval engine, not a flow action",
       );
-    }
-    const result = (await db.execute<{ id: string }>(sql`
+    },
+
+    async releaseApproval(subjectId, outcome, ctx, detail, run): Promise<void> {
+      await releaseFlowApproval({
+        subjectKind: TIMESHEET_WEEK_SUBJECT_KIND,
+        subjectId,
+        outcome,
+        comment: detail?.comment,
+        approvalRunId: run?.id,
+        ctx,
+      });
+    },
+
+    async setField(): Promise<void> {
+      throw new Error(
+        "timesheet hours are not writable by flows; edit the week",
+      );
+    },
+
+    /** Recent weeks awaiting a decision, for scheduled fan-out (reminders). */
+    async findCandidateIds(limit: number): Promise<string[]> {
+      // The explicit org_id predicate is the tenant boundary — NOT the RLS
+      // GUCs withOrg pins on its own client: pooled sibling connections (and
+      // any bypass-ambient resolver, e.g. the test harness's) can otherwise
+      // see every tenant, which would fan one flow's firing out across orgs.
+      // Fails closed when no ambient tenant is active rather than reading
+      // unscoped. (Parity with the documents and budget-scenario adapters.)
+      const orgId = ambientTenantOrgId();
+      if (!orgId) {
+        throw new Error(
+          `findCandidateIds for "${TIMESHEET_WEEK_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
+        );
+      }
+      const result = await db.execute<{ id: string }>(sql`
       select id::text as id from timesheet_weeks
        where org_id = ${orgId}
          and status in ('draft', 'submitted', 'rejected')
        order by week_start desc
        limit ${limit}
-    `));
-    return result.rows.map((row) => row.id);
-  },
-});
+    `);
+      return result.rows.map((row) => row.id);
+    },
+  });

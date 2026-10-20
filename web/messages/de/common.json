@@ -319,13 +319,13 @@
   "approvalFlow": {
     "pendingWith": "Ausstehend bei {names}",
     "awaitingAnother": "Wartet auf einen anderen Genehmiger",
-    "rejectTitle": "Dieses Dokument ablehnen?",
+    "rejectTitle": "Diese Einreichung ablehnen?",
     "rejectReasonLabel": "Ablehnungsgrund",
     "waitingOthers": "Erfasst — Warten auf die übrigen Genehmiger",
     "alreadyDecided": "Über diese Genehmigung wurde bereits entschieden — wird aktualisiert",
     "decisionFailed": "Entscheidung fehlgeschlagen",
     "submitRun": "Zur Genehmigung einreichen",
-    "submitted": "An den Genehmigungsablauf gesendet — die neue Genehmigung steht auf der Arbeitsliste",
+    "submitted": "Einreichung verarbeitet.",
     "submitFailed": "Einreichen fehlgeschlagen",
     "withdrawTitle": "Diese Einreichung zurückziehen?",
     "withdrawReasonLabel": "Grund für den Rückzug",
@@ -350,7 +350,9 @@
     "signLabel": "Geben Sie Ihren Namen als Freigabebestätigung ein",
     "retryRun": "Freigabe erneut anstoßen",
     "retried": "Freigabe neu angestoßen — der neue Schritt liegt auf der Arbeitsliste",
-    "retryFailed": "Erneutes Anstoßen fehlgeschlagen"
+    "retryFailed": "Erneutes Anstoßen fehlgeschlagen",
+    "commandWithdrawn": "Einreichung zurückgezogen. Der Datensatz kann bearbeitet und erneut eingereicht werden.",
+    "decisionRecorded": "Entscheidung erfasst."
   },
   "customFields": {
     "noOptions": "Keine Optionen definiert",

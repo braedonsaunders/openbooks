@@ -319,13 +319,13 @@
   "approvalFlow": {
     "pendingWith": "Pendente com {names}",
     "awaitingAnother": "Aguardando outro aprovador",
-    "rejectTitle": "Rejeitar este documento?",
+    "rejectTitle": "Rejeitar este envio?",
     "rejectReasonLabel": "Motivo da rejeição",
     "waitingOthers": "Registrado — aguardando os demais aprovadores",
     "alreadyDecided": "Esta aprovação já foi decidida — atualizando",
     "decisionFailed": "Falha na decisão",
     "submitRun": "Enviar para aprovação",
-    "submitted": "Enviado ao fluxo de aprovação — a nova aprovação está na lista de trabalho",
+    "submitted": "Envio processado.",
     "submitFailed": "Falha ao enviar",
     "withdrawTitle": "Retirar esta submissão?",
     "withdrawReasonLabel": "Motivo da retirada",
@@ -350,7 +350,9 @@
     "signLabel": "Digite seu nome como atesto de aprovação",
     "retryRun": "Tentar aprovação de novo",
     "retried": "Aprovação reimpulsionada — a nova etapa está na lista de trabalho",
-    "retryFailed": "Nova tentativa falhou"
+    "retryFailed": "Nova tentativa falhou",
+    "commandWithdrawn": "Envio retirado. O registro pode ser editado e enviado novamente.",
+    "decisionRecorded": "Decisão registrada."
   },
   "customFields": {
     "noOptions": "Nenhuma opção definida",

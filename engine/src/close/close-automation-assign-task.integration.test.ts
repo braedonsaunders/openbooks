@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
 import { assignCloseTaskTx } from "./tasks.ts";
 import { CloseError } from "../periods/period-policy.ts";
 import {
-  dropScratchOrg,
+  dropScratchOrg, grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import {
   setupCloseAutomationHarness,
@@ -19,7 +19,9 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 type Harness = CloseAutomationHarness;
 
 async function setupAssignHarness(): Promise<Harness> {
-  return setupCloseAutomationHarness("fp-assign-task");
+  const h=await setupCloseAutomationHarness("fp-assign-task");
+  await grantScratchPermissions(h.orgId,h.submitterId,["close.run"]);
+  return h;
 }
 
 async function insertTask(h: Harness, key: string): Promise<string> {
@@ -88,13 +90,12 @@ test("assignment against a vanished task is refused by name, never a zero-row su
     // deleted task fails before any branch runs; the race this guards is a
     // task vanishing between claim and assignment, which lands here.
     await assert.rejects(
-      db.transaction(async (tx) =>
-        assignCloseTaskTx(tx, {
+      withOrgTransaction(h.orgId,async () =>
+        assignCloseTaskTx(db, {
           orgId: h.orgId,
           runId: h.runId,
           taskId: randomUUID(),
           ownerId: h.approver1Id,
-          reviewerId: null,
           actorId: h.submitterId,
         }),
       ),

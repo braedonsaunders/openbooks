@@ -13,8 +13,6 @@ const requestBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("start"), notes: z.string().max(2000).optional() }),
   z.object({ action: z.literal("submit"), notes: z.string().max(2000).optional() }),
   z.object({ action: z.literal("complete"), notes: z.string().max(2000).optional() }),
-  z.object({ action: z.literal("approve"), notes: z.string().max(2000).optional() }),
-  z.object({ action: z.literal("request_changes"), notes: z.string().max(2000).optional() }),
   z.object({ action: z.literal("waive"), notes: z.string().max(2000).optional() }),
 ]);
 
@@ -25,8 +23,6 @@ const ACTIONS = new Set([
   "start",
   "submit",
   "complete",
-  "approve",
-  "request_changes",
   "waive",
 ]);
 
@@ -49,11 +45,7 @@ export const POST = defineRoute({
 
     if (!body.action || !ACTIONS.has(body.action))
       return NextResponse.json({ error: "invalid task action" }, { status: 400 });
-    const permission = ["approve", "request_changes", "waive"].includes(
-      body.action,
-    )
-      ? "close.approve"
-      : "close.run";
+    const permission = "close.run";
     const gate = await guardFeaturePermission(permission, "continuousClose");
     if (gate instanceof NextResponse) return gate;
     const scopeDenied = guardCloseScope(gate);

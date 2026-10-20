@@ -138,7 +138,7 @@
     "discard": "Descartar cambios",
     "submit": "Enviar a publicación",
     "submitted": "{count, plural, one {Se envió un cambio a publicación.} other {Se enviaron # cambios a publicación.}}",
-    "governedExplain": "Tablero gobernado: publicar registra una publicación. Si se aplica un flujo de aprobación, los cambios se publican al aprobarse.",
+    "flowExplain": "La publicación envía estos cambios a los Flows de su organización. Sin etapas de aprobación, se publican de inmediato.",
     "awaiting": "{count, plural, one {# cambio espera} other {# cambios esperan}} la decisión sobre la publicación.",
     "awaitingFlow": "Un flujo de aprobación decide esta publicación en Aprobaciones. Hasta entonces, los cambios enviados quedan bloqueados.",
     "openApprovals": "Abrir Aprobaciones"

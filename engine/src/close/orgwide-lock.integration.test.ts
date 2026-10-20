@@ -1,3 +1,4 @@
+import {seedCloseRunApprovalFixture} from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -31,12 +32,7 @@ test(
         bookId: org.bookId,
         actorId: actors.adminId,
       });
-      await db.execute(sql`
-        update close_runs
-           set status = 'approved', current_stage = 'lock', approved_at = now(),
-               approved_by = ${actors.adminId}, updated_at = now(), updated_by = ${actors.adminId}
-         where id = ${runId} and org_id = ${org.orgId}
-      `);
+      await seedCloseRunApprovalFixture(org.orgId,runId,actors.adminId);
       await db.execute(sql`
         insert into period_locks
           (org_id, period_id, book_id, subsidiary_id, module, state, created_by, updated_by)
@@ -45,7 +41,7 @@ test(
            ${actors.adminId}, ${actors.adminId})
       `);
 
-      await closeApprovedRun(org.orgId, runId, actors.approver1Id);
+      await closeApprovedRun(org.orgId, runId, actors.adminId);
 
       const blocked = (await db.execute<{ blocked: boolean }>(sql`
         select period_module_blocks_write(

@@ -1,3 +1,7 @@
+import {
+  decideReopenFixture,
+  requestReviewedReopenFixture,
+} from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -5,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { assertPeriodModulesOpen, CloseError, PeriodClosedError } from "../periods/period-policy.ts";
 import { PNL_TYPES } from "../records/account-types.ts";
-import { decidePeriodReopen, requestPeriodReopen } from "./reopening.ts";
+import {} from "./reopening.ts";
 import {
   generatePeriodEndJournals,
   PeriodEndJournalError,
@@ -240,36 +244,47 @@ test("the operator reverses a generation through the kernel before the year lock
   }
 });
 
-test("a governed reopen admits only the year-end period and its approval reverses the journals", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const { actors, year, december } = await readyYear(org);
-    await grantScratchPermissions(org.orgId, actors.approver1Id, ["close.reopen"]);
-    await generatePeriodEndJournals(org.orgId, actors.adminId, { periodId: december, reason: REASON });
-    await closeScratchPeriods(org, actors.adminId, [december]);
+test(
+  "a governed reopen admits only the year-end period and its approval reverses the journals",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { actors, year, december } = await readyYear(org);
+      await grantScratchPermissions(org.orgId, actors.approver1Id, ["close.reopen"]);
+      await generatePeriodEndJournals(org.orgId, actors.adminId, { periodId: december, reason: REASON });
+      await closeScratchPeriods(org, actors.adminId, [december]);
 
-    const july = year.periods.get("2026-07")!;
-    await assert.rejects(
-      () => requestPeriodReopen({ orgId: org.orgId, periodId: july, bookId: org.bookId, modules: ["gl"], actorId: actors.adminId, reason: "Correct a July accrual" }),
-      (error: unknown) => error instanceof CloseError && /request the reopen of P12 FY2026 first/.test(error.message),
-    );
-    const requestId = await requestPeriodReopen({
+      const july = year.periods.get("2026-07")!;
+      await assert.rejects(
+        () =>
+          requestReviewedReopenFixture({ orgId: org.orgId, periodId: july, bookId: org.bookId, modules: ["gl"], actorId: actors.adminId, reason: "Correct a July accrual" }),
+        (error: unknown) => error instanceof CloseError && /request the reopen of P12 FY2026 first/.test(error.message),
+      );
+      const requestId = await requestReviewedReopenFixture({
       orgId: org.orgId, periodId: december, bookId: org.bookId, modules: ["gl"], actorId: actors.adminId, reason: "Auditor adjustment to fiscal year 2026",
     });
-    await decidePeriodReopen({ orgId: org.orgId, requestId, actorId: actors.approver1Id, approve: true, hours: 2 });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
 
-    const set = (await db.execute<{ status: string; reversed_by: string; reopen_request_id: string; reversal_reason: string }>(sql`
+      const set = (await db.execute<{ status: string; reversed_by: string; reopen_request_id: string; reversal_reason: string }>(sql`
       select status, reversed_by, reopen_request_id, reversal_reason from period_end_journal_sets where org_id = ${org.orgId}`)).rows;
-    assert.deepEqual(set.map((row) => [row.status, row.reversed_by, row.reopen_request_id]), [["reversed", actors.approver1Id, requestId]]);
-    assert.match(set[0]!.reversal_reason, /Auditor adjustment to fiscal year 2026/);
-    assert.equal(await incomeStatementTotal(org, "2026-12-31"), "-550.1000");
+      assert.deepEqual(set.map((row) => [row.status, row.reversed_by, row.reopen_request_id]), [["reversed", actors.approver1Id, requestId]]);
+      assert.match(set[0]!.reversal_reason, /Auditor adjustment to fiscal year 2026/);
+      assert.equal(await incomeStatementTotal(org, "2026-12-31"), "-550.1000");
 
-    // With the journals reversed, the rest of the year reopens normally.
-    await requestPeriodReopen({ orgId: org.orgId, periodId: july, bookId: org.bookId, modules: ["gl"], actorId: actors.adminId, reason: "Correct a July accrual" });
-  } finally {
+      // With the journals reversed, the rest of the year reopens normally.
+      await requestReviewedReopenFixture({ orgId: org.orgId, periodId: july, bookId: org.bookId, modules: ["gl"], actorId: actors.adminId, reason: "Correct a July accrual" });
+    } finally {
     await dropScratchOrg(org.orgId);
   }
-});
+  },
+);
 
 test("generation refuses an unready year by name and posts nothing", { skip: !DB }, async () => {
   const org = await createScratchOrg();

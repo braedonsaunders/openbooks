@@ -1,11 +1,11 @@
 import { authorizeTimeWorkspace, refuseOthersTime, timeWorkFamily } from "@/lib/time-workspace";
 import { lockSharedTimeAuthority, TimeWorkTargetError } from "@openbooks/engine/projects/time-work-target";
-import { z } from "zod";
+import { z } from 'zod'
 import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { notFound, unprocessable } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   lockScopeRow,
@@ -18,14 +18,12 @@ import {
   isFeatureEnabled,
 } from "../../../lib/features";
 import { isUuid } from "../../../lib/list-params";
-import { can } from "../../../lib/authz";
+import { can } from '../../../lib/authz'
 import {
   findUnownedCustomReferences,
   loadFieldDefs,
   validateCustomValues,
 } from "../../../lib/custom-fields";
-import { initialEntryStatus, loadTimePolicy } from "../../../lib/time-policy";
-import { runTimeApprovalEffects } from "../../../lib/time-approval";
 import { TimeApprovalRefusal } from "../../../lib/time-approval-refusal";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
@@ -57,7 +55,7 @@ const saveBodySchema = z.strictObject({
   expectedRevision: z.string().min(1, "expectedRevision is required"),
 });
 
-export const runtime = "nodejs";
+export const runtime = 'nodejs'
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
@@ -192,16 +190,16 @@ const save = defineRoute({
   body: saveBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ request: workspaceRequest, authz: gate, body: requestBody }) => {
-    const { user } = gate;
-    const orgId = user.orgId;
+    const { user } = gate
+    const orgId = user.orgId
 
-    const body = requestBody as SaveBody;
+    const body = requestBody as SaveBody
     const employee = uuidOrNull(body.employee);
     if (employee === "invalid" || employee === null)
       return bad("Invalid employee");
     if (!body.week || !isIsoDate(body.week)) return bad("Invalid week");
-    const week = weekStart(body.week);
-    const days = weekWindow(week);
+    const week = weekStart(body.week)
+    const days = weekWindow(week)
     if (!Array.isArray(body.rows)) return bad("Rows must be a list");
 
     const ownedEmployee = await pinTimekeeper(
@@ -213,7 +211,7 @@ const save = defineRoute({
     // A self-service caller enters only their own week; refused before any
     // of the named employee's entries are read.
     const othersRefused = await refuseOthersTime(gate, "time.manage", ownedEmployee);
-    if (othersRefused) return othersRefused;
+    if (othersRefused) return othersRefused
     // The grant production targets are fenced with: the supervisory grant,
     // or time.self for a caller entering their own week.
     const timeEntryPermission = can(gate, "time.manage") ? "time.manage" : "time.self";
@@ -235,11 +233,8 @@ const save = defineRoute({
     // Org-defined line fields live on time_entries.custom; validate + strip
     // unknown keys exactly as every other record does.
     const lineDefs = await loadFieldDefs("time_entries");
-    // When the org does not require approval, saved hours are usable at once
-    // rather than sitting in a draft nobody will ever submit.
-    const policy = await loadTimePolicy(orgId);
-    const newStatus = initialEntryStatus(policy);
-    const toPersist: Persist[] = [];
+    const newStatus = 'draft' as const
+    const toPersist: Persist[] = []
     for (const r of body.rows) {
       if (r == null || typeof r !== "object" || Array.isArray(r))
         return bad("Each row must be an object");
@@ -409,14 +404,14 @@ const save = defineRoute({
     // never silently overwrites an approval (or an in-flight submission).
     // Set when the revision fence below refuses the save; answered as a 409
     // after the transaction (which wrote nothing) commits empty.
-    let staleRevision: string | null = null;
-    let projectsRefused: boolean;
+    let staleRevision: string | null = null
+    let projectsRefused: boolean
     try {
       projectsRefused = await withOrgTransaction(orgId, async () => {
-        const tx = db;
+        const tx = db
         await lockSharedTimeAuthority(tx, orgId, user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: gate.allowedSubsidiaryIds, permission: "time.manage", workFamily: timeWorkFamily(workspaceRequest) });
         // Canonical lock order is department, party, project. Shared locks
-        // pin legal-entity attribution through save and automatic approval.
+        // pin legal-entity attribution through the save.
         const departmentScopes = await lockScopeRows(
           tx, orgId,
           toPersist.flatMap((p) => p.departmentId ? [{ kind: "department" as const, id: p.departmentId }] : []),
@@ -447,9 +442,7 @@ const save = defineRoute({
             throw new TimeLineEntityRefusal("The department belongs to a different legal entity than this work; select a department in the employee or project legal entity");
           }
         }
-        // When approval is not required, saved entries land already approved, so
-        // the replaceable set has to include those too — otherwise every save
-        // would insert a second copy of the week's hours alongside the first.
+        // Released entries remain immutable across subsequent saves.
         // Entries any downstream document has consumed stay put regardless: they
         // are evidence for an invoice, pay run or ledger entry that already
         // exists.
@@ -532,17 +525,8 @@ const save = defineRoute({
             || row.cost_journal_entry_id != null || row.production_consumed_operation_id != null
             || row.overhead_journal_entry_id != null || row.billing_status !== "unbilled") return false;
           if (row.status === "draft" || row.status === "rejected") return true;
-          return (
-            !policy.requireApproval &&
-            row.status === "approved" &&
-            row.invoiced_by_line_id == null &&
-            row.payroll_batch_ref == null &&
-            row.cost_journal_entry_id == null && row.production_consumed_operation_id == null &&
-            row.overhead_journal_entry_id == null &&
-            row.field_ticket_id == null &&
-            row.billing_status === "unbilled"
-          );
-        };
+          return false
+        }
         const lineKey = (v: {
           workedOn: string;
           hours: string;
@@ -595,7 +579,7 @@ const save = defineRoute({
             survivorCounts.set(key, (survivorCounts.get(key) ?? 0) + 1);
           }
         }
-        const toInsert: Persist[] = [];
+        const toInsert: Persist[] = []
         for (const p of toPersist) {
           const key = lineKey(p);
           const survivors = survivorCounts.get(key) ?? 0;
@@ -637,7 +621,6 @@ const save = defineRoute({
       `);
           if (deleted.rows.length !== deleteIds.length) throw new TimeLineEntityRefusal("The time lines changed while saving. Reload before trying again.");
         }
-        const savedIds: string[] = [];
         for (const p of toInsert) {
           if (p.workOrderId) await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: p.workOrderId, operationId: p.woOperationId, requestedScope: gate.allowedSubsidiaryIds, permission: timeEntryPermission });
           const saved = await tx.execute<{ id: string }>(sql`
@@ -652,24 +635,15 @@ const save = defineRoute({
            ${user.id}, ${user.id})
         returning id
       `);
-          savedIds.push(saved.rows[0]!.id);
+          if(saved.rows.length!==1)throw new TimeLineEntityRefusal("The time line was not saved. Reload the week before retrying.");
         }
-        // Disabling the manual sign-off changes who authorizes availability, not
-        // the rate evidence or accounting required when hours become usable.
-        // Effects run only for freshly inserted lines: replayed lines already
-        // carry theirs.
-        if (newStatus === "approved")
-          // Zero-hour declaration lines cost nothing: they approve with the
-          // week but never enter costing, billing or payroll effects.
-          await runTimeApprovalEffects(orgId, user.id, savedIds.filter((_, index) => compareDecimal(toInsert[index]!.hours, "0") !== 0), 'time.manage');
-        return false;
-      });
+        return false
+      })
     } catch (error) {
       if (error instanceof TimeLineEntityRefusal) return bad(error.message);
       if (error instanceof ScopeNotFoundError)
         return notFound("record");
-      // A designed approval refusal inside auto-approve answers typed, not
-      // as an unexpected failure: the save wrote nothing, by transaction.
+      // Native work-target refusals preserve the saved week atomically.
       if (error instanceof TimeApprovalRefusal || error instanceof TimeWorkTargetError)
         return apiErrorResponse(error);
       throw error;
@@ -692,9 +666,9 @@ const save = defineRoute({
       week,
       gate.allowedSubsidiaryIds,
     );
-    return NextResponse.json(payload);
+    return NextResponse.json(payload)
   },
-});
+})
 
-export const PUT = save;
-export const POST = save;
+export const PUT = save
+export const POST = save

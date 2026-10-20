@@ -3320,15 +3320,11 @@
       "title": "Approval controls",
       "openFlows": "Open Flows",
       "hint": "Flows applies the configured approval stages and conditions for this program.",
-      "unconfigured": "No Benefits approval policy is configured. Configure Flows before submitting rewards.",
+      "unconfigured": "No Benefits Flow is enabled. Valid reward submissions are released immediately without an approver.",
       "policiesHint": "Enabled policies are evaluated when a reward is submitted.",
       "openApprovals": "Open Approvals",
       "administratorRemedy": "Ask your company workflow administrator to configure or change approval policies.",
-      "unconfiguredStatus": "No Benefits approval policy is configured.",
-      "modes": {
-        "none": "No approvals required",
-        "flows": "Use Flows approvals"
-      },
+      "unconfiguredStatus": "No Benefits Flow is enabled. Valid reward submissions are released immediately without an approver.",
       "noneHint": "Authorized submissions become ready for payroll. No workflow configuration or approver is required."
     },
     "externalPayrollProcessed": "Processed in payroll · awaiting fulfillment",

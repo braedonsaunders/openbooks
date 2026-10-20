@@ -168,7 +168,7 @@ export function buildQuickApprovalGraph(
     title: input.title?.trim() || "Approval",
     assignees: [assignee.assignee],
     mode: "any" as const,
-    ...(preventSelfApproval ? { preventSelfApproval: true } : {}),
+    preventSelfApproval,
   };
 
   if (!amountField) {

@@ -884,50 +884,13 @@ async function readDashboardMetrics(
   const topCustomers = need('topCustomers') ? groupByCustomer(arItems, asOfDay).slice(0, 5) : null
   const topVendors = need('topVendors') ? groupByVendor(apItems, asOfDay).slice(0, 5) : null
   const unionRequestedAt = (item: ApprovalWorklistItem): string => {
-    const raw =
-      item.kind === 'flow_gate' ? item.createdAt : (item.submittedAt ?? item.createdAt)
+    const raw = item.createdAt
     return raw instanceof Date ? raw.toISOString() : raw
   }
   const unionTop5 = [...unifiedApprovals]
     .sort((a, b) => unionRequestedAt(a).localeCompare(unionRequestedAt(b)))
     .slice(0, 5)
     .map((item) => {
-      if (item.kind === 'document') {
-        return {
-          id: item.id,
-          targetKind: item.docKind,
-          targetId: item.id,
-          amount: item.total,
-          currency: item.currency,
-          title: item.documentNumber,
-          createdAt: unionRequestedAt(item),
-        }
-      }
-      if (item.kind === 'budget') {
-        return {
-          id: item.id,
-          targetKind: 'budget_scenario',
-          targetId: item.id,
-          amount: item.total,
-          currency: null as string | null,
-          title: item.name,
-          createdAt: unionRequestedAt(item),
-        }
-      }
-      if (item.kind === 'timesheet') {
-        return {
-          id: item.id,
-          targetKind: 'timesheet_week',
-          targetId: item.id,
-          amount: null as string | null,
-          currency: null as string | null,
-          title: `${item.personName ?? 'Timesheet'} · week of ${item.weekStart}`,
-          createdAt: unionRequestedAt(item),
-          // Open lands in the week drawer (employee + week), not the
-          // week-id deep-link the flow adapter names.
-          weekHref: `/timesheets?timesheet=${item.employeePartyId}:${item.weekStart}`,
-        }
-      }
       return {
         id: item.id,
         targetKind: item.document?.kind ?? item.subjectKind,
@@ -940,7 +903,7 @@ async function readDashboardMetrics(
     })
     .map((row) => ({
       ...row,
-      href: 'weekHref' in row && typeof row.weekHref === 'string' ? row.weekHref : approvalRecordHref(row.targetKind, row.targetId),
+      href: approvalRecordHref(row.targetKind, row.targetId),
     }))
   const agent = (agentFindings as unknown as { rows: Array<{ open: number; proposals: number; last_run: string | Date | null }> }).rows[0]!
   return {

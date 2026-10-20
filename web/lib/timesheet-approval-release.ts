@@ -1,4 +1,7 @@
+import { lockApprovalSubject } from '@openbooks/engine/platform/approval-routing'
 import 'server-only'
+import { completedGateDecisionPolicy } from '@openbooks/engine/flows/approval-decision-policy'
+import { lockSharedTimeAuthority } from '@openbooks/engine/projects/time-work-target'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { resolveTimesheetWeek } from '@openbooks/engine/flows/timesheet-weeks-adapter'
@@ -23,7 +26,9 @@ export async function releaseTimesheetWeekApproval(
   outcome: 'approved' | 'rejected',
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   comment?: string | null,
+  approvalRunId?: string,
 ): Promise<void> {
+  await lockApprovalSubject(orgId, 'timesheet_week', subjectId)
   const parsed = await resolveTimesheetWeek(subjectId, orgId)
   if (!parsed) throw new Error(`unknown timesheet week: ${subjectId}`)
   const from = parsed.weekStart
@@ -36,23 +41,58 @@ export async function releaseTimesheetWeekApproval(
       weekStart: from,
       allowedSubsidiaryIds,
       comment,
+      approvalRunId,
     })
     return
   }
 
+  const decision = await completedGateDecisionPolicy(db, {
+    orgId,
+    subjectKind: 'timesheet_week',
+    subjectId,
+    actorId,
+    outcome,
+    approvalRunId,
+  })
+  if (!decision)
+    throw new Error('Complete the native Flow gate before rejecting this week.')
+  const throughDate = (
+    await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`)
+  ).rows[0]!.d
+  await lockSharedTimeAuthority(db, orgId, actorId, {
+    employeeId: parsed.employeePartyId,
+    from,
+    through: throughDate,
+    requestedScope: allowedSubsidiaryIds,
+    permission: 'time.approve',
+  })
+
   // Rejection carries the approver's words. Without a reason the employee is
   // told only that it came back, which is the complaint every timesheet system
   // that skips this earns.
-  const reason = (comment ?? '').trim() || 'Rejected by approver'
-  const through = (await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`)).rows[0]!.d
-  const header = (await db.execute<{ id: string; status: string }>(sql`
+  const reason = (comment ?? '').trim()
+  if(!reason)throw new Error('Record why the submitted week needs correction before rejecting it.')
+  const through = (
+    await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`)
+  ).rows[0]!.d
+  const header = (
+    await db.execute<{ id: string; status: string }>(sql`
     select id, status from timesheet_weeks
      where org_id = ${orgId}
        and employee_party_id = ${parsed.employeePartyId}
        and week_start = ${from}::date
-  `)).rows[0]
+     for update
+  `)
+  ).rows[0]
+  if (!header || header.status !== 'submitted')
+    throw new Error('Only a submitted week can be rejected.')
   await setTimesheetWeekStatus(
-    orgId, parsed.employeePartyId, from, 'rejected', actorId, reason,
+    orgId,
+    parsed.employeePartyId,
+    from,
+    'rejected',
+    actorId,
+    reason,
   )
   await db.execute(sql`
     update time_entries
@@ -72,10 +112,10 @@ export async function releaseTimesheetWeekApproval(
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify(
         {
-          event: "rejected",
-          actor: { kind: "user", userId: actorId },
+          event: 'rejected',
+          actor: { kind: 'user', userId: actorId },
           before: { status: header.status },
-          after: { status: "rejected" },
+          after: { status: 'rejected' },
           reason,
           weekStart: from,
         },

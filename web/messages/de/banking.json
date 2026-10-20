@@ -1486,7 +1486,7 @@
         "discard": "Sitzung verworfen",
         "confirm_opening": "Eröffnungssaldo bestätigt",
         "session_adjustment": "Sitzung angepasst",
-        "revalidate_sign_off": "Unabhängige Freigabeprüfung"
+        "revalidate_sign_off": "Prüfung der Freigabe"
       },
       "signOffStatement": "Auszugssaldo {balance} · bis {date} · {matched} Journalzeilen markiert · {excluded} Auszugszeilen ausgeschlossen",
       "signOffSource": "Quelldaten · Saldo {balance} · bis {date} · {matched} abgestimmte Journalzeilen",
@@ -1502,12 +1502,12 @@
   },
   "revalidation": {
     "action": "Neutrale Kontohistorie prüfen",
-    "title": "Diese Freigabe unabhängig prüfen",
+    "title": "Diese Freigabe prüfen",
     "reason": "Prüfgrund (10–500 Zeichen)",
     "confirm": "Prüfung erfassen",
     "preview": "Der bestätigte Saldo bis {date} bleibt {balance}. Prüfen Sie {entries} verspätete Buchungen ({lines} Kontenzeilen) anhand der erhaltenen Nachweise. Auszug, Zuordnungen, Bestätigung und Ausgleichsmarkierungen bleiben unverändert.",
     "failed": "Diese Freigabeprüfung konnte nicht abgeschlossen werden. Laden Sie die Nachweise erneut und versuchen Sie es noch einmal.",
-    "recorded": "Unabhängige Freigabeprüfung erfasst",
+    "recorded": "Prüfung der Freigabe erfasst",
     "reasonRequired": "Geben Sie einen Prüfgrund mit 10–500 Zeichen ein.",
     "reviewedBadge": "Neutrale Historie geprüft",
     "reviewedBasis": "Prüfnachweis bis {date}",

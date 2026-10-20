@@ -1486,7 +1486,7 @@
         "discard": "已丢弃会话",
         "confirm_opening": "已确认期初余额",
         "session_adjustment": "已调整会话",
-        "revalidate_sign_off": "独立签核审核"
+        "revalidate_sign_off": "签核复核"
       },
       "signOffStatement": "对账单余额 {balance} · 截至 {date} · 已标记 {matched} 条日记账行 · 已排除 {excluded} 条对账单行",
       "signOffSource": "源数据 · 余额 {balance} · 截至 {date} · 已清算 {matched} 条日记账行",
@@ -1502,12 +1502,12 @@
   },
   "revalidation": {
     "action": "复核余额无变化的账户历史",
-    "title": "独立审核此次签核",
+    "title": "复核此签核",
     "reason": "审核理由（10–500字符）",
     "confirm": "记录审核",
     "preview": "截至{date}的已签署余额仍为{balance}。请根据保留证据复核{entries}笔迟记分录（{lines}行）。账单、匹配、签署及核销标记均保持不变。",
     "failed": "无法完成此次签核审核。请重新加载凭证后重试。",
-    "recorded": "已记录独立签核审核",
+    "recorded": "已记录签核复核",
     "reasonRequired": "请输入10–500字符的审核理由。",
     "reviewedBadge": "已复核余额无变化的历史记录",
     "reviewedBasis": "截至{date}的复核证据",

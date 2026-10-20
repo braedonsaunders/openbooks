@@ -1,0 +1,1 @@
+New close-run receipts bind current ledger and manual evidence. Existing completed close decisions and task evidence remain unchanged. Pending submissions without the current fingerprint can be recalled and resubmitted through the native Flow controls.

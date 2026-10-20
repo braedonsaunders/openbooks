@@ -59,8 +59,9 @@ export async function holdsSubjectGrant(
 
 /** True when the caller may read this record of the kind (see holdsSubjectGrant). */
 export async function canReadSubjectRecord(authz: Authz, subjectKind: string, subjectId: string): Promise<boolean> {
-  const perms = flowSubjectPermissions(subjectKind)
-  return perms !== null && holdsSubjectGrant(authz, subjectKind, subjectId, perms.read)
+  const adapter=getFlowAdapter(subjectKind)
+  const permission=adapter?.readPermission ? await adapter.readPermission(subjectId,authz.user.id) : adapter?.permissions?.read
+  return typeof permission==='string' && holdsSubjectGrant(authz,subjectKind,subjectId,permission)
 }
 
 /**

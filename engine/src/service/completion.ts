@@ -1,3 +1,4 @@
+import { routeSubjectSubmission } from "../flows/submission-policy.ts";
 /**
  * Visit completion: work notes, parts used (issued from stock through a
  * native inventory issue), labor recorded on native time entries in the
@@ -208,9 +209,20 @@ async function issueParts(actor: ServiceActor, visit: StoredVisit, issueDate: st
 
 type ReviewRouting = { gated: boolean; runId: string | null; failed: boolean; error: string | null };
 
-async function routeCompletionReview(actor: ServiceActor, visitId: string, revision: number): Promise<ReviewRouting> {
-  const result = await runRecordFlows({ kind: "on_submit", occurrenceKey: `${SERVICE_VISIT_COMPLETION_SUBJECT_KIND}:${visitId}:on_submit:${revision}` },
-    SERVICE_VISIT_COMPLETION_SUBJECT_KIND, visitId, { orgId: actor.orgId, userId: actor.actorId });
+async function routeCompletionReview(
+  actor: ServiceActor,
+  visitId: string,
+  revision: number,
+): Promise<ReviewRouting> {
+  const result = (
+    await routeSubjectSubmission({
+      orgId: actor.orgId,
+      actorId: actor.actorId,
+      subjectKind: SERVICE_VISIT_COMPLETION_SUBJECT_KIND,
+      subjectId: visitId,
+      source: "api",
+    })
+  ).dispatch;
   const failedRun = result.runs.find((run) => run.status === "failed");
   return {
     gated: result.gatesCreated > 0,
@@ -232,7 +244,9 @@ export interface CompletionResult {
  * Complete a visit that is on site: record the work notes, issue the parts,
  * record labor and submit the completion for any review Flow.
  */
-export async function completeVisit(actor: ServiceActor & { visitId: string; expectedRevision: number; workNotes: string; labor?: readonly LaborInput[] }): Promise<CompletionResult> {
+export async function completeVisit(
+  actor: ServiceActor & { visitId: string; expectedRevision: number; workNotes: string; labor?: readonly LaborInput[] },
+): Promise<CompletionResult> {
   const workNotes = requiredText(actor.workNotes, "Work notes", 8000);
   return withOrgTransaction(actor.orgId, async () => {
     const visit = await lockVisit(actor.orgId, actor.visitId);
@@ -241,8 +255,10 @@ export async function completeVisit(actor: ServiceActor & { visitId: string; exp
     if (visit.status !== "on_site") {
       throw new ServiceError("A visit is completed on site.", { status: 409, code: "service_invalid_transition", remedy: "Mark the visit on site first." });
     }
-    const job = visit.jobId ? (await db.execute<{ laborItemId: string | null; billingMode: string; status: string }>(sql`select labor_item_id as "laborItemId", billing_mode as "billingMode", status
-      from service_jobs where org_id = ${actor.orgId} and id = ${visit.jobId} for share`)).rows[0] ?? null : null;
+    const job = visit.jobId
+      ? ((await db.execute<{ laborItemId: string | null; billingMode: string; status: string }>(sql`select labor_item_id as "laborItemId", billing_mode as "billingMode", status
+      from service_jobs where org_id = ${actor.orgId} and id = ${visit.jobId} for share`)).rows[0] ?? null)
+      : null;
     const timeZone = await businessTimeZoneInTx(db, actor.orgId);
     const today = localTimeFields(new Date().toISOString(), timeZone)?.date ?? new Date().toISOString().slice(0, 10);
     const partsIssued = await issueParts(actor, visit, today);

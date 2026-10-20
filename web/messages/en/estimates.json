@@ -52,7 +52,7 @@
     "timingAdvance": "In advance",
     "timingArrears": "In arrears",
     "singlePeriodNote": "Multi-period ramps need Advanced subscriptions — without it this term bills as one flat period.",
-    "approvalHint": "Discounts over {threshold}% — or any line below catalog — route through Flows approval before sending.",
+    "approvalHint": "Quote approvals are controlled by your tenant’s Flows.",
     "sendForSignature": "Send for signature",
     "signerName": "Signer name",
     "signerEmail": "Signer email",

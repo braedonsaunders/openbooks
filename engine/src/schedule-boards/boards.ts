@@ -57,9 +57,7 @@ export type ScheduleBoard = {
   readonly dayPolicyKnown: boolean;
   readonly dayEnds: string;
   readonly dayBreakMinutes: number;
-  readonly publishPolicy: "live" | "staged" | "governed";
-  /** First booking date that needs independent publication; set when the policy is governed. */
-  readonly governedFrom: string | null;
+  readonly publishPolicy: "live" | "staged";
   readonly prefillTimesheets: boolean;
   readonly prefillCrewTime: boolean;
   readonly prefillFieldTickets: boolean;
@@ -84,7 +82,7 @@ export const BOARD_COLUMNS = sql`b.id, b.code, b.name, b.description, b.row_kind
   b.grain, b.views, b.default_view as "defaultView", b.range_days as "rangeDays", b.week_starts_on as "weekStartsOn",
   b.show_weekends as "showWeekends", b.time_zone as "timeZone",
   to_char(b.day_starts, 'HH24:MI') as "dayStarts", to_char(b.day_ends, 'HH24:MI') as "dayEnds",
-  b.day_break_minutes as "dayBreakMinutes", b.day_policy_known as "dayPolicyKnown", b.publish_policy as "publishPolicy", b.governed_from::text as "governedFrom",
+  b.day_break_minutes as "dayBreakMinutes", b.day_policy_known as "dayPolicyKnown", b.publish_policy as "publishPolicy",
   b.prefill_timesheets as "prefillTimesheets", b.prefill_crew_time as "prefillCrewTime",
   b.prefill_field_tickets as "prefillFieldTickets", b.notify_assignees as "notifyAssignees",
   b.sort_order as "sortOrder", b.is_active as "isActive"`;

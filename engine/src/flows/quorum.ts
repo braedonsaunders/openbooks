@@ -18,6 +18,7 @@ export type GateDecision = "approved" | "rejected";
 /** Sibling snapshot AFTER the deciding row was flipped. */
 export interface SiblingGate {
   id: string;
+  escalatedFromGateId?: string | null;
   status: "pending" | "approved" | "rejected" | "cancelled" | "escalated";
 }
 
@@ -47,13 +48,31 @@ export function resolveQuorumOutcome(
     .map((s) => s.id);
 
   if (quorum === "any") {
-    return { resume: decision === "approved" ? "approve" : "reject", cancelIds: cancellable };
+    return {
+      resume: decision === "approved" ? "approve" : "reject",
+      cancelIds: cancellable,
+    };
   }
 
   // quorum === 'all'
-  if (decision === "rejected") return { resume: "reject", cancelIds: cancellable };
+  if (decision === "rejected")
+    return { resume: "reject", cancelIds: cancellable };
   const stillPending = siblings.some((s) => s.status === "pending");
   if (stillPending) return { resume: null, cancelIds: [] };
-  const anyRejected = siblings.some((s) => s.status === "rejected");
-  return { resume: anyRejected ? "reject" : "approve", cancelIds: cancellable };
+  if (siblings.some((s) => s.status === "rejected"))
+    return { resume: "reject", cancelIds: cancellable };
+  const approvedReplacements = new Set(
+    siblings
+      .filter((s) => s.status === "approved" && s.escalatedFromGateId)
+      .map((s) => s.escalatedFromGateId),
+  );
+  if (
+    siblings.some(
+      (s) => s.status !== "approved" && !approvedReplacements.has(s.id),
+    )
+  )
+    throw new Error(
+      "This approval group has an unresolved required decision. Recall the submission and review its Flow before resubmitting.",
+    );
+  return { resume: "approve", cancelIds: cancellable };
 }

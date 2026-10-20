@@ -9,11 +9,11 @@ import { deliverScheduleNotices } from '@/lib/scheduling/notify'
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 
 /**
- * Publish a board's unpublished changes for a date range, all or nothing. A
- * governed board records a publication for any configured approval Flow.
+ * Publish a board's unpublished changes for a date range, all or nothing. Every
+ * publication records the submitted revisions and its tenant Flow policy.
  */
 export const POST = defineRoute({
-  authorize: ({ params }) => schedulingBoardRouteAuthority(params, 'publish'),
+  authorize: ({ params }) => schedulingBoardRouteAuthority(params, 'manage'),
   feature: { none: 'The addressed board is gated and authorized by its native family.' },
   params: z.object({ boardId: uuidString() }),
   body: z.strictObject({ from: date, through: date, reason: z.string().max(2000).nullable().optional() }),

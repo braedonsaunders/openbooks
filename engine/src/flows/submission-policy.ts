@@ -1,0 +1,126 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
+import { lockApprovalSubject } from "../platform/approval-routing.ts";
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
+import type { FlowEventSource } from "@openbooks/forms-core";
+import { db, pinnedTransactionExecutor } from "../platform/db.ts";
+import {
+  cancelDispatchRuns,
+  dispatchFailureReason,
+  FlowDispatchError,
+} from "./dispatch-result.ts";
+import { getFlowAdapter } from "./registry.ts";
+import { runRecordFlows, type RecordFlowsResult } from "./run.ts";
+
+import type { FlowSubmissionPolicy } from "../platform/flow-submission-policy.ts";
+export type SubmissionPolicy = FlowSubmissionPolicy;
+
+export async function routeSubjectSubmission(input: {
+  orgId: string;
+  subjectKind: string;
+  subjectId: string;
+  actorId: string | null;
+  source?: FlowEventSource;
+  command?: Record<string, unknown>;
+  event?:
+    | { kind: "on_create"; source?: FlowEventSource }
+    | { kind: "on_update"; source?: FlowEventSource; changedFields?: string[] };
+}): Promise<{
+  submissionId: string;
+  gatingRunId: string | null;
+  policy: SubmissionPolicy;
+  dispatch: RecordFlowsResult;
+}> {
+  if (!pinnedTransactionExecutor()) {
+    throw new Error(
+      "Submission routing requires the subject's active transaction.",
+    );
+  }
+  const source = input.event?.source ?? input.source ?? "ui";
+  if (input.actorId === null && source !== "schedule")
+    throw new FlowDispatchError(
+      "Interactive submission requires an authorized acting user.",
+    );
+  await lockApprovalSubject(input.orgId, input.subjectKind, input.subjectId);
+  const actor = input.actorId === null ? null : await lockActorIdentity(db,input.orgId,input.actorId);
+  if(input.actorId !== null && !actor)
+    throw new FlowDispatchError("The submission requires an active authorized acting identity.");
+  const adapter = getFlowAdapter(input.subjectKind);
+  if (!adapter) {
+    throw new FlowDispatchError(
+      "This record has no registered Flow subject; configure its native routing before submitting.",
+    );
+  }
+  // Keep the policy set stable through routing and the subject transition.
+  // Concurrent submissions share this lock; graph writes wait until commit.
+  await db.execute(sql`lock table flows in share mode`);
+  const context = await adapter.loadContext(input.subjectId);
+  if (!context)
+    throw new FlowDispatchError(
+      "The submission record is unavailable; reopen it before retrying.",
+    );
+  context.values = { ...context.values, event_source: source, submissionActorHomeOrgId: actor?.orgId ?? null };
+  if (input.command)
+    context.values = {
+      ...context.values,
+      command: input.command,
+      commandAction: input.command.action ?? null,
+    };
+  const flows = (
+    await db.execute<{ id: string; graph: unknown }>(sql`
+    select id,graph from flows where org_id=${input.orgId}
+      and subject_kind=${input.subjectKind} and enabled order by id
+  `)
+  ).rows;
+  const dispatch = await runRecordFlows(
+    input.event ?? { kind: "on_submit", source: input.source ?? "ui" },
+    input.subjectKind,
+    input.subjectId,
+    {
+      orgId: input.orgId,
+      userId: input.actorId,
+      submissionCommand: input.command,
+    },
+  );
+  if (
+    dispatch.failed ||
+    dispatch.runs.some(
+      (run) => run.status === "failed" || run.status === "cancelled",
+    ) ||
+    (dispatch.gatesCreated === 0 &&
+      dispatch.runs.some((run) => run.status !== "completed"))
+  ) {
+    await cancelDispatchRuns(
+      input.orgId,
+      dispatch.runs.map((run) => run.runId),
+      { actorId: input.actorId },
+    );
+    throw new FlowDispatchError(
+      dispatchFailureReason(dispatch) ??
+        "Submission routing did not complete; review the record's Flows and retry.",
+    );
+  }
+  const policy: SubmissionPolicy = {
+    version: 1,
+    trigger: input.event?.kind ?? "on_submit",
+    kind: dispatch.gatesCreated > 0 ? "gated" : "ungated",
+    flowIds: flows.map((flow) => flow.id),
+    runIds: dispatch.runs.map((run) => run.runId).sort(),
+  };
+  const submissionId = randomUUID();
+  const saved =
+    await db.execute(sql`insert into flow_submissions(id,org_id,subject_kind,subject_id,actor_id,policy,context,graphs)
+    values(${submissionId},${input.orgId},${input.subjectKind},${input.subjectId},${input.actorId},${JSON.stringify(policy)}::jsonb,
+      ${JSON.stringify(context.values)}::jsonb,${JSON.stringify(flows)}::jsonb) returning id`);
+  if (saved.rows.length !== 1)
+    throw new FlowDispatchError(
+      "The submission routing receipt was not saved; nothing was released.",
+    );
+  return {
+    submissionId,
+    gatingRunId:
+      dispatch.runs.find((run) => run.gatesCreated > 0)?.runId ?? null,
+    policy,
+    dispatch,
+  };
+}

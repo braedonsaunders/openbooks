@@ -1,9 +1,14 @@
+import {
+  routeNativeApproval,
+  readNativeApprovalDecision,
+  cancelNativeApprovals,
+} from "../platform/approval-routing.ts";
 import { requireSalesSchema } from "./sales-readiness.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { routeSalesAccount } from "./sales-routing.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
-import { db, type SqlExecutor } from "../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import {
@@ -271,6 +276,7 @@ async function saveCommand(
   tx: SqlExecutor,
   scope: SalesScope,
   input: SalesCommand,
+  approvalRunId?: string,
 ): Promise<SalesRecord | { id: string }> {
   await requireSalesSchema(tx);
   await acquireOrgFeatureGateLock(tx, scope.orgId);
@@ -285,7 +291,7 @@ async function saveCommand(
       tx,
       scope.orgId,
       scope.actorId,
-      "crm.setup.manage",
+      approvalRunId ? "crm.forecasts.override" : "crm.setup.manage",
     ))
   )
     throw new SalesError(
@@ -367,7 +373,29 @@ async function saveCommand(
         "Close the representative allocations before closing their team quota.",
       );
     if (input.lifecycle === "approved") {
+      const decision = await readNativeApprovalDecision({
+        orgId: scope.orgId,
+        actorId: scope.actorId,
+        subjectKind: "sales_quota",
+        subjectId: input.id,
+        outcome: "approved",
+        approvalRunId,
+      });
+      const ungated =
+        !approvalRunId &&
+        (
+          await tx.execute<{
+            allowed: boolean;
+          }>(sql`select public.flow_ungated_submission_authorized(
+        ${scope.orgId},'sales_quota',${input.id},${scope.actorId},jsonb_build_object('revision',${before.revision - 1}::integer)) as allowed`)
+        ).rows[0]?.allowed === true;
+      if (!decision && !ungated)
+        throw new SalesError(
+          "Complete the configured native Flow gates before releasing this quota.",
+          409,
+        );
       if (
+        decision &&
         !(await actorHasPermission(
           tx,
           scope.orgId,
@@ -376,14 +404,8 @@ async function saveCommand(
         ))
       )
         throw new SalesError(
-          "Quota approval requires the sales manager approval permission.",
+          "Quota decisions require the configured approval permission.",
           403,
-        );
-      if (before.created_by === scope.actorId)
-        throw new SalesError(
-          "A different authorized manager must approve this quota.",
-          403,
-          "segregation_of_duties",
         );
       const children = (
         await tx.execute<{ amount: string; lifecycle: string }>(
@@ -434,8 +456,28 @@ async function saveCommand(
         );
       }
     }
+    let submissionPolicy: unknown = null;
+    if (input.lifecycle === "pending_approval") {
+      const routing = await routeNativeApproval({
+        orgId: scope.orgId,
+        actorId: scope.actorId,
+        subjectKind: "sales_quota",
+        subjectId: input.id,
+      });
+      submissionPolicy = routing.policy;
+    }
+    if (input.lifecycle === "draft")
+      await cancelNativeApprovals({
+        orgId: scope.orgId,
+        actorId: scope.actorId,
+        subjectKind: "sales_quota",
+        subjectId: input.id,
+      });
     const after = (
-      await tx.execute<SalesRecord>(sql`update crm_sales_quotas set lifecycle=${input.lifecycle},reason=${input.lifecycle === "closed" ? sql`reason` : input.reason},approved_by=${input.lifecycle === "approved" ? scope.actorId : sql`approved_by`},approved_at=${input.lifecycle === "approved" ? sql`now()` : sql`approved_at`},revision=revision+1,updated_at=clock_timestamp(),updated_by=${scope.actorId}
+      await tx.execute<SalesRecord>(sql`update crm_sales_quotas set lifecycle=${input.lifecycle},
+      submission_policy=case when ${input.lifecycle}='pending_approval' then ${JSON.stringify(submissionPolicy)}::jsonb when ${input.lifecycle}='draft' then null else submission_policy end,
+      submitted_by=case when ${input.lifecycle}='pending_approval' then ${scope.actorId}::uuid when ${input.lifecycle}='draft' then null else submitted_by end,
+      reason=${input.lifecycle === "closed" ? sql`reason` : input.reason},approved_by=${input.lifecycle === "approved" ? scope.actorId : sql`approved_by`},approved_at=${input.lifecycle === "approved" ? sql`now()` : sql`approved_at`},revision=revision+1,updated_at=clock_timestamp(),updated_by=${scope.actorId}
       where org_id=${scope.orgId} and id=${input.id} returning *`)
     ).rows[0];
     if (!after) throw new SalesError("Quota transition was not applied.", 409);
@@ -448,6 +490,16 @@ async function saveCommand(
       after,
       input.reason,
     );
+    if (
+      input.lifecycle === "pending_approval" &&
+      (submissionPolicy as { kind: string }).kind === "ungated"
+    ) {
+      return saveCommand(tx, scope, {
+        ...input,
+        lifecycle: "approved",
+        expectedRevision: after.revision,
+      });
+    }
     return after;
   }
   assertScope(scope, input.subsidiaryId);
@@ -803,7 +855,14 @@ export async function writeSalesCommand(
   input: SalesCommand,
 ): Promise<SalesRecord | { id: string }> {
   try {
-    return await db.transaction((tx) => saveCommand(tx, scope, input));
+    return await withOrgTransaction(scope.orgId, () => {
+      if (input.action === "quota-transition" && input.lifecycle === "approved")
+        throw new SalesError(
+          "Decide quota approvals through the native Flow gate.",
+          409,
+        );
+      return saveCommand(db, scope, input);
+    });
   } catch (error) {
     if (error instanceof SalesError) throw error;
     const cause =
@@ -831,4 +890,63 @@ export async function writeSalesCommand(
       );
     throw error;
   }
+}
+
+export async function releaseQuotaApproval(args: {
+  subjectId: string;
+  outcome: "approved" | "rejected";
+  approvalRunId?: string;
+  comment?: string | null;
+  ctx: { orgId: string; userId?: string | null };
+}): Promise<void> {
+  const actorId = args.ctx.userId;
+  if (!actorId)
+    throw new SalesError("Quota decisions require a named operator.", 403);
+  const decision = await readNativeApprovalDecision({
+    orgId: args.ctx.orgId,
+    actorId,
+    subjectKind: "sales_quota",
+    subjectId: args.subjectId,
+    outcome: args.outcome,
+    approvalRunId: args.approvalRunId,
+  });
+  if (!decision)
+    throw new SalesError(
+      "Complete the native quota Flow gate before releasing it.",
+      409,
+    );
+  const { actorAllowedSubsidiaryIds } =
+    await import("../organization/actor-subsidiaries.ts");
+  const scope = {
+    orgId: args.ctx.orgId,
+    actorId,
+    allowedSubsidiaryIds: await actorAllowedSubsidiaryIds(
+      db,
+      args.ctx.orgId,
+      actorId,
+    ),
+  };
+  const row = (
+    await db.execute<{ revision: number; lifecycle: string }>(
+      sql`select revision,lifecycle from crm_sales_quotas where org_id=${scope.orgId} and id=${args.subjectId} for update`,
+    )
+  ).rows[0];
+  if (!row || row.lifecycle !== "pending_approval")
+    throw new SalesError(
+      "This quota no longer accepts an approval decision.",
+      409,
+    );
+  await saveCommand(
+    db,
+    scope,
+    {
+      action: "quota-transition",
+      id: args.subjectId,
+      expectedRevision: row.revision,
+      lifecycle: args.outcome === "approved" ? "approved" : "draft",
+      reason:
+        args.comment?.trim() || "Released through the submitted Flow policy.",
+    },
+    args.approvalRunId,
+  );
 }

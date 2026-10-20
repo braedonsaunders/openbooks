@@ -1,10 +1,13 @@
-import "server-only";
-import { sql } from "drizzle-orm";
+import 'server-only'
+import { sql } from 'drizzle-orm'
 import { db } from "@openbooks/engine/platform/db";
-import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine/close/approvals";
+import { requestCloseApproval } from '@openbooks/engine/close/approvals'
 import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/close/run-completion";
 import { CloseError, type CloseModule, type PeriodDisplayInput } from "@openbooks/engine/periods/period-policy";
-import { decidePeriodReopen, requestPeriodReopen } from "@openbooks/engine/close/reopening";
+import {
+  submitPeriodReopen,
+  requestPeriodReopen,
+} from '@openbooks/engine/close/reopening'
 import { refreshCloseRun } from "@openbooks/engine/close/run-automation";
 import { startCloseRun } from "@openbooks/engine/close/run-start";
 import {
@@ -27,7 +30,7 @@ import {
   type ExactPeriodLockRead,
 } from "@openbooks/engine/close/period-lock-read";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { can } from "../authz";
+import { can } from '../authz'
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, forbidden, notFound } from "./errors";
@@ -93,9 +96,12 @@ function mapCloseError(error: unknown): never {
   throw error;
 }
 
-async function closeRun(context: ApplicationContext, runId: string): Promise<CloseRunRow> {
-  assertSubsidiaryAccess(context, null);
-  const result = (await db.execute<CloseRunDbRow>(sql`
+async function closeRun(
+  context: ApplicationContext,
+  runId: string,
+): Promise<CloseRunRow> {
+  assertSubsidiaryAccess(context, null)
+  const result = await db.execute<CloseRunDbRow>(sql`
     select r.id, r.period_id as "periodId", p.name as "periodName", ${PERIOD_REF_COLUMNS},
            r.book_id as "bookId", b.code as "bookCode", r.status,
            r.current_stage as "currentStage", r.target_close_date as "targetCloseDate",
@@ -105,10 +111,10 @@ async function closeRun(context: ApplicationContext, runId: string): Promise<Clo
       join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
      where r.id = ${runId} and r.org_id = ${context.authz.user.orgId}
      limit 1
-  `));
-  const row = result.rows[0];
-  if (!row) throw notFound("close run");
-  return closeRunRow(row);
+  `)
+  const row = result.rows[0]
+  if (!row) throw notFound('close run')
+  return closeRunRow(row)
 }
 
 type CloseRunDbRow = Omit<CloseRunRow, "periodRef"> & {
@@ -135,7 +141,7 @@ export async function listCloseRuns(
   // Declared lock targets do not narrow the organization-wide diagnostics.
   assertUnrestrictedCloseDiagnostics(context);
   const limit = clamp(input.limit ?? 50, 1, 100);
-  const result = (await db.execute<CloseRunDbRow>(sql`
+  const result = await db.execute<CloseRunDbRow>(sql`
     select r.id, r.period_id as "periodId", p.name as "periodName", ${PERIOD_REF_COLUMNS},
            r.book_id as "bookId", b.code as "bookCode", r.status,
            r.current_stage as "currentStage", r.target_close_date as "targetCloseDate",
@@ -147,8 +153,8 @@ export async function listCloseRuns(
        ${input.status ? sql`and r.status = ${input.status}` : sql``}
      order by p.ends_on desc, r.started_at desc
      limit ${limit}
-  `));
-  return result.rows.map(closeRunRow);
+  `)
+  return result.rows.map(closeRunRow)
 }
 
 const LOCK_STATES = new Set(["open", "soft_closed", "closed"]);
@@ -384,20 +390,23 @@ export async function startApplicationCloseRun(context: ApplicationContext, inpu
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
-export async function advanceCloseRun(context: ApplicationContext, input: {
-  runId: string;
-  action: "refresh" | "request_approval" | "attest" | "close" | "publish";
-  comment?: string;
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
+export async function advanceCloseRun(
+  context: ApplicationContext,
+  input: {
+    runId: string
+    action: 'refresh' | 'request_approval' | 'close' | 'publish'
+    comment?: string
+    idempotencyKey: string
+  },
+): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
   assertApplicationPermission(
     context,
-    input.action === "attest" || input.action === "close" ? "close.approve" : "close.run",
-  );
+    input.action === 'close' ? 'close.approve' : 'close.run',
+  )
   if (input.action === "publish" && !(await isFeatureEnabled(context.authz.user.orgId, "advancedClose"))) {
     throw notFound("close package");
   }
-  await closeRun(context, input.runId);
+  await closeRun(context, input.runId)
   const outcome = await executeIdempotent({
     context,
     operation: `close.${input.action}`,
@@ -405,13 +414,14 @@ export async function advanceCloseRun(context: ApplicationContext, input: {
     request: input,
     execute: async (): Promise<Record<string, unknown>> => {
       try {
-        if (input.action === "refresh") {
-          return { refreshed: true, ...await refreshCloseRun(context.authz.user.orgId, input.runId, context.authz.user.id) };
+        if (input.action === 'refresh') {
+          return {
+            refreshed: true,
+            ...(await refreshCloseRun(context.authz.user.orgId, input.runId, context.authz.user.id)),
+          }
         }
-        if (input.action === "request_approval") {
+        if (input.action === 'request_approval') {
           await requestCloseApproval(context.authz.user.orgId, input.runId, context.authz.user.id);
-        } else if (input.action === "attest") {
-          await attestOwnerManagedClose(context.authz.user.orgId, input.runId, context.authz.user.id, input.comment ?? "");
         } else if (input.action === "close") {
           await closeApprovedRun(context.authz.user.orgId, input.runId, context.authz.user.id);
         } else {
@@ -422,7 +432,7 @@ export async function advanceCloseRun(context: ApplicationContext, input: {
         mapCloseError(error);
       }
     },
-  });
+  })
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
@@ -540,68 +550,81 @@ export async function recordApplicationClosingFxRateEvidence(
   }
 }
 
-export async function createReopenRequest(context: ApplicationContext, input: {
-  periodId: string;
-  bookId: string;
-  subsidiaryId?: string;
-  modules: CloseModule[];
-  reason: string;
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: { requestId: string } }> {
+export async function createReopenRequest(
+  context: ApplicationContext,
+  input: {
+    periodId: string
+    bookId: string
+    subsidiaryId?: string
+    modules: CloseModule[]
+    reason: string
+    hours?: number
+    idempotencyKey: string
+  },
+): Promise<{ replayed: boolean; result: { requestId: string } }> {
   assertApplicationPermission(context, "close.reopen");
-  assertSubsidiaryAccess(context, null);
+  assertSubsidiaryAccess(context, null)
   assertSubsidiaryAccess(context, input.subsidiaryId);
   const outcome = await executeIdempotent({
-    context, operation: "close.reopen.request", idempotencyKey: input.idempotencyKey, request: input,
+    context,
+    operation: 'close.reopen.request',
+    idempotencyKey: input.idempotencyKey,
+    request: input,
     execute: async () => {
       try {
-        return { requestId: await requestPeriodReopen({
-          orgId: context.authz.user.orgId,
-          actorId: context.authz.user.id,
-          periodId: input.periodId,
-          bookId: input.bookId,
-          subsidiaryId: input.subsidiaryId,
-          modules: input.modules,
-          reason: input.reason,
-        }) };
-      } catch (error) { mapCloseError(error); }
+        return {
+          requestId: await requestPeriodReopen({
+            orgId: context.authz.user.orgId,
+            actorId: context.authz.user.id,
+            periodId: input.periodId,
+            bookId: input.bookId,
+            subsidiaryId: input.subsidiaryId,
+            modules: input.modules,
+            reason: input.reason,
+            hours: input.hours,
+          }),
+        }
+      } catch (error) {
+        mapCloseError(error);
+      }
     },
-  });
+  })
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
-export async function decideReopenRequest(context: ApplicationContext, input: {
-  requestId: string;
-  approve: boolean;
-  hours?: number;
-  attestation?: string;
-  decisionReason?: string;
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: { requestId: string; approved: boolean } }> {
+export async function submitReopenRequest(
+  context: ApplicationContext,
+  input: { requestId: string; hours?: number; idempotencyKey: string },
+): Promise<{
+  replayed: boolean
+  result: { requestId: string; gated: boolean }
+}> {
   assertApplicationPermission(context, "close.reopen");
-  assertSubsidiaryAccess(context, null);
-  const scope = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select subsidiary_id as "subsidiaryId" from close_reopen_requests
-     where id = ${input.requestId} and org_id = ${context.authz.user.orgId}
-  `));
-  if (!scope.rows[0]) throw notFound("reopen request");
-  assertSubsidiaryAccess(context, scope.rows[0].subsidiaryId);
+  const scope = (
+    await db.execute<{ subsidiaryId: string | null }>(
+      sql`select subsidiary_id as "subsidiaryId" from close_reopen_requests where org_id=${context.authz.user.orgId} and id=${input.requestId}`,
+    )
+  ).rows[0]
+  if (!scope) throw notFound('reopen request')
+  assertSubsidiaryAccess(context, scope.subsidiaryId)
   const outcome = await executeIdempotent({
-    context, operation: "close.reopen.decide", idempotencyKey: input.idempotencyKey, request: input,
+    context,
+    operation: 'close.reopen.submit',
+    idempotencyKey: input.idempotencyKey,
+    request: input,
     execute: async () => {
       try {
-        await decidePeriodReopen({
+        const result = await submitPeriodReopen({
           orgId: context.authz.user.orgId,
           actorId: context.authz.user.id,
           requestId: input.requestId,
-          approve: input.approve,
           hours: input.hours,
-          attestation: input.attestation,
-          decisionReason: input.decisionReason,
-        });
-        return { requestId: input.requestId, approved: input.approve };
-      } catch (error) { mapCloseError(error); }
+        })
+        return { requestId: input.requestId, gated: result.gated }
+      } catch (error) {
+        mapCloseError(error);
+      }
     },
-  });
+  })
   return { replayed: outcome.replayed, result: outcome.value };
 }

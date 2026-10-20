@@ -3320,15 +3320,11 @@
       "title": "承認管理",
       "openFlows": "Flowsを開く",
       "hint": "Flows はこのプログラムに設定された承認段階と条件を適用します。",
-      "unconfigured": "福利厚生の承認ポリシーが未設定です。報奨を提出する前にFlowsを設定してください。",
+      "unconfigured": "福利厚生のFlowは有効になっていません。有効な報奨申請は、承認者なしで直ちに処理されます。",
       "policiesHint": "有効なポリシーは報奨の提出時に評価されます。",
       "openApprovals": "承認を開く",
       "administratorRemedy": "会社のワークフロー管理者に承認ポリシーの設定または変更を依頼してください。",
-      "unconfiguredStatus": "福利厚生の承認ポリシーが未設定です。",
-      "modes": {
-        "none": "承認不要",
-        "flows": "Flows の承認を使用"
-      },
+      "unconfiguredStatus": "福利厚生のFlowは有効になっていません。有効な報奨申請は、承認者なしで直ちに処理されます。",
       "noneHint": "権限を持つ担当者が提出すると給与処理の準備が整います。ワークフローの設定や承認者は不要です。"
     },
     "externalPayrollProcessed": "給与計算で処理済み · 履行待ち",

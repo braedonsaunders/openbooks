@@ -45,7 +45,7 @@ async function withEscalatableGate(
     } as never;
     await db.execute(sql`update flows set graph = ${JSON.stringify(graph)}::jsonb where id = ${flowId}`);
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    const res = await submitForApproval("vendor_bill", docId);
+    const res = await submitForApproval("vendor_bill", docId, actors.submitterId);
     assert.equal(res.gated, true, "submit created a gate");
     const gate = (
       await db.execute<{ id: string }>(sql`

@@ -8,7 +8,10 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/periods/period-policy";
-import { consumeReopenRequestsForClosedModules, decidePeriodReopen, extendReopenRequest, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen, withdrawPeriodReopen } from "@openbooks/engine/close/reopening";
+import {
+  consumeReopenRequestsForClosedModules,
+  submitPeriodReopen, extendReopenRequest, recloseApprovedReopen, requestPeriodReopen, withdrawPeriodReopen,
+} from "@openbooks/engine/close/reopening";
 import { generateAccountingPeriods } from "@openbooks/engine/close/calendar";
 import { closePeriodAllModules, setPeriodLockState } from "@openbooks/engine/periods/period-locks";
 import { auditBankingModuleClose, bankingCloseStatus, bankingUnmatchedStatementLines, evaluateBankingModuleClose } from "@openbooks/engine/close/banking-close";
@@ -23,7 +26,7 @@ import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 const closeObject = z.record(z.string(), z.json());
 const closePolicySchema = z.object({
   action: z.literal("save-policy"), code: z.string().trim().min(1), name: z.string().trim().min(1),
-  policyType: z.enum(["materiality", "lock", "review", "segregation", "exception"]),
+  policyType: z.enum(["materiality", "lock", "evidence", "exception"]),
   description: z.string().nullable().optional(), rules: closeObject.optional(), isActive: z.boolean().optional(),
 }).superRefine((body, ctx) => {
   if (body.policyType !== "materiality") return;
@@ -38,7 +41,7 @@ const closePolicySchema = z.object({
     ctx.addIssue({ code: "custom", path: ["rules", "percent"], message: "Materiality percent must be between 0 and 100" });
   }
 });
-const closeStepSchema = z.object({
+const closeStepSchema = z.strictObject({
   key: z.string().trim().min(1), title: z.string().trim().min(1),
   workstream: z.enum(["readiness", "banking", "sales", "ar", "ap", "assets", "tax", "payroll", "intercompany", "gl", "review", "publish"]),
   taskType: z.enum(["check", "action", "reconciliation", "journal", "approval", "report", "publish"]).optional(),
@@ -46,7 +49,7 @@ const closeStepSchema = z.object({
   gateType: z.enum(["none", "soft", "hard"]).optional(),
   description: z.string().nullable().optional(), dueOffsetBusinessDays: z.number().int().optional(),
   evidenceRequired: z.boolean().optional(), defaultOwnerRoleKey: z.string().nullable().optional(),
-  defaultReviewerRoleKey: z.string().nullable().optional(), applicability: closeObject.optional(),
+  applicability: closeObject.optional(),
   dependsOn: z.array(z.string()).optional(),
 });
 const closeActionSchemas = [
@@ -54,17 +57,23 @@ const closeActionSchemas = [
   z.object({ action: z.literal("generate-periods"), calendarId: uuidString(), fiscalYear: z.number().int().min(1900).max(2200) }),
   z.object({ action: z.literal("save-blueprint"), id: uuidString().optional(), name: z.string().trim().min(1), description: z.string().nullable().optional(), periodType: z.enum(["month", "quarter", "year", "adjustment", "any"]).optional(), steps: z.array(closeStepSchema).min(1).max(200), isDefault: z.boolean().optional() }),
   closePolicySchema,
-  z.object({ action: z.literal("save-automation"), id: uuidString().optional(), name: z.string().trim().min(1), trigger: z.enum(["run_started", "task_ready", "exception_opened", "deadline_approaching", "run_closed"]), automationAction: z.enum(["notify", "assign", "run_check", "complete_task", "create_task", "generate_report", "start_flow", "run_allocation"]), conditions: closeObject.optional(), config: closeObject.optional(), isActive: z.boolean().optional() }),
+  z.object({ action: z.literal("save-automation"), id: uuidString().optional(), name: z.string().trim().min(1), trigger: z.enum(["run_started", "task_ready", "exception_opened", "deadline_approaching", "run_closed"]), automationAction: z.enum(["notify", "assign", "run_check", "complete_task", "create_task", "generate_report", "start_flow", "run_allocation"]), conditions: closeObject.optional(), config: closeObject.optional(), isActive: z.boolean().optional() }).superRefine((body,ctx)=>{
+    for(const key of ["reviewerUserId","reviewerRoleKey"])
+      if(Object.hasOwn(body.config??{},key))ctx.addIssue({code:"custom",path:["config",key],message:"Configure close task approvals in Flows; assignment rules only choose the preparation owner."});
+  }),
   z.object({ action: z.literal("save-package"), id: uuidString().optional(), name: z.string().trim().min(1), description: z.string().nullable().optional(), reports: z.array(z.record(z.string(), z.json()).refine((report) => typeof report.slug === "string" && report.slug.trim().length > 0, "report slug is required")).min(1), recipients: z.array(z.string().trim().min(1).max(320)).optional(), delivery: closeObject.optional(), isDefault: z.boolean().optional(), isActive: z.boolean().optional() }),
   z.object({ action: z.literal("send-package"), packageId: uuidString(), periodId: uuidString(), bookId: uuidString(), idempotencyKey: uuidString() }),
   z.object({ action: z.literal("set-lock"), periodId: uuidString(), bookId: uuidString(), subsidiaryId: uuidString().nullable().optional(), module: z.enum(CLOSE_MODULES), state: z.enum(["open", "soft_closed", "closed"]), reason: z.string().trim().min(1), bankingAcknowledgement: z.string().max(2000).optional(), }),
   z.object({ action: z.literal("close-period"), periodId: uuidString(), bookId: uuidString(), subsidiaryId: uuidString().nullable().optional(), state: z.enum(["soft_closed", "closed"]).optional().default("closed"), modules: z.array(z.enum(CLOSE_MODULES)).min(1).optional(), moduleReasons: z.record(z.enum(CLOSE_MODULES), z.string()).optional(), reason: z.string().trim().min(1), bankingAcknowledgement: z.string().max(2000).optional(), }),
   z.object({ action: z.literal("banking-close-status"), periodId: uuidString(), bookId: uuidString(), subsidiaryId: uuidString().nullable().optional() }),
-  z.object({ action: z.literal("request-reopen"), periodId: uuidString(), bookId: uuidString(), subsidiaryId: uuidString().nullable().optional(), modules: z.array(z.enum(CLOSE_MODULES)).min(1), reason: z.string().trim().min(1) }),
-  z.object({ action: z.literal("decide-reopen"), requestId: uuidString(), approve: z.boolean(), hours: z.number().positive().max(168).optional(), attestation: z.string().max(500).optional(), decisionReason: z.string().max(500).optional() }),
+  z.object({ action: z.literal("request-reopen"), periodId: uuidString(), bookId: uuidString(), subsidiaryId: uuidString().nullable().optional(), modules: z.array(z.enum(CLOSE_MODULES)).min(1), reason: z.string().trim().min(1),
+    hours: z.number().int().positive().optional(),
+  }),
+  z.object({ action: z.literal('submit-reopen'), requestId: uuidString(),
+    hours: z.number().int().positive().optional(),
+  }),
   z.object({ action: z.literal("withdraw-reopen"), requestId: uuidString(), reason: z.string().trim().min(10).max(500) }),
   z.object({ action: z.literal("extend-reopen"), requestId: uuidString(), additionalHours: z.number().int().min(0).max(168).optional(), addModules: z.array(z.enum(CLOSE_MODULES)).optional(), reason: z.string().trim().min(1) }),
-  z.object({ action: z.literal("reopen-conflicts"), requestId: uuidString() }),
   z.object({ action: z.literal("reclose-reopen"), requestId: uuidString(), reason: z.string().trim().min(1) }),
 ] as const;
 const requestBodySchema = z.discriminatedUnion("action", closeActionSchemas);
@@ -179,8 +188,8 @@ function validateDependencies(
 
 async function saveCalendar(orgId: string, actorId: string, body: Body) {
   const id = optionalUuid(body, "id", "calendar");
-  const isActive = optionalActive(body);
-  const name = text(body, "name", true)!;
+  const isActive = optionalActive(body)
+  const name = text(body, 'name', true)!
   const cadence = text(body, "cadence", true)!;
   if (!CADENCES.has(cadence)) throw new CloseError("invalid calendar cadence");
   const yearStartMonth = Number(body.yearStartMonth);
@@ -205,14 +214,14 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
       sql`select id from fiscal_calendars where org_id = ${orgId} for update`,
     );
     let before: Record<string, unknown> | null = null;
-    let savedId: string;
+    let savedId: string
     if (id) {
-      const current = ((await tx.execute(sql`
+      const current = await tx.execute(sql`
         select c.*, exists(select 1 from accounting_periods p where p.fiscal_calendar_id = c.id and p.org_id = ${orgId}) as has_periods
-          from fiscal_calendars c where c.id = ${id} and c.org_id = ${orgId} for update`)));
-      const row = current.rows[0];
+          from fiscal_calendars c where c.id = ${id} and c.org_id = ${orgId} for update`)
+      const row = current.rows[0]
       if (!row) throw new CloseError("calendar not found");
-      before = row as Record<string, unknown>;
+      before = row as Record<string, unknown>
       if (
         row.has_periods &&
         (row.cadence !== cadence ||
@@ -279,13 +288,13 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
         "this change would leave the organization with periods but no active default fiscal calendar, and new postings would be refused; save one active calendar with the default flag switched on first",
       );
     }
-    return savedId;
-  });
+    return savedId
+  })
 }
 
 async function saveBlueprint(orgId: string, actorId: string, body: Body) {
   const sourceId = optionalUuid(body, "id", "blueprint");
-  const name = text(body, "name", true)!;
+  const name = text(body, 'name', true)!
   const description = text(body, "description");
   const periodType = text(body, "periodType") ?? "any";
   if (!["month", "quarter", "year", "adjustment", "any"].includes(periodType))
@@ -336,10 +345,6 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
         typeof step.defaultOwnerRoleKey === "string"
           ? step.defaultOwnerRoleKey
           : null,
-      defaultReviewerRoleKey:
-        typeof step.defaultReviewerRoleKey === "string"
-          ? step.defaultReviewerRoleKey
-          : null,
       applicability:
         step.applicability &&
         typeof step.applicability === "object" &&
@@ -354,15 +359,15 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
       sortOrder: (index + 1) * 10,
     };
   });
-  validateDependencies(steps);
+  validateDependencies(steps)
   const isDefault = body.isDefault === true;
   return db.transaction(async (tx) => {
-    let version = 1;
+    let version = 1
     let sourceBefore: Record<string, unknown> | null = null;
     if (sourceId) {
-      const source = (await tx.execute(
+      const source = await tx.execute(
         sql`select * from close_blueprints where id = ${sourceId} and org_id = ${orgId} for update`,
-      ));
+      )
       if (!source.rows[0]) throw new CloseError("blueprint not found");
       sourceBefore = source.rows[0] as Record<string, unknown>;
       version = Number(source.rows[0].version) + 1;
@@ -370,7 +375,7 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
         update close_blueprints set is_active = false, is_default = false, updated_at = now(), updated_by = ${actorId}
          where id = ${sourceId} and org_id = ${orgId}
          returning *`)) as { rows: Array<Record<string, unknown>> };
-      const sourceAfter = deactivated.rows[0];
+      const sourceAfter = deactivated.rows[0]
       if (!sourceAfter) throw new CloseError("blueprint not found");
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -389,18 +394,18 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
     const insertedBlueprint = inserted.rows[0];
     if (!insertedBlueprint) throw new CloseError("blueprint could not be created");
     const blueprintId = insertedBlueprint.id as string;
-    const ids = new Map<string, string>();
+    const ids = new Map<string, string>()
     for (const step of steps) {
-      const result = (await tx.execute<{ id: string }>(sql`
+      const result = await tx.execute<{ id: string }>(sql`
         insert into close_blueprint_steps
           (org_id, blueprint_id, key, title, description, workstream, task_type, completion_mode,
            gate_type, due_offset_business_days, evidence_required, default_owner_role_key,
-           default_reviewer_role_key, sort_order, applicability, created_by, updated_by)
+           sort_order, applicability, created_by, updated_by)
         values (${orgId}, ${blueprintId}, ${step.key}, ${step.title}, ${step.description}, ${step.workstream},
                 ${step.taskType}, ${step.completionMode}, ${step.gateType}, ${step.dueOffsetBusinessDays},
-                ${step.evidenceRequired}, ${step.defaultOwnerRoleKey}, ${step.defaultReviewerRoleKey},
-                ${step.sortOrder}, ${JSON.stringify(step.applicability)}::jsonb, ${actorId}, ${actorId}) returning id`));
-      ids.set(step.key, result.rows[0]!.id);
+                ${step.evidenceRequired}, ${step.defaultOwnerRoleKey},
+                ${step.sortOrder}, ${JSON.stringify(step.applicability)}::jsonb, ${actorId}, ${actorId}) returning id`)
+      ids.set(step.key, result.rows[0]!.id)
     }
     for (const step of steps)
       for (const dependency of step.dependsOn) {
@@ -413,8 +418,8 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'close_blueprints', ${blueprintId}, 'insert',
               ${JSON.stringify({ before: null, after: insertedBlueprint })}::jsonb, ${actorId})`);
-    return blueprintId;
-  });
+    return blueprintId
+  })
 }
 
 async function savePolicy(orgId: string, actorId: string, body: Body) {
@@ -423,7 +428,7 @@ async function savePolicy(orgId: string, actorId: string, body: Body) {
     throw new CloseError("policy code must be a stable kebab-case key");
   const policyType = text(body, "policyType", true)!;
   if (
-    !["materiality", "lock", "review", "segregation", "exception"].includes(
+    !["materiality", "lock", "evidence", "exception"].includes(
       policyType,
     )
   )
@@ -586,8 +591,6 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
   });
 }
 
-
-
 export const POST = defineRoute({
   // Close scope is capability-blind: a selected subsidiary must see 404 for
   // every organization-wide close action, including a malformed one, before
@@ -614,23 +617,19 @@ export const POST = defineRoute({
   body: requestBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ body: parsedBody, authz: routeAuthz }) => {
-    const body = parsedBody as Body;
-
-
-
+    const body = parsedBody as Body
 
     const action = typeof body.action === "string" ? body.action : "";
     const permission = [
-      "request-reopen",
-      "decide-reopen",
-      "withdraw-reopen",
-      "reclose-reopen",
-      "reopen-conflicts",
-      "extend-reopen",
+      'request-reopen',
+      'submit-reopen',
+      'withdraw-reopen',
+      'reclose-reopen',
+      'extend-reopen',
     ].includes(action)
-      ? "close.reopen"
-      : "periods.manage";
-    const gate = routeAuthz;
+      ? 'close.reopen'
+      : 'periods.manage'
+    const gate = routeAuthz
     if (!can(gate, permission)) {
       return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 });
     }
@@ -641,7 +640,7 @@ export const POST = defineRoute({
       const denied = guardCloseScope(gate);
       if (denied) return denied;
     }
-    const { orgId, id: actorId } = gate.user;
+    const { orgId, id: actorId } = gate.user
     try {
       const advancedActions = new Set(["save-blueprint", "save-policy", "save-automation", "save-package", "send-package"]);
       if (advancedActions.has(action) && !(await isFeatureEnabled(orgId, "advancedClose"))) {
@@ -892,7 +891,7 @@ export const POST = defineRoute({
           unmatchedStatementLines,
         });
       }
-      if (action === "request-reopen") {
+      if (action === 'request-reopen') {
         const periodId = text(body, "periodId", true)!;
         const bookId = text(body, "bookId", true)!;
         const subsidiaryId = text(body, "subsidiaryId");
@@ -915,24 +914,22 @@ export const POST = defineRoute({
           bookId,
           subsidiaryId: subsidiaryId ?? undefined,
           modules,
-          reason: text(body, "reason", true)!,
+          reason: text(body, 'reason', true)!,
           actorId,
-        });
+          hours: body.hours == null ? undefined : Number(body.hours),
+        })
         return NextResponse.json({ ok: true, requestId });
       }
-      if (action === "decide-reopen") {
+      if (action === 'submit-reopen') {
         const requestId = text(body, "requestId", true)!;
         if (!isUuid(requestId)) throw new CloseError("invalid reopen request");
-        await decidePeriodReopen({
+        const result = await submitPeriodReopen({
           orgId,
           requestId,
           actorId,
-          approve: body.approve === true,
           hours: body.hours == null ? undefined : Number(body.hours),
-          attestation: typeof body.attestation === "string" ? body.attestation : undefined,
-          decisionReason: typeof body.decisionReason === "string" ? body.decisionReason : undefined,
-        });
-        return NextResponse.json({ ok: true });
+        })
+        return NextResponse.json({ ok: true, ...result })
       }
       if (action === "withdraw-reopen") {
         const requestId = text(body, "requestId", true)!;
@@ -976,22 +973,6 @@ export const POST = defineRoute({
         });
         return NextResponse.json({ ok: true, ...extended });
       }
-      if (action === "reopen-conflicts") {
-        const requestId = text(body, "requestId", true)!;
-        if (!isUuid(requestId)) throw new CloseError("invalid reopen request");
-        const preview = await reopenDecisionPreview(orgId, requestId, actorId);
-        return NextResponse.json({
-          ok: true,
-          conflicts: preview.conflicts,
-          ownRequest: preview.ownRequest,
-          independenceRequired: preview.independenceRequired,
-          independenceReason: preview.independenceReason,
-          selfApprovalAllowed: preview.selfApprovalAllowed,
-          eligibleApprovers: preview.eligibleApprovers,
-          unconflictedApprovers: preview.unconflictedApprovers,
-          conflictAcknowledgementAllowed: preview.conflictAcknowledgementAllowed,
-        });
-      }
       return NextResponse.json(
         { error: "unknown close setup action" },
         { status: 400 },
@@ -1002,4 +983,4 @@ export const POST = defineRoute({
       throw error;
     }
   },
-});
+})

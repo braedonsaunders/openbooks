@@ -67,7 +67,6 @@ async function fixture() {
   const project = randomUUID()
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
     features: { projects: true, timeTracking: true },
-    timesheets: { requireApproval: true },
     laborCosting: { mode: 'post', hoursPerDay: 8, annualHours: 2080, components: [] },
     controlAccounts: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, laborWip: org.accounts.cogs, laborClearing: org.accounts.clearing },
   })}::jsonb where id=${org.orgId}`)

@@ -104,7 +104,7 @@ async function liveVersions(employmentId: string): Promise<Array<{ no: number; s
 /** A flow with the apply-without-approval outcome: the governed direct path. */
 async function seedDirectHirePolicy(orgId: string): Promise<string> {
   const id = randomUUID();
-  const graph = { schemaVersion: 1, ungatedOutcome: "apply", nodes: [{ id: "submit", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } }], edges: [] };
+  const graph = { schemaVersion: 1, nodes: [{ id: "submit", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } }], edges: [] };
   await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph) values (${id}, ${orgId}, 'Direct hires', 'hrm_employment_change_request', true, ${JSON.stringify(graph)}::jsonb)`);
   return id;
 }
@@ -151,12 +151,13 @@ test("first hire under an apply-without-approval flow applies at once with an au
     assert.equal(revision, 2);
     // Direct application stays evidenced: the automatic snapshot pins the
     // permitting flow, plus the identity audit row with actor and reason.
-    const snapshot = (await db.execute<{ snapshot: { mode: string; gates: unknown[]; policy: { flowId: string } } }>(sql`
+    const snapshot = (await db.execute<{ snapshot: { mode: string; gates: unknown[]; policy: { kind: string; flowIds: string[] } } }>(sql`
       select decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}
     `)).rows[0]!.snapshot;
     assert.equal(snapshot.mode, "automatic");
     assert.deepEqual(snapshot.gates, []);
-    assert.equal(snapshot.policy.flowId, flowId);
+    assert.equal(snapshot.policy.kind, "ungated");
+    assert.deepEqual(snapshot.policy.flowIds, [flowId]);
     assert.equal(await identityAuditCount(h.org.orgId, hire.employmentId), 1);
 
     // The Me/leave path is now available through the native reads.
@@ -184,12 +185,12 @@ test("first hire with no configured flow applies directly through the governed a
     assert.equal(hire.status, "applied");
     assert.equal(hire.applied, true);
     assert.deepEqual(await liveVersions(hire.employmentId), [{ no: 1, status: "active" }]);
-    const snapshot = (await db.execute<{ snapshot: { mode: string; gates: unknown[]; policy: { flowConfigured: boolean } } }>(sql`
+    const snapshot = (await db.execute<{ snapshot: { mode: string; gates: unknown[]; policy: { kind: string } } }>(sql`
       select decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}
     `)).rows[0]!.snapshot;
     assert.equal(snapshot.mode, "automatic");
     assert.deepEqual(snapshot.gates, []);
-    assert.equal(snapshot.policy.flowConfigured, false);
+    assert.equal(snapshot.policy.kind, "ungated");
     assert.equal(await identityAuditCount(h.org.orgId, hire.employmentId), 1);
 
     // The Me/leave path is available without any approval ceremony.

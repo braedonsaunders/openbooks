@@ -1,12 +1,21 @@
+import {seedCloseRunApprovalFixture} from "../testing/close.ts";
+import {
+  decideReopenFixture,
+  requestReviewedReopenFixture,
+} from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { closeApprovedRun, publishCloseRun } from "./run-completion.ts";
-import { decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen } from "./reopening.ts";
+import { recloseApprovedReopen } from "./reopening.ts";
 import { startCloseRun } from "./run-start.ts";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} from "../testing/fixtures.ts";
 
 /**
  * A corrected package must reach its recipients. publishCloseRun enqueues one
@@ -49,67 +58,83 @@ const hooks = registerHooks({
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("re-publishing after a controlled reopen enqueues a deliverable package", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actors = await seedFlowActors(org.orgId);
-    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}',
+test(
+  "re-publishing after a controlled reopen enqueues a deliverable package",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features', '{}'::jsonb) || '{"advancedClose": true}'::jsonb)
       where id = ${org.orgId}`);
-    const runId = await startCloseRun({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId: actors.adminId,
-    });
-    const approveAndClose = async () => {
-      await db.execute(sql`
-        update close_runs set status = 'approved', current_stage = 'lock',
-               approved_at = now(), approved_by = ${actors.adminId},
-               updated_at = now(), updated_by = ${actors.adminId}
-         where id = ${runId} and org_id = ${org.orgId}`);
-      await closeApprovedRun(org.orgId, runId, actors.approver1Id);
-    };
-    await approveAndClose();
-    await publishCloseRun(org.orgId, runId, actors.adminId, "first publication");
-    assert.equal(enqueues.length, 1, "first publish must enqueue delivery");
-    assert.equal(enqueues[0]!.swallowed, false);
+      const runId = await startCloseRun({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actors.adminId,
+      });
+      const approveAndClose = async () => {
+        await seedCloseRunApprovalFixture(org.orgId,runId,actors.adminId);
+        await closeApprovedRun(org.orgId, runId, actors.adminId);
+      };
+      await approveAndClose();
+      await publishCloseRun(
+        org.orgId,
+        runId,
+        actors.adminId,
+        "first publication",
+      );
+      assert.equal(enqueues.length, 1, "first publish must enqueue delivery");
+      assert.equal(enqueues[0]!.swallowed, false);
 
-    // Controlled correction cycle: reopen GL with a reason, then re-close it.
-    const requestId = await requestPeriodReopen({
-      orgId: org.orgId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      modules: ["gl"],
-      reason: "Correct a misclassified adjusting entry before re-issue",
-      actorId: actors.adminId,
-    });
-    await decidePeriodReopen({
-      orgId: org.orgId,
-      requestId,
-      actorId: actors.approver1Id,
-      approve: true,
-      hours: 2,
-    });
-    // Ending a window is permission-gated, so the approver holds the
-    // reopen permission here.
-    await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
-    await recloseApprovedReopen({
-      orgId: org.orgId,
-      requestId,
-      actorId: actors.approver1Id,
-      reason: "Correction posted and reviewed; window closed for re-issue",
-    });
-    await approveAndClose();
-    await publishCloseRun(org.orgId, runId, actors.adminId, "corrected re-publication");
-    assert.equal(enqueues.length, 2, "re-publication must enqueue delivery again");
-    assert.equal(
-      enqueues[1]!.swallowed,
-      false,
-      "the corrected package was swallowed as a duplicate job and would never deliver",
-    );
-  } finally {
-    hooks.deregister();
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Controlled correction cycle: reopen GL with a reason, then re-close it.
+      const requestId = await requestReviewedReopenFixture({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        modules: ["gl"],
+        reason: "Correct a misclassified adjusting entry before re-issue",
+        actorId: actors.adminId,
+      });
+      await decideReopenFixture({
+        orgId: org.orgId,
+        requestId,
+        actorId: actors.approver1Id,
+        decision: "approved",
+        hours: 2,
+      });
+      // Ending a window is permission-gated, so the approver holds the
+      // reopen permission here.
+      await db.execute(
+        sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`,
+      );
+      await recloseApprovedReopen({
+        orgId: org.orgId,
+        requestId,
+        actorId: actors.approver1Id,
+        reason: "Correction posted and reviewed; window closed for re-issue",
+      });
+      await approveAndClose();
+      await publishCloseRun(
+        org.orgId,
+        runId,
+        actors.adminId,
+        "corrected re-publication",
+      );
+      assert.equal(
+        enqueues.length,
+        2,
+        "re-publication must enqueue delivery again",
+      );
+      assert.equal(
+        enqueues[1]!.swallowed,
+        false,
+        "the corrected package was swallowed as a duplicate job and would never deliver",
+      );
+    } finally {
+      hooks.deregister();
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

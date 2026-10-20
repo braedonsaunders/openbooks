@@ -18,6 +18,7 @@ import type { RecordFlowsResult, RecordFlowRun } from "./run.ts";
  * to their own typed error (SubmitError, AllocationRunError, HTTP 422) — the
  * message already names the flow and the remedy. */
 export class FlowDispatchError extends Error {
+  readonly status = 422;
   readonly name = "FlowDispatchError";
 }
 
@@ -26,7 +27,9 @@ export function findGatingRun(
   result: RecordFlowsResult,
   flowId?: string,
 ): RecordFlowRun | undefined {
-  return result.runs.find((r) => r.gatesCreated > 0 && (!flowId || r.flowId === flowId));
+  return result.runs.find(
+    (r) => r.gatesCreated > 0 && (!flowId || r.flowId === flowId),
+  );
 }
 
 /**
@@ -35,17 +38,17 @@ export function findGatingRun(
  * in every consumer is built from this one function so the remedy reads the
  * same everywhere.
  */
-export function dispatchFailureReason(result: RecordFlowsResult): string | null {
+export function dispatchFailureReason(
+  result: RecordFlowsResult,
+): string | null {
   if (!result.failed) return null;
   const failed = result.runs.find((r) => r.status === "failed");
   if (failed) {
     const what = `approval flow "${failed.flowName}" failed`;
-    return failed.error ? `${what}: ${failed.error}` : what;
+    return `${failed.error ? `${what}: ${failed.error}` : what}. Open Flows to correct its routing, then submit the record again.`;
   }
   return result.error ?? "flow dispatch failed before any flow ran";
 }
-
-
 
 /**
  * Cancel everything one dispatch opened: pending/escalated gates first, then
@@ -69,7 +72,10 @@ export async function cancelDispatchRuns(
   const ids = [...new Set(runIds)];
   if (ids.length === 0) return;
   const actorId = opts?.actorId ?? null;
-  const cancelled = await db.execute<{ subject_kind: string; subject_id: string }>(sql`
+  const cancelled = await db.execute<{
+    subject_kind: string;
+    subject_id: string;
+  }>(sql`
     update flow_gates set status = 'cancelled', updated_at = now()
       ${actorId ? sql`, updated_by = ${actorId}` : sql``}
      where run_id in (
@@ -85,8 +91,14 @@ export async function cancelDispatchRuns(
      ) and org_id = ${orgId} and status in ('running', 'waiting')
   `);
   // Cancelled requests no longer wait on anyone: resolve their notices.
-  const subjects = new Map(cancelled.rows.map((row) => [`${row.subject_kind}:${row.subject_id}`, row]));
+  const subjects = new Map(
+    cancelled.rows.map((row) => [`${row.subject_kind}:${row.subject_id}`, row]),
+  );
   for (const row of subjects.values()) {
-    await resolveApprovalRequestNotices(orgId, row.subject_kind, row.subject_id);
+    await resolveApprovalRequestNotices(
+      orgId,
+      row.subject_kind,
+      row.subject_id,
+    );
   }
 }

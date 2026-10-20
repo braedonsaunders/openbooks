@@ -8,15 +8,17 @@
  * Own leg: my draft or rejected weeks, link-only. Submission flips entry
  * rows through the timesheets submit route's guards
  * (assertWeekSubmittable), which the inbox does not duplicate — the
- * subtitle names the remedy. Gateless submitted weeks awaiting my direct
- * approval are likewise a link: the direct approve path stamps entry rows
- * in web/lib/time-approval.ts, and a second write path here is refused by
- * the brief.
+ * subtitle names the remedy. Submitted weeks appear only through their
+ * configured Flow gates; zero-gate submissions release in the native command.
  */
 
 import { sql } from "drizzle-orm";
 import { TIMESHEET_WEEK_SUBJECT_KIND } from "../../flows/timesheet-weeks-adapter.ts";
-import { decideGate, delegateGate, gateDecisionCapability } from "../../flows/gates.ts";
+import {
+  decideGate,
+  delegateGate,
+  gateDecisionCapability,
+} from "../../flows/gates.ts";
 import { db } from "../../platform/db.ts";
 import { parseDelegationReason } from "../delegation.ts";
 import { actorPartyId, actorPendingGates, toWorklistScope } from "../guard.ts";
@@ -38,9 +40,18 @@ type OwnWeekRow = {
  * treats Monday to Friday as working days. The answer only decides whether
  * to nudge — it never records, approves or costs any time.
  */
-async function weekNeedsNoTimesheet(ctx: InboxListContext, partyId: string, weekStartIso: string): Promise<boolean> {
+async function weekNeedsNoTimesheet(
+  ctx: InboxListContext,
+  partyId: string,
+  weekStartIso: string,
+): Promise<boolean> {
   const exec = ctx.exec ?? db;
-  const facts = (await exec.execute<{ entries: number; subsidiary_id: string | null; leave_days: string[] | null }>(sql`
+  const facts = (
+    await exec.execute<{
+      entries: number;
+      subsidiary_id: string | null;
+      leave_days: string[] | null;
+    }>(sql`
     select
       (select count(*)::int from time_entries te
         where te.org_id = ${ctx.orgId} and te.employee_party_id = ${partyId}
@@ -58,7 +69,8 @@ async function weekNeedsNoTimesheet(ctx: InboxListContext, partyId: string, week
             join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
            where r.org_id = ${ctx.orgId} and e.worker_party_id = ${partyId}
              and r.status = 'approved' and day::date between r.starts_on and r.ends_on)) as leave_days
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!facts || facts.entries > 0) return false;
   const leave = new Set(facts.leave_days ?? []);
   const days = Array.from({ length: 7 }, (_, index) => {
@@ -68,12 +80,22 @@ async function weekNeedsNoTimesheet(ctx: InboxListContext, partyId: string, week
   });
   let isWorkingDay: (date: string) => boolean;
   try {
-    const { businessCalendarOver } = await import("../../payroll/business-calendars.ts");
-    const calendar = await businessCalendarOver(ctx.orgId, facts.subsidiary_id, days[0]!, days[6]!);
+    const { businessCalendarOver } =
+      await import("../../payroll/business-calendars.ts");
+    const calendar = await businessCalendarOver(
+      ctx.orgId,
+      facts.subsidiary_id,
+      days[0]!,
+      days[6]!,
+    );
     isWorkingDay = (date) => calendar.day(date).isBusinessDay;
   } catch (error) {
     const name = (error as { name?: unknown } | null)?.name;
-    if (name !== "BusinessCalendarMissingError" && name !== "SubsidiaryCalendarMismatchError") throw error;
+    if (
+      name !== "BusinessCalendarMissingError" &&
+      name !== "SubsidiaryCalendarMismatchError"
+    )
+      throw error;
     isWorkingDay = (date) => {
       const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
       return weekday >= 1 && weekday <= 5;
@@ -88,8 +110,11 @@ export const timesheetWeekAdapter: InboxAdapter = {
     const out: InboxItem[] = [];
     for (const gate of await actorPendingGates(ctx)) {
       if (gate.subjectKind !== TIMESHEET_WEEK_SUBJECT_KIND) continue;
-      const sodBlocked = (await gateDecisionCapability(gate.id, ctx.actorId)).sodBlocked;
-      const dueAt = gate.escalateAt ? new Date(gate.escalateAt).toISOString() : null;
+      const sodBlocked = (await gateDecisionCapability(gate.id, ctx.actorId))
+        .sodBlocked;
+      const dueAt = gate.escalateAt
+        ? new Date(gate.escalateAt).toISOString()
+        : null;
       out.push({
         id: inboxItemId("timesheet_week", `gate:${gate.id}`),
         kind: "timesheet_week",
@@ -100,11 +125,28 @@ export const timesheetWeekAdapter: InboxAdapter = {
         waitingSince: new Date(gate.createdAt).toISOString(),
         priority: priorityForDueDate(dueAt, ctx.asOf, ctx.timeZone),
         subjectHref: gate.href ?? "/timesheets",
-        actions: sodBlocked ? [] : [
-          { key: "approve", label: "Approve", style: "primary", needsReason: false },
-          { key: "reject", label: "Reject", style: "danger", needsReason: true },
-          { key: "delegate", label: "Delegate", style: "secondary", needsReason: true },
-        ],
+        actions: sodBlocked
+          ? []
+          : [
+              {
+                key: "approve",
+                label: "Approve",
+                style: "primary",
+                needsReason: false,
+              },
+              {
+                key: "reject",
+                label: "Reject",
+                style: "danger",
+                needsReason: true,
+              },
+              {
+                key: "delegate",
+                label: "Delegate",
+                style: "secondary",
+                needsReason: true,
+              },
+            ],
         source: { kind: "timesheet_week_gate", id: gate.id },
       });
     }
@@ -117,7 +159,8 @@ export const timesheetWeekAdapter: InboxAdapter = {
       // never on the week's own last day, and never by the database
       // server's clock or its Monday-based week.
       const today = ctx.asOf.slice(0, 10);
-      const weeks = (await db.execute<OwnWeekRow>(sql`
+      const weeks = (
+        await db.execute<OwnWeekRow>(sql`
         select id::text as id, week_start::text as week_start, status
           from timesheet_weeks
          where org_id = ${ctx.orgId}
@@ -126,7 +169,8 @@ export const timesheetWeekAdapter: InboxAdapter = {
            and week_start + 7 <= ${today}::date
          order by week_start desc
          limit 10
-      `)).rows;
+      `)
+      ).rows;
       for (const week of weeks) {
         // A week with nothing recorded in which every working day was
         // approved leave or a non-working calendar day owes no timesheet.
@@ -163,16 +207,34 @@ export const timesheetWeekAdapter: InboxAdapter = {
     if (sourceId.startsWith("gate:")) {
       const gateId = sourceId.slice("gate:".length);
       if (actionKey === "approve") {
-        await decideGate({ gateId, decision: "approved", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+        await decideGate({
+          gateId,
+          decision: "approved",
+          userId: ctx.actorId,
+          comment: reason,
+          allowedSubsidiaryIds,
+        });
         return;
       }
       if (actionKey === "reject") {
-        await decideGate({ gateId, decision: "rejected", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
+        await decideGate({
+          gateId,
+          decision: "rejected",
+          userId: ctx.actorId,
+          comment: reason,
+          allowedSubsidiaryIds,
+        });
         return;
       }
       if (actionKey === "delegate") {
         const delegation = parseDelegationReason(reason);
-        await delegateGate(gateId, ctx.actorId, delegation.toUserId, allowedSubsidiaryIds, delegation.note);
+        await delegateGate(
+          gateId,
+          ctx.actorId,
+          delegation.toUserId,
+          allowedSubsidiaryIds,
+          delegation.note,
+        );
         return;
       }
     }

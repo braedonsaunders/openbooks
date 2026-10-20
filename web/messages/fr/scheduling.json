@@ -138,7 +138,7 @@
     "discard": "Abandonner les modifications",
     "submit": "Soumettre pour publication",
     "submitted": "{count, plural, one {Une modification soumise pour publication.} other {# modifications soumises pour publication.}}",
-    "governedExplain": "Tableau encadré : publier enregistre une publication. Si un flux d’approbation s’applique, les modifications sont publiées une fois approuvées.",
+    "flowExplain": "La publication soumet ces modifications aux Flows de votre organisation. Sans étape d’approbation, elles sont publiées immédiatement.",
     "awaiting": "{count, plural, one {# modification attend} other {# modifications attendent}} la décision de publication.",
     "awaitingFlow": "Un flux d’approbation décide cette publication dans Approbations. D’ici là, les modifications soumises restent verrouillées.",
     "openApprovals": "Ouvrir Approbations"

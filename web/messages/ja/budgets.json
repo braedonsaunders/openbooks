@@ -21,7 +21,10 @@
     "total": "予算合計",
     "updated": "更新日"
   },
-  "kind": { "budget": "予算", "forecast": "予測" },
+  "kind": {
+    "budget": "予算",
+    "forecast": "予測"
+  },
   "status": {
     "draft": "下書き",
     "pending_approval": "承認待ち",
@@ -97,7 +100,8 @@
     "reject": "差し戻し",
     "openReport": "予算対実績",
     "exportCsv": "CSV をエクスポート",
-    "exportXlsx": "Excel をエクスポート"
+    "exportXlsx": "Excel をエクスポート",
+    "withdraw": "申請を取り下げる"
   },
   "confirm": {
     "archive": "この予算をアーカイブしますか？",
@@ -137,7 +141,8 @@
     "revisionConflict": "この予算は別の場所で変更されました。続行するには再読み込みしてください。",
     "selfApprovalForbidden": "自分が提出した予算を承認することはできません。他の承認者に判断を依頼してください。",
     "created": "予算の下書きを作成しました。",
-    "savedWithLineFailure": "予算の下書きは作成されましたが、明細を保存できませんでした（{reason}）。下書きを開きました。再試行する前に明細を確認してください。"
+    "savedWithLineFailure": "予算の下書きは作成されましたが、明細を保存できませんでした（{reason}）。下書きを開きました。再試行する前に明細を確認してください。",
+    "withdrawn": "申請を取り下げました"
   },
   "import": {
     "button": "インポート",

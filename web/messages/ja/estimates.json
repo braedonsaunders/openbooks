@@ -52,7 +52,7 @@
     "timingAdvance": "前払い",
     "timingArrears": "後払い",
     "singlePeriodNote": "複数期間のランプには拡張サブスクリプションが必要です。ない場合、この明細は単一期間として請求されます。",
-    "approvalHint": "{threshold}%超の値引き、またはカタログ価格を下回る明細は、送付前にFlows承認が必要です。",
+    "approvalHint": "見積の承認は組織のFlowsで設定します。",
     "sendForSignature": "署名用に送信",
     "signerName": "署名者名",
     "signerEmail": "署名者メール",

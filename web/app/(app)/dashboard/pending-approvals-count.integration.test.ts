@@ -3,12 +3,8 @@ import { randomUUID } from "node:crypto";
 
 import test from "node:test";
 
-// The dashboard "Pending approvals" tile links to /inbox — the
-// unified worklist — so its number must BE the unified count (Flows gates,
-// payment runs among them, + gateless document-status approvals). It counted
-// only flow_gates, so it under-reported whenever a document waited outside a
-// gate, disagreeing with both the worklist page and get_vitals on the same
-// data.
+// Dashboard counts share the native Flow worklist; an unreceipted historical
+// document status cannot create a separate approval path.
 const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({ intl: true });
 
@@ -36,7 +32,7 @@ function authzFor(orgId: string, userId: string): Authz {
   };
 }
 
-test("dashboard pending-approvals tile counts the unified worklist, not just gates", { skip: !DB }, async () => {
+test("dashboard pending-approvals tile counts native document and payment gates", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId));
@@ -49,7 +45,7 @@ test("dashboard pending-approvals tile counts the unified worklist, not just gat
     }
     // One gated document (visible through its gate).
     const gatedId = await withBypassContext(() => seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId }));
-    await withOrgContext(org.orgId, () => submitForApproval("vendor_bill", gatedId));
+    await withOrgContext(org.orgId, () => submitForApproval("vendor_bill", gatedId, actors.submitterId));
     // One gateless document in pending_approval with no flow run behind it.
     const gatelessId = await withBypassContext(() => seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId }));
     await withBypassContext(() => db.execute(sql`update documents set status='pending_approval', submitted_by=${actors.submitterId},
@@ -83,8 +79,8 @@ test("dashboard pending-approvals tile counts the unified worklist, not just gat
     // The tile reader takes its org from the authz object but its SQL runs
     // through the ambient connection scope, exactly as the dashboard route
     // provides in production.
-    const metrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(authzFor(org.orgId, actors.approver1Id)));
-    assert.equal(metrics.pendingApprovals, 3, "tile must count gate + gateless document + payment-run gate");
+    const metrics = await withOrgContext(org.orgId, () => loadDashboardMetrics(authzFor(org.orgId, actors.approver1Id), ['kpi-pending-approvals']));
+    assert.equal(metrics.pendingApprovals, 2, "tile counts the two native gates and excludes an unreceipted status");
   } finally {
     await dropScratchOrg(org.orgId);
   }

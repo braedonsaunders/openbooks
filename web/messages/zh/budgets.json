@@ -21,7 +21,10 @@
     "total": "预算合计",
     "updated": "更新时间"
   },
-  "kind": { "budget": "预算", "forecast": "预测" },
+  "kind": {
+    "budget": "预算",
+    "forecast": "预测"
+  },
   "status": {
     "draft": "草稿",
     "pending_approval": "待审批",
@@ -97,7 +100,8 @@
     "reject": "退回",
     "openReport": "预算与实际对比",
     "exportCsv": "导出 CSV",
-    "exportXlsx": "导出 Excel"
+    "exportXlsx": "导出 Excel",
+    "withdraw": "撤回提交"
   },
   "confirm": {
     "archive": "归档此预算？",
@@ -137,7 +141,8 @@
     "revisionConflict": "此预算已在别处更改。请重新加载以继续。",
     "selfApprovalForbidden": "您不能批准自己提交的预算。请让其他审批人进行裁决。",
     "created": "预算草稿已创建。",
-    "savedWithLineFailure": "预算草稿已创建，但保存明细失败（{reason}）。现已打开草稿；重试前请检查明细。"
+    "savedWithLineFailure": "预算草稿已创建，但保存明细失败（{reason}）。现已打开草稿；重试前请检查明细。",
+    "withdrawn": "已撤回提交"
   },
   "import": {
     "button": "导入",

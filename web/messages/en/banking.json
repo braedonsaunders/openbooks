@@ -1486,7 +1486,7 @@
         "discard": "Session discarded",
         "confirm_opening": "Opening confirmed",
         "session_adjustment": "Session adjusted",
-        "revalidate_sign_off": "Independent sign-off review"
+        "revalidate_sign_off": "Sign-off review"
       },
       "signOffStatement": "Statement balance {balance} · through {date} · {matched} journal lines stamped · {excluded} statement lines excluded",
       "signOffSource": "Source evidence · balance {balance} · through {date} · {matched} cleared journal lines",
@@ -1502,12 +1502,12 @@
   },
   "revalidation": {
     "action": "Review neutral account history",
-    "title": "Independently review this sign-off",
+    "title": "Review this sign-off",
     "reason": "Review reason (10–500 characters)",
     "confirm": "Record review",
     "preview": "The signed balance through {date} remains {balance}. Review {entries} late entries ({lines} account lines) against the retained account evidence. The original statement, matches, sign-off and all clearing stamps remain unchanged.",
     "failed": "This sign-off review could not complete. Reload its evidence and try again.",
-    "recorded": "Independent sign-off review recorded",
+    "recorded": "Sign-off review recorded",
     "reasonRequired": "Enter a review reason of 10–500 characters.",
     "reviewedBadge": "Neutral history reviewed",
     "reviewedBasis": "Review evidence through {date}",

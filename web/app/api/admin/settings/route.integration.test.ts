@@ -31,8 +31,7 @@ const routeState: RouteState = {
         )
       : NextResponse.json({ error: "unauthorized" }, { status: 401 });
   },
-};
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
+};(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
 
 const mockAuthz = `
@@ -77,7 +76,6 @@ const { db, withBypass, withBypassContext, withOrgContext } =
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/testing/fixtures");
 const { updateCompanySettings } = await import("../../../../lib/company-settings");
-
 
 /** Drizzle wraps driver errors, so PostgreSQL messages live on `cause`. */
 function postgresCauseMessage(error: unknown): string {
@@ -256,36 +254,32 @@ async function waitForSettingsWriters(): Promise<void> {
   );
 }
 
-test(
-  "users-manage authority cannot write accounting policy; setup authority can",
-  async () => {
-    const fixture = await seed();
-    try {
-      authorize(fixture, ["admin.users.manage"]);
-      const readable = await withOrgContext(fixture.orgId, () => GET());
-      assert.equal(readable.status, 200);
-      assert.deepEqual(await readable.json(), {
-        org: {
-          name: (await settingsState(fixture.orgId)).name,
-          legalName: "",
-          country: "CA",
-          address: null,
-          legalForm: null,
-          taxClassification: null,
-          taxIds: {},
-          defaultLocale: "en",
-          timeZone: "UTC",
-          reportingFramework: "us_gaap",
-          taxFramework: "asc740",
-          requireVendorBillApproval: false,
-          requireStockCountReview: false,
-          billing: { defaultPaymentTermsId: null },
-        },
-      });
-      assert.deepEqual(routeState.requestedPermissions, ["admin.users.manage", "admin.users.manage"]);
-      routeState.requestedPermissions = [];
+test("users-manage authority cannot write accounting policy; setup authority can", async () => {
+  const fixture = await seed()
+  try {
+    authorize(fixture, ["admin.users.manage"]);
+    const readable = await withOrgContext(fixture.orgId, () => GET());
+    assert.equal(readable.status, 200)
+    assert.deepEqual(await readable.json(), {
+      org: {
+        name: (await settingsState(fixture.orgId)).name,
+        legalName: '',
+        country: 'CA',
+        address: null,
+        legalForm: null,
+        taxClassification: null,
+        taxIds: {},
+        defaultLocale: 'en',
+        timeZone: 'UTC',
+        reportingFramework: 'us_gaap',
+        taxFramework: 'asc740',
+        billing: { defaultPaymentTermsId: null },
+      },
+    })
+    assert.deepEqual(routeState.requestedPermissions, ["admin.users.manage", "admin.users.manage"]);
+    routeState.requestedPermissions = []
 
-      const denied = await put(fixture, {
+    const denied = await put(fixture, {
         baseCurrency: "USD",
         fiscalYearStartMonth: 4,
         taxFramework: "ias12",
@@ -293,32 +287,32 @@ test(
         fairValueRangePolicy: "off",
         controlAccounts: { ar: fixture.accounts.ar },
       });
-      assert.equal(denied.status, 403);
-      assert.deepEqual(routeState.requestedPermissions, ["admin.setup.manage"]);
-      assert.equal((await settingsState(fixture.orgId)).audits, 0);
+    assert.equal(denied.status, 403)
+    assert.deepEqual(routeState.requestedPermissions, ["admin.setup.manage"]);
+    assert.equal((await settingsState(fixture.orgId)).audits, 0);
 
-      authorize(fixture);
-      const allowed = await put(fixture, { taxFramework: "ias12" });
-      assert.equal(allowed.status, 200);
-      assert.equal(
+    authorize(fixture)
+    const allowed = await put(fixture, { taxFramework: "ias12" });
+    assert.equal(allowed.status, 200)
+    assert.equal(
         (await settingsState(fixture.orgId)).settings.taxFramework,
         "ias12",
       );
 
-      const invalid = await put(fixture, { reportingFramework: "local_gaap" });
-      assert.equal(invalid.status, 400);
-      const refusal = await invalid.json();
-      assert.match(refusal.error, /us_gaap/);
-      assert.match(refusal.error, /ifrs/);
-      assert.deepEqual(refusal.issues, [{ path: "reportingFramework", message: refusal.error }]);
+    const invalid = await put(fixture, { reportingFramework: "local_gaap" });
+    assert.equal(invalid.status, 400)
+    const refusal = await invalid.json()
+    assert.match(refusal.error, /us_gaap/)
+    assert.match(refusal.error, /ifrs/)
+    assert.deepEqual(refusal.issues, [{ path: "reportingFramework", message: refusal.error }]);
 
-      const explicit = await put(fixture, { reportingFramework: "ifrs" });
-      assert.equal(explicit.status, 200);
-      assert.equal(
+    const explicit = await put(fixture, { reportingFramework: "ifrs" });
+    assert.equal(explicit.status, 200)
+    assert.equal(
         (await settingsState(fixture.orgId)).settings.reportingFramework,
         "ifrs",
       );
-      const frameworkAudit = await withOrgContext(fixture.orgId, () =>
+    const frameworkAudit = await withOrgContext(fixture.orgId, () =>
         db.execute<{ change: [string, string] }>(sql`
           select changes->'reportingFramework' as change
             from audit_log
@@ -328,21 +322,20 @@ test(
            order by at desc
            limit 1`),
       );
-      assert.deepEqual(frameworkAudit.rows[0]?.change, ["us_gaap", "ifrs"]);
+    assert.deepEqual(frameworkAudit.rows[0]?.change, ["us_gaap", "ifrs"]);
 
-      // Tax presentation is an independent policy. Changing it back to ASC
-      // 740 must not move the authoritative financial-reporting framework.
-      const taxOnly = await put(fixture, { taxFramework: "asc740" });
-      assert.equal(taxOnly.status, 200);
-      const afterTaxEdit = await settingsState(fixture.orgId);
-      assert.equal(afterTaxEdit.settings.taxFramework, "asc740");
-      assert.equal(afterTaxEdit.settings.reportingFramework, "ifrs");
-    } finally {
+    // Tax presentation is an independent policy. Changing it back to ASC
+    // 740 must not move the authoritative financial-reporting framework.
+    const taxOnly = await put(fixture, { taxFramework: "asc740" });
+    assert.equal(taxOnly.status, 200)
+    const afterTaxEdit = await settingsState(fixture.orgId);
+    assert.equal(afterTaxEdit.settings.taxFramework, "asc740");
+    assert.equal(afterTaxEdit.settings.reportingFramework, "ifrs");
+  } finally {
       routeState.authz = null;
       await dropScratchOrg(fixture.orgId);
     }
-  },
-);
+})
 
 test("subsidiary-restricted setup administrators cannot change company settings", async () => {
   const fixture = await seed();

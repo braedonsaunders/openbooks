@@ -12,25 +12,28 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__timesheetSaveControls.user}' }
   return next(specifier, context)
 }})
+const { configureTimesheetReviewFixture,decideTimesheetFixture,installTimesheetFlowFixture } = await import('../../../testing/timesheet-flows')
 const { sql } = await import('drizzle-orm')
 const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 const { waitForLockWaiter } = await import('@openbooks/engine/testing/lock-wait')
 const { PUT } = await import('./route')
 const { POST: submitWeek } = await import('./submit/route')
-const { POST: approveWeek } = await import('./approve/route')
+
 const { loadWeek } = await import('./_lib')
 const { isIsoCalendarDate } = await import('@openbooks/engine/platform/business-date/module')
 
-async function fixture(requireApproval: boolean) {
+async function fixture(reviewRequired: boolean) {
   const org = await createScratchOrg()
   const actor = await createScratchUser(org.orgId, 'Timesheet auditor', 'reviewer')
   await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
+  await installTimesheetFlowFixture()
+  if(reviewRequired)await configureTimesheetReviewFixture(org.orgId,actor,false)
   session.user = { id: actor, orgId: org.orgId, name: 'Auditor', email: 'auditor@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
   const nativeId = () => { const id = randomUUID(); return `${id.slice(0, 14)}f${id.slice(15)}` }
   const employee = nativeId(), project = nativeId()
   await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({
-    features: { projects: true, timeTracking: true }, timesheets: { requireApproval },
+    features: { projects: true, timeTracking: true },
     laborCosting: { mode: 'post', hoursPerDay: "8", annualHours: "2080", components: [] },
     controlAccounts: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, laborWip: org.accounts.cogs, laborClearing: org.accounts.clearing },
   })}::jsonb where id=${org.orgId}`)
@@ -50,9 +53,14 @@ async function fixture(requireApproval: boolean) {
       method: 'PUT', body: JSON.stringify({ employee, week: '2026-07-12', rows: [row], expectedRevision, ...body }),
     })))
   }
+  const submit=async(week='2026-07-12')=>{
+    const loaded=await withOrgContext(org.orgId,()=>loadWeek(org.orgId,employee,week));
+    const additional=loaded.status==='approved'?{selections:loaded.pendingEntries!.map(({id,updatedAt})=>({id,updatedAt})),reason:'Submit the newly recorded hours.'}:{};
+    return withOrgContext(org.orgId,()=>submitWeek(new Request('http://audit.local/api/timesheets/submit',{method:'POST',body:JSON.stringify({employee,week,...additional})})));
+  }
   const snapshot = () => db.execute(sql`select * from time_entries where org_id=${org.orgId} order by id`)
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
-  return { org, actor, employee, project, row, save, snapshot, close }
+  return { org, actor, employee, project, row, save, submit, snapshot, close }
 }
 
 test('malformed weekly grids cannot erase existing hours', async () => {
@@ -82,23 +90,26 @@ test('malformed weekly grids cannot erase existing hours', async () => {
   } finally { await f.close() }
 })
 
-test('saving immediately approved hours captures rates and posts configured labor atomically', async () => {
+test('zero-gate submission captures rates and posts configured labor atomically', async () => {
   const f = await fixture(false)
   try {
     const response = await f.save({})
     assert.equal(response.status, 200, await response.clone().text())
+    assert.equal((await f.snapshot()).rows[0]!.status,'draft','saving captures a draft; submission applies the tenant policy');
+    const submitted=await f.submit();assert.equal(submitted.status,200,await submitted.clone().text());
     const entry = (await f.snapshot()).rows[0]!
     assert.equal(entry.status, 'approved')
     assert.equal(entry.cost_rate, '30.0000')
     assert.equal(entry.bill_rate, '100.0000')
     assert.ok(entry.cost_journal_entry_id)
-    assert.equal(entry.approved_by, null, 'automatic availability must not invent an approver')
+    assert.equal(entry.approved_by, f.actor, 'zero-gate release retains the actual native command actor')
     const journal = (await db.execute(sql`select count(*)::int as lines, sum(amount)::text as balance from journal_lines where org_id=${f.org.orgId} and entry_id=${entry.cost_journal_entry_id}`)).rows[0]!
     assert.equal(journal.lines, 2)
     assert.equal(journal.balance, '0.0000')
     // The next day's automatic approval preserves the first day's posted
     // evidence and applies effects only to the newly captured hours.
     assert.equal((await f.save({ rows: [{ ...f.row, hours: ['', '', '', '', '2', '', ''] }] })).status, 200)
+    const additional=await f.submit();assert.equal(additional.status,200,await additional.clone().text());
     const before = (await f.snapshot()).rows
     assert.equal(before.length, 2)
     assert.deepEqual(before.find(row => row.id === entry.id), entry)
@@ -107,8 +118,14 @@ test('saving immediately approved hours captures rates and posts configured labo
     assert.equal(posted.cost, '180.0000')
     // No accounting period exists for this second date. Failed effects must
     // roll back the time insert as well as the journal work.
-    await assert.rejects(f.save({ week: '2026-08-02' }), /no accounting period covers/)
-    assert.deepEqual((await f.snapshot()).rows, before)
+    assert.equal((await f.save({week:'2026-08-02'})).status,200);
+    const saved=(await f.snapshot()).rows;
+    const refused=await f.submit('2026-08-02');
+    const refusalBody=await refused.text();
+    assert.equal(refused.status,409,refusalBody);
+    assert.match(refusalBody,/No accounting period covers/);
+    assert.deepEqual((await f.snapshot()).rows,saved,'a refused submission preserves the saved draft and every posted row');
+    for(const row of before)assert.deepEqual(saved.find(candidate=>candidate.id===row.id),row)
   } finally { await f.close() }
 })
 
@@ -139,7 +156,7 @@ test('nonbillable employee hours retain their department and dated wage without 
     })))
     const submitted = await command(submitWeek)
     assert.equal(submitted.status, 200, await submitted.clone().text())
-    const approved = await command(approveWeek)
+    const approved = await withOrgContext(f.org.orgId,()=>decideTimesheetFixture({orgId:f.org.orgId,employee:f.employee,week:'2026-07-12',decision:'approved'}))
     assert.equal(approved.status, 200, await approved.clone().text())
     const entry = (await f.snapshot()).rows[0]!
     assert.equal(entry.id, draft.id)
@@ -166,12 +183,11 @@ test('nonbillable employee hours retain their department and dated wage without 
 })
 
 test('replaying an identical save returns the stored week without duplicating hours or effects', async () => {
-  // With automatic approval the first save leaves approved entries behind.
-  // A replayed grid must resolve to those rows — not insert a second copy of
-  // the week's hours alongside fresh financial effects.
+  // A replayed grid retains submitted financial evidence.
   const f = await fixture(false)
   try {
     assert.equal((await f.save({})).status, 200)
+    const submission=await f.submit();assert.equal(submission.status,200,await submission.clone().text());
     const first = (await f.snapshot()).rows
     assert.equal(first.length, 1)
     const journalsBefore = (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`)).rows[0]!.n

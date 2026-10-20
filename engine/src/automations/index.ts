@@ -1,6 +1,6 @@
 /**
  * HR-16 automations engine module — triggers, rules, conditions, actions,
- * exception-only approval, simulator, run log, action/reason codes, and
+ * simulator, run log, action/reason codes, and
  * cancel / rescind / correct event verbs on Flows.
  *
  * Boundary: this module depends on flows (subject adapters, delegations,
@@ -16,9 +16,7 @@ export * from "./triggers.ts";
 export * from "./evaluate.ts";
 export * from "./registry.ts";
 export * from "./execute.ts";
-export * from "./approvals.ts";
 export * from "./simulator.ts";
 export * from "./services.ts";
 export * from "./action-reasons.ts";
-export * from "./event-verbs.ts";
 export * from "./tick.ts";

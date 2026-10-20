@@ -2,14 +2,24 @@ import { lockSharedTimeAuthority } from '@openbooks/engine/projects/time-work-ta
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { canonicalDecimal, compareDecimal } from '@openbooks/engine/money/decimal'
+import {
+  canonicalDecimal,
+  compareDecimal,
+} from '@openbooks/engine/money/decimal'
 import { neg } from '@openbooks/engine/money/money'
-import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
-import { pinTimekeeper, pinTimesheetLineRefs, setTimesheetWeekStatus, weekStart, weekWindow } from '../app/api/timesheets/_lib'
+import {
+  lockScopeRow,
+  ScopeNotFoundError,
+} from '@openbooks/engine/organization/scope'
+import {
+  pinTimekeeper,
+  pinTimesheetLineRefs,
+  setTimesheetWeekStatus,
+  weekStart,
+  weekWindow,
+} from '../app/api/timesheets/_lib'
 import { checkProjectsWriteEnabled } from './features'
 import { lockReasonsFor } from './time-lifecycle'
-import { initialEntryStatus, loadTimePolicy } from './time-policy'
-import { runTimeApprovalEffects } from './time-approval'
 
 /**
  * Amendment refusals are user-actionable (the message names the remedy)
@@ -47,55 +57,128 @@ export async function amendTimeEntry(
   entryId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   replacement?: { hours: string; reason: string },
-): Promise<{ id: string; replacementId: string | null; week: string; amendsEntryId: string; amended: number }> {
+): Promise<{
+  id: string
+  replacementId: string | null
+  week: string
+  amendsEntryId: string
+  amended: number
+}> {
   return withOrgTransaction(orgId, async () => {
     // Probe only the employee identity first, then take the authoritative
     // party scope lock before locking the week header or entry.
-    const identity = (await db.execute<{ employee_party_id: string; worked_on: string }>(sql`
+    const identity = (
+      await db.execute<{ employee_party_id: string; worked_on: string }>(sql`
       select employee_party_id, worked_on::text from time_entries where id = ${entryId} and org_id = ${orgId}
-    `)).rows[0]
+    `)
+    ).rows[0]
     if (!identity) throw new TimeAmendmentRefusal('time entry not found')
-    await lockScopeRow(db, orgId, 'party', identity.employee_party_id, allowedSubsidiaryIds, 'share')
+    await lockScopeRow(
+      db,
+      orgId,
+      'party',
+      identity.employee_party_id,
+      allowedSubsidiaryIds,
+      'share',
+    )
     const entryWeek = weekStart(identity.worked_on)
     const days = weekWindow(entryWeek)
-    await lockSharedTimeAuthority(db,orgId,actorId,{ employeeId:identity.employee_party_id,from:days[0]!,through:days[6]!,requestedScope:allowedSubsidiaryIds,permission:"time.reopen" })
+    await lockSharedTimeAuthority(db, orgId, actorId, {
+      employeeId: identity.employee_party_id,
+      from: days[0]!,
+      through: days[6]!,
+      requestedScope: allowedSubsidiaryIds,
+      permission: 'time.reopen',
+    })
     await lockTimesheetWeek(orgId, identity.employee_party_id, entryWeek)
-    const src = (await db.execute<AmendableRow>(sql`
+    const src = await db.execute<AmendableRow>(sql`
       select ${AMENDABLE_COLUMNS}
         from time_entries
        where id = ${entryId} and org_id = ${orgId}
        for update
-    `))
+    `)
     const row = src.rows[0]
     if (!row) throw new TimeAmendmentRefusal('time entry not found')
-    if (row.employee_party_id !== identity.employee_party_id) throw new ScopeNotFoundError()
-    if (weekStart(row.worked_on) !== entryWeek) throw new TimeAmendmentRefusal('time entry week changed; retry the amendment')
-    if (row.amends_entry_id) throw new TimeAmendmentRefusal('an amendment cannot itself be amended — amend the original')
+    if (row.employee_party_id !== identity.employee_party_id)
+      throw new ScopeNotFoundError()
+    if (weekStart(row.worked_on) !== entryWeek)
+      throw new TimeAmendmentRefusal(
+        'time entry week changed; retry the amendment',
+      )
+    if (row.amends_entry_id)
+      throw new TimeAmendmentRefusal(
+        'an amendment cannot itself be amended — amend the original',
+      )
     // Only approved history is amended. An entry that is still draft,
     // submitted, or rejected remains editable, so a contra against it would
     // point at a row the weekly save can delete or replace — orphaning the
     // offset into phantom negative hours. Correct editable entries by saving,
     // and consumed ones here.
-    if (row.status !== 'approved') throw new TimeAmendmentRefusal('only an approved entry can be amended — edit or submit it first')
-    const ownedEmployee = await pinTimekeeper(orgId, row.employee_party_id, allowedSubsidiaryIds)
+    if (row.status !== 'approved')
+      throw new TimeAmendmentRefusal(
+        'only an approved entry can be amended — edit or submit it first',
+      )
+    const ownedEmployee = await pinTimekeeper(
+      orgId,
+      row.employee_party_id,
+      allowedSubsidiaryIds,
+    )
     if (!ownedEmployee) throw new TimeAmendmentRefusal('employee not found')
     row.employee_party_id = ownedEmployee
-    const already = (await db.execute(sql`
+    const already = await db.execute(sql`
       select 1 from time_entries
        where org_id = ${orgId} and amends_entry_id = ${entryId}
        limit 1
-    `))
-    if (already.rows.length) throw new TimeAmendmentRefusal('this entry already has an amendment')
+    `)
+    if (already.rows.length)
+      throw new TimeAmendmentRefusal('this entry already has an amendment')
 
-    if (replacement && (canonicalDecimal(replacement.hours,4) === null || compareDecimal(replacement.hours,'0') < 0 || compareDecimal(replacement.hours,'24') > 0 || replacement.reason.trim().length < 5 || replacement.reason.trim().length > 500)) throw new TimeAmendmentRefusal('Enter corrected hours between zero and 24, with a reason of 5–500 characters.')
-    const inserted = await insertAmendment(orgId, actorId, row, undefined, replacement?.reason)
-    const replacementId = replacement && compareDecimal(replacement.hours,'0') > 0 ? await insertAmendment(orgId,actorId,row,replacement.hours,replacement.reason) : null
-    if (initialEntryStatus(await loadTimePolicy(orgId)) === 'approved') await runTimeApprovalEffects(orgId, actorId, [inserted, ...(replacementId ? [replacementId] : [])], 'time.reopen')
+    if (
+      replacement &&
+      (canonicalDecimal(replacement.hours, 4) === null ||
+        compareDecimal(replacement.hours, '0') < 0 ||
+        compareDecimal(replacement.hours, '24') > 0 ||
+        replacement.reason.trim().length < 5 ||
+        replacement.reason.trim().length > 500)
+    )
+      throw new TimeAmendmentRefusal(
+        'Enter corrected hours between zero and 24, with a reason of 5–500 characters.',
+      )
+    const inserted = await insertAmendment(
+      orgId,
+      actorId,
+      row,
+      undefined,
+      replacement?.reason,
+    )
+    const replacementId =
+      replacement && compareDecimal(replacement.hours, '0') > 0
+        ? await insertAmendment(
+            orgId,
+            actorId,
+            row,
+            replacement.hours,
+            replacement.reason,
+          )
+        : null
     // The week header stays "approved" until we clear it — otherwise the
     // offset sits in a read-only week and the replacement hours cannot be
     // entered.
-    await setTimesheetWeekStatus(orgId, row.employee_party_id, weekStart(row.worked_on), 'draft', actorId, null)
-    return { id: inserted, replacementId, week: entryWeek, amendsEntryId: entryId, amended: 1 }
+    await setTimesheetWeekStatus(
+      orgId,
+      row.employee_party_id,
+      weekStart(row.worked_on),
+      'draft',
+      actorId,
+      null,
+    )
+    return {
+      id: inserted,
+      replacementId,
+      week: entryWeek,
+      amendsEntryId: entryId,
+      amended: 1,
+    }
   })
 }
 
@@ -155,16 +238,23 @@ const AMENDABLE_COLUMNS = sql`
   bill_rate_currency, bill_rate_book_id, bill_rate_version_id, bill_rate_line_id`
 
 /** Lock and re-read the lifecycle header before touching any entries in the week. */
-async function lockTimesheetWeek(orgId: string, employeeId: string, week: string): Promise<void> {
-  const header = (await db.execute<{ id: string; status: string }>(sql`
+async function lockTimesheetWeek(
+  orgId: string,
+  employeeId: string,
+  week: string,
+): Promise<void> {
+  const header = (
+    await db.execute<{ id: string; status: string }>(sql`
     select id, status from timesheet_weeks
      where org_id = ${orgId} and employee_party_id = ${employeeId} and week_start = ${week}::date
      for update
-  `)).rows[0]
+  `)
+  ).rows[0]
   if (!header) throw new TimeAmendmentRefusal('timesheet week not found')
   // Reading status under the lock deliberately rechecks any approval or
   // submission that completed while this amendment waited for the header.
-  if (header.status === 'empty') throw new TimeAmendmentRefusal('no locked entries to amend')
+  if (header.status === 'empty')
+    throw new TimeAmendmentRefusal('no locked entries to amend')
 }
 
 async function insertAmendment(
@@ -189,17 +279,22 @@ async function insertAmendment(
     timeTypeId: row.time_type_id,
     departmentId: row.department_id,
   })
-  if (!ownedRefs) throw new TimeAmendmentRefusal('amendment line references are not in this organization')
+  if (!ownedRefs)
+    throw new TimeAmendmentRefusal(
+      'amendment line references are not in this organization',
+    )
   // Consumed production time must retain its original valuation evidence.
   // Legacy project time without a snapshot keeps its established zero-cost
   // amendment contract; production cannot manufacture that evidence.
-  if (row.production_consumed_operation_id && row.cost_rate==null) {
-    throw new TimeAmendmentRefusal('Consumed production time is missing its wage-cost snapshot. Restore the original costing evidence before amending this entry; nothing changed.')
+  if (row.production_consumed_operation_id && row.cost_rate == null) {
+    throw new TimeAmendmentRefusal(
+      'Consumed production time is missing its wage-cost snapshot. Restore the original costing evidence before amending this entry; nothing changed.',
+    )
   }
   const costRate = row.cost_rate ?? '0'
   const contraHours = replacementHours ?? neg(row.hours)
-  const status = initialEntryStatus(await loadTimePolicy(orgId))
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const status = 'draft' as const
+  const inserted = await db.execute<{ id: string }>(sql`
     insert into time_entries
       (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
        project_id, work_order_id, wo_operation_id, project_task_id, department_id, memo, memo_is_private, is_billable, status, custom,
@@ -219,9 +314,12 @@ async function insertAmendment(
        ${row.bill_rate_currency}, ${row.bill_rate_book_id}, ${row.bill_rate_version_id}, ${row.bill_rate_line_id},
        ${replacementHours === undefined ? row.id : null}, ${replacementHours === undefined ? null : row.id}, ${actorId}, ${actorId})
     returning id
-  `))
+  `)
   const contraId = inserted.rows[0]?.id
-  if (inserted.rows.length !== 1 || !contraId) throw new TimeAmendmentRefusal("The time amendment could not be recorded. Nothing changed.")
+  if (inserted.rows.length !== 1 || !contraId)
+    throw new TimeAmendmentRefusal(
+      'The time amendment could not be recorded. Nothing changed.',
+    )
   // Durable correction evidence, part of the same atomic unit: the contra
   // rewrites the economics of consumed history, so the link back to the
   // original plus the before/after hours must commit with it — an audit
@@ -254,38 +352,57 @@ export async function amendLockedWeek(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ amended: number }> {
   return withOrgTransaction(orgId, async () => {
-    await lockScopeRow(db, orgId, 'party', employeeId, allowedSubsidiaryIds, 'share')
-    const ownedEmployee = await pinTimekeeper(orgId, employeeId, allowedSubsidiaryIds)
+    await lockScopeRow(
+      db,
+      orgId,
+      'party',
+      employeeId,
+      allowedSubsidiaryIds,
+      'share',
+    )
+    const ownedEmployee = await pinTimekeeper(
+      orgId,
+      employeeId,
+      allowedSubsidiaryIds,
+    )
     if (!ownedEmployee) throw new TimeAmendmentRefusal('employee not found')
     const week = weekStart(sundayIso)
     const days = weekWindow(week)
-    await lockSharedTimeAuthority(db,orgId,actorId,{ employeeId:ownedEmployee,from:days[0]!,through:days[6]!,requestedScope:allowedSubsidiaryIds,permission:"time.reopen" })
+    await lockSharedTimeAuthority(db, orgId, actorId, {
+      employeeId: ownedEmployee,
+      from: days[0]!,
+      through: days[6]!,
+      requestedScope: allowedSubsidiaryIds,
+      permission: 'time.reopen',
+    })
     await lockTimesheetWeek(orgId, ownedEmployee, week)
 
     // The header owns the week lifecycle and must precede entry locks, just as
     // it does during approval. Re-read status after acquiring the row lock so
     // a concurrent approval cannot leave this amendment acting on stale week
     // state (or deadlock while each transaction owns the other's rows).
-    const header = ((await db.execute<{ status: string }>(sql`
+    const header = (
+      await db.execute<{ status: string }>(sql`
       select status from timesheet_weeks
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and week_start = ${week}::date
        for update
-    `)).rows[0])
+    `)
+    ).rows[0]
     if (!header) throw new TimeAmendmentRefusal('timesheet week not found')
     if (header.status !== 'approved') {
       throw new TimeAmendmentRefusal('only an approved week can be amended')
     }
 
-    const src = (await db.execute<AmendableRow>(sql`
+    const src = await db.execute<AmendableRow>(sql`
       select ${AMENDABLE_COLUMNS}
         from time_entries
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
        for update
-    `))
+    `)
 
     let amended = 0
     const correctionIds: string[] = []
@@ -302,18 +419,25 @@ export async function amendLockedWeek(
         billingStatus: row.billing_status,
       })
       if (locks.length === 0) continue
-      const already = (await db.execute(sql`
+      const already = await db.execute(sql`
         select 1 from time_entries
          where org_id = ${orgId} and amends_entry_id = ${row.id}
          limit 1
-      `))
+      `)
       if (already.rows.length) continue
       correctionIds.push(await insertAmendment(orgId, actorId, row))
       amended += 1
     }
-    if (amended === 0) throw new TimeAmendmentRefusal('no locked entries to amend')
-    if (initialEntryStatus(await loadTimePolicy(orgId)) === 'approved') await runTimeApprovalEffects(orgId,actorId,correctionIds,'time.reopen')
-    await setTimesheetWeekStatus(orgId, ownedEmployee, week, 'draft', actorId, null)
+    if (amended === 0)
+      throw new TimeAmendmentRefusal('no locked entries to amend')
+    await setTimesheetWeekStatus(
+      orgId,
+      ownedEmployee,
+      week,
+      'draft',
+      actorId,
+      null,
+    )
     return { amended }
   })
 }

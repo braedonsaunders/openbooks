@@ -1,3 +1,5 @@
+import { lockApprovalSubject } from "../platform/approval-routing.ts";
+import { requestNativeCommandApproval } from "../platform/approval-routing.ts";
 import { canonicalJson } from '../platform/canonical-json.ts';
 import { sql, and, eq } from 'drizzle-orm';
 import { db, schema, withOrg, type SqlExecutor } from '../platform/db.ts';
@@ -29,7 +31,8 @@ export type RebateClaim = {
   created_by: string; approved_by: string | null; settlement_document_id: string | null; settlement_entry_id?: string | null; settlement_basis?: unknown;
 };
 async function enabled(tx: SqlExecutor, orgId: string) {
-  if (!await lockAndCheckOrgFeature(tx,orgId,'rebateManagement')) throw new RebateError('Enable Rebate management in Company Settings → Features');
+  if (!(await lockAndCheckOrgFeature(tx,orgId,'rebateManagement')))
+    throw new RebateError('Enable Rebate management in Company Settings → Features');
 }
 async function mutex(tx: SqlExecutor, orgId: string, subsidiaryId: string) {
   await lockLedgerSetupFence(tx,orgId,'shared');
@@ -41,17 +44,40 @@ async function agreement(tx: SqlExecutor,orgId: string,id: string): Promise<Reba
   if (!row) throw new ScopeNotFoundError();
   return row;
 }
-export async function approveRebateAgreement(orgId: string, actorId: string, id: string, reason: string) {
+export async function approveRebateAgreement(
+  orgId: string,
+  actorId: string,
+  id: string,
+  reason: string,
+  approvalRunId?: string,
+) {
   if (reason.trim().length<8) throw new RebateError('Enter an approval reason');
   return withOrg(orgId, async () => {
+    const identity = (
+      await db.execute<{ side: string }>(
+        sql`select side from rebate_agreements where org_id=${orgId} and id=${id}`,
+      )
+    ).rows[0];
+    if (!identity) throw new ScopeNotFoundError();
+    await lockApprovalSubject(orgId, `${identity.side}_rebate_agreement`, id);
     await lockLedgerSetupFence(db,orgId,'shared');
-    const row=await agreement(db,orgId,id);
-    await mutex(db,orgId,row.subsidiary_id);
-    await enabled(db,orgId);
+    const row = await agreement(db, orgId, id);
+    await mutex(db, orgId, row.subsidiary_id);
+    await enabled(db, orgId);
     await lockActorCommandAuthority(db,orgId,actorId,row.subsidiary_id,permission(row.side));
     const current=(await db.execute<RebateAgreement>(sql`select * from rebate_agreements where org_id=${orgId} and id=${id} for update`)).rows[0]!;
-    if (current.created_by===actorId) throw new RebateError('An independent operator must approve this agreement');
     if (current.status!=='draft') throw new RebateError('This agreement is already approved');
+    if (
+      await requestNativeCommandApproval({
+        orgId,
+        actorId,
+        subjectKind: `${current.side}_rebate_agreement`,
+        subjectId: id,
+        command: { reason: reason.trim() },
+        approvalRunId,
+      })
+    )
+      return { id, pendingApproval: true };
     validateRebateTerms({ method: current.method,tierBasis: current.tier_basis,tiers: current.tiers,targetUnitCost: current.target_unit_cost,marginPercent: current.margin_percent });
     if (!(await db.execute(sql`update rebate_agreements set status='approved',approved_by=${actorId},approved_at=now(),updated_by=${actorId},updated_at=now()
       where org_id=${orgId} and id=${id} and status='draft' returning id`)).rows[0]) throw new RebateError('Agreement approval could not be saved');
@@ -93,15 +119,16 @@ async function eligibleLines(tx: SqlExecutor,orgId: string,a: RebateAgreement, d
 /** Re-measure the approved earning periods in one legal entity. Target changes
  * are appended as signed accrual deltas, including returns, voids and retroactive
  * tier crossings. The triggering document's posting unit owns this transaction. */
-export async function accrueRebatesForDocument(orgId: string,documentId: string,actorId: string | null,postingDate?: string) {
+export async function accrueRebatesForDocument(orgId: string,documentId: string,actorId: string | null,postingDate?: string,
+) {
   return withOrg(orgId, async () => {
     await lockLedgerSetupFence(db,orgId,'shared');
     const doc=(await db.execute<{subsidiary_id:string;posting_date:string;kind:string}>(sql`select coalesce(subsidiary_id,(select id from subsidiaries where org_id=${orgId} and parent_id is null)) as subsidiary_id,coalesce(posting_date,document_date)::text as posting_date,kind from documents where org_id=${orgId} and id=${documentId}`)).rows[0];
     if (!doc) throw new ScopeNotFoundError();
     if (!['customer_invoice','cash_sale','customer_credit','cash_refund','vendor_bill','vendor_credit'].includes(doc.kind)) return;
-    if (!await lockAndCheckOrgFeature(db,orgId,'rebateManagement')) return;
+    if (!(await lockAndCheckOrgFeature(db,orgId,'rebateManagement'))) return;
     if (!doc.subsidiary_id) throw new RebateError('Rebate posting requires a legal entity');
-    await mutex(db,orgId,doc.subsidiary_id);
+    await mutex(db, orgId, doc.subsidiary_id);
     await refreshEntityAccruals(db,orgId,doc.subsidiary_id,actorId,postingDate ?? doc.posting_date,documentId);
   });
 }
@@ -202,15 +229,39 @@ export async function rebateClaimContext(tx:SqlExecutor,orgId:string,actorId:str
   if (!locked) throw new ScopeNotFoundError();
   return {claim:locked,agreement:a};
 }
-export async function approveRebateClaim(orgId:string,actorId:string,id:string,reason:string) {
+export async function approveRebateClaim(
+  orgId: string,
+  actorId: string,
+  id: string,
+  reason: string,
+  approvalRunId?: string,
+) {
   if (reason.trim().length<8) throw new RebateError('Enter an approval reason');
-  return withOrg(orgId,async()=>{
+  return withOrg(orgId, async () => {
+    const identity = (
+      await db.execute<{ side: string }>(
+        sql`select a.side from rebate_claims c join rebate_agreements a on a.org_id=c.org_id and a.id=c.agreement_id where c.org_id=${orgId} and c.id=${id}`,
+      )
+    ).rows[0];
+    if (!identity) throw new ScopeNotFoundError();
+    await lockApprovalSubject(orgId, `${identity.side}_rebate_claim`, id);
     await lockLedgerSetupFence(db,orgId,'shared');
-    const {claim}=await rebateClaimContext(db,orgId,actorId,id);
+    const { claim, agreement: owningAgreement } = await rebateClaimContext(db,orgId,actorId,id);
     if (claim.status!=='draft') throw new RebateError('Only a draft claim can be approved');
-    if (claim.created_by===actorId) throw new RebateError('An independent operator must approve the rebate claim');
+    if (
+      await requestNativeCommandApproval({
+        orgId,
+        actorId,
+        subjectKind: `${owningAgreement.side}_rebate_claim`,
+        subjectId: id,
+        command: { reason: reason.trim() },
+        approvalRunId,
+      })
+    )
+      return { id, pendingApproval: true };
     if (!(await db.execute(sql`update rebate_claims set status='approved',approved_by=${actorId},approved_at=now(),updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${id} and status='draft' returning id`)).rows[0]) throw new RebateError('Claim approval could not be saved');
-    await audit(db,orgId,actorId,'rebate_claims',id,'approve',reason,claim,{status:'approved'}); return {id};
+    await audit(db,orgId,actorId,'rebate_claims',id,'approve',reason,claim,{status:'approved'});
+    return { id };
   });
 }
 
@@ -248,8 +299,13 @@ export async function settleRebatePayment(orgId:string,actorId:string,id:string,
 /** Native credits and recovery invoices use the accrual account as their
  * financial leg. Linking the document does not settle a claim; only its posted
  * journal, checked here inside the posting unit, clears the claim. */
-export async function recordRebateSettlementDocument(orgId:string,actorId:string,claimId:string,documentId:string) {
-  const {claim}=await rebateClaimContext(db,orgId,actorId,claimId);
+export async function recordRebateSettlementDocument(
+  orgId: string,
+  actorId: string,
+  claimId: string,
+  documentId: string,
+) {
+  const { claim, agreement: owningAgreement } = await rebateClaimContext(db,orgId,actorId,claimId);
   if (claim.status!=='approved') throw new RebateError('Only an approved claim can create a settlement document');
   if (!(await db.execute(sql`update rebate_claims set status='document_pending',settlement_document_id=${documentId},updated_by=${actorId},updated_at=now()
     where org_id=${orgId} and id=${claimId} and status='approved' returning id`)).rows[0]) throw new RebateError('Settlement document could not be linked');
@@ -320,11 +376,17 @@ export async function assertRebateSettlementTaxBeforePosting(orgId:string,docume
 
 /** A generated settlement draft can be voided and prepared again. A posted
  * settlement must be reversed through its claim to retain accrual lineage. */
-export async function rebateSettlementVoidContext(orgId:string,documentId:string) {
+export async function rebateSettlementVoidContext(
+  orgId: string,
+  documentId: string,
+) {
   const row=(await db.execute<RebateClaim>(sql`select * from rebate_claims where org_id=${orgId} and settlement_document_id=${documentId}`)).rows[0];
   if (!row) return null;
-  const a=await agreement(db,orgId,row.agreement_id); await mutex(db,orgId,a.subsidiary_id);
-  return (await db.execute<RebateClaim>(sql`select * from rebate_claims where org_id=${orgId} and id=${row.id} for update`)).rows[0]??null;
+  const a=await agreement(db,orgId,row.agreement_id);
+  await mutex(db, orgId, a.subsidiary_id);
+  return (
+    (await db.execute<RebateClaim>(sql`select * from rebate_claims where org_id=${orgId} and id=${row.id} for update`)).rows[0]??null
+  );
 }
 export async function releaseVoidedRebateDraft(orgId:string,actorId:string,claim:RebateClaim) {
   if (claim.status!=='document_pending') throw new RebateError('Reverse the posted settlement through the rebate claim before voiding');
@@ -377,13 +439,19 @@ export async function reassessRebates(orgId:string,actorId:string,documentId:str
   });
 }
 
-export async function cancelRebateClaim(orgId:string,actorId:string,id:string,reason:string) {
+export async function cancelRebateClaim(
+  orgId: string,
+  actorId: string,
+  id: string,
+  reason: string,
+) {
   if(reason.trim().length<8) throw new RebateError('Enter a cancellation reason');
-  return withOrg(orgId,async()=>{
+  return withOrg(orgId, async () => {
     await lockLedgerSetupFence(db,orgId,'shared');
-    const {claim}=await rebateClaimContext(db,orgId,actorId,id);
+    const { claim, agreement: owningAgreement } = await rebateClaimContext(db,orgId,actorId,id);
     if(!['draft','approved'].includes(claim.status)||claim.settlement_document_id) throw new RebateError('Void or reverse the linked settlement before cancelling this claim');
     if(!(await db.execute(sql`update rebate_claims set status='cancelled',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and status in ('draft','approved') returning id`)).rows[0]) throw new RebateError('Claim cancellation could not be saved');
-    await audit(db,orgId,actorId,'rebate_claims',id,'cancel',reason,claim,{status:'cancelled'});return {id};
+    await audit(db,orgId,actorId,'rebate_claims',id,'cancel',reason,claim,{status:'cancelled'});
+    return { id };
   });
 }

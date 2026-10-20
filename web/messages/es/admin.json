@@ -1116,14 +1116,8 @@
     },
     "approvals": {
       "title": "Aprobaciones",
-      "description": "Controle cuándo se liberan las facturas de proveedores tras enviarlas.",
-      "requireVendorBillApproval": "Requerir aprobación antes de liberar facturas de proveedores",
-      "requireVendorBillApprovalHint": "Si está activado, una factura de proveedor solo se libera mediante un flujo de aprobación. Una factura sin un flujo coincidente queda enviada y se indica al remitente que configure un flujo o desactive esta opción.",
-      "requireStockCountReview": "Exigir otro usuario para contabilizar los recuentos",
-      "requireStockCountReviewHint": "Si está activado, el usuario que registró o envió un recuento no puede contabilizarlo — otro usuario con permiso debe hacerlo. Si está desactivado, cualquier usuario con permiso puede contabilizar su propio recuento.",
-      "noFlowTitle": "Sin flujo de aprobación para facturas de proveedores",
-      "noFlowWarningAuto": "No hay ningún flujo de aprobación configurado para las facturas de proveedores. <flows>Configure uno en Flujos</flows> — hasta entonces, las facturas enviadas se liberan automáticamente sin aprobador.",
-      "noFlowWarningRequired": "No hay ningún flujo de aprobación configurado para las facturas de proveedores. <flows>Configure uno en Flujos</flows> — hasta entonces, cada envío de factura de proveedor será rechazado."
+      "description": "Los flujos determinan si un envío requiere aprobación, quién lo aprueba y cuántas decisiones se necesitan. Sin etapas de aprobación aplicables, el envío continúa sin aprobador.",
+      "manageFlows": "Gestionar flujos de aprobación"
     },
     "documentKinds": {
       "vendorBill": "Factura de proveedor",
@@ -1924,7 +1918,10 @@
       "keyRemoved": "Se quitó la clave del proveedor documental.",
       "model": "Modelo de factura",
       "provider": "Lector de documentos",
-      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "Modelo de IA ({provider})"},
+      "providers": {
+        "azure_document_intelligence": "Azure Document Intelligence",
+        "llm_vision": "Modelo de IA ({provider})"
+      },
       "azureHint": "Lee facturas y recibos con su recurso y clave de Azure Document Intelligence.",
       "llmHint": "Lee facturas y recibos con el proveedor de IA, la clave y los modelos configurados abajo ({provider}). Cada campo lleva la confianza del modelo; los campos por debajo del umbral quedan vacíos para revisión.",
       "llmNoVision": "{provider} no lee imágenes. Elija abajo un proveedor con modelos de visión o use Azure Document Intelligence.",
@@ -2860,14 +2857,14 @@
       }
     },
     "usFilingLineage": {
-          "stateAccount": "Cuenta de declaración estatal",
-          "employer": "Empleador legal original",
-          "federalAccount": "EIN federal original",
-          "federalHelp": "Los EIN retirados siguen disponibles para acreditar fuentes históricas.",
-          "datesHelp": "Fechas inclusivas de la inscripción original. El cierre debe respetar la última nómina contabilizada.",
-          "sourceReference": "Referencia de la evidencia de inscripción original",
-          "sourceHelp": "Identifique la carta de inscripción o el documento conservado que acredita este EIN y el período.",
-          "reason": "Motivo del cambio"
+      "stateAccount": "Cuenta de declaración estatal",
+      "employer": "Empleador legal original",
+      "federalAccount": "EIN federal original",
+      "federalHelp": "Los EIN retirados siguen disponibles para acreditar fuentes históricas.",
+      "datesHelp": "Fechas inclusivas de la inscripción original. El cierre debe respetar la última nómina contabilizada.",
+      "sourceReference": "Referencia de la evidencia de inscripción original",
+      "sourceHelp": "Identifique la carta de inscripción o el documento conservado que acredita este EIN y el período.",
+      "reason": "Motivo del cambio"
     },
     "entities": {
       "schedule-patterns": {
@@ -3360,9 +3357,9 @@
         "singular": "regla de distribución"
       },
       "payroll-us-filing-account-employer-lineage": {
-              "title": "Historial del EIN del empleador",
-              "singularTitle": "Afiliación al EIN del empleador",
-              "description": "Titularidad original de la cuenta estatal, con fechas inclusivas y evidencia conservada."
+        "title": "Historial del EIN del empleador",
+        "singularTitle": "Afiliación al EIN del empleador",
+        "description": "Titularidad original de la cuenta estatal, con fechas inclusivas y evidencia conservada."
       },
       "payroll-filing-accounts": {
         "title": "Cuentas de declaración",
@@ -3932,8 +3929,14 @@
         "title": "Políticas de renovación de suscripciones",
         "description": "Condiciones de renovación con fecha de vigencia, responsable y recordatorios antes del vencimiento."
       },
-      "project-loss-policies": {"title": "Políticas de proyectos con pérdida", "description": "Si los proyectos que prevén pérdidas se señalan en el cierre y si el cierre espera su evaluación de pérdida."},
-      "expense-fx-policies": {"title": "Políticas de cambio de gastos", "description": "Si una línea de gasto en moneda extranjera puede convertirse a un tipo de cambio explícito con un motivo en lugar del tipo fechado."},
+      "project-loss-policies": {
+        "title": "Políticas de proyectos con pérdida",
+        "description": "Si los proyectos que prevén pérdidas se señalan en el cierre y si el cierre espera su evaluación de pérdida."
+      },
+      "expense-fx-policies": {
+        "title": "Políticas de cambio de gastos",
+        "description": "Si una línea de gasto en moneda extranjera puede convertirse a un tipo de cambio explícito con un motivo en lugar del tipo fechado."
+      },
       "service-dispatch-policies": {
         "title": "Política de despacho de servicio",
         "singularTitle": "Versión de la política de despacho",
@@ -5788,7 +5791,11 @@
         "fiscal_year": "Por ejercicio",
         "never": "Nunca"
       },
-      "projectLossPolicy": {"off": "Desactivada", "warn": "Advertir en el cierre", "require": "Exigir evaluación antes del cierre"}
+      "projectLossPolicy": {
+        "off": "Desactivada",
+        "warn": "Advertir en el cierre",
+        "require": "Exigir evaluación antes del cierre"
+      }
     },
     "laborCosting": {
       "navTitle": "Costeo de mano de obra",
@@ -7410,7 +7417,7 @@
       "chooseApprovedVersion": "Versión aprobada de la política",
       "chooseVersionHint": "Elija una versión aprobada antes de asignar empleados. Cada asignación conserva esa versión y sus fechas de vigencia.",
       "review": "Revisión y decisión",
-      "reviewHint": "Las condiciones presentadas requieren la aprobación de una persona vinculada independiente. Las condiciones aprobadas se conservan; los cambios requieren una nueva versión o una asignación sucesora.",
+      "reviewHint": "Los Flows del inquilino determinan las etapas de aprobación. Sin etapas, los envíos válidos se liberan de inmediato. Se conservan las condiciones aprobadas; los cambios usan una nueva versión o asignación sucesora.",
       "noActions": "No hay ninguna transición disponible para sus permisos y el estado actual de este registro.",
       "actions": {
         "submit": "Enviar para aprobación",
@@ -7490,7 +7497,7 @@
       "reason": "Motivo",
       "reasonHint": "Indique el motivo del cambio de política, sesión o resultado.",
       "review": "Revisión y acciones",
-      "reviewHint": "Las acciones usan la revisión actual. El aprobador debe ser distinto del autor.",
+      "reviewHint": "Las acciones usan la revisión actual del registro. Los Flows del inquilino determinan las etapas de aprobación y quién puede decidir.",
       "history": "Historial",
       "result": "Asistencia y evaluación",
       "resultHint": "Registre asistencia y evaluación reales. La verificación es independiente; anular conserva el resultado original.",
@@ -8096,10 +8103,7 @@
         "connectAction": "Conectar",
         "connectPlaceholder": "Elige un paso…",
         "connectEmpty": "Aún no hay otro paso — añade primero un nodo."
-      },
-      "ungatedOutcomeLabel": "Si no corresponde un paso de aprobación",
-      "ungatedApply": "Aplicar inmediatamente",
-      "ungatedRequireApproval": "Exigir un paso de aprobación"
+      }
     },
     "node": {
       "trigger": "Disparador",
@@ -9482,7 +9486,7 @@
     "changeSetDefaultName": "Cambios del sandbox",
     "captureChanges": "Capturar cambios",
     "captureFailed": "No se completó la captura. Revisa la lista de conjuntos de cambios antes de volver a intentarlo.",
-    "captureTitle": "Captura cambios de configuración para su revisión y aprobación independientes"
+    "captureTitle": "Capturar cambios de configuración para enviarlos mediante Flows"
   },
   "sandboxes": {
     "changeSets": {
@@ -9512,7 +9516,7 @@
       "capturedFrom": "Capturado de {name}",
       "retained": "Conjunto de cambios de configuración conservado",
       "listTitle": "Conjuntos de cambios",
-      "listDescription": "Inspeccione los cambios de configuración capturados, registre una revisión y aprobación independientes y aplique los cambios aprobados a producción.",
+      "listDescription": "Inspeccione los cambios de configuración capturados, envíelos mediante los Flows del inquilino y aplique en producción los cambios liberados.",
       "listBack": "Entornos",
       "requestFailed": "La solicitud no se completó. Actualice para comprobar el estado registrado antes de intentarlo de nuevo.",
       "working": "Procesando…",
@@ -9549,8 +9553,7 @@
       "reasons": {
         "incomplete": "Esta captura está incompleta. Capture un nuevo conjunto de cambios del entorno.",
         "noSnapshot": "Esta captura anterior no tiene instantánea de producción. Capture y revise un nuevo conjunto de cambios antes de aplicarlo.",
-        "empty": "No se capturaron cambios de configuración.",
-        "segregation": "El creador, el revisor, el aprobador y el aplicador deben ser cuatro usuarios distintos. Otro usuario autorizado debe realizar el siguiente paso."
+        "empty": "No se capturaron cambios de configuración."
       }
     }
   }

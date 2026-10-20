@@ -1,6 +1,11 @@
+import {
+  routeNativeApproval,
+  lockApprovalSubject,
+  cancelNativeApprovals,
+  readNativeApprovalDecision,
+} from "../platform/approval-routing.ts";
 import { sql } from "drizzle-orm";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
-import { completedGateAllowsSelfApproval } from "../flows/approval-decision-policy.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import {
@@ -908,11 +913,14 @@ export interface SubmitLeaveRequestQuery {
  * auto-approved. All filing validations re-run: a draft is a parking spot,
  * never a promise.
  */
-export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promise<LeaveRequestDTO> {
+export async function submitLeaveRequest(
+  query: SubmitLeaveRequestQuery,
+): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const requestId = requireUuid(query.requestId, "requestId");
   return withOrgTransaction(orgId, async () => {
+    await lockApprovalSubject(orgId, HRM_LEAVE_REQUEST_SUBJECT_KIND, requestId);
     const current = await loadRequestForUpdate(db, orgId, requestId);
     const { onBehalf } = await requireRequestAccess(db, orgId, actorId, current.employment_id);
     if (current.status !== "draft") {
@@ -943,66 +951,32 @@ export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promis
     await assertTimeBalance(db, orgId, actorId, current.leave_type_id, scope, startsOn, endsOn, String(current.hours));
     await assertNotice(db, orgId, current.leave_type_id, scope, startsOn, onBehalf, current.reason);
 
-    // Lazy: engine/src/flows/run.ts → registry → this service's adapter.
-    const { runRecordFlows } = await import("../flows/run.ts");
-    const flowResult = await runRecordFlows(
-      { kind: "on_submit", source: "api" },
-      HRM_LEAVE_REQUEST_SUBJECT_KIND,
-      requestId,
-      { orgId, userId: actorId },
-    );
-    const gatedRun = flowResult.runs.find((run) => run.gatesCreated > 0);
-    if (flowResult.failed || !gatedRun) {
-      const strayRunIds = flowResult.runs.map((run) => run.runId);
-      if (strayRunIds.length > 0) {
-        await db.execute(sql`
-          update flow_gates set status = 'cancelled', updated_at = now()
-           where run_id in (
-             select jsonb_array_elements_text(${JSON.stringify(strayRunIds)}::jsonb)::uuid
-           ) and org_id = ${orgId} and status in ('pending', 'escalated')
-        `);
-        await db.execute(sql`
-          update flow_runs set status = 'cancelled', finished_at = now()
-           where id in (
-             select jsonb_array_elements_text(${JSON.stringify(strayRunIds)}::jsonb)::uuid
-           ) and org_id = ${orgId} and status in ('running', 'waiting')
-        `);
-      }
-      if (flowResult.failed) {
-        throw new LeaveError(
-          "FLOW_ERROR",
-          await setupRemedyFor(db, {
-            orgId,
-            actorId,
-            setupPermission: "flows.manage",
-            setupRemedy: "approval routing failed for this leave — fix the approval flow, then submit again",
-            selfServiceRemedy:
-              "approval routing failed for this leave — ask your administrator to fix the approval flow, then submit again",
-          }),
-        );
-      }
-      throw new LeaveError(
-        "NO_FLOW",
-        await setupRemedyFor(db, {
-          orgId,
-          actorId,
-          setupPermission: "flows.manage",
-          setupRemedy: "no enabled approval flow produced an approval gate for leave requests — configure a flow for leave requests before submitting",
-          selfServiceRemedy:
-            "no enabled approval flow covers leave requests — ask your administrator to configure one before you submit",
-        }),
-      );
-    }
-    const submitted = (await db.execute<RequestRow>(sql`
+    const routing = await routeNativeApproval({
+      orgId,
+      actorId,
+      subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
+      subjectId: requestId,
+    });
+    const submitted = (
+      await db.execute<RequestRow>(sql`
       update hrm_leave_requests
-         set status = 'submitted', flow_instance_id = ${gatedRun.runId},
+         set status = 'submitted', flow_instance_id = ${routing.gatingRunId},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'draft'
       returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!submitted) {
       throw new LeaveError("BAD_STATE", "the request changed while submission was being recorded — reload it and submit again");
     }
+    if (routing.policy.kind === "ungated")
+      return releaseLeaveRequest({
+        orgId,
+        actorId,
+        requestId,
+        outcome: "approved",
+        comment: "Released by the tenant's zero-gate Flow policy",
+      });
     return toRequestDTO(submitted);
   });
 }
@@ -1042,29 +1016,27 @@ export interface WithdrawLeaveRequestQuery {
  * Withdraw a draft or a submitted request. Approved requests never
  * withdraw — they cancel, which reverses absences and voids inputs.
  */
-export async function withdrawLeaveRequest(query: WithdrawLeaveRequestQuery): Promise<LeaveRequestDTO> {
+export async function withdrawLeaveRequest(
+  query: WithdrawLeaveRequestQuery,
+): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const requestId = requireUuid(query.requestId, "requestId");
   const reason = requireReason(query.reason, "a withdrawal");
   return withOrgTransaction(orgId, async () => {
+    await lockApprovalSubject(orgId, HRM_LEAVE_REQUEST_SUBJECT_KIND, requestId);
     const current = await loadRequestForUpdate(db, orgId, requestId);
     await requireRequestAccess(db, orgId, actorId, current.employment_id);
     if (current.status !== "draft" && current.status !== "submitted") {
       throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be withdrawn — cancel it instead`);
     }
-    if (current.status === "submitted" && current.flow_instance_id) {
-      await db.execute(sql`
-        update flow_gates set status = 'cancelled', updated_at = now()
-         where run_id = ${current.flow_instance_id} and org_id = ${orgId}
-           and status in ('pending', 'escalated')
-      `);
-      await db.execute(sql`
-        update flow_runs set status = 'cancelled', finished_at = now()
-         where id = ${current.flow_instance_id} and org_id = ${orgId}
-           and status in ('running', 'waiting')
-      `);
-    }
+    if (current.status === "submitted")
+      await cancelNativeApprovals({
+        orgId,
+        actorId,
+        subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
+        subjectId: requestId,
+      });
     // The withdrawal reason is audit evidence on the terminal row.
     const withdrawn = (await db.execute<RequestRow>(sql`
       update hrm_leave_requests
@@ -1136,7 +1108,9 @@ async function committedRunCoveringDay(
  * (the decide savepoint) instead of opening a nested one, so everything
  * below commits or rolls back with the decision.
  */
-export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Promise<LeaveRequestDTO> {
+export async function releaseLeaveRequest(
+  query: ReleaseLeaveRequestQuery,
+): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const requestId = requireUuid(query.requestId, "requestId");
@@ -1145,34 +1119,51 @@ export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Prom
   }
   const comment = requireReason(query.comment, `a ${query.outcome} decision`);
   return withOrgTransaction(orgId, async () => {
+    await lockApprovalSubject(orgId, HRM_LEAVE_REQUEST_SUBJECT_KIND, requestId);
     const current = await loadRequestForUpdate(db, orgId, requestId);
     if (current.status !== "submitted") {
       throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be decided — only submitted requests decide`);
     }
-    // Permission/scope half over the trusted subject loaded in-transaction.
-    const subject = await requireHrmLeaveApprove(db, orgId, actorId, current.employment_id);
-    // Identity half over trusted-DB-loaded parties.
-    const approver = await loadActorPerson(db, orgId, actorId);
-    if (!approver.partyId) {
+    const approval = await readNativeApprovalDecision({
+      orgId,
+      actorId,
+      subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
+      subjectId: requestId,
+      outcome: query.outcome,
+      approvalRunId: query.approvalRunId,
+    });
+    const proof = (
+      await db.execute<{ valid: boolean }>(
+        sql`select public.flow_subject_decision_authorized(r.org_id,'hrm_leave_request',r.id,${actorId},public.leave_request_approval_fingerprint(r),${query.outcome}) as valid from hrm_leave_requests r where r.org_id=${orgId} and r.id=${requestId}`,
+      )
+    ).rows[0];
+    if (
+      !proof?.valid ||
+      (query.approvalRunId ? !approval : query.outcome !== "approved")
+    )
       throw new LeaveError(
         "REFUSED",
-        "leave approval refused: the approver has no linked person — link the approver to a person in Admin → Users → Link person before they decide",
+        "Submit the current leave request through Flows and complete its configured gates before release.",
       );
-    }
-    // No submitter, no decision: without submission evidence the
-    // independence legs cannot be evaluated, and no protection may be implied.
-    if (!current.created_by) {
-      throw new LeaveError(
-        "REFUSED",
-        "this submitted request carries no submission evidence — withdraw it and file a new request",
-      );
-    }
-    const submitter = await loadApprovalPerson(db, orgId, current.created_by);
-    checkApprovalIdentitySeparation({ approver, submitter, subjectWorkerPartyId: subject.workerPartyId,
-      requireIndependentActor: !await completedGateAllowsSelfApproval(db, {
-        orgId, subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND, subjectId: requestId,
-        actorId, outcome: query.outcome, approvalRunId: query.approvalRunId,
-      }) });
+    if (query.approvalRunId) {
+      const subject = await requireHrmLeaveApprove(db, orgId, actorId, current.employment_id);
+      if (!approval?.allowsSelfApproval) {
+        const approver = await loadActorPerson(db, orgId, actorId);
+        if (!current.created_by)
+          throw new LeaveError(
+            "REFUSED",
+            "The leave request has no author identity. Withdraw it and submit a new request.",
+          );
+        const submitter = await loadApprovalPerson(db, orgId, current.created_by);
+        checkApprovalIdentitySeparation({
+          approver,
+          submitter,
+          subjectWorkerPartyId: subject.workerPartyId,
+          requireIndependentActor: true,
+        });
+      }
+    } else
+      await requireRequestAccess(db, orgId, actorId, current.employment_id);
     const startsOn = String(current.starts_on).slice(0, 10);
     const endsOn = String(current.ends_on).slice(0, 10);
     if (query.outcome === "approved") {
@@ -1204,7 +1195,23 @@ export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Prom
     }
     if (query.outcome === "rejected") return toRequestDTO(decided);
     try {
-      await writeApprovalEffects(db, orgId, actorId, decided, subject.workerPartyId);
+      const employment = (
+        await db.execute<{ worker_party_id: string }>(
+          sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${decided.employment_id} for share`,
+        )
+      ).rows[0];
+      if (!employment)
+        throw new LeaveError(
+          "REFUSED",
+          "The employment is unavailable. Reload the leave request before release.",
+        );
+      await writeApprovalEffects(
+        db,
+        orgId,
+        actorId,
+        decided,
+        employment.worker_party_id,
+      );
     } catch (error) {
       // A concurrent approval landing first hits the storage exclusion: name
       // the overlap instead of leaking a PG exclusion code. db.execute

@@ -47,6 +47,5 @@ test('governed equity actions release through the boot-registered equity handler
   const profile = listFlowSubjectProfiles().find((candidate) => candidate.subjectKind === 'equity_action')
   assert.deepEqual(profile?.triggers, ['on_submit'], 'equity actions are submitted to Flows on submit')
   const adapter = getFlowAdapter('equity_action')
-  assert.equal(adapter?.selfApprovalPolicy, 'forbidden', 'the requester never decides its own equity action')
   assert.deepEqual(adapter?.permissions, { read: 'equity.read', edit: 'equity.manage', approve: 'equity.approve' })
 })

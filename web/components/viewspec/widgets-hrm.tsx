@@ -79,11 +79,21 @@ import { num, str, type WidgetRenderer } from './widget-props'
 /** HR workspace adapters; lifecycle permissions remain owned by the rendered components. */
 export const HRM_WIDGETS = {
   'hrm-install-app': () => <InstallEmployeeApp />,
-  'hrm-comp-workspace': (props) => <CompensationWorkspace data={props.data as ComponentProps<typeof CompensationWorkspace>['data']} />,
-  'hrm-comp-equity-workspace': (props) => <EquityWorkspace data={props.data as ComponentProps<typeof EquityWorkspace>['data']} />,
-  'hrm-conversation-create':(props)=><ConversationCreate employees={props.employees as ComponentProps<typeof ConversationCreate>['employees']} closeHref={str(props,'closeHref')??'/hrm/performance/conversations'}/>,
-  'hrm-goal-editor':(props)=><GoalEditor initial={props.initial as ComponentProps<typeof GoalEditor>['initial']} employees={props.employees as ComponentProps<typeof GoalEditor>['employees']} canWrite={props.canWrite===true} closeHref={str(props,'closeHref')??'/hrm/performance/goals'}/>,
-  'hrm-application-review': (props) => <ApplicationReview selection={props.selection as ComponentProps<typeof ApplicationReview>['selection']} queue={props.queue as ComponentProps<typeof ApplicationReview>['queue']} closeHref={str(props,'closeHref')??'/hrm/recruiting'} canManage={props.canManage===true}/>,
+  'hrm-comp-workspace': (props) => (
+    <CompensationWorkspace data={props.data as ComponentProps<typeof CompensationWorkspace>['data']} />
+  ),
+  'hrm-comp-equity-workspace': (props) => (
+    <EquityWorkspace data={props.data as ComponentProps<typeof EquityWorkspace>['data']} />
+  ),
+  'hrm-conversation-create': (props) => (
+    <ConversationCreate employees={props.employees as ComponentProps<typeof ConversationCreate>['employees']} closeHref={str(props,'closeHref')??'/hrm/performance/conversations'}/>
+  ),
+  'hrm-goal-editor': (props) => (
+    <GoalEditor initial={props.initial as ComponentProps<typeof GoalEditor>['initial']} employees={props.employees as ComponentProps<typeof GoalEditor>['employees']} canWrite={props.canWrite===true} closeHref={str(props,'closeHref')??'/hrm/performance/goals'}/>
+  ),
+  'hrm-application-review': (props) => (
+    <ApplicationReview selection={props.selection as ComponentProps<typeof ApplicationReview>['selection']} queue={props.queue as ComponentProps<typeof ApplicationReview>['queue']} closeHref={str(props,'closeHref')??'/hrm/recruiting'} canManage={props.canManage===true}/>
+  ),
   'hrm-pool-create': (props) => {
     const create = props.create as ComponentProps<typeof CandidatePoolCreateDrawer>['create']
     return create ? <CandidatePoolCreateDrawer create={create} /> : null
@@ -234,7 +244,9 @@ export const HRM_WIDGETS = {
   },
   /** The review-cycle flyout: the loader-resolved cycle with its reviews
    *  table and calibration island, closing by navigation. */
-  'hrm-review-template-designer': props => <ReviewTemplateDesigner initial={props.initial as ComponentProps<typeof ReviewTemplateDesigner>['initial']} closeHref={String(props.closeHref)} canEdit={!!props.canEdit} competencies={(props.competencies as ComponentProps<typeof ReviewTemplateDesigner>['competencies'])??[]}/>,
+  'hrm-review-template-designer': (props) => (
+    <ReviewTemplateDesigner initial={props.initial as ComponentProps<typeof ReviewTemplateDesigner>['initial']} closeHref={String(props.closeHref)} canEdit={!!props.canEdit} competencies={(props.competencies as ComponentProps<typeof ReviewTemplateDesigner>['competencies'])??[]}/>
+  ),
   'hrm-cycle-drawer': (props) => (
     <CycleDrawer
       detail={(props.detail as ComponentProps<typeof CycleDrawer>['detail']) ?? null}
@@ -255,7 +267,9 @@ export const HRM_WIDGETS = {
   ),
   /** The cycle create dialog, opened from the page header through
    *  `?cycle=new`; closing navigates the param away. */
-  'hrm-cycle-dialog': (props) => <CycleDialog create={(props.create as ComponentProps<typeof CycleDialog>['create']) ?? null} />,
+  'hrm-cycle-dialog': (props) => (
+    <CycleDialog create={(props.create as ComponentProps<typeof CycleDialog>['create']) ?? null} />
+  ),
   /** The Retention panel: trailing-twelve-months turnover, regrettable
    *  leavers, and the exit-record gaps, all loader-resolved. */
   /** The exit drawer (?exit=<employmentId>): HR managers record and
@@ -296,7 +310,9 @@ export const HRM_WIDGETS = {
     <QualificationRequirementManager
       today={str(props, 'today') ?? ''}
       types={(props.types as ComponentProps<typeof QualificationRequirementManager>['types']) ?? []}
-      labels={(props.labels as ComponentProps<typeof QualificationRequirementManager>['labels'])}
+      labels={
+        props.labels as ComponentProps<typeof QualificationRequirementManager>['labels']
+      }
     />
   ),
   'hrm-qualification-requirement-remove': (props) => (
@@ -312,7 +328,9 @@ export const HRM_WIDGETS = {
   /** Label/value facts behind the Me profile and overview panels — the
    *  loader-resolved rows, never ids. Empty sets render the loader's empty
    *  line (a missing address is legitimate) rather than a blank panel. */
-  'hrm-facts': (props) => <HrmFacts facts={(props.facts as ComponentProps<typeof HrmFacts>['facts']) ?? []} empty={str(props, 'empty')} />,
+  'hrm-facts': (props) => (
+    <HrmFacts facts={(props.facts as ComponentProps<typeof HrmFacts>['facts']) ?? []} empty={str(props, 'empty')} />
+  ),
   /** The Explain drawer (?explain=<stubId>): the deterministic payslip
    *  trace as a table with diff chips. Renders nothing without one. */
   'hrm-explain-drawer': (props) => {
@@ -482,7 +500,9 @@ export const HRM_WIDGETS = {
   /** Award operational list over the prepared hrm_benefit_awards source:
    *  shared PagedTable composition with the true population and the
    *  truncation notice in the footer. */
-  'hrm-benefit-delivery-table': (props) => <BenefitDeliveryTable rows={(props.rows as ComponentProps<typeof BenefitDeliveryTable>['rows']) ?? []} text={props.text as ComponentProps<typeof BenefitDeliveryTable>['text']} />,
+  'hrm-benefit-delivery-table': (props) => (
+    <BenefitDeliveryTable rows={(props.rows as ComponentProps<typeof BenefitDeliveryTable>['rows']) ?? []} text={props.text as ComponentProps<typeof BenefitDeliveryTable>['text']} />
+  ),
   'hrm-award-table': (props) => (
     <AwardPortfolioTable
       rows={(props.rows as ComponentProps<typeof AwardPortfolioTable>['rows']) ?? []}
@@ -657,7 +677,9 @@ export const HRM_WIDGETS = {
   ),
   /** Cycle budget pacing bar: computed percent with the over-budget
    *  tone, loader-resolved. */
-  'hrm-pacing-bar': (props) => <PacingBar pct={num(props, 'pct') ?? null} note={str(props, 'note') ?? ''} over={props.over === true} />,
+  'hrm-pacing-bar': (props) => (
+    <PacingBar pct={num(props, 'pct') ?? null} note={str(props, 'note') ?? ''} over={props.over === true} />
+  ),
   /** The cycle line drawer: propose form, decide buttons, and the
    *  append-only event history, opened from the line's `line` param. */
   'hrm-comp-line-drawer': (props) => {
@@ -740,7 +762,9 @@ export const HRM_WIDGETS = {
    *  nothing unless the line is proposed; null labels (readers) render
    *  nothing. The approve endpoint owns the grant and the transition. */
   'hrm-plan-line-approve': (props) => {
-    const approve = props.approve as ComponentProps<typeof PlanLineApproveButton>['labels'] & { approve: string } | null
+    const approve = props.approve as
+      | (ComponentProps<typeof PlanLineApproveButton>['labels'] & { approve: string })
+      | null
     if (!approve) return null
     return (
       <PlanLineApproveButton
@@ -748,7 +772,6 @@ export const HRM_WIDGETS = {
         lineId={str(props, 'lineId') ?? ''}
         lineStatus={str(props, 'lineStatus') ?? ''}
         labels={{ failed: approve.failed, submit: approve.submit, cancel: approve.cancel }}
-        approveLabel={approve.approve}
       />
     )
   },

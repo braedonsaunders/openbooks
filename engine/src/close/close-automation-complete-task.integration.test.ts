@@ -1,3 +1,7 @@
+import { requestCloseApproval } from "./approvals.ts";
+import { installEngineSeams } from "../composition/install.ts";
+import { decideGate } from "../flows/gates.ts";
+import { withdrawApprovalCommand } from "../flows/command-approval.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -7,7 +11,7 @@ import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
 import { addCloseEvidence, updateCloseTask } from "./tasks.ts";
 import { CloseError } from "../periods/period-policy.ts";
 import {
-  dropScratchOrg,
+  dropScratchOrg, seedApprovalFlow, grantScratchPermissions, seedDraftDocument,
 } from "../testing/fixtures.ts";
 import {
   setupCloseAutomationHarness,
@@ -20,7 +24,12 @@ type Harness = CloseAutomationHarness;
 
 async function setupCompleteTaskHarness(fingerprint: string | null = "fp-complete-task"): Promise<Harness> {
   // A null fingerprint stores NULL, leaving the run unvalidated for the refusal test.
-  return setupCloseAutomationHarness(fingerprint as string);
+  const h=await setupCloseAutomationHarness(fingerprint as string);
+  installEngineSeams();
+  await grantScratchPermissions(h.orgId,h.submitterId,["close.run","close.approve"]);
+  await grantScratchPermissions(h.orgId,h.approver1Id,["close.approve"]);
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,continuousClose}','true'::jsonb,true) where id=${h.orgId}`);
+  return h;
 }
 
 async function insertTask(
@@ -31,6 +40,7 @@ async function insertTask(
     reviewerId?: string | null;
     status?: string;
     completionMode?: string;
+    taskType?: string;
     evidenceRequired?: boolean;
     gateType?: string;
   } = {},
@@ -39,7 +49,7 @@ async function insertTask(
     insert into close_run_tasks
       (org_id, run_id, key, title, workstream, task_type, completion_mode, gate_type,
        status, sort_order, owner_id, reviewer_id, evidence_required, created_by, updated_by)
-    values (${h.orgId}, ${h.runId}, ${key}, ${key}, 'execute', 'action',
+    values (${h.orgId}, ${h.runId}, ${key}, ${key}, 'execute', ${overrides.taskType ?? 'action'},
             ${overrides.completionMode ?? "manual"}, ${overrides.gateType ?? "hard"},
             ${overrides.status ?? "ready"}, 10,
             ${overrides.ownerId === undefined ? h.submitterId : overrides.ownerId},
@@ -129,70 +139,57 @@ test("automation completes an authorized reviewerless manual task with task audi
   }
 });
 
-test("manual complete on a reviewer-gated task is refused; submit then approve reaches complete", { skip: !DB }, async () => {
-  const h = await setupCompleteTaskHarness();
-  try {
-    const taskId = await insertTask(h, "gated", { reviewerId: h.approver1Id });
-    // RED-adjacent: the canonical path must not complete past review.
-    await assert.rejects(
-      updateCloseTask({ orgId: h.orgId, runId: h.runId, taskId, actorId: h.submitterId, action: "complete" }),
-      (e: unknown) => e instanceof CloseError && /independent review.*submit it for review/.test(e.message),
-    );
-    assert.equal((await taskState(h, taskId)).status, "ready");
-    // The reachable manual route still works: owner submits, a different
-    // human approves, and the task completes with a review signoff.
-    await assert.rejects(
-      updateCloseTask({ orgId: h.orgId, runId: h.runId, taskId, actorId: h.submitterId, action: "approve" }),
-      (e: unknown) => e instanceof CloseError && /only the assigned reviewer/.test(e.message),
-    );
-    await updateCloseTask({ orgId: h.orgId, runId: h.runId, taskId, actorId: h.submitterId, action: "submit" });
-    assert.equal((await taskState(h, taskId)).status, "submitted");
-    // Segregation of duties still holds: the same person cannot review
-    // their own preparation.
-    const selfReviewedId = await insertTask(h, "self-reviewed", {
-      ownerId: h.submitterId,
-      reviewerId: h.submitterId,
-    });
-    await updateCloseTask({ orgId: h.orgId, runId: h.runId, taskId: selfReviewedId, actorId: h.submitterId, action: "submit" });
-    await assert.rejects(
-      updateCloseTask({ orgId: h.orgId, runId: h.runId, taskId: selfReviewedId, actorId: h.submitterId, action: "approve" }),
-      (e: unknown) => e instanceof CloseError && /different people/.test(e.message),
-    );
-    await updateCloseTask({ orgId: h.orgId, runId: h.runId, taskId, actorId: h.approver1Id, action: "approve" });
-    const task = await taskState(h, taskId);
-    assert.equal(task.status, "complete");
-    assert.equal(await taskSignoffCount(h, taskId), 1);
-    assert.equal(await taskAuditCount(h, taskId), 2);
-  } finally {
-    await dropScratchOrg(h.orgId);
-  }
+test("all ten tenant gates govern close task release and self-approval follows their frozen policy",{skip:!DB},async()=>{
+  const h=await setupCompleteTaskHarness();
+  try{
+    const taskId=await insertTask(h,"flow-reviewed",{reviewerId:h.approver1Id});
+    for(let index=0;index<10;index++)await seedApprovalFlow(h.orgId,{subjectKind:"close_task",assignees:[{type:"user",userId:h.submitterId}],mode:"all",preventSelfApproval:false});
+    const command={orgId:h.orgId,runId:h.runId,taskId,actorId:h.submitterId,action:"complete" as const};
+    await updateCloseTask(command);
+    assert.equal((await taskState(h,taskId)).status,"submitted");
+    await updateCloseTask(command);
+    assert.equal(await taskAuditCount(h,taskId),1,"an exact pending replay creates no duplicate submission event");
+    const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.orgId} and subject_kind='close_task' and subject_id=${taskId} order by id`)).rows;
+    assert.equal(gates.length,10);
+    await assert.rejects(decideGate({gateId:gates[0]!.id,userId:h.adminId,decision:"approved"}),/not an approver/);
+    for(const gate of gates){
+      assert.equal((await taskState(h,taskId)).status,"submitted");
+      await decideGate({gateId:gate.id,userId:h.submitterId,decision:"approved"});
+    }
+    const completed=await taskState(h,taskId);
+    assert.equal(completed.status,"complete");
+    assert.equal(completed.completed_by,h.submitterId);
+    assert.equal(await taskSignoffCount(h,taskId),1);
+  }finally{await dropScratchOrg(h.orgId);}
 });
 
-test("automation refuses a reviewer-gated task and never auto-approves", { skip: !DB }, async () => {
-  const h = await setupCompleteTaskHarness();
-  try {
-    const taskId = await insertTask(h, "gated-auto", { reviewerId: h.approver1Id });
+test("recalling a close task restores preparation while retaining its earlier gate decisions",{skip:!DB},async()=>{
+  const h=await setupCompleteTaskHarness();
+  try{
+    const taskId=await insertTask(h,"recall");
+    for(let index=0;index<2;index++)await seedApprovalFlow(h.orgId,{subjectKind:"close_task",assignees:[{type:"user",userId:h.approver1Id}],mode:"all"});
+    await updateCloseTask({orgId:h.orgId,runId:h.runId,taskId,actorId:h.submitterId,action:"complete"});
+    const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.orgId} and subject_id=${taskId} order by id`)).rows;
+    await decideGate({gateId:gates[0]!.id,userId:h.approver1Id,decision:"approved"});
+    await withdrawApprovalCommand({orgId:h.orgId,actorId:h.submitterId,subjectKind:"close_task",subjectId:taskId,reason:"Add the remaining reconciliation evidence"});
+    assert.equal((await taskState(h,taskId)).status,"in_progress");
+    assert.equal((await db.execute<{status:string}>(sql`select status from flow_gates where org_id=${h.orgId} and id=${gates[0]!.id}`)).rows[0]?.status,"approved");
+  }finally{await dropScratchOrg(h.orgId);}
+});
+
+test("automation submits the same tenant Flow without releasing the task before its gates",{skip:!DB},async()=>{
+  const h=await setupCompleteTaskHarness();
+  try{
+    const taskId=await insertTask(h,"flow-automation");
+    await seedApprovalFlow(h.orgId,{subjectKind:"close_task",assignees:[{type:"user",userId:h.approver1Id}],mode:"all"});
     await stabilize(h);
-    // Even the owner cannot auto-complete past review through automation.
-    const ownerOutcome = await fire(h, taskId, h.submitterId);
-    assert.equal(ownerOutcome.completed, 0);
-    assert.equal(ownerOutcome.failed, 1);
-    assert.equal((await taskState(h, taskId)).status, "ready");
-    assert.equal(await taskSignoffCount(h, taskId), 0);
-    assert.equal(await failedExecutionCount(h, taskId), 1);
-    // A non-owner is refused on owner grounds, exactly like the manual path.
-    const strangerOutcome = await fire(h, taskId, h.adminId);
-    assert.equal(strangerOutcome.failed, 1);
-    assert.equal((await taskState(h, taskId)).status, "ready");
-    // The pending review still gates approval: run approval only considers
-    // complete/waived tasks done.
-    const blockers = (await db.execute<{ tasks: string }>(sql`
-      select (select count(*) from close_run_tasks where run_id = ${h.runId} and org_id = ${h.orgId} and gate_type = 'hard'
-        and task_type <> 'approval' and status not in ('complete','waived')) as tasks`));
-    assert.equal(Number(blockers.rows[0]?.tasks ?? 0) >= 1, true);
-  } finally {
-    await dropScratchOrg(h.orgId);
-  }
+    const owner=await fire(h,taskId,h.submitterId);
+    assert.equal(owner.completed,1);assert.equal(owner.failed,0);
+    assert.equal((await taskState(h,taskId)).status,"submitted");
+    assert.equal(await taskSignoffCount(h,taskId),0);
+    const other=await fire(h,taskId,h.adminId);assert.equal(other.failed,1);
+    assert.equal((await taskState(h,taskId)).status,"submitted");
+  }finally{await dropScratchOrg(h.orgId);}
 });
 
 test("automation refuses blocked, non-owned, evidence-gated, and computed tasks", { skip: !DB }, async () => {
@@ -248,4 +245,111 @@ test("automation refuses to complete when the close run is not validated", { ski
   } finally {
     await dropScratchOrg(h.orgId);
   }
+});
+
+
+for(const count of [0,10])test(`close run approval tasks reflect exactly ${count} tenant Flow gates`,{skip:!DB},async()=>{
+ const h=await setupCompleteTaskHarness();
+ try{
+  const taskId=await insertTask(h,"run-approval",{taskType:"approval"});
+  for(let index=0;index<count;index++)await seedApprovalFlow(h.orgId,{subjectKind:"close_run",assignees:[{type:"user",userId:h.submitterId}],mode:"all",preventSelfApproval:false});
+  const result=await requestCloseApproval(h.orgId,h.runId,h.submitterId);
+  assert.equal(result.approvals,count);
+  const state=async()=>(await db.execute<{status:string}>(sql`select status from close_runs where org_id=${h.orgId} and id=${h.runId}`)).rows[0]!.status;
+  assert.equal(await state(),count?"review":"approved");
+  if(count)await assert.rejects(updateCloseTask({orgId:h.orgId,runId:h.runId,taskId,actorId:h.submitterId,action:"complete"}),/close run through its native Flow/);
+  const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.orgId} and subject_kind='close_run' and subject_id=${h.runId} order by id`)).rows;
+  for(const gate of gates){assert.equal(await state(),"review");await decideGate({gateId:gate.id,userId:h.submitterId,decision:"approved"});}
+  assert.equal(await state(),"approved");
+  const task=(await db.execute<{status:string;reviewed_by:string|null}>(sql`select status,reviewed_by from close_run_tasks where org_id=${h.orgId} and id=${taskId}`)).rows[0]!;
+  assert.equal(task.status,"complete");assert.equal(task.reviewed_by,count?h.submitterId:null);
+  assert.equal((await db.execute(sql`select id from flow_gates where org_id=${h.orgId} and subject_kind='close_task' and subject_id=${taskId}`)).rows.length,0,"the parent approval has one authoritative Flow subject");
+ }finally{await dropScratchOrg(h.orgId);}
+});
+
+test("changed manual evidence refuses the final close decision and a native recall permits fresh review",{skip:!DB},async()=>{
+ const h=await setupCompleteTaskHarness();
+ try{
+  const taskId=await insertTask(h,"review-statements");
+  await insertTask(h,"parent-approval",{taskType:"approval"});
+  await refreshCloseRun(h.orgId,h.runId,h.submitterId);
+  await updateCloseTask({orgId:h.orgId,runId:h.runId,taskId,actorId:h.submitterId,action:"complete"});
+  for(let index=0;index<2;index++)await seedApprovalFlow(h.orgId,{subjectKind:"close_run",assignees:[{type:"user",userId:h.approver1Id}],mode:"all"});
+  await requestCloseApproval(h.orgId,h.runId,h.submitterId);
+  const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.orgId} and subject_kind='close_run' and subject_id=${h.runId} order by id`)).rows;
+  await decideGate({gateId:gates[0]!.id,userId:h.approver1Id,decision:"approved"});
+  await addCloseEvidence({orgId:h.orgId,runId:h.runId,taskId,actorId:h.submitterId,evidenceType:"note",label:"Updated statement review evidence"});
+  await assert.rejects(decideGate({gateId:gates[1]!.id,userId:h.approver1Id,decision:"approved"}),/close evidence changed/i);
+  await withdrawApprovalCommand({orgId:h.orgId,actorId:h.submitterId,subjectKind:"close_run",subjectId:h.runId,reason:"Review the additional statement evidence"});
+  const retained=(await db.execute<{status:string}>(sql`select status from flow_gates where org_id=${h.orgId} and id=${gates[0]!.id}`)).rows[0]!;
+  assert.equal(retained.status,"approved","recall preserves earlier recorded decisions");
+  await requestCloseApproval(h.orgId,h.runId,h.submitterId);
+  const fresh=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.orgId} and subject_kind='close_run' and subject_id=${h.runId} and status='pending' order by id`)).rows;
+  assert.equal(fresh.length,2);
+  for(const gate of fresh)await decideGate({gateId:gate.id,userId:h.approver1Id,decision:"approved"});
+  assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where org_id=${h.orgId} and id=${h.runId}`)).rows[0]?.status,"approved");
+ }finally{await dropScratchOrg(h.orgId);}
+});
+
+test("ledger revalidation cancels stale task gates before invalidating preparation and preserves prior decisions",{skip:!DB},async()=>{
+ const h=await setupCompleteTaskHarness();
+ try{
+  const taskId=await insertTask(h,"reconcile-ledger");
+  await refreshCloseRun(h.orgId,h.runId,h.submitterId);
+  for(let index=0;index<2;index++)await seedApprovalFlow(h.orgId,{subjectKind:"close_task",assignees:[{type:"user",userId:h.approver1Id}],mode:"all"});
+  await updateCloseTask({orgId:h.orgId,runId:h.runId,taskId,actorId:h.submitterId,action:"complete"});
+  const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.orgId} and subject_id=${taskId} order by id`)).rows;
+  await decideGate({gateId:gates[0]!.id,userId:h.approver1Id,decision:"approved"});
+  await seedDraftDocument(h.orgId,{kind:"vendor_bill",createdBy:h.submitterId});
+  const revalidated=await refreshCloseRun(h.orgId,h.runId,h.submitterId);
+  assert.equal(revalidated.invalidated,1);
+  assert.equal((await taskState(h,taskId)).status,"invalidated");
+  const retained=(await db.execute<{status:string}>(sql`select status from flow_gates where org_id=${h.orgId} and id=${gates[0]!.id}`)).rows[0]!;
+  assert.equal(retained.status,"approved");
+  assert.equal((await db.execute<{status:string}>(sql`select status from flow_gates where org_id=${h.orgId} and id=${gates[1]!.id}`)).rows[0]?.status,"cancelled");
+  await updateCloseTask({orgId:h.orgId,runId:h.runId,taskId,actorId:h.submitterId,action:"complete"});
+  const fresh=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.orgId} and subject_id=${taskId} and status='pending' order by id`)).rows;
+  assert.equal(fresh.length,2);for(const gate of fresh)await decideGate({gateId:gate.id,userId:h.approver1Id,decision:"approved"});
+  assert.equal((await taskState(h,taskId)).status,"complete");
+ }finally{await dropScratchOrg(h.orgId);}
+});
+
+test("close status writes cannot replace native Flow approval or atomic period locking",{skip:!DB},async()=>{
+ const h=await setupCompleteTaskHarness();
+ const {errorChainMatches}=await import("../testing/error-chain.ts");
+ const {closeApprovedRun}=await import("./run-completion.ts");
+ try{
+  await assert.rejects(db.execute(sql`update close_runs set status='approved',approved_at=now(),approved_by=${h.submitterId},updated_by=${h.submitterId}
+    where org_id=${h.orgId} and id=${h.runId}`),error=>errorChainMatches(error,/complete every configured Flow gate/));
+  await requestCloseApproval(h.orgId,h.runId,h.submitterId);
+  await assert.rejects(db.execute(sql`update close_runs set approved_by=${h.adminId},updated_by=${h.adminId}
+    where org_id=${h.orgId} and id=${h.runId}`),error=>errorChainMatches(error,/actual actor and timestamp/));
+  await assert.rejects(db.execute(sql`update close_runs set status='closed',closed_at=now(),closed_by=${h.submitterId},updated_by=${h.submitterId}
+    where org_id=${h.orgId} and id=${h.runId}`),error=>errorChainMatches(error,/every scoped subledger and GL lock/));
+  await assert.rejects(db.execute(sql`update close_runs set status='published',published_at=now(),published_by=${h.submitterId},updated_by=${h.submitterId}
+    where org_id=${h.orgId} and id=${h.runId}`),error=>errorChainMatches(error,/native publication command/));
+  await closeApprovedRun(h.orgId,h.runId,h.submitterId);
+  assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where org_id=${h.orgId} and id=${h.runId}`)).rows[0]?.status,"closed");
+  assert.equal((await db.execute<{count:number}>(sql`select count(*)::int as count from period_locks l join close_runs r
+    on r.org_id=l.org_id and r.period_id=l.period_id and r.book_id=l.book_id
+    where r.org_id=${h.orgId} and r.id=${h.runId} and l.subsidiary_id is null and l.state='closed'`)).rows[0]?.count,6);
+ }finally{await dropScratchOrg(h.orgId);}
+});
+
+test("closing refuses changed manual evidence and retains its invalidation without sealing any period",{skip:!DB},async()=>{
+ const h=await setupCompleteTaskHarness();
+ const {closeApprovedRun}=await import("./run-completion.ts");
+ try{
+  const taskId=await insertTask(h,"retained-statement-review");
+  await updateCloseTask({orgId:h.orgId,runId:h.runId,taskId,actorId:h.submitterId,action:"complete"});
+  await requestCloseApproval(h.orgId,h.runId,h.submitterId);
+  await db.execute(sql`insert into close_task_evidence(org_id,run_id,task_id,evidence_type,label,snapshot,content_hash,created_by,updated_by)
+    values(${h.orgId},${h.runId},${taskId},'note','Additional retained source evidence','{}'::jsonb,encode(sha256(convert_to('{}','UTF8')),'hex'),${h.submitterId},${h.submitterId})`);
+  await assert.rejects(closeApprovedRun(h.orgId,h.runId,h.submitterId),/approval evidence changed/);
+  assert.deepEqual((await db.execute(sql`select status,approved_at,approved_by from close_runs where org_id=${h.orgId} and id=${h.runId}`)).rows[0],{status:"in_progress",approved_at:null,approved_by:null});
+  assert.equal((await db.execute<{count:number}>(sql`select count(*)::int as count from period_locks l join close_runs r
+    on r.org_id=l.org_id and r.period_id=l.period_id and r.book_id=l.book_id
+    where r.org_id=${h.orgId} and r.id=${h.runId} and l.state='closed'`)).rows[0]?.count,0);
+  assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${h.orgId} and subject_kind='close_run' and subject_id=${h.runId}`)).rows.length,1,"the earlier decision receipt remains retained");
+ }finally{await dropScratchOrg(h.orgId);}
 });

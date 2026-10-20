@@ -8,7 +8,10 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { resolveQuorumOutcome, type SiblingGate } from "./quorum.ts";
 
-const g = (id: string, status: SiblingGate["status"]): SiblingGate => ({ id, status });
+const g = (id: string, status: SiblingGate["status"]): SiblingGate => ({
+  id,
+  status,
+});
 
 describe("quorum 'any'", () => {
   test("first approval wins the gate and cancels pending siblings", () => {
@@ -22,14 +25,23 @@ describe("quorum 'any'", () => {
   });
 
   test("first rejection wins the gate and cancels pending siblings", () => {
-    const out = resolveQuorumOutcome("any", "rejected", [g("a", "rejected"), g("b", "pending")]);
+    const out = resolveQuorumOutcome("any", "rejected", [
+      g("a", "rejected"),
+      g("b", "pending"),
+    ]);
     assert.equal(out.resume, "reject");
     assert.deepEqual(out.cancelIds, ["b"]);
   });
 
   test("single-assignee gate: decision equals branch", () => {
-    assert.equal(resolveQuorumOutcome("any", "approved", [g("a", "approved")]).resume, "approve");
-    assert.equal(resolveQuorumOutcome("any", "rejected", [g("a", "rejected")]).resume, "reject");
+    assert.equal(
+      resolveQuorumOutcome("any", "approved", [g("a", "approved")]).resume,
+      "approve",
+    );
+    assert.equal(
+      resolveQuorumOutcome("any", "rejected", [g("a", "rejected")]).resume,
+      "reject",
+    );
   });
 });
 
@@ -45,13 +57,19 @@ describe("quorum 'all'", () => {
   });
 
   test("an approval with siblings still pending keeps waiting", () => {
-    const out = resolveQuorumOutcome("all", "approved", [g("a", "approved"), g("b", "pending")]);
+    const out = resolveQuorumOutcome("all", "approved", [
+      g("a", "approved"),
+      g("b", "pending"),
+    ]);
     assert.equal(out.resume, null);
     assert.deepEqual(out.cancelIds, []);
   });
 
   test("the last approval resumes the approve branch", () => {
-    const out = resolveQuorumOutcome("all", "approved", [g("a", "approved"), g("b", "approved")]);
+    const out = resolveQuorumOutcome("all", "approved", [
+      g("a", "approved"),
+      g("b", "approved"),
+    ]);
     assert.equal(out.resume, "approve");
     assert.deepEqual(out.cancelIds, []);
   });
@@ -78,9 +96,27 @@ describe("quorum 'all'", () => {
     const done = resolveQuorumOutcome("all", "approved", [
       g("a", "escalated"),
       g("b", "approved"),
-      g("c", "approved"),
+      { ...g("c", "approved"), escalatedFromGateId: "a" },
     ]);
     assert.equal(done.resume, "approve");
     assert.deepEqual(done.cancelIds, ["a"]);
   });
+});
+
+test("an all gate cannot substitute a cancelled or unproven escalation row for a required approval", () => {
+  for (const status of ["cancelled", "escalated"] as const)
+    assert.throws(
+      () =>
+        resolveQuorumOutcome("all", "approved", [
+          g("a", "approved"),
+          g("b", status),
+        ]),
+      /unresolved required decision/,
+    );
+  const replaced = resolveQuorumOutcome("all", "approved", [
+    g("a", "approved"),
+    g("b", "cancelled"),
+    { ...g("c", "approved"), escalatedFromGateId: "b" },
+  ]);
+  assert.equal(replaced.resume, "approve");
 });

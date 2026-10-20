@@ -126,9 +126,15 @@ function MultiCheck({ options, values, onChange, ariaLabel, disabled = false }: 
 }) {
   const t = useTranslations('allocations')
   if (options.length === 0 && values.length === 0) {
-    return <p className="text-xs text-slate-400">{t('rules.definition.noOptions')}</p>
+    return (
+      <p className="text-xs text-slate-400">
+        {t('rules.definition.noOptions')}
+      </p>
+    )
   }
-  return <TagInput value={values} onChange={onChange} options={options} ariaLabel={ariaLabel} placeholder={ariaLabel} allowNew={false} disabled={disabled} />
+  return (
+    <TagInput value={values} onChange={onChange} options={options} ariaLabel={ariaLabel} placeholder={ariaLabel} allowNew={false} disabled={disabled} />
+  )
 }
 
 /**
@@ -224,8 +230,13 @@ function ErrorBox({ message, onRetry, retryLabel }: { message: string; onRetry?:
 const TABS: DrawerTab[] = ['general', 'definition', 'versions', 'test']
 
 export function RuleDrawerHost({ ruleParam, closeHref, payrollExpenses = false }: { ruleParam: string; closeHref: string; payrollExpenses?: boolean }) {
-  if (ruleParam === 'new') return <AllocationRuleWizard closeHref={closeHref} payrollExpenses={payrollExpenses} />
-  return <RuleEditDrawer key={ruleParam} ruleId={ruleParam} closeHref={closeHref} />
+  if (ruleParam === 'new')
+    return (
+      <AllocationRuleWizard closeHref={closeHref} payrollExpenses={payrollExpenses} />
+    )
+  return (
+    <RuleEditDrawer key={ruleParam} ruleId={ruleParam} closeHref={closeHref} />
+  )
 }
 
 function TabStrip({ tab, onTab }: { tab: DrawerTab; onTab: (tab: DrawerTab) => void }) {
@@ -370,7 +381,9 @@ function RuleEditDrawer({ ruleId, closeHref }: { ruleId: string; closeHref: stri
       {error ? (
         <ErrorBox message={error} onRetry={reload} retryLabel={t('rules.drawer.retry')} />
       ) : detail === null || options === null ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('rules.drawer.loading')}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {t('rules.drawer.loading')}
+        </p>
       ) : tab === 'general' ? (
         <GeneralTab detail={detail} onSaved={(next) => { setDetail(next); router.refresh() }} onStale={reload} />
       ) : tab === 'definition' ? (
@@ -652,17 +665,24 @@ function DefinitionTab({
         >
           {detail.versions.map((entry) => (
             <option key={entry.version.id} value={entry.version.id}>
-              {t('rules.versions.version', { n: entry.version.versionNo })} · {entry.version.status}
+              {t('rules.versions.version', { n: entry.version.versionNo })} ·{' '}
+              {entry.version.status}
             </option>
           ))}
         </Select>
       </Field>
       {error ? <ErrorBox message={error} /> : null}
       {loaded === null ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('rules.drawer.loading')}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {t('rules.drawer.loading')}
+        </p>
       ) : (
         <>
-          {!isDraft ? <p className="text-sm text-slate-500 dark:text-slate-400">{t('rules.definition.readOnly')}</p> : null}
+          {!isDraft ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {t('rules.definition.readOnly')}
+            </p>
+          ) : null}
           <DrawerSection first title={t('rules.definition.windowHeading')}>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t('rules.definition.effectiveFrom')}>
@@ -674,9 +694,15 @@ function DefinitionTab({
             </div>
             <Field label={t('rules.definition.bookScope')}>
               <Select value={form.bookScope} disabled={!isDraft} aria-label={t('rules.definition.bookScope')} onChange={(e) => set('bookScope', e.target.value as DefinitionForm['bookScope'])}>
-                <option value="primary">{t('rules.definition.bookScopes.primary')}</option>
-                <option value="all_posting">{t('rules.definition.bookScopes.all_posting')}</option>
-                <option value="books">{t('rules.definition.bookScopes.books')}</option>
+                <option value="primary">
+                  {t('rules.definition.bookScopes.primary')}
+                </option>
+                <option value="all_posting">
+                  {t('rules.definition.bookScopes.all_posting')}
+                </option>
+                <option value="books">
+                  {t('rules.definition.bookScopes.books')}
+                </option>
               </Select>
             </Field>
             {form.bookScope === 'books' ? (
@@ -729,9 +755,15 @@ function DefinitionTab({
             </div>
             <Field label={t('rules.definition.accountScope')}>
               <Select value={form.accountScopeKind} disabled={!isDraft} aria-label={t('rules.definition.accountScope')} onChange={(e) => set('accountScopeKind', e.target.value as DefinitionForm['accountScopeKind'])}>
-                <option value="any">{t('rules.definition.accountScopes.any')}</option>
-                <option value="accounts">{t('rules.definition.accountScopes.accounts')}</option>
-                <option value="account_group">{t('rules.definition.accountScopes.account_group')}</option>
+                <option value="any">
+                  {t('rules.definition.accountScopes.any')}
+                </option>
+                <option value="accounts">
+                  {t('rules.definition.accountScopes.accounts')}
+                </option>
+                <option value="account_group">
+                  {t('rules.definition.accountScopes.account_group')}
+                </option>
               </Select>
             </Field>
             {form.accountScopeKind === 'accounts' ? (
@@ -779,22 +811,23 @@ function DefinitionTab({
                   )
                 })}
               </div>
-              {!form.payrollExpensesOnly && <div>
-                <Label>{filterLabels['party']}</Label>
-                <div className="space-y-2">
-                  {partyGroups.map((group) => (
-                    <div key={group.role}>
-                      <Label>{group.label}</Label>
-                      <MultiCheck
+              {!form.payrollExpensesOnly && (
+                <div>
+                  <Label>{filterLabels['party']}</Label>
+                  <div className="space-y-2">
+                    {partyGroups.map((group) => (
+                      <div key={group.role}>
+                        <Label>{group.label}</Label>
+                        <MultiCheck
                         disabled={!isDraft}
                         ariaLabel={group.label}
                         options={group.parties.map((item) => ({ value: item.id, label: item.label }))}
                         values={form.filterPartyIds}
                         onChange={(next) => set('filterPartyIds', next)}
                       />
-                    </div>
-                  ))}
-                  {partyGroups.length === 0 ? (
+                      </div>
+                    ))}
+                    {partyGroups.length === 0 ? (
                     <MultiCheck
                       disabled={!isDraft}
                       ariaLabel={filterLabels['party'] ?? 'party'}
@@ -803,18 +836,21 @@ function DefinitionTab({
                       onChange={(next) => set('filterPartyIds', next)}
                     />
                   ) : null}
+                  </div>
                 </div>
-              </div>}
-              {!form.payrollExpensesOnly && <div>
-                <Label>{filterLabels['item']}</Label>
-                <MultiCheck
+              )}
+              {!form.payrollExpensesOnly && (
+                <div>
+                  <Label>{filterLabels['item']}</Label>
+                  <MultiCheck
                   disabled={!isDraft}
                   ariaLabel={filterLabels['item'] ?? 'item'}
                   options={options.items.map((item) => ({ value: item.id, label: item.label }))}
                   values={form.filterItemIds}
                   onChange={(next) => set('filterItemIds', next)}
                 />
-              </div>}
+                </div>
+              )}
               {form.payrollExpensesOnly && (
                 <div>
                   <Label>{t('rules.definition.filters.payComponent')}</Label>
@@ -841,9 +877,12 @@ function DefinitionTab({
               ))}
               <div className="mt-2 space-y-1">
                 <Label>{t('rules.definition.filtersUntagged')}</Label>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('rules.definition.filtersUntaggedHint')}</p>
-                {(['department', 'location', 'class', 'project'] as const).map((dim) => (
-                  <Check
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('rules.definition.filtersUntaggedHint')}
+                </p>
+                {(['department', 'location', 'class', 'project'] as const).map(
+                  (dim) => (
+                    <Check
                     key={dim}
                     disabled={!isDraft}
                     checked={form.requireUntagged.includes(dim)}
@@ -856,24 +895,37 @@ function DefinitionTab({
                       )
                     }
                   >
-                    {filterLabels[dim]}
-                  </Check>
-                ))}
+                      {filterLabels[dim]}
+                    </Check>
+                  ),
+                )}
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t('rules.definition.applyPolicy')}>
                 <Select value={form.applyPolicy} disabled={!isDraft} aria-label={t('rules.definition.applyPolicy')} onChange={(e) => set('applyPolicy', e.target.value as DefinitionForm['applyPolicy'])}>
-                  <option value="automatic">{t('rules.definition.applyPolicies.automatic')}</option>
-                  <option value="suggest">{t('rules.definition.applyPolicies.suggest')}</option>
-                  <option value="manual">{t('rules.definition.applyPolicies.manual')}</option>
+                  <option value="automatic">
+                    {t('rules.definition.applyPolicies.automatic')}
+                  </option>
+                  <option value="suggest">
+                    {t('rules.definition.applyPolicies.suggest')}
+                  </option>
+                  <option value="manual">
+                    {t('rules.definition.applyPolicies.manual')}
+                  </option>
                 </Select>
               </Field>
               <Field label={t('rules.definition.sourceMeasure')}>
                 <Select value={form.sourceMeasure} disabled={!isDraft} aria-label={t('rules.definition.sourceMeasure')} onChange={(e) => set('sourceMeasure', e.target.value as DefinitionForm['sourceMeasure'])}>
-                  <option value="period_activity">{t('rules.definition.sourceMeasures.period_activity')}</option>
-                  <option value="period_end_balance">{t('rules.definition.sourceMeasures.period_end_balance')}</option>
-                  <option value="ytd_activity">{t('rules.definition.sourceMeasures.ytd_activity')}</option>
+                  <option value="period_activity">
+                    {t('rules.definition.sourceMeasures.period_activity')}
+                  </option>
+                  <option value="period_end_balance">
+                    {t('rules.definition.sourceMeasures.period_end_balance')}
+                  </option>
+                  <option value="ytd_activity">
+                    {t('rules.definition.sourceMeasures.ytd_activity')}
+                  </option>
                 </Select>
               </Field>
             </div>
@@ -882,16 +934,28 @@ function DefinitionTab({
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t('rules.definition.basisKind')}>
                 <Select value={form.basisKind} disabled={!isDraft} aria-label={t('rules.definition.basisKind')} onChange={(e) => set('basisKind', e.target.value as DefinitionForm['basisKind'])}>
-                  <option value="fixed_percent">{t('rules.definition.basisKinds.fixed_percent')}</option>
-                  <option value="driver">{t('rules.definition.basisKinds.driver')}</option>
-                  <option value="stepped">{t('rules.definition.basisKinds.stepped')}</option>
+                  <option value="fixed_percent">
+                    {t('rules.definition.basisKinds.fixed_percent')}
+                  </option>
+                  <option value="driver">
+                    {t('rules.definition.basisKinds.driver')}
+                  </option>
+                  <option value="stepped">
+                    {t('rules.definition.basisKinds.stepped')}
+                  </option>
                 </Select>
               </Field>
               <Field label={t('rules.definition.driverAsOf')}>
                 <Select value={form.driverAsOf} disabled={!isDraft} aria-label={t('rules.definition.driverAsOf')} onChange={(e) => set('driverAsOf', e.target.value as DefinitionForm['driverAsOf'])}>
-                  <option value="period">{t('rules.definition.driverAsOfs.period')}</option>
-                  <option value="document_date">{t('rules.definition.driverAsOfs.document_date')}</option>
-                  <option value="prior_period">{t('rules.definition.driverAsOfs.prior_period')}</option>
+                  <option value="period">
+                    {t('rules.definition.driverAsOfs.period')}
+                  </option>
+                  <option value="document_date">
+                    {t('rules.definition.driverAsOfs.document_date')}
+                  </option>
+                  <option value="prior_period">
+                    {t('rules.definition.driverAsOfs.prior_period')}
+                  </option>
                 </Select>
               </Field>
             </div>
@@ -909,14 +973,18 @@ function DefinitionTab({
                   emptyLabel={t('rules.definition.driver')}
                 />
                 {driversError ? (
-                  <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">{driversError}</p>
+                  <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+                    {driversError}
+                  </p>
                 ) : null}
               </Field>
             ) : null}
             {form.basisKind === 'stepped' ? (
               <div>
                 <Label>{t('rules.definition.tiersHeading')}</Label>
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('rules.definition.tierOpenEnded')}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t('rules.definition.tierOpenEnded')}
+                </p>
                 <div className="mt-1.5 space-y-2">
                   {form.tiers.map((tier, index) => (
                     <span key={index} className="flex items-center gap-2">
@@ -927,7 +995,12 @@ function DefinitionTab({
                         placeholder={t('rules.definition.tierUpTo')}
                         aria-label={t('rules.definition.tierUpTo')}
                         onChange={(e) =>
-                          set('tiers', form.tiers.map((current, j) => (j === index ? { ...current, upTo: e.target.value } : current)))
+                          set(
+                            'tiers',
+                            form.tiers.map((current, j) =>
+                              j === index ? { ...current, upTo: e.target.value } : current,
+                            ),
+                          )
                         }
                       />
                       <Input
@@ -936,7 +1009,12 @@ function DefinitionTab({
                         placeholder={t('rules.definition.tierTargetKey')}
                         aria-label={t('rules.definition.tierTargetKey')}
                         onChange={(e) =>
-                          set('tiers', form.tiers.map((current, j) => (j === index ? { ...current, targetKey: e.target.value } : current)))
+                          set(
+                            'tiers',
+                            form.tiers.map((current, j) =>
+                              j === index ? { ...current, targetKey: e.target.value } : current,
+                            ),
+                          )
                         }
                       />
                       {isDraft ? (
@@ -958,13 +1036,17 @@ function DefinitionTab({
           <DrawerSection title={t('rules.definition.targetsHeading')}>
             <Field label={t('rules.definition.targetKind')}>
               <Select value={form.targetKind} disabled={!isDraft} aria-label={t('rules.definition.targetKind')} onChange={(e) => set('targetKind', e.target.value as DefinitionForm['targetKind'])}>
-                <option value="explicit">{t('rules.definition.targetKinds.explicit')}</option>
-                <option value="dynamic">{t('rules.definition.targetKinds.dynamic')}</option>
+                <option value="explicit">
+                  {t('rules.definition.targetKinds.explicit')}
+                </option>
+                <option value="dynamic">
+                  {t('rules.definition.targetKinds.dynamic')}
+                </option>
               </Select>
             </Field>
             {form.targetKind === 'explicit' ? (
               <fieldset disabled={!isDraft}>
-              <SplitLinesEditor
+                <SplitLinesEditor
                 lines={lines}
                 onChange={(next) => {
                   setLines(next)
@@ -1008,7 +1090,9 @@ function DefinitionTab({
                       aria-label={t('rules.definition.dynamicDimension')}
                       onChange={(e) => set('dynamicDimension', e.target.value as DefinitionForm['dynamicDimension'])}
                     >
-                      <option value="">{t('rules.definition.dynamicDimensionNone')}</option>
+                      <option value="">
+                        {t('rules.definition.dynamicDimensionNone')}
+                      </option>
                       {dynamicDimOptions.map((dim) => (
                         <option key={dim.value} value={dim.value}>
                           {dim.label}
@@ -1066,14 +1150,22 @@ function DefinitionTab({
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t('rules.definition.impact')}>
                 <Select value={form.impact} disabled={!isDraft} aria-label={t('rules.definition.impact')} onChange={(e) => set('impact', e.target.value as DefinitionForm['impact'])}>
-                  <option value="reclass">{t('rules.definition.impacts.reclass')}</option>
-                  <option value="net_zero_pair">{t('rules.definition.impacts.net_zero_pair')}</option>
-                  <option value="report_only">{t('rules.definition.impacts.report_only')}</option>
+                  <option value="reclass">
+                    {t('rules.definition.impacts.reclass')}
+                  </option>
+                  <option value="net_zero_pair">
+                    {t('rules.definition.impacts.net_zero_pair')}
+                  </option>
+                  <option value="report_only">
+                    {t('rules.definition.impacts.report_only')}
+                  </option>
                 </Select>
               </Field>
               <Field label={t('rules.definition.solveMethod')}>
                 <Select value={form.solveMethod} disabled={!isDraft} aria-label={t('rules.definition.solveMethod')} onChange={(e) => set('solveMethod', e.target.value as DefinitionForm['solveMethod'])}>
-                  <option value="sequential">{t('rules.definition.solveMethods.sequential')}</option>
+                  <option value="sequential">
+                    {t('rules.definition.solveMethods.sequential')}
+                  </option>
                   {/* Simultaneous (reciprocal) solving is not implemented: publication and runs
                       refuse it, so it is hidden here rather than offered. */}
                 </Select>
@@ -1095,10 +1187,18 @@ function DefinitionTab({
               </Field>
               <Field label={t('rules.definition.residualPolicy')}>
                 <Select value={form.residualPolicy} disabled={!isDraft} aria-label={t('rules.definition.residualPolicy')} onChange={(e) => set('residualPolicy', e.target.value as DefinitionForm['residualPolicy'])}>
-                  <option value="largest_share">{t('rules.definition.residualPolicies.largest_share')}</option>
-                  <option value="first_target">{t('rules.definition.residualPolicies.first_target')}</option>
-                  <option value="last_target">{t('rules.definition.residualPolicies.last_target')}</option>
-                  <option value="explicit_target">{t('rules.definition.residualPolicies.explicit_target')}</option>
+                  <option value="largest_share">
+                    {t('rules.definition.residualPolicies.largest_share')}
+                  </option>
+                  <option value="first_target">
+                    {t('rules.definition.residualPolicies.first_target')}
+                  </option>
+                  <option value="last_target">
+                    {t('rules.definition.residualPolicies.last_target')}
+                  </option>
+                  <option value="explicit_target">
+                    {t('rules.definition.residualPolicies.explicit_target')}
+                  </option>
                 </Select>
               </Field>
             </div>
@@ -1122,9 +1222,15 @@ function DefinitionTab({
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t('rules.definition.runPolicy')}>
                 <Select value={form.runPolicy} disabled={!isDraft} aria-label={t('rules.definition.runPolicy')} onChange={(e) => set('runPolicy', e.target.value as DefinitionForm['runPolicy'])}>
-                  <option value="manual">{t('rules.definition.runPolicies.manual')}</option>
-                  <option value="auto_preview">{t('rules.definition.runPolicies.auto_preview')}</option>
-                  <option value="auto_post">{t('rules.definition.runPolicies.auto_post')}</option>
+                  <option value="manual">
+                    {t('rules.definition.runPolicies.manual')}
+                  </option>
+                  <option value="auto_preview">
+                    {t('rules.definition.runPolicies.auto_preview')}
+                  </option>
+                  <option value="auto_post">
+                    {t('rules.definition.runPolicies.auto_post')}
+                  </option>
                 </Select>
               </Field>
               <Field label={t('rules.definition.runOffsetDays')}>
@@ -1137,19 +1243,6 @@ function DefinitionTab({
                 />
               </Field>
             </div>
-            <Field label={t('rules.definition.approvalFlow')} hint={t('rules.definition.approvalFlowHint')}>
-              <SearchSelect
-                value={form.approvalFlowId}
-                onChange={(value) => set('approvalFlowId', value ?? '')}
-                options={options.flows.map((flow) => ({ value: flow.id, label: flow.label }))}
-                placeholder={t('rules.definition.approvalFlowNone')}
-                sheetTitle={t('rules.definition.approvalFlow')}
-                ariaLabel={t('rules.definition.approvalFlow')}
-                disabled={!isDraft}
-                clearable
-                emptyLabel={t('rules.definition.approvalFlowNone')}
-              />
-            </Field>
           </DrawerSection>
           <DrawerSection title={t('rules.definition.presentationHeading')}>
             <Field label={t('rules.definition.memoTemplate')}>
@@ -1169,7 +1262,11 @@ function DefinitionTab({
               <Button type="button" onClick={() => void save()} disabled={saving}>
                 {tc('actions.save')}
               </Button>
-              {saved ? <span className="text-sm text-teal-700 dark:text-teal-300">{t('rules.targets.saved')}</span> : null}
+              {saved ? (
+                <span className="text-sm text-teal-700 dark:text-teal-300">
+                  {t('rules.targets.saved')}
+                </span>
+              ) : null}
             </span>
           ) : null}
         </>
@@ -1255,28 +1352,38 @@ function VersionsTab({
 
   return (
     <div className="space-y-4 p-1">
-      <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('rules.versions.heading')}</h2>
+      <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+        {t('rules.versions.heading')}
+      </h2>
       {error ? <ErrorBox message={error} /> : null}
       {problems.length > 0 ? (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40">
           <p className="font-medium">{t('rules.problems.title')}</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {problems.map((problem, index) => (
-              <li key={index}>{problem.message ?? t('rules.problems.fallback')}</li>
+              <li key={index}>
+                {problem.message ?? t('rules.problems.fallback')}
+              </li>
             ))}
           </ul>
         </div>
       ) : null}
       {detail.versions.length === 0 ? (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('rules.versions.empty')}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {t('rules.versions.empty')}
+        </p>
       ) : (
         <ul className="space-y-2">
           {detail.versions.map((entry) => (
             <li key={entry.version.id} className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">{t('rules.versions.version', { n: entry.version.versionNo })}</span>
+                <span className="text-sm font-medium">
+                  {t('rules.versions.version', { n: entry.version.versionNo })}
+                </span>
                 <Badge>{statusLabels[entry.version.status]}</Badge>
-                {entry.version.id === currentId ? <Badge>{t('rules.versions.current')}</Badge> : null}
+                {entry.version.id === currentId ? (
+                  <Badge>{t('rules.versions.current')}</Badge>
+                ) : null}
                 <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
                   {t('rules.versions.effective', {
                     from: entry.version.effectiveFrom,
@@ -1347,7 +1454,9 @@ function TestTab({
   const t = useTranslations('allocations')
   const payrollExpenses = detail.versions.some((entry) => {
     const filters = entry.version['dimensionFilters']
-    return typeof filters === 'object' && filters !== null && (filters as { payrollExpensesOnly?: unknown }).payrollExpensesOnly === true
+    return (
+      typeof filters === 'object' && filters !== null && (filters as { payrollExpensesOnly?: unknown }).payrollExpensesOnly === true
+    )
   })
   const [versionId, setVersionId] = useState(
     (detail.rule as { currentVersionId?: string | null }).currentVersionId
@@ -1434,25 +1543,34 @@ function TestTab({
   }
 
   if (detail.versions.length === 0) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">{t('rules.test.noVersion')}</p>
+    return (
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        {t('rules.test.noVersion')}
+      </p>
+    )
   }
 
   return (
     <div className="space-y-4 p-1">
-      <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('rules.test.heading')}</h2>
+      <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+        {t('rules.test.heading')}
+      </h2>
       {error ? <ErrorBox message={error} /> : null}
       <Field label={t('rules.test.version')}>
         <Select value={versionId} aria-label={t('rules.test.version')} onChange={(e) => setVersionId(e.target.value)}>
           {detail.versions.map((entry) => (
             <option key={entry.version.id} value={entry.version.id}>
-              {t('rules.versions.version', { n: entry.version.versionNo })} · {entry.version.status}
+              {t('rules.versions.version', { n: entry.version.versionNo })} ·{' '}
+              {entry.version.status}
             </option>
           ))}
         </Select>
       </Field>
       {isPeriod ? (
         <>
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('rules.test.periodHeading')}</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            {t('rules.test.periodHeading')}
+          </h3>
           <Field label={t('rules.test.period')}>
             <SearchSelect
               value={periodId}
@@ -1485,7 +1603,9 @@ function TestTab({
         </>
       ) : (
         <>
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('rules.test.lineHeading')}</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            {t('rules.test.lineHeading')}
+          </h3>
           <Field label={t('rules.test.account')}>
             <SearchSelect
               value={accountId}
@@ -1499,7 +1619,11 @@ function TestTab({
             />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
-            {payrollExpenses && <Check checked={payrollExpense} onChange={setPayrollExpense}>{t('rules.test.payrollExpense')}</Check>}
+            {payrollExpenses && (
+              <Check checked={payrollExpense} onChange={setPayrollExpense}>
+                {t('rules.test.payrollExpense')}
+              </Check>
+            )}
             <Field label={t('rules.test.documentKind')}>
               <Input value={documentKind} aria-label={t('rules.test.documentKind')} onChange={(e) => setDocumentKind(e.target.value)} />
             </Field>
@@ -1533,20 +1657,30 @@ function TestTab({
               {verdict.matched ? t('rules.test.matched', { n: verdict.specificity }) : t('rules.test.notMatched')}
             </p>
           ) : null}
-          {basisNote ? <p className="text-xs text-slate-500 dark:text-slate-400">{basisNote}</p> : null}
+          {basisNote ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {basisNote}
+            </p>
+          ) : null}
           {preview.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('rules.test.targetColumn')}</TableHead>
-                  <TableHead className="text-right">{t('rules.test.shareColumn')}</TableHead>
+                  <TableHead className="text-right">
+                    {t('rules.test.shareColumn')}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {preview.map((row) => (
                   <TableRow key={row.sequence}>
-                    <TableCell>{row.label ?? row.targetAccountId ?? ''}</TableCell>
-                    <TableCell className="text-right tabular-nums">{row.sharePercent ?? ''}</TableCell>
+                    <TableCell>
+                      {row.label ?? row.targetAccountId ?? ''}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.sharePercent ?? ''}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

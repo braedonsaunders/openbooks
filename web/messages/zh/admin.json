@@ -1116,14 +1116,8 @@
     },
     "approvals": {
       "title": "审批",
-      "description": "控制供应商账单在提交后何时下达。",
-      "requireVendorBillApproval": "供应商账单下达前需要审批",
-      "requireVendorBillApprovalHint": "开启后，供应商账单只能通过审批流程下达。没有匹配流程的账单将保持已提交状态，并提示提交人设置流程或关闭此选项。",
-      "requireStockCountReview": "盘点过账需要其他用户",
-      "requireStockCountReviewHint": "开启后，记录或提交盘点的人不能过账 — 必须由有过账权限的其他用户完成。关闭后，任何有过账权限的人都可以过账自己的盘点。",
-      "noFlowTitle": "供应商账单没有审批流程",
-      "noFlowWarningAuto": "尚未为供应商账单配置审批流程。<flows>请在“流程”中设置</flows>——在此之前，提交的账单将在没有审批人的情况下自动下达。",
-      "noFlowWarningRequired": "尚未为供应商账单配置审批流程。<flows>请在“流程”中设置</flows>——在此之前，每次提交供应商账单都会被拒绝。"
+      "description": "流程决定提交是否需要审批、由谁审批以及需要多少次审批。如果没有适用的审批步骤，提交将无需审批人即可继续。",
+      "manageFlows": "管理审批流程"
     },
     "documentKinds": {
       "vendorBill": "应付账单",
@@ -1924,7 +1918,10 @@
       "keyRemoved": "文档服务商密钥已移除。",
       "model": "发票模型",
       "provider": "文档读取方式",
-      "providers": {"azure_document_intelligence": "Azure 文档智能", "llm_vision": "AI 模型（{provider}）"},
+      "providers": {
+        "azure_document_intelligence": "Azure 文档智能",
+        "llm_vision": "AI 模型（{provider}）"
+      },
       "azureHint": "使用您的 Azure 文档智能资源和密钥读取账单和收据。",
       "llmHint": "使用下方配置的 AI 提供商、密钥和模型（{provider}）读取账单和收据。每个字段都带有模型的置信度；低于阈值的字段保持空白以供审核。",
       "llmNoVision": "{provider} 无法读取图像。请在下方选择具备视觉模型的提供商，或使用 Azure 文档智能。",
@@ -2935,14 +2932,14 @@
       "saveFailed": "无法保存配置。"
     },
     "usFilingLineage": {
-          "stateAccount": "州申报账户",
-          "employer": "原始法定雇主",
-          "federalAccount": "原始联邦EIN",
-          "federalHelp": "已停用的EIN仍可用于核实历史来源。",
-          "datesHelp": "原始登记的日期范围包含起止日。结束日期不得早于最后一次已入账工资。",
-          "sourceReference": "原始登记证据引用",
-          "sourceHelp": "请指定证明此EIN和日期范围的登记函或保留记录。",
-          "reason": "变更原因"
+      "stateAccount": "州申报账户",
+      "employer": "原始法定雇主",
+      "federalAccount": "原始联邦EIN",
+      "federalHelp": "已停用的EIN仍可用于核实历史来源。",
+      "datesHelp": "原始登记的日期范围包含起止日。结束日期不得早于最后一次已入账工资。",
+      "sourceReference": "原始登记证据引用",
+      "sourceHelp": "请指定证明此EIN和日期范围的登记函或保留记录。",
+      "reason": "变更原因"
     },
     "entities": {
       "schedule-patterns": {
@@ -3435,9 +3432,9 @@
         "description": "按辖区划分的法定所得税税率，带生效日期 — 用于 ASC 740 所得税计提。"
       },
       "payroll-us-filing-account-employer-lineage": {
-              "title": "雇主EIN历史",
-              "singularTitle": "雇主EIN归属",
-              "description": "州登记的原始所有权，包含起止日期和保留的证据。"
+        "title": "雇主EIN历史",
+        "singularTitle": "雇主EIN归属",
+        "description": "州登记的原始所有权，包含起止日期和保留的证据。"
       },
       "payroll-filing-accounts": {
         "title": "申报账户",
@@ -4007,8 +4004,14 @@
         "title": "订阅续订策略",
         "description": "按生效日期管理续订条款、负责人和到期前提醒。"
       },
-      "project-loss-policies": {"title": "亏损项目政策", "description": "决定在结账时是否标记预计亏损的项目，以及结账是否需等待其亏损评估。"},
-      "expense-fx-policies": {"title": "费用汇率政策", "description": "外币费用行是否可以使用附理由的指定汇率，而不是按日期的汇率进行换算。"},
+      "project-loss-policies": {
+        "title": "亏损项目政策",
+        "description": "决定在结账时是否标记预计亏损的项目，以及结账是否需等待其亏损评估。"
+      },
+      "expense-fx-policies": {
+        "title": "费用汇率政策",
+        "description": "外币费用行是否可以使用附理由的指定汇率，而不是按日期的汇率进行换算。"
+      },
       "service-dispatch-policies": {
         "title": "服务派工策略",
         "singularTitle": "服务派工策略版本",
@@ -5863,7 +5866,11 @@
         "fiscal_year": "按会计年度",
         "never": "不重置"
       },
-      "projectLossPolicy": {"off": "关闭", "warn": "结账时警告", "require": "结账前必须评估"}
+      "projectLossPolicy": {
+        "off": "关闭",
+        "warn": "结账时警告",
+        "require": "结账前必须评估"
+      }
     },
     "payroll": {
       "navTitle": "工资"
@@ -7410,7 +7417,7 @@
       "chooseApprovedVersion": "已批准的政策版本",
       "chooseVersionHint": "分配员工前请选择已批准的版本。每项分配都会保留该版本及其生效日期。",
       "review": "审核与决定",
-      "reviewHint": "提交的条款需要由已关联的独立人员批准。已批准条款会保留；修改应使用新版本或后续分配。",
+      "reviewHint": "审批阶段由租户的Flows决定。未设置审批阶段时，有效提交会立即获准执行。已批准的条款会保留；更改需使用新版本或后续分配。",
       "noActions": "根据您的权限和此记录的当前状态，没有可用的状态转换。",
       "actions": {
         "submit": "提交审批",
@@ -7490,7 +7497,7 @@
       "reason": "原因",
       "reasonHint": "记录规则、培训或结果变更的原因。",
       "review": "审核与操作",
-      "reviewHint": "操作使用当前记录修订版，课程审批人必须独立于作者。",
+      "reviewHint": "操作使用记录的当前修订版本。审批阶段及有权作出决定的人员由租户的Flows决定。",
       "history": "历史",
       "result": "出勤与考核",
       "resultHint": "记录实际出勤和考核。资质核验单独进行，作废保留原始结果。",
@@ -8096,10 +8103,7 @@
         "connectAction": "连接",
         "connectPlaceholder": "选择一个步骤…",
         "connectEmpty": "还没有其他步骤 — 请先添加一个节点。"
-      },
-      "ungatedOutcomeLabel": "没有适用的审批步骤时",
-      "ungatedApply": "立即应用",
-      "ungatedRequireApproval": "必须有审批步骤"
+      }
     },
     "node": {
       "trigger": "触发器",
@@ -9482,7 +9486,7 @@
     "changeSetDefaultName": "沙箱变更",
     "captureChanges": "捕获变更",
     "captureFailed": "未能完成捕获。重试前请检查变更集列表。",
-    "captureTitle": "捕获配置变更以供独立审核和批准"
+    "captureTitle": "记录要通过Flows提交的配置更改"
   },
   "sandboxes": {
     "changeSets": {
@@ -9512,7 +9516,7 @@
       "capturedFrom": "捕获自{name}",
       "retained": "保留的配置更改集",
       "listTitle": "更改集",
-      "listDescription": "检查捕获的配置更改，记录独立复核与批准，然后将已批准的更改应用到生产。",
+      "listDescription": "检查已记录的配置更改，通过租户的Flows提交，然后将获准执行的更改应用到生产环境。",
       "listBack": "环境",
       "requestFailed": "请求未能完成。请刷新以确认已记录的状态，然后再试。",
       "working": "处理中…",
@@ -9549,8 +9553,7 @@
       "reasons": {
         "incomplete": "此次捕获不完整。请从环境中捕获新的更改集。",
         "noSnapshot": "此旧捕获没有生产快照。请先捕获并复核新的更改集，再应用。",
-        "empty": "未捕获到配置更改。",
-        "segregation": "创建者、复核者、批准者和应用者必须是四位不同的用户。请由另一位授权用户执行下一步。"
+        "empty": "未捕获到配置更改。"
       }
     }
   }

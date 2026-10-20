@@ -300,8 +300,8 @@
     "description": "操作性子账在总账之前锁定。锁定应用后，数据库将拒绝任何过账。",
     "blockedTitle": "审批受阻",
     "blockedDescription": "{count, plural, one {仍有 # 项硬关卡任务} other {仍有 # 项硬关卡任务}}。",
-    "approvalTitle": "独立审批与锁定",
-    "approvalDescription": "结账运行的发起人不能提供最终审批。审批后的任何总账变动都将重新开启审核。",
+    "approvalTitle": "审批与锁定",
+    "approvalDescription": "所需审批由组织的 Flows 定义。审批后总账发生任何变更都会重新开启复核。",
     "ownerTitle": "负责人鉴证与锁定",
     "ownerDescription": "对于负责人管理的结账，请复核报表并记录本期已就绪的原因。该鉴证与当前总账状态精确绑定。",
     "attestationLabel": "这些账簿为何已具备结账条件？",
@@ -335,6 +335,7 @@
       "started": "结账运行已开始",
       "data_changed": "总账变动使先前工作失效",
       "approval_requested": "已请求结账审批",
+      "approval_withdrawn": "结账审批已撤回",
       "owner_attested": "负责人已鉴证账簿就绪",
       "approval_rejected": "结账审批已拒绝",
       "approved": "结账已获得最终审批",
@@ -381,7 +382,7 @@
       },
       "controlledReopen": {
         "name": "受控重新开启",
-        "description": "重新开启需要理由、独立审批和有效期。"
+        "description": "重新开放需要填写原因、通过组织的 Flows 处理并设置到期时间。"
       },
       "sourceReconciliationEvidence": {
         "name": "源系统对账证据",
@@ -444,11 +445,11 @@
     },
     "controller-approval": {
       "title": "控制人审签",
-      "description": "独立审核就绪度、异常、证据和报告输出。"
+      "description": "复核结账准备情况、异常、凭证和报告。"
     },
     "financial-review": {
       "title": "复核财务报表",
-      "description": "在鉴证前复核试算平衡表、资产负债表和利润表，确认完整性并关注异常余额。"
+      "description": "完成复核前，请检查试算平衡表、资产负债表和利润表是否完整，以及是否存在异常余额。"
     },
     "lock-subledgers": {
       "title": "锁定操作性子账",
@@ -494,7 +495,7 @@
   "setup": {
     "title": "会计期间与结账",
     "description": "设计会计日历、生成期间、管理锁定与重新开启、对结账蓝图进行版本管理，并配置管控、自动化和报告包。",
-    "simpleMode": "负责人管理的结账已启用。日历、期间、锁定、鉴证和不可变发布均可直接使用，无企业级工作流负担。",
+    "simpleMode": "日历、会计期间、锁定和不可更改的发布记录仍可使用。请在 Flows 中配置审批。",
     "enableAdvanced": "查看高级结账",
     "tabs": {
       "calendars": "日历",
@@ -782,7 +783,8 @@
       "lock": "锁定",
       "review": "审核",
       "segregation": "职责分离",
-      "exception": "异常"
+      "exception": "异常",
+      "evidence": "凭证"
     },
     "automationTriggers": {
       "run_started": "运行已开始",

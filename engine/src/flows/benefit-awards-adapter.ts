@@ -109,7 +109,6 @@ export const benefitAwardsFlowAdapter: FlowSubjectAdapter =
     scope: tableScope("employment", "hrm_benefit_awards", "employment_id"),
     profile: benefitAwardSubjectProfile,
     releaseViaHandler: true,
-    selfApprovalPolicy: "configurable",
     async loadContext(id) {
       const award = await loadAward(id);
       if (!award) return null;
@@ -166,13 +165,14 @@ export const benefitAwardsFlowAdapter: FlowSubjectAdapter =
         "Submitted Benefits reward evidence is immutable; create a correcting reward instead.",
       );
     },
-    async releaseApproval(subjectId, outcome, ctx, detail) {
+    async releaseApproval(subjectId, outcome, ctx, detail, run) {
       await releaseFlowApproval({
         subjectKind: BENEFIT_AWARD_SUBJECT_KIND,
         subjectId,
         outcome,
         ctx,
         comment: detail?.comment,
+        approvalRunId: run?.id,
       });
     },
     async findCandidateIds(limit) {

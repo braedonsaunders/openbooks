@@ -32,7 +32,16 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import './_flow-canvas.css'
-import { Alert, AlertDescription, AlertTitle, Button, EmptyState, Label, Select, cn } from '@openbooks/ui'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
+  EmptyState,
+  Label,
+  Select,
+  cn,
+} from '@openbooks/ui'
 import {
   flowReadiness,
   lintAutomationGraph,
@@ -86,7 +95,13 @@ export default function FlowBuilder({
   permissions,
   subsidiaries = [],
 }: {
-  flow: { id: string; name: string; enabled: boolean; updatedAt: string; graph: AutomationGraph }
+  flow: {
+    id: string
+    name: string
+    enabled: boolean
+    updatedAt: string
+    graph: AutomationGraph
+  }
   runs: FlowRunRow[]
   profile: FlowSubjectProfile
   users: OrgUser[]
@@ -110,15 +125,21 @@ export default function FlowBuilder({
     }),
     [t],
   )
-  const initial = useMemo(() => toFlow(flow.graph, edgeLabels), [flow.graph, edgeLabels])
+  const initial = useMemo(
+    () => toFlow(flow.graph, edgeLabels),
+    [flow.graph, edgeLabels],
+  )
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(initial.nodes)
+  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(
+    initial.nodes,
+  )
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [name, setName] = useState(flow.name)
   const [enabled, setEnabled] = useState(flow.enabled)
-  const [ungatedOutcome, setUngatedOutcome] = useState<'apply' | undefined>(flow.graph.ungatedOutcome)
-  const [subjectScopeIds, setSubjectScopeIds] = useState<string[]>(flow.graph.subjectScope?.subsidiaryIds ?? [])
+  const [subjectScopeIds, setSubjectScopeIds] = useState<string[]>(
+    flow.graph.subjectScope?.subsidiaryIds ?? [],
+  )
   const [tab, setTab] = useState<'canvas' | 'runs'>('canvas')
   const [dirty, setDirty] = useState(false)
   const [revision, setRevision] = useState(flow.updatedAt)
@@ -156,13 +177,19 @@ export default function FlowBuilder({
 
   // Live author-time lint — same rules the server reports on save.
   const warnings = useMemo(
-    () => lintAutomationGraph(fromFlow(nodes, edges, ungatedOutcome, subjectScopeIds), profileFieldIds(profile), profile),
-    [nodes, edges, profile, ungatedOutcome, subjectScopeIds],
+    () =>
+      lintAutomationGraph(
+        fromFlow(nodes, edges, subjectScopeIds),
+        profileFieldIds(profile),
+        profile,
+      ),
+    [nodes, edges, profile, subjectScopeIds],
   )
 
   const markDirtyOnNodesChange = useCallback(
     (changes: NodeChange<FlowNode>[]) => {
-      if (changes.some((c) => c.type !== 'select' && c.type !== 'dimensions')) markDirty()
+      if (changes.some((c) => c.type !== 'select' && c.type !== 'dimensions'))
+        markDirty()
       onNodesChange(changes)
     },
     [onNodesChange, markDirty],
@@ -195,7 +222,11 @@ export default function FlowBuilder({
   const onConnect = useCallback(
     (c: Connection) => {
       if (!c.source || !c.target) return
-      connect({ source: c.source, sourceHandle: c.sourceHandle ?? 'next', target: c.target })
+      connect({
+        source: c.source,
+        sourceHandle: c.sourceHandle ?? 'next',
+        target: c.target,
+      })
     },
     [connect],
   )
@@ -218,7 +249,13 @@ export default function FlowBuilder({
       data: defaultNodeData(kind, profile),
       selected: true,
     }
-    const edge = autoWireEdge(id, [...nodes, node], edges, selectedNodeId ?? undefined, edgeLabels)
+    const edge = autoWireEdge(
+      id,
+      [...nodes, node],
+      edges,
+      selectedNodeId ?? undefined,
+      edgeLabels,
+    )
     setNodes([...nodes.map((n) => ({ ...n, selected: false })), node])
     if (edge) setEdges((eds) => addEdge(edge, eds))
     setSelectedNodeId(id)
@@ -246,7 +283,11 @@ export default function FlowBuilder({
       const res = await fetch(`/api/admin/flows/${flow.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expectedUpdatedAt: revision, name: name.trim() || flow.name, graph: fromFlow(nodes, edges, ungatedOutcome, subjectScopeIds) }),
+        body: JSON.stringify({
+          expectedUpdatedAt: revision,
+          name: name.trim() || flow.name,
+          graph: fromFlow(nodes, edges, subjectScopeIds),
+        }),
       })
       if (!res.ok) {
         const failure = (await res.json().catch(() => null)) as {
@@ -256,7 +297,11 @@ export default function FlowBuilder({
         setSaveErrors(
           Array.isArray(failure?.errors)
             ? (failure.errors as unknown[]).map(String)
-            : [String((failure as { error?: unknown } | null)?.error ?? res.status)],
+            : [
+                String(
+                  (failure as { error?: unknown } | null)?.error ?? res.status,
+                ),
+              ],
         )
         toast.error(t('builder.saveFailed'))
         return
@@ -299,11 +344,19 @@ export default function FlowBuilder({
       // The body parses from a clone so the refusal can read through the
       // shared helper: message, remedy and code render in the pin and the
       // toast instead of a bare fallback.
-      const data = (await res.clone().json().catch(() => ({}))) as { updatedAt?: string; enabled?: unknown; errors?: unknown }
+      const data = (await res
+        .clone()
+        .json()
+        .catch(() => ({}))) as {
+        updatedAt?: string
+        enabled?: unknown
+        errors?: unknown
+      }
       if (!res.ok) {
-        const refusal = Array.isArray(data.errors) && data.errors.length > 0
-          ? data.errors.map(String)
-          : [await readApiErrorMessage(res, t('actions.updateFailed'))]
+        const refusal =
+          Array.isArray(data.errors) && data.errors.length > 0
+            ? data.errors.map(String)
+            : [await readApiErrorMessage(res, t('actions.updateFailed'))]
         setSaveErrors(refusal)
         toast.error(refusal[0] ?? t('actions.updateFailed'))
         return
@@ -328,7 +381,8 @@ export default function FlowBuilder({
   // at render so a label edit renames the node immediately — the state
   // itself never carries a second, staler copy of the name.
   const labeledNodes = useMemo(
-    () => nodes.map((n) => ({ ...n, ariaLabel: nodeAccessibleName(t, n.data) })),
+    () =>
+      nodes.map((n) => ({ ...n, ariaLabel: nodeAccessibleName(t, n.data) })),
     [nodes, t],
   )
 
@@ -336,19 +390,32 @@ export default function FlowBuilder({
   // enrichment covers author-time warnings and server-side enable/save
   // errors, which share the linter's vocabulary.
   const nodeNames = useMemo(
-    () => new Map(nodes.map((n) => [n.id, nodeAccessibleName(t, n.data)] as const)),
+    () =>
+      new Map(nodes.map((n) => [n.id, nodeAccessibleName(t, n.data)] as const)),
     [nodes, t],
   )
-  const namedWarnings = useMemo(() => nameFlowWarnings(warnings, nodeNames), [warnings, nodeNames])
-  const namedSaveErrors = useMemo(() => nameFlowWarnings(saveErrors, nodeNames), [saveErrors, nodeNames])
+  const namedWarnings = useMemo(
+    () => nameFlowWarnings(warnings, nodeNames),
+    [warnings, nodeNames],
+  )
+  const namedSaveErrors = useMemo(
+    () => nameFlowWarnings(saveErrors, nodeNames),
+    [saveErrors, nodeNames],
+  )
 
   // Whether this flow can fire, in the one shared vocabulary the flows list
   // uses for its status column: disabled never runs, an enabled flow with
   // lint errors cannot be trusted to run. Rendered as a banner so a flow
   // that reads "enabled, no warnings" while unable to fire is impossible.
-  const readiness = useMemo(() => flowReadiness(enabled, warnings), [enabled, warnings])
+  const readiness = useMemo(
+    () => flowReadiness(enabled, warnings),
+    [enabled, warnings],
+  )
   const readinessDetail = useMemo(
-    () => (readiness.state === 'incomplete' ? nameFlowWarnings([readiness.reasons[0] ?? ''], nodeNames)[0] : null),
+    () =>
+      readiness.state === 'incomplete'
+        ? nameFlowWarnings([readiness.reasons[0] ?? ''], nodeNames)[0]
+        : null,
     [readiness, nodeNames],
   )
   const triggerExists = useMemo(() => !canAddTrigger(nodes), [nodes])
@@ -372,7 +439,9 @@ export default function FlowBuilder({
           placeholder={t('builder.namePlaceholder')}
           className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-lg font-semibold text-slate-900 outline-none hover:border-slate-200 focus:border-teal-500 dark:text-slate-100 dark:hover:border-slate-700"
         />
-        <span className="text-xs text-slate-400 dark:text-slate-500">{profile.label}</span>
+        <span className="text-xs text-slate-400 dark:text-slate-500">
+          {profile.label}
+        </span>
         {dirty ? (
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
             {t('builder.unsaved')}
@@ -403,13 +472,6 @@ export default function FlowBuilder({
           </button>
           {enabled ? t('statusEnabled') : t('statusDisabled')}
         </label>
-        {profile.supportsUngatedSubmission && <div className="flex items-center gap-2">
-          <Label htmlFor="flow-ungated-outcome">{t('builder.ungatedOutcomeLabel')}</Label>
-          <Select id="flow-ungated-outcome" value={ungatedOutcome ?? ''} disabled={busy} onChange={(event) => { setUngatedOutcome(event.target.value === 'apply' ? 'apply' : undefined); markDirty() }}>
-            <option value="">{t('builder.ungatedRequireApproval')}</option>
-            <option value="apply">{t('builder.ungatedApply')}</option>
-          </Select>
-        </div>}
         <Button onClick={save} disabled={busy || !dirty}>
           <Save size={15} /> {t('builder.save')}
         </Button>
@@ -420,12 +482,19 @@ export default function FlowBuilder({
           Nothing checked keeps the ordinary organization-wide scope. */}
       {subsidiaries.length > 0 ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{tLegalEntity('subsidiary')}</span>
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            {tLegalEntity('subsidiary')}
+          </span>
           {subjectScopeIds.length === 0 ? (
-            <span className="text-xs text-slate-500 dark:text-slate-400">{tAllEntities('allEntities')}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {tAllEntities('allEntities')}
+            </span>
           ) : null}
           {subsidiaries.map((subsidiary) => (
-            <label key={subsidiary.id} className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
+            <label
+              key={subsidiary.id}
+              className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300"
+            >
               <input
                 type="checkbox"
                 checked={subjectScopeIds.includes(subsidiary.id)}
@@ -549,13 +618,17 @@ export default function FlowBuilder({
               onNodesChange={markDirtyOnNodesChange}
               onEdgesChange={markDirtyOnEdgesChange}
               onConnect={onConnect}
-              onSelectionChange={({ nodes: sel }) => setSelectedNodeId(sel[0]?.id ?? null)}
+              onSelectionChange={({ nodes: sel }) =>
+                setSelectedNodeId(sel[0]?.id ?? null)
+              }
               nodeTypes={NODE_TYPES}
               colorMode={isDark ? 'dark' : 'light'}
               deleteKeyCode={['Backspace', 'Delete']}
               connectionMode={CANVAS_CONNECTION_MODE}
               isValidConnection={(c) => c.source !== c.target}
-              defaultEdgeOptions={{ markerEnd: { type: MarkerType.ArrowClosed } }}
+              defaultEdgeOptions={{
+                markerEnd: { type: MarkerType.ArrowClosed },
+              }}
               fitView
               fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
               minZoom={0.2}

@@ -5,7 +5,8 @@ export const financialReports: DocArticle = {
   title: 'Reports and Ledger Detail',
   category: 'reporting',
   order: 1,
-  summary: 'Run financial statements, aging, registers, ledger detail, budget, order, and project reports.',
+  summary:
+    'Run financial statements, aging, registers, ledger detail, budget, order, and project reports.',
   updated: '2026-10-11',
   keywords: [
     'reports',
@@ -158,7 +159,19 @@ export const analyticsAndSavedViews: DocArticle = {
   summary:
     'Choose between financial reports, operational analytics, dashboard cards, custom reports, and reusable record views.',
   updated: '2026-09-16',
-  keywords: ['analytics', 'dashboard', 'insights', 'saved search', 'saved view', 'custom report', 'KPI', 'query', 'sentinel', 'forensics', 'duplicates'],
+  keywords: [
+    'analytics',
+    'dashboard',
+    'insights',
+    'saved search',
+    'saved view',
+    'custom report',
+    'KPI',
+    'query',
+    'sentinel',
+    'forensics',
+    'duplicates',
+  ],
   related: ['financial-reports', 'switching-from-enterprise-systems', 'apps'],
   body: `# Analytics, Dashboards, and Saved Views
 
@@ -231,7 +244,8 @@ export const periodClose: DocArticle = {
   title: 'Period Close',
   category: 'banking-close',
   order: 2,
-  summary: 'Prepare, execute, approve, and lock an accounting period — publishing the reporting package with advanced close — reopening under governance when needed.',
+  summary:
+    'Prepare, execute, approve, and lock an accounting period — publishing the reporting package with advanced close — reopening under governance when needed.',
   updated: '2026-10-10',
   keywords: [
     'period close',
@@ -243,7 +257,12 @@ export const periodClose: DocArticle = {
     'evidence',
     'continuous close',
   ],
-  related: ['banking-and-reconciliation', 'financial-reports', 'audit-log', 'year-end-closing'],
+  related: [
+    'banking-and-reconciliation',
+    'financial-reports',
+    'audit-log',
+    'year-end-closing',
+  ],
   body: `# Period Close
 
 Period close turns a set of completed reconciliations and reviews into a governed
@@ -281,16 +300,15 @@ the result.
 
 Close approval uses the same visual flow system as other governed records. Go to
 **Administration → Flows**, filter to **Period close run**, and edit the enabled
-flow. The default flow has one independent approval gate. A smaller organization
-can keep that single gate; a larger organization can add sequential gates or an
-**All must approve** gate with several assignees. Conditions can route month-end,
+flow. The tenant chooses whether to use no approval gates, a single gate, or
+several sequential and parallel gates. Conditions can route month-end,
 quarter-end, year-end, books, readiness scores, or exception counts differently.
 
-The **Request approval** action evaluates every enabled matching close flow and
-places its gates in the **Inbox**. Approval fails closed when no gate is produced
-or an assignee cannot be resolved. The run initiator cannot decide any close gate,
-even if a flow gate is authored to permit self-approval. This separation is an
-accounting invariant.
+The **Request approval** action evaluates every enabled matching close Flow.
+With no applicable gates, the validated run is released immediately. Otherwise,
+every governing gate must finish before the run is released. An unresolved
+assignee or failed Flow refuses submission with its cause. Each gate's submitted
+separation policy determines whether the initiator can decide an assigned gate.
 
 Every approval is tied to the validated ledger fingerprint. If ledger data changes
 while review is pending or after final approval, open gates are cancelled, prior
@@ -302,9 +320,8 @@ repeat affected work, and request a new approval round.
 The run moves through Scope, Readiness, Execute, Review, and Lock. Module and
 accounting locks prevent new activity or amendments in the closed scope.
 
-After the final configured gate approves, use **Lock period** to apply subledger
-locks before the GL lock. Approval should occur only after named reviewers
-accept the result.
+Once the submitted routing policy is satisfied, use **Lock period** to apply
+subledger locks before the GL lock.
 
 ## Publish the reporting package (advanced close only)
 
@@ -362,7 +379,8 @@ export const yearEndClosing: DocArticle = {
   title: 'Year-End Closing Journals',
   category: 'banking-close',
   order: 3,
-  summary: 'Post explicit year-end closing and opening journals where a jurisdiction requires them, as a governed step of the year-end close.',
+  summary:
+    'Post explicit year-end closing and opening journals where a jurisdiction requires them, as a governed step of the year-end close.',
   updated: '2026-10-11',
   keywords: [
     'year-end close',

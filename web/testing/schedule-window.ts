@@ -28,7 +28,6 @@ export function scheduleWindow(
     dayBreakMinutes: 30,
     publishPolicy: 'live',
     boardType: 'people',
-    governedFrom: null,
     isActive: true,
     projectId: null,
   }

@@ -1,3 +1,4 @@
+import { users } from "./extension";
 import {
   boolean,
   foreignKey,
@@ -7,8 +8,9 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
@@ -74,7 +76,9 @@ export const flows = pgTable(
      * Last time the scheduler fired this flow's `scheduled` trigger — dedups
      * the every-minute scan so a cron only runs once per matching minute.
      */
-    lastScheduledRunAt: timestamp("last_scheduled_run_at", { withTimezone: true }),
+    lastScheduledRunAt: timestamp("last_scheduled_run_at", {
+      withTimezone: true,
+    }),
     ...auditColumns,
   },
   (t) => [
@@ -98,11 +102,18 @@ export const flowRuns = pgTable(
     subjectId: uuid("subject_id").notNull(),
     /** The trigger kind that fired: 'on_submit', 'scheduled', 'manual', … */
     trigger: text("trigger").notNull(),
-    status: text("status", { enum: FLOW_RUN_STATUSES }).notNull().default("running"),
+    status: text("status", { enum: FLOW_RUN_STATUSES })
+      .notNull()
+      .default("running"),
     error: text("error"),
     /** Snapshot of the evaluation values (record fields, …) at run start. */
-    context: jsonb("context").$type<Record<string, unknown>>().notNull().default({}),
-    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    context: jsonb("context")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     /**
      * Deterministic retry identity for scheduled firings:
@@ -152,8 +163,13 @@ export const flowRunEffects = pgTable(
     orgId: orgRef(),
     runId: uuid("run_id").notNull(),
     effectKey: text("effect_key").notNull(),
-    detail: jsonb("detail").$type<Record<string, unknown>>().notNull().default({}),
-    completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
+    detail: jsonb("detail")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    completedAt: timestamp("completed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     ...auditColumns,
   },
   (t) => [
@@ -192,8 +208,12 @@ export const flowGates = pgTable(
     assigneeRole: text("assignee_role"),
     /** Same for all sibling rows of one gate node instance: `${runId}:${nodeId}`. */
     groupKey: text("group_key").notNull(),
-    quorum: text("quorum", { enum: FLOW_GATE_QUORUMS }).notNull().default("any"),
-    status: text("status", { enum: FLOW_GATE_STATUSES }).notNull().default("pending"),
+    quorum: text("quorum", { enum: FLOW_GATE_QUORUMS })
+      .notNull()
+      .default("any"),
+    status: text("status", { enum: FLOW_GATE_STATUSES })
+      .notNull()
+      .default("pending"),
     signatureRequired: boolean("signature_required").notNull().default(false),
     /** Typed e-signature captured when a signature-required gate is approved. */
     signature: text("signature"),
@@ -206,6 +226,8 @@ export const flowGates = pgTable(
      * assignee it was handed off FROM (preserved even after the row is decided).
      */
     delegatedFromUserId: uuid("delegated_from_user_id"),
+    /** The gate replaced by this tenant-authored escalation. */
+    escalatedFromGateId: uuid("escalated_from_gate_id"),
     /**
      * The principal a delegate decided ON BEHALF OF (out-of-office coverage).
      * decidedBy stays the actual decider; this records whose gate it was.
@@ -219,7 +241,17 @@ export const flowGates = pgTable(
   },
   (t) => [
     // Idempotent gate creation: replaying a run can't spawn duplicate rows.
-    uniqueIndex("flow_gates_run_node_assignee").on(t.runId, t.nodeId, t.assigneeUserId),
+    uniqueIndex("flow_gates_org_id_id_unique").on(t.orgId, t.id),
+    foreignKey({
+      name: "flow_gates_escalated_from_fk",
+      columns: [t.orgId, t.escalatedFromGateId],
+      foreignColumns: [t.orgId, t.id],
+    }),
+    uniqueIndex("flow_gates_run_node_assignee").on(
+      t.runId,
+      t.nodeId,
+      t.assigneeUserId,
+    ),
     index("flow_gates_assignee").on(t.orgId, t.status, t.assigneeUserId),
     index("flow_gates_subject").on(t.orgId, t.subjectKind, t.subjectId),
     index("flow_gates_remind").on(t.orgId, t.status, t.remindAt),
@@ -323,8 +355,36 @@ export const notifications = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("notifications_renewal_org_id_id").on(t.orgId,t.id),
+    uniqueIndex("notifications_renewal_org_id_id").on(t.orgId, t.id),
     index("notifications_user_inbox").on(t.orgId, t.userId, t.readAt),
     index("notifications_user_created").on(t.userId, t.createdAt),
+  ],
+);
+
+/** Immutable submission dispatch, including the successful absence of gates. */
+export const flowSubmissions = pgTable(
+  "flow_submissions",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subjectKind: text("subject_kind").notNull(),
+    subjectId: uuid("subject_id").notNull(),
+    actorId: uuid("actor_id").references(() => users.id),
+    policy: jsonb("policy").notNull(),
+    context: jsonb("context").notNull(),
+    graphs: jsonb("graphs").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`clock_timestamp()`),
+  },
+  (t) => [
+    uniqueIndex("flow_submissions_org_id_id_unique").on(t.orgId, t.id),
+    index("flow_submissions_subject").on(
+      t.orgId,
+      t.subjectKind,
+      t.subjectId,
+      t.createdAt,
+      t.id,
+    ),
   ],
 );

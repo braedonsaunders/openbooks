@@ -1,3 +1,4 @@
+import { before } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
@@ -187,6 +188,7 @@ async function respondents(w: { orgId: string; subA: string; subB: string }) {
 // --- crew time -----------------------------------------------------------------
 
 const CREW = {
+  permissions: ["time.crew.enter", "time.approve"],
   features: ["projects", "timeTracking", "fieldTime"],
   subB: { currency: "USD", country: "US" },
   actors: { foremanA: { scope: "A", link: "Foreman A" }, foremanB: { scope: "B", link: "Foreman B" } },
@@ -389,7 +391,7 @@ scopeMatrix([
     name: "enrollment-window reads fence B's windows and pending counts to the lens",
     permissions: BENEFITS,
     seed: async (w) => {
-      const { planId } = await seedPlan(w.orgId, { approval_mode: "flows" });
+      const { planId } = await seedPlan(w.orgId);
       await seedApprovalFlow(w.orgId,{subjectKind:"hrm_benefit_enrollment",assignees:[{type:"user",userId:w.admin}],mode:"any",preventSelfApproval:false});
       const windowIds: string[] = [];
       for (const [subsidiaryId, name] of [[w.subA, "A window"], [w.subB, "B window"]] as const) {
@@ -753,6 +755,7 @@ scopeMatrix([
         orgId: w.orgId, actorUserId: w.foremanA, foremanPartyId: site.foremanA, projectId: site.projectA, workedOn: "2026-09-14",
         canManageAll: false, allowedSubsidiaryIds: new Set([w.subA]),
       }));
+      await seedApprovalFlow(w.orgId,{subjectKind:"crew_time_batch",assignees:[{type:"user",userId:w.foremanA}],mode:"all",preventSelfApproval:false});
       return { ...site, batchId };
     },
     read: (w, { batchId }) => withOrg(w.orgId, async () => {
@@ -922,3 +925,9 @@ scopeMatrix([
     },
   }),
 ]);
+
+// Exercise the same native Flow composition installed by application entry points.
+before(async () => {
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
+});

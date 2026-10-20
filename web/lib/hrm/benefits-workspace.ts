@@ -71,8 +71,6 @@ export interface PortfolioAwardRow extends BenefitAward {
   openLabel: string
 }
 
-
-
 export interface PortfolioVitals {
   activePrograms: number
   draftPrograms: number
@@ -244,12 +242,6 @@ function programValueLabel(program: BenefitProgram, amount: (value: string, curr
   return program.valuation
 }
 
-
-
-
-
-
-
 async function serviceRefusal(
   t: Catalog,
   work: () => Promise<void>,
@@ -262,7 +254,6 @@ async function serviceRefusal(
     return { title: t('portfolio.loadFailedTitle'), message }
   }
 }
-
 
 export async function loadBenefitsPortfolio(
   authz: Authz,
@@ -656,8 +647,9 @@ export async function loadBenefitsPortfolio(
       policy('payComponent', component ? `${component.code ?? ''} — ${component.name}` : null)
       let approvalPolicies: ProgramDetailDrawer['approvalPolicies'] = null
       let approvalPoliciesRefusal: ProgramDetailDrawer['approvalPoliciesRefusal'] = null
-      try { if (found.approvalMode === 'flows') approvalPolicies = await listBenefitApprovalPolicies({ orgId, actorId, programId: found.id }) }
-      catch (error) { approvalPoliciesRefusal = { title: t('portfolio.readFailedTitle'), message: error instanceof Error ? error.message : t('portfolio.loadFailed') } }
+      try {
+        approvalPolicies = await listBenefitApprovalPolicies({ orgId, actorId, programId: found.id })
+      } catch (error) { approvalPoliciesRefusal = { title: t('portfolio.readFailedTitle'), message: error instanceof Error ? error.message : t('portfolio.loadFailed') } }
       programDrawer = {
         canConfigureApprovalPolicies: can(authz, 'flows.manage'),
         approvalPolicies, approvalPoliciesRefusal,

@@ -2,13 +2,14 @@ import { payRunCalculationSource, payRunCalculationSourceDigest } from "./run-ca
 import { seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, seedVacationTerms,
+  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, seedVacationTerms, seedApprovalFlow,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { submitForApproval } from "../flows/submit.ts";
 import { cmp, sum } from "../money/money.ts";
 import {
   assertPayRunApprovalReleased,
@@ -186,15 +187,14 @@ test(
         /has not been submitted for approval/,
       );
 
-      // Submission evaluates the policy. Once it has, and nothing is
-      // outstanding, money may move.
+      // A timestamp without native decisions is not evidence of release.
       await db.execute(sql`
         update documents set submitted_at = now(), submitted_by = ${run.actorId}
          where id = ${run.documentId}`);
       const after = await payRunApprovalState(run.orgId, run.documentId);
       assert.equal(after.submitted, true);
-      assert.equal(after.released, true);
-      await assertPayRunApprovalReleased(run.orgId, run.documentId);
+      assert.equal(after.released, false);
+      await assert.rejects(assertPayRunApprovalReleased(run.orgId, run.documentId), /awaiting approval/);
     } finally {
       await dropScratchOrgReporting(run.orgId);
     }
@@ -237,19 +237,10 @@ test(
                 ${JSON.stringify(GATING_GRAPH)}::jsonb, ${run.actorId}, ${run.actorId})`);
       assert.equal((await payRunApprovalState(run.orgId, run.documentId)).released, true);
 
-      await db.execute(sql`update flows set enabled = true where id = ${flowId}`);
-      await db.execute(sql`
-        update documents set submitted_at = now(), submitted_by = ${run.actorId}, status = 'pending_approval'
-         where id = ${run.documentId}`);
-      const runId = randomUUID();
-      await db.execute(sql`
-        insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
-        values (${runId}, ${run.orgId}, ${flowId}, 'pay_run', ${run.documentId}, 'on_submit', 'waiting')`);
-      await db.execute(sql`
-        insert into flow_gates (org_id, flow_id, run_id, node_id, subject_kind, subject_id, title,
-                                group_key, quorum, status, assignee_user_id)
-        values (${run.orgId}, ${flowId}, ${runId}, 'g', 'pay_run', ${run.documentId},
-                'Approve pay run', 'g', 'any', 'pending', ${run.actorId})`);
+      await seedApprovalFlow(run.orgId, {
+        subjectKind:"pay_run",assignees:[{type:"user",userId:run.actorId}],mode:"any",preventSelfApproval:false,
+      });
+      await submitForApproval("pay_run",run.documentId,run.actorId);
 
       const state = await payRunApprovalState(run.orgId, run.documentId);
       assert.equal(state.outstandingGates, 1);

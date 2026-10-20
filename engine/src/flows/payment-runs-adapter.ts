@@ -3,7 +3,11 @@ import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
 import { paymentRunVisibleSql } from "../payments-core/payment-run-scope.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
-import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
+import type {
+  FlowExecCtx,
+  FlowSubjectAdapter,
+  FlowSubjectContext,
+} from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
@@ -38,7 +42,9 @@ export type PaymentRunDirection = "outbound" | "inbound";
 
 /** The flow subject a run approves under, from its stored direction. */
 export function paymentRunSubjectKind(direction: string): string {
-  return direction === "inbound" ? INBOUND_PAYMENT_RUN_SUBJECT_KIND : OUTBOUND_PAYMENT_RUN_SUBJECT_KIND;
+  return direction === "inbound"
+    ? INBOUND_PAYMENT_RUN_SUBJECT_KIND
+    : OUTBOUND_PAYMENT_RUN_SUBJECT_KIND;
 }
 
 const PAYMENT_RUN_STATUSES = [
@@ -71,7 +77,9 @@ const METHOD_OPTIONS = [
 function paymentRunProfile(direction: PaymentRunDirection): FlowSubjectProfile {
   const outbound = direction === "outbound";
   return {
-    subjectKind: outbound ? OUTBOUND_PAYMENT_RUN_SUBJECT_KIND : INBOUND_PAYMENT_RUN_SUBJECT_KIND,
+    subjectKind: outbound
+      ? OUTBOUND_PAYMENT_RUN_SUBJECT_KIND
+      : INBOUND_PAYMENT_RUN_SUBJECT_KIND,
     pinsSubmissionPolicy: true,
     label: outbound ? "Payment run" : "Collection run",
     triggers: ["on_submit"],
@@ -80,15 +88,23 @@ function paymentRunProfile(direction: PaymentRunDirection): FlowSubjectProfile {
     fields: [
       { key: "runNumber", label: "Run number", type: "text" },
       {
-        key: "purpose", label: "Purpose", type: "enum", options: outbound
+        key: "purpose",
+        label: "Purpose",
+        type: "enum",
+        options: outbound
           ? [
-            { value: "vendor_payments", label: "Vendor payments" },
-            { value: "refunds", label: "Refunds" },
-            { value: "positive_pay", label: "Positive pay" },
-          ]
+              { value: "vendor_payments", label: "Vendor payments" },
+              { value: "refunds", label: "Refunds" },
+              { value: "positive_pay", label: "Positive pay" },
+            ]
           : [{ value: "customer_collections", label: "Customer collections" }],
       },
-      { key: "method", label: "Payment method", type: "enum", options: METHOD_OPTIONS },
+      {
+        key: "method",
+        label: "Payment method",
+        type: "enum",
+        options: METHOD_OPTIONS,
+      },
       { key: "currency", label: "Currency", type: "text" },
       { key: "totalAmount", label: "Total amount", type: "number" },
       { key: "paymentCount", label: "Payments", type: "number" },
@@ -96,7 +112,10 @@ function paymentRunProfile(direction: PaymentRunDirection): FlowSubjectProfile {
       { key: "bankAccountName", label: "Bank account", type: "text" },
       { key: "profileName", label: "Payment profile", type: "text" },
       {
-        key: "origin", label: "Origin", type: "enum", options: [
+        key: "origin",
+        label: "Origin",
+        type: "enum",
+        options: [
           { value: "manual", label: "Assembled by a user" },
           { value: "scheduled", label: "Payment schedule" },
         ],
@@ -104,7 +123,12 @@ function paymentRunProfile(direction: PaymentRunDirection): FlowSubjectProfile {
       { key: "status", label: "Status", type: "enum" },
       { key: "createdBy", label: "Assembled by", type: "user" },
       { key: "submittedBy", label: "Submitted by", type: "user" },
-      { key: "event_source", label: "Event source", type: "enum", options: [...EVENT_SOURCE_OPTIONS] },
+      {
+        key: "event_source",
+        label: "Event source",
+        type: "enum",
+        options: [...EVENT_SOURCE_OPTIONS],
+      },
     ],
   };
 }
@@ -131,7 +155,10 @@ type PaymentRunRow = {
 };
 
 /** The run as this subject sees it: a run of the other direction is not this subject. */
-async function loadRun(subjectId: string, direction: PaymentRunDirection): Promise<PaymentRunRow | null> {
+async function loadRun(
+  subjectId: string,
+  direction: PaymentRunDirection,
+): Promise<PaymentRunRow | null> {
   const result = await db.execute<PaymentRunRow>(sql`
     select r.id, r.run_number, r.direction, r.purpose, r.method, r.currency,
            r.total_amount::text as total_amount, r.payment_count,
@@ -146,14 +173,21 @@ async function loadRun(subjectId: string, direction: PaymentRunDirection): Promi
   return result.rows[0] ?? null;
 }
 
-function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubjectAdapter {
+function createPaymentRunsFlowAdapter(
+  direction: PaymentRunDirection,
+): FlowSubjectAdapter {
   const subjectKind = paymentRunSubjectKind(direction);
   const area = direction === "inbound" ? "ar" : "ap";
-  const getStatusFor = async (subjectId: string) => (await loadRun(subjectId, direction))?.status ?? null;
+  const getStatusFor = async (subjectId: string) =>
+    (await loadRun(subjectId, direction))?.status ?? null;
   return defineTableSubjectAdapter({
     subjectKind,
     // The same grants the run drawer and its verbs require for this direction.
-    permissions: { read: `${area}.pay`, edit: `${area}.pay`, approve: `${area}.approve` },
+    permissions: {
+      read: `${area}.pay`,
+      edit: `${area}.pay`,
+      approve: `${area}.approve`,
+    },
     scope: {
       via: "custom",
       // A run is visible only when its header and every source document are
@@ -161,7 +195,8 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
       // entity reports the entity its evidence proves, so restricted callers
       // see the same runs here as on the run list.
       async subsidiaryOf(orgId, ids, allowed, lock) {
-        const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+        const rows = (
+          await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
           select r.id,
                  coalesce(r.subsidiary_id, (
                    select d.subsidiary_id from payment_run_items i
@@ -174,8 +209,15 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
            where r.org_id = ${orgId}
              and r.id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
            ${lock ? sql`for share of r` : sql``}
-        `)).rows as Array<{ id: string; subsidiaryId: string | null; visible: boolean }>;
-        return new Map(rows.map((row) => [row.id, row.visible ? row.subsidiaryId : null]));
+        `)
+        ).rows as Array<{
+          id: string;
+          subsidiaryId: string | null;
+          visible: boolean;
+        }>;
+        return new Map(
+          rows.map((row) => [row.id, row.visible ? row.subsidiaryId : null]),
+        );
       },
       worklistPredicate(allowedIdsJson) {
         const allowed = new Set<string>(JSON.parse(allowedIdsJson) as string[]);
@@ -186,9 +228,11 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
         )`;
       },
     },
-    profile: direction === "inbound" ? inboundPaymentRunSubjectProfile : outboundPaymentRunSubjectProfile,
+    profile:
+      direction === "inbound"
+        ? inboundPaymentRunSubjectProfile
+        : outboundPaymentRunSubjectProfile,
     releaseViaHandler: true,
-    selfApprovalPolicy: "configurable",
 
     async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
       const run = await loadRun(subjectId, direction);
@@ -228,7 +272,9 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
     },
 
     async changeStatus(): Promise<void> {
-      throw new Error("payment run status is released by the approval engine, not a flow action");
+      throw new Error(
+        "payment run status is released by the approval engine, not a flow action",
+      );
     },
 
     async releaseApproval(
@@ -238,7 +284,14 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
       detail?: { comment?: string | null },
       run?: { id: string; dispatchValues: Record<string, unknown> | null },
     ): Promise<void> {
-      await releaseFlowApproval({ subjectKind, subjectId, outcome, comment: detail?.comment, ctx, approvalRunId: run?.id });
+      await releaseFlowApproval({
+        subjectKind,
+        subjectId,
+        outcome,
+        comment: detail?.comment,
+        ctx,
+        approvalRunId: run?.id,
+      });
     },
 
     /**
@@ -248,7 +301,10 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
      * retried run fails closed instead of gating a run that cannot be
      * released.
      */
-    async markAwaitingApproval(subjectId: string, ctx: FlowExecCtx): Promise<void> {
+    async markAwaitingApproval(
+      subjectId: string,
+      ctx: FlowExecCtx,
+    ): Promise<void> {
       const parked = await db.execute<{ id: string; status: string }>(sql`
         update payment_runs set status = 'pending_approval',
                submitted_at = coalesce(submitted_at, now()),
@@ -268,12 +324,16 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
       }
       const current = await getStatusFor(subjectId);
       if (current !== "pending_approval") {
-        throw new Error(`payment run is ${current ?? "missing"}; only a submitted draft can await approval`);
+        throw new Error(
+          `payment run is ${current ?? "missing"}; only a submitted draft can await approval`,
+        );
       }
     },
 
     async setField(): Promise<void> {
-      throw new Error("payment run fields are not writable by flows; reassemble the run instead");
+      throw new Error(
+        "payment run fields are not writable by flows; reassemble the run instead",
+      );
     },
 
     /** Runs awaiting a decision, for scheduled fan-out (reminders). */
@@ -283,7 +343,9 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
       // tenant. Fails closed without an ambient tenant.
       const orgId = ambientTenantOrgId();
       if (!orgId) {
-        throw new Error(`findCandidateIds for "${subjectKind}" requires an ambient tenant context (withOrg)`);
+        throw new Error(
+          `findCandidateIds for "${subjectKind}" requires an ambient tenant context (withOrg)`,
+        );
       }
       const result = await db.execute<{ id: string }>(sql`
         select id::text as id from payment_runs
@@ -296,5 +358,7 @@ function createPaymentRunsFlowAdapter(direction: PaymentRunDirection): FlowSubje
   });
 }
 
-export const outboundPaymentRunsFlowAdapter = createPaymentRunsFlowAdapter("outbound");
-export const inboundPaymentRunsFlowAdapter = createPaymentRunsFlowAdapter("inbound");
+export const outboundPaymentRunsFlowAdapter =
+  createPaymentRunsFlowAdapter("outbound");
+export const inboundPaymentRunsFlowAdapter =
+  createPaymentRunsFlowAdapter("inbound");

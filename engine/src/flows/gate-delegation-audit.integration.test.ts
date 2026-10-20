@@ -36,7 +36,7 @@ async function withPendingGate(
       assignees: [{ type: "user", userId: actors.approver1Id }],
     });
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    const res = await submitForApproval("vendor_bill", docId);
+    const res = await submitForApproval("vendor_bill", docId, actors.submitterId);
     assert.equal(res.gated, true, "submit created a gate");
     const gate = (
       await db.execute<{ id: string }>(sql`

@@ -230,40 +230,44 @@ test('native package component and classification edits cannot cross the held pa
   });
 });
 
-test("gated package approval requires independent user and person identities, freezes terms and preserves complete audit", { skip: !DB }, async () => {
-  await withHarness(setup, async (f) => {
-    const base = { orgId: f.org.orgId, packageId: f.pack.id, versionId: f.version.id, reason: "Policy review" };
-    const submitted = await transitionCompensationPackageVersion({ ...base, actorId: f.authorId, expectedRevision: 1, action: "submit" });
-    assert.equal(submitted.status, "submitted");
-    assert.equal(submitted.flowApprovalRequired, true);
-    assert.equal(submitted.submissionPolicy?.kind, "flow");
-    for (const actorId of [f.authorId, f.approverId]) {
+test(
+  "gated package approval requires independent user and person identities, freezes terms and preserves complete audit",
+  { skip: !DB },
+  async () => {
+    await withHarness(setup, async (f) => {
+      const base = { orgId: f.org.orgId, packageId: f.pack.id, versionId: f.version.id, reason: "Policy review" };
+      const submitted = await transitionCompensationPackageVersion({ ...base, actorId: f.authorId, expectedRevision: 1, action: "submit" });
+      assert.equal(submitted.status, 'submitted');
+      assert.equal(submitted.submissionPolicy?.kind, "flow");
+      for (const actorId of [f.authorId, f.approverId]) {
       await assert.rejects(transitionCompensationPackageVersion({ ...base, actorId, expectedRevision: submitted.revision, action: "approve" }),
         /through its submitted Flow approval controls/, "a direct decision cannot bypass the tenant approval Flow");
     }
-    assert.deepEqual(await pendingGates(f, submitted.id, f.authorId), [], "the submitter is never routed their own approval");
-    const [approverGate] = await pendingGates(f, submitted.id, f.approverId);
-    assert.ok(approverGate);
-    await assert.rejects(decideGate({ gateId: approverGate, decision: "approved", userId: f.authorId }), /not an approver for this gate/);
-    await assert.rejects(decide(f, submitted.id, f.aliasId, "Attempted author alternate login"), /requires an independent approver/,
-      "a different login resolving to the author's person cannot approve");
-    await assert.rejects(decide(f, submitted.id, f.unlinkedId, "Attempted unidentified approval"), /resolved person identity.*link/);
-    const pending = await versionOf(f, submitted.id);
-    assert.equal(pending.status, "submitted"); assert.equal(pending.revision, submitted.revision, "refused decisions change nothing");
-    await decide(f, submitted.id, f.approverId);
-    const approved = await versionOf(f, submitted.id);
-    assert.equal(approved.status, "approved");
-    assert.equal(approved.decidedBy, f.approverId);
-    assert.equal(approved.definitionHash, f.version.definitionHash);
-    await assert.rejects(saveCompensationPackageVersion({ ...base, actorId: f.authorId, expectedRevision: approved.revision, definition: f.definition, effectiveFrom: "2026-01-01", effectiveTo: null }), /frozen.*new draft/);
-    await assert.rejects(db.execute(sql`update payroll_compensation_versions set definition='{}'::jsonb,revision=revision+1 where org_id=${f.org.orgId} and id=${approved.id}`), (error: unknown) => error instanceof Error && error.cause instanceof Error && /Approved compensation history is immutable.*successor/.test(error.cause.message));
-    const audits = (await db.execute<{ actorId: string; changes: { before: unknown; after: unknown; reason: string } }>(sql`select actor_id as "actorId",changes from audit_log where org_id=${f.org.orgId} and table_name='payroll_compensation_versions' and row_id=${approved.id} order by at,id`)).rows;
-    assert.equal(audits.length, 3);
-    assert.deepEqual(audits.map((row) => row.actorId), [f.authorId, f.authorId, f.approverId]);
-    assert.ok(audits.every((row) => row.changes.after && row.changes.reason));
-    assert.ok(audits[2]!.changes.before);
-  });
-});
+      assert.deepEqual(await pendingGates(f, submitted.id, f.authorId), [], "the submitter is never routed their own approval");
+      const [approverGate] = await pendingGates(f, submitted.id, f.approverId);
+      assert.ok(approverGate);
+      await assert.rejects(decideGate({ gateId: approverGate, decision: "approved", userId: f.authorId }), /not an approver for this gate/);
+      assert.deepEqual(await pendingGates(f, submitted.id, f.aliasId), [], "the author's second login is excluded by the frozen gate policy");
+      await assert.rejects(decideGate({gateId:approverGate,userId:f.aliasId,decision:"approved"}),/not an approver for this gate/);
+      await assert.rejects(decide(f, submitted.id, f.unlinkedId, "Attempted unidentified approval"), /resolved person identity.*link/);
+      const pending = await versionOf(f, submitted.id);
+      assert.equal(pending.status, "submitted");
+      assert.equal(pending.revision, submitted.revision, "refused decisions change nothing");
+      await decide(f, submitted.id, f.approverId);
+      const approved = await versionOf(f, submitted.id);
+      assert.equal(approved.status, "approved");
+      assert.equal(approved.decidedBy, f.approverId);
+      assert.equal(approved.definitionHash, f.version.definitionHash);
+      await assert.rejects(saveCompensationPackageVersion({ ...base, actorId: f.authorId, expectedRevision: approved.revision, definition: f.definition, effectiveFrom: "2026-01-01", effectiveTo: null }), /frozen.*new draft/);
+      await assert.rejects(db.execute(sql`update payroll_compensation_versions set definition='{}'::jsonb,revision=revision+1 where org_id=${f.org.orgId} and id=${approved.id}`), (error: unknown) => error instanceof Error && error.cause instanceof Error && /Approved compensation history is immutable.*successor/.test(error.cause.message));
+      const audits = (await db.execute<{ actorId: string; changes: { before: unknown; after: unknown; reason: string } }>(sql`select actor_id as "actorId",changes from audit_log where org_id=${f.org.orgId} and table_name='payroll_compensation_versions' and row_id=${approved.id} order by at,id`)).rows;
+      assert.equal(audits.length, 3);
+      assert.deepEqual(audits.map((row) => row.actorId), [f.authorId, f.authorId, f.approverId]);
+      assert.ok(audits.every((row) => row.changes.after && row.changes.reason));
+      assert.ok(audits[2]!.changes.before);
+    });
+  },
+);
 
 test("assignment refusals preserve the register and approval excludes the affected employee", { skip: !DB }, async () => {
   await withHarness(setup, async (f) => {
@@ -347,8 +351,8 @@ test("an earlier editor cannot approve through a relinked login and authorship c
     const submitted = await transitionCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, versionId: f.version.id,
       expectedRevision: edited.revision, action: "submit", reason: "Prepared for independent review" });
     await db.execute(sql`update users set party_id=${f.workerPartyId} where org_id=${f.org.orgId} and id=${f.approverId}`);
-    await db.execute(sql`update users set party_id=${f.approverPartyId} where org_id=${f.org.orgId} and id=${f.aliasId}`);
-    await assert.rejects(decide(f, submitted.id, f.aliasId, "Attempted alternate login"), /requires an independent approver/,
+    await db.execute(sql`update users set party_id=${f.approverPartyId} where org_id=${f.org.orgId} and id=${f.unlinkedId}`);
+    await assert.rejects(decide(f, submitted.id, f.unlinkedId, "Attempted alternate login"), /requires an independent approver/,
       "a login relinked to an earlier editor's person cannot approve");
     assert.equal((await versionOf(f, submitted.id)).status, "submitted");
     await assert.rejects(db.execute(sql`update payroll_compensation_versions set authorship='[]',revision=revision+1 where org_id=${f.org.orgId} and id=${f.version.id}`),
@@ -359,8 +363,8 @@ test("an earlier editor cannot approve through a relinked login and authorship c
       packageId: f.pack.id, versionId: next.id, expectedRevision: next.revision, action: "submit", reason: "Submission by a separate person" });
     assert.ok(separateSubmitter.authorship.some((row) => row.actorId === f.approverId && row.partyId === f.workerPartyId));
     await db.execute(sql`update users set party_id=${f.authorPartyId} where org_id=${f.org.orgId} and id=${f.approverId}`);
-    await db.execute(sql`update users set party_id=${f.workerPartyId} where org_id=${f.org.orgId} and id=${f.aliasId}`);
-    await assert.rejects(decide(f, next.id, f.aliasId, "Attempted submitter identity reuse"), /requires an independent approver/,
+    await db.execute(sql`update users set party_id=${f.workerPartyId} where org_id=${f.org.orgId} and id=${f.unlinkedId}`);
+    await assert.rejects(decide(f, next.id, f.unlinkedId, "Attempted submitter identity reuse"), /requires an independent approver/,
       "a login relinked to the submitter's recorded person cannot approve");
     assert.equal((await versionOf(f, next.id)).status, "submitted");
   });
@@ -426,27 +430,33 @@ test("create retries match immutable evidence after edits and decisions and chan
   });
 });
 
-test("without a tenant compensation Flow, submission releases versions and assignments directly with no reviewer", { skip: !DB }, async () => {
-  await withHarness(() => setup({ approvalFlow: false }), async (f) => {
-    const version = await transitionCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, versionId: f.version.id,
+test(
+  "without a tenant compensation Flow, submission releases versions and assignments directly with no reviewer",
+  { skip: !DB },
+  async () => {
+    await withHarness(
+      () => setup({ approvalFlow: false }),
+      async (f) => {
+        const version = await transitionCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, versionId: f.version.id,
       expectedRevision: f.version.revision, action: "submit", reason: "Owner-approved package terms" });
-    assert.equal(version.status, "approved");
-    assert.equal(version.submissionPolicy?.kind, "ungated");
-    assert.equal(version.flowApprovalRequired, false);
-    assert.equal(version.submittedBy, f.authorId); assert.equal(version.decidedBy, f.authorId, "the submitter's authority releases an ungated proposal");
-    assert.equal(version.definitionHash, f.version.definitionHash);
-    const saved = await assignment(f);
-    const active = await transitionCompensationPackageAssignment({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id,
+        assert.equal(version.status, "approved");
+        assert.equal(version.submissionPolicy?.kind, "ungated");
+        assert.equal(version.submittedBy, f.authorId);
+        assert.equal(version.decidedBy, f.authorId, "the submitter's authority releases an ungated proposal");
+        assert.equal(version.definitionHash, f.version.definitionHash);
+        const saved = await assignment(f);
+        const active = await transitionCompensationPackageAssignment({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, assignmentId: saved.id,
       expectedRevision: saved.revision, action: "submit", reason: "Owner-approved employee terms" });
-    assert.equal(active.status, "active");
-    assert.equal(active.submissionPolicy?.kind, "ungated");
-    assert.equal(active.flowApprovalRequired, false);
-    assert.equal(active.decidedBy, f.authorId);
-    assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId}`)).rows.length, 0, "no approval is routed without a tenant Flow");
-    const [source] = await compensationPackageEmploymentSource(db, { orgId: f.org.orgId, employmentId: f.employmentId, periodStart: "2026-01-01", periodEnd: "2026-01-31" });
-    assert.equal(source?.assignmentId, saved.id, "directly released terms are payable");
-  });
-});
+        assert.equal(active.status, "active");
+        assert.equal(active.submissionPolicy?.kind, "ungated");
+        assert.equal(active.decidedBy, f.authorId);
+        assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId}`)).rows.length, 0, "no approval is routed without a tenant Flow");
+        const [source] = await compensationPackageEmploymentSource(db, { orgId: f.org.orgId, employmentId: f.employmentId, periodStart: "2026-01-01", periodEnd: "2026-01-31" });
+        assert.equal(source?.assignmentId, saved.id, "directly released terms are payable");
+      },
+    );
+  },
+);
 
 async function runtimeContext(f: Fixture, effectiveFrom = "2026-01-01"): Promise<CompensationPackagePayrollContext> {
   await approveVersion(f);

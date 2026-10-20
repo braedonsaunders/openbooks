@@ -1,11 +1,19 @@
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { CONTROL_ACCOUNT_ROLES, CONTROL_ACCOUNT_TYPE_POLICY } from '@openbooks/engine/records/control-accounts'
+import {
+  CONTROL_ACCOUNT_ROLES,
+  CONTROL_ACCOUNT_TYPE_POLICY,
+} from '@openbooks/engine/records/control-accounts'
 import { db } from '@openbooks/engine/platform/db'
-import { canonicalTimeZone, listCanonicalTimeZones } from '@openbooks/engine/platform/time-zone'
-import { hasVendorBillApprovalFlow } from '@openbooks/engine/flows/module'
+import {
+  canonicalTimeZone,
+  listCanonicalTimeZones,
+} from '@openbooks/engine/platform/time-zone'
 import { DEFAULT_LOCALE, isLocale } from '../../../../../i18n/config'
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
+import {
+  isFeatureEnabled,
+  subsidiaryFeatureEnabled,
+} from '../../../../../lib/features'
 import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
 import {
   EMPTY_COMPANY_ADDRESS,
@@ -14,7 +22,10 @@ import {
   readCompanyAddress,
   readTaxIds,
 } from '@openbooks/engine/organization/company-identity'
-import { readBillingSettings, readCashSalesSettings } from '../../../../../lib/company-settings'
+import {
+  readBillingSettings,
+  readCashSalesSettings,
+} from '../../../../../lib/company-settings'
 import { SampleCompanyPicker } from '../../../../../components/sample-company-picker'
 import { parsePartylessControlPolicy } from '@openbooks/engine/ledger/partyless-control-policy'
 
@@ -27,7 +38,18 @@ import { parsePartylessControlPolicy } from '@openbooks/engine/ledger/partyless-
 export async function CompanyTab({ orgId }: { orgId: string }) {
   const t = await getTranslations('admin.setup')
 
-  const [org, accounts, currencies, multiSubsidiary, revenueRecognition, revenueContracts, saasMetricsEnabled, cashSalesEnabled, vendorBillFlowConfigured, customers, paymentTerms] = ((await Promise.all([
+  const [
+    org,
+    accounts,
+    currencies,
+    multiSubsidiary,
+    revenueRecognition,
+    revenueContracts,
+    saasMetricsEnabled,
+    cashSalesEnabled,
+    customers,
+    paymentTerms,
+  ] = await Promise.all([
     db.execute(sql`
       select name, legal_name, base_currency, country, tax_ids, settings
         from orgs where id = ${orgId}`),
@@ -41,7 +63,6 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
     isFeatureEnabled(orgId, 'revenueContracts'),
     isFeatureEnabled(orgId, 'saasMetrics'),
     isFeatureEnabled(orgId, 'cashSales'),
-    hasVendorBillApprovalFlow(orgId),
     db.execute(sql`
       select p.id, p.display_name from parties p
        where p.org_id = ${orgId} and p.is_active
@@ -54,7 +75,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
       select id, name, net_days from payment_terms
        where org_id = ${orgId} and is_active
        order by name`),
-  ])))
+  ])
 
   const row = org.rows[0]
   const settings = (row?.settings ?? {}) as Record<string, unknown>
@@ -72,7 +93,9 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
           {t('entities.company.title')}
         </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('entities.company.description')}</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          {t('entities.company.description')}
+        </p>
       </div>
       <SettingsForm
         initial={{
@@ -82,45 +105,58 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
           baseCurrency: (row?.base_currency as string) ?? '',
           timeZone: canonicalTimeZone(settings.timeZone) ?? 'UTC',
           fiscalYearStartMonth:
-            typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
-          reportingFramework: settings.reportingFramework === 'ifrs' ? 'ifrs' : 'us_gaap',
+            typeof settings.fiscalYearStartMonth === 'number'
+              ? settings.fiscalYearStartMonth
+              : 1,
+          reportingFramework:
+            settings.reportingFramework === 'ifrs' ? 'ifrs' : 'us_gaap',
           taxFramework: settings.taxFramework === 'ias12' ? 'ias12' : 'asc740',
-          defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
-          reportPdfStyle: settings.reportPdfStyle === 'formal' ? 'formal' : 'modern',
+          defaultLocale: isLocale(settings.defaultLocale)
+            ? settings.defaultLocale
+            : DEFAULT_LOCALE,
+          reportPdfStyle:
+            settings.reportPdfStyle === 'formal' ? 'formal' : 'modern',
           fairValueRangePolicy:
-            (settings.revenue as Record<string, unknown> | undefined)?.fairValueRangePolicy === 'off'
+            (settings.revenue as Record<string, unknown> | undefined)
+              ?.fairValueRangePolicy === 'off'
               ? 'off'
               : 'warn',
           contractCreation:
-            (settings.revenue as Record<string, unknown> | undefined)?.contractCreation === 'booking'
+            (settings.revenue as Record<string, unknown> | undefined)
+              ?.contractCreation === 'booking'
               ? 'booking'
               : 'first_billing',
           saasMetrics: (() => {
-            const definitions = settings.saasMetrics as Record<string, unknown> | undefined
+            const definitions = settings.saasMetrics as
+              Record<string, unknown> | undefined
             return {
-              evergreenBookingMonths: typeof definitions?.evergreenBookingMonths === 'string'
-                ? definitions.evergreenBookingMonths
-                : '12',
-              billingsUsePreTaxSubtotal: definitions?.billingsUsePreTaxSubtotal !== false,
-              customerCreditsReduceBillings: definitions?.customerCreditsReduceBillings !== false,
+              evergreenBookingMonths:
+                typeof definitions?.evergreenBookingMonths === 'string'
+                  ? definitions.evergreenBookingMonths
+                  : '12',
+              billingsUsePreTaxSubtotal:
+                definitions?.billingsUsePreTaxSubtotal !== false,
+              customerCreditsReduceBillings:
+                definitions?.customerCreditsReduceBillings !== false,
             }
           })(),
-          requireVendorBillApproval:
-            (settings.approvals as Record<string, unknown> | undefined)
-              ?.requireVendorBillApproval === true,
-          requireStockCountReview:
-            (settings.approvals as Record<string, unknown> | undefined)
-              ?.requireStockCountReview === true,
           controlAccounts: Object.fromEntries(
             CONTROL_ACCOUNT_ROLES.map((role) => [role, control[role] ?? '']),
           ),
           partylessControlPolicy: parsePartylessControlPolicy(
-            (settings.ledger as Record<string, unknown> | undefined)?.partylessControlPolicy,
+            (settings.ledger as Record<string, unknown> | undefined)
+              ?.partylessControlPolicy,
           ),
           legalIdentity: {
-            address: readCompanyAddress(settings.companyAddress) ?? { ...EMPTY_COMPANY_ADDRESS },
-            legalForm: isLegalForm(settings.legalForm) ? settings.legalForm : '',
-            taxClassification: isTaxClassification(settings.taxClassification) ? settings.taxClassification : '',
+            address: readCompanyAddress(settings.companyAddress) ?? {
+              ...EMPTY_COMPANY_ADDRESS,
+            },
+            legalForm: isLegalForm(settings.legalForm)
+              ? settings.legalForm
+              : '',
+            taxClassification: isTaxClassification(settings.taxClassification)
+              ? settings.taxClassification
+              : '',
             taxIds: readTaxIds(row?.tax_ids),
           },
           billing: (() => {
@@ -150,15 +186,18 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
         revenueContracts={revenueContracts}
         saasMetricsEnabled={saasMetricsEnabled}
         cashSalesEnabled={cashSalesEnabled}
-        customers={(customers.rows as { id: string; display_name: string }[]).map((c) => ({
+        customers={(
+          customers.rows as { id: string; display_name: string }[]
+        ).map((c) => ({
           id: c.id,
           label: c.display_name,
         }))}
-        paymentTerms={(paymentTerms.rows as { id: string; name: string }[]).map((pt) => ({
-          id: pt.id,
-          label: pt.name,
-        }))}
-        vendorBillFlowConfigured={vendorBillFlowConfigured}
+        paymentTerms={(paymentTerms.rows as { id: string; name: string }[]).map(
+          (pt) => ({
+            id: pt.id,
+            label: pt.name,
+          }),
+        )}
       />
       <SampleCompanyPicker />
     </div>

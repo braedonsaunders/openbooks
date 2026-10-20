@@ -7,7 +7,6 @@ import {
   ACCOUNT_MERGE_OPERATION,
   assertFinancialChangeApproved,
   completeFinancialChange,
-  financialChangeFlowConfigured,
   loadFinancialChange,
   proposeFinancialChange,
 } from "../platform/financial-changes.ts";
@@ -148,7 +147,6 @@ export interface AccountMergePreview {
   children: { id: string; number: string | null; name: string }[];
   draftJournalLines: number;
   controlRoles: { scope: string; role: string; label: string }[];
-  approvalRequired: boolean;
   pendingChangeId: string | null;
   alreadyMerged: { mergeId: string; targetAccountId: string } | null;
   digest: string;
@@ -696,7 +694,7 @@ async function planAccountMerge(
       children,
       draftJournalLines,
       controlRoles,
-      approvalRequired: await financialChangeFlowConfigured(tx, orgId),
+
       pendingChangeId: pendingChange?.id ?? null,
       alreadyMerged,
       digest: mergeConsequenceDigest(consequences),
@@ -993,7 +991,10 @@ function validateCommand(command: AccountMergeCommand): void {
  * governs it. Refuses unless the current consequences match the confirmed
  * preview digest.
  */
-export async function requestAccountMerge(orgId: string, command: AccountMergeCommand): Promise<AccountMergeOutcome> {
+export async function requestAccountMerge(
+  orgId: string,
+  command: AccountMergeCommand,
+): Promise<AccountMergeOutcome> {
   validateCommand(command);
   return withOrgTransaction(orgId, async () => {
     const tx = db;
@@ -1001,12 +1002,25 @@ export async function requestAccountMerge(orgId: string, command: AccountMergeCo
     await lockMerges(tx, orgId);
     const replay = await replayedMerge(tx, orgId, command.idempotencyKey, command);
     if (replay) return replay;
-    const existingChange = (await tx.execute<{ id: string; subject_id: string; payload: Record<string, unknown> }>(sql`
-      select id, subject_id, payload from financial_changes where org_id = ${orgId} and idempotency_key = ${command.idempotencyKey}`)).rows[0];
+    const existingChange = (await tx.execute<{
+      id: string; subject_id: string; domain: string; operation: string; status: string;
+      effective_on: string; reason: string; submitted_by: string; payload: Record<string, unknown>;
+    }>(sql`
+      select id, subject_id, domain, operation, status, effective_on::text, reason, submitted_by, payload
+        from financial_changes where org_id = ${orgId} and idempotency_key = ${command.idempotencyKey}`)).rows[0];
     if (existingChange) {
-      if (existingChange.subject_id !== command.sourceAccountId || existingChange.payload?.targetAccountId !== command.targetAccountId) {
+      if (existingChange.domain !== "ledger" || existingChange.operation !== ACCOUNT_MERGE_OPERATION ||
+        existingChange.subject_id !== command.sourceAccountId || existingChange.payload?.targetAccountId !== command.targetAccountId ||
+        existingChange.effective_on !== command.effectiveDate || existingChange.reason !== command.reason.trim() ||
+        existingChange.submitted_by !== command.actorId || existingChange.payload.previewDigest !== command.expectedDigest) {
         throw new AccountMergeError("This request key already belongs to a different proposal.", "account_merge_key_conflict", "Review the earlier proposal; use a new request key only for a separate merge.", 409);
       }
+      if (existingChange.status === "approved" || existingChange.status === "applied")
+        return applyApprovedAccountMerge(orgId, {
+          changeId: existingChange.id, actorId: command.actorId, allowedSubsidiaryIds: command.allowedSubsidiaryIds,
+        });
+      if (existingChange.status !== "pending")
+        throw new AccountMergeError("The original merge proposal is no longer awaiting approval.", "account_merge_not_pending", "Open its recorded outcome and create a new proposal for changed work.", 409);
       return { status: "pending_approval", changeId: existingChange.id, replayed: true };
     }
     const plan = await planAccountMerge(tx, orgId, command, { lock: true, allowedSubsidiaryIds: command.allowedSubsidiaryIds });
@@ -1028,7 +1042,7 @@ export async function requestAccountMerge(orgId: string, command: AccountMergeCo
     if (plan.preview.pendingChangeId) {
       throw new AccountMergeError("A merge of this account is already awaiting approval.", "account_merge_pending", "Decide or apply the pending proposal first.", 409);
     }
-    if (plan.preview.approvalRequired) {
+    {
       const anchor = plan.source.subsidiary_id ?? (await tx.execute<{ id: string }>(sql`
         select id from subsidiaries where org_id = ${orgId} and parent_id is null and not is_elimination order by created_at, id limit 1`)).rows[0]?.id;
       if (!anchor) throw new AccountMergeError("The company has no root subsidiary to record the proposal against.", "account_merge_no_entity", "Create the company's root subsidiary first.");
@@ -1053,14 +1067,15 @@ export async function requestAccountMerge(orgId: string, command: AccountMergeCo
         beforeState: { previewDigest: plan.preview.digest },
       });
       await submitFinancialChange(orgId, changeId, command.actorId);
+      const change = await loadFinancialChange(tx, orgId, changeId);
+      if (change.status === "approved")
+        return applyApprovedAccountMerge(orgId, {
+          changeId,
+          actorId: command.actorId,
+          allowedSubsidiaryIds: command.allowedSubsidiaryIds,
+        });
       return { status: "pending_approval", changeId, replayed: false };
     }
-    return applyMerge(tx, orgId, plan, {
-      reason: command.reason,
-      idempotencyKey: command.idempotencyKey,
-      actorId: command.actorId,
-      financialChangeId: null,
-    });
   });
 }
 

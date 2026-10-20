@@ -1,9 +1,15 @@
+import { before } from "node:test";
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { DB, setupHarness, withHarness, seedEmployment } from '@openbooks/engine/testing/hrm'
+import {
+  DB,
+  setupHarness,
+  withHarness,
+  seedEmployment,
+} from '@openbooks/engine/testing/hrm'
 import { db } from '@openbooks/engine/platform/database'
 import {
   createTrainingCourse,
@@ -22,7 +28,10 @@ registerHooks({
       shortCircuit: true as const,
       url: 'data:text/javascript,' + encodeURIComponent(source),
     })
-    if (specifier === '@/lib/feature-gates' && context.parentURL?.includes('/lib/api/route'))
+    if (
+      specifier === '@/lib/feature-gates' &&
+      context.parentURL?.includes('/lib/api/route')
+    )
       return virtual(
         `export async function guardFeaturePermission(){const s=globalThis.__ownTrainingActor;return {user:{orgId:s.orgId,id:s.actorId},allowedSubsidiaryIds:null}}`,
       )
@@ -32,8 +41,10 @@ registerHooks({
   },
 })
 const { GET: list } = await import('./route')
-const { GET: read, POST: respond } = await import('./participants/[participantId]/route')
-const { POST: feedback } = await import('./participants/[participantId]/feedback/route')
+const { GET: read, POST: respond } =
+  await import('./participants/[participantId]/route')
+const { POST: feedback } =
+  await import('./participants/[participantId]/feedback/route')
 const spec = {
   features: ['hrm', 'hrmCertifications', 'hrmTraining'],
   users: [
@@ -72,7 +83,10 @@ const spec = {
 const request = (body: unknown, key?: string) =>
   new Request('http://training.test/api/me/training', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(key ? { 'Idempotency-Key': key } : {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(key ? { 'Idempotency-Key': key } : {}),
+    },
     body: JSON.stringify(body),
   })
 
@@ -112,7 +126,7 @@ test(
           actorId: f.reviewerId,
           courseId: course.id,
           expectedRevision: course.revision,
-          action: 'approve',
+          action: 'submit',
           reason: 'Independent approval',
         })
         const draft = await createTrainingSession({
@@ -150,7 +164,9 @@ test(
         })
         state.orgId = f.org.orgId
         state.actorId = f.employeeId
-        const ownContext = { params: Promise.resolve({ participantId: invite.id }) },
+        const ownContext = {
+            params: Promise.resolve({ participantId: invite.id }),
+          },
           peerContext = { params: Promise.resolve({ participantId: other.id }) }
         const rows = await list(new Request('http://training.test'))
         assert.equal(rows.status, 200)
@@ -158,12 +174,24 @@ test(
           (await rows.json()).map((row: { id: string }) => row.id),
           [invite.id],
         )
-        assert.equal((await read(new Request('http://training.test'), peerContext)).status, 404)
-        const body = { action: 'accept', expectedRevision: invite.revision, reason: 'I will attend' }
-        assert.equal((await respond(request({ ...body, audience: 'staff' }), ownContext)).status, 422)
+        assert.equal(
+          (await read(new Request('http://training.test'), peerContext)).status,
+          404,
+        )
+        const body = {
+          action: 'accept',
+          expectedRevision: invite.revision,
+          reason: 'I will attend',
+        }
+        assert.equal(
+          (await respond(request({ ...body, audience: 'staff' }), ownContext))
+            .status,
+          422,
+        )
         assert.equal((await respond(request(body), peerContext)).status, 404)
         assert.equal(
-          (await respond(request({ ...body, action: 'cancel' }), ownContext)).status,
+          (await respond(request({ ...body, action: 'cancel' }), ownContext))
+            .status,
           422,
           'Employee controls cannot cancel an administrative invitation',
         )
@@ -200,9 +228,17 @@ test(
           notes: null,
           reason: 'Attendance confirmed',
         })
-        const comment = { rating: 4, comments: 'Clear instruction', supersedesId: null, reason: 'My course feedback' },
+        const comment = {
+            rating: 4,
+            comments: 'Clear instruction',
+            supersedesId: null,
+            reason: 'My course feedback',
+          },
           key = randomUUID()
-        assert.equal((await feedback(request(comment, key), peerContext)).status, 404)
+        assert.equal(
+          (await feedback(request(comment, key), peerContext)).status,
+          404,
+        )
         const first = await feedback(request(comment, key), ownContext)
         assert.equal(first.status, 201)
         const saved = await first.json()
@@ -210,14 +246,30 @@ test(
         const replay = await feedback(request(comment, key), ownContext)
         assert.equal(replay.status, 201)
         assert.equal((await replay.json()).id, saved.id)
-        const changed = await feedback(request({ ...comment, rating: 5 }, key), ownContext)
+        const changed = await feedback(
+          request({ ...comment, rating: 5 }, key),
+          ownContext,
+        )
         assert.equal(changed.status, 422)
-        assert.match((await changed.json()).error, /different content.*preserved/)
+        assert.match(
+          (await changed.json()).error,
+          /different content.*preserved/,
+        )
         assert.equal(
-          (await db.execute(sql`select id from hrm_training_feedback where org_id=${f.org.orgId}`)).rows.length,
+          (
+            await db.execute(
+              sql`select id from hrm_training_feedback where org_id=${f.org.orgId}`,
+            )
+          ).rows.length,
           1,
         )
       },
     )
   },
 )
+
+// Exercise the same native Flow composition installed by application entry points.
+before(async () => {
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});

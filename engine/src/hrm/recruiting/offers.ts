@@ -1,3 +1,7 @@
+import {
+  routeNativeApproval,
+  readNativeApprovalDecision,
+} from "../../platform/approval-routing.ts";
 import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
@@ -8,7 +12,15 @@ import {
 } from "../authorization.ts";
 import { effectiveOfferStatus } from "./funnel.ts";
 import { RecruitingError } from "./errors.ts";
-import { optionalCivilDate, requireActorId, requireCivilDate, requireId, requireOrgId, requireReason, isUniqueViolation } from "./input.ts";
+import {
+  optionalCivilDate,
+  requireActorId,
+  requireCivilDate,
+  requireId,
+  requireOrgId,
+  requireReason,
+  isUniqueViolation,
+} from "./input.ts";
 import { appendApplicationEvent, loadApplication } from "./applications.ts";
 
 /**
@@ -21,7 +33,14 @@ import { appendApplicationEvent, loadApplication } from "./applications.ts";
  * create, send, decline, withdraw, and expiry materialisation.
  */
 
-export const OFFER_STATUSES = ["draft", "sent", "accepted", "declined", "withdrawn", "expired"] as const;
+export const OFFER_STATUSES = [
+  "draft",
+  "sent",
+  "accepted",
+  "declined",
+  "withdrawn",
+  "expired",
+] as const;
 export type OfferStatus = (typeof OFFER_STATUSES)[number];
 
 export interface OfferDTO {
@@ -36,6 +55,7 @@ export interface OfferDTO {
   readonly compensationAmount: string;
   readonly compensationCurrency: string;
   readonly compensationBasis: "hourly" | "annual";
+  readonly approvalStatus: "none" | "pending" | "approved" | "rejected";
   readonly status: OfferStatus;
   /** The reader-reported status: a past-due sent offer reads expired. */
   readonly effectiveStatus: OfferStatus;
@@ -58,6 +78,7 @@ export type OfferRow = {
   compensationAmount: string;
   compensationCurrency: string;
   compensationBasis: string;
+  approvalStatus: "none" | "pending" | "approved" | "rejected";
   status: string;
   sentAt: string | null;
   expiresOn: string | null;
@@ -74,7 +95,7 @@ const OFFER_COLUMNS = sql`
   proposed_start_on as "proposedStartOn",
   compensation_amount as "compensationAmount",
   compensation_currency as "compensationCurrency",
-  compensation_basis as "compensationBasis", status,
+  compensation_basis as "compensationBasis", status,approval_status as "approvalStatus",
   sent_at as "sentAt", expires_on as "expiresOn",
   responded_at as "respondedAt", decline_reason as "declineReason",
   approved_change_id as "approvedChangeId"
@@ -82,31 +103,61 @@ const OFFER_COLUMNS = sql`
 
 function toDTO(row: OfferRow, today: string): OfferDTO {
   if (!(OFFER_STATUSES as readonly string[]).includes(row.status)) {
-    throw new RecruitingError("REFUSED", `offer ${row.id} carries unknown status ${row.status} — refusing a lifecycle the service cannot resolve`);
+    throw new RecruitingError(
+      "REFUSED",
+      `offer ${row.id} carries unknown status ${row.status} — refusing a lifecycle the service cannot resolve`,
+    );
   }
-  if (row.compensationBasis !== "hourly" && row.compensationBasis !== "annual") {
-    throw new RecruitingError("REFUSED", `offer ${row.id} carries unknown compensation basis — refusing terms the service cannot resolve`);
+  if (
+    row.compensationBasis !== "hourly" &&
+    row.compensationBasis !== "annual"
+  ) {
+    throw new RecruitingError(
+      "REFUSED",
+      `offer ${row.id} carries unknown compensation basis — refusing terms the service cannot resolve`,
+    );
   }
   return {
     ...row,
     status: row.status as OfferStatus,
     compensationBasis: row.compensationBasis,
-    effectiveStatus: effectiveOfferStatus({ status: row.status, expiresOn: row.expiresOn, businessToday: today }),
+    effectiveStatus: effectiveOfferStatus({
+      status: row.status,
+      expiresOn: row.expiresOn,
+      businessToday: today,
+    }),
   };
 }
 
-export async function loadOffer(exec: SqlExecutor, orgId: string, offerId: string): Promise<OfferRow | null> {
-  return (await exec.execute<OfferRow>(sql`
+export async function loadOffer(
+  exec: SqlExecutor,
+  orgId: string,
+  offerId: string,
+): Promise<OfferRow | null> {
+  return (
+    (
+      await exec.execute<OfferRow>(sql`
     select ${OFFER_COLUMNS} from hrm_offers where org_id = ${orgId} and id = ${offerId}
-  `)).rows[0] ?? null;
+  `)
+    ).rows[0] ?? null
+  );
 }
 
-async function loadOfferForUpdate(exec: SqlExecutor, orgId: string, offerId: string): Promise<OfferRow> {
-  const row = (await exec.execute<OfferRow>(sql`
+async function loadOfferForUpdate(
+  exec: SqlExecutor,
+  orgId: string,
+  offerId: string,
+): Promise<OfferRow> {
+  const row = (
+    await exec.execute<OfferRow>(sql`
     select ${OFFER_COLUMNS} from hrm_offers where org_id = ${orgId} and id = ${offerId} for update
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!row) {
-    throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
+    throw new RecruitingError(
+      "NOT_FOUND",
+      "offer is not visible in this organization",
+    );
   }
   return row;
 }
@@ -120,11 +171,14 @@ async function requireOfferManage(
   try {
     await requireHrmRecruitingManage(exec, orgId, actorId, requisitionId);
   } catch {
-    await requireOwnRequisitionForHiringManager(exec, orgId, actorId, requisitionId);
+    await requireOwnRequisitionForHiringManager(
+      exec,
+      orgId,
+      actorId,
+      requisitionId,
+    );
   }
 }
-
-
 
 export interface CreateOfferQuery {
   readonly orgId: string;
@@ -151,38 +205,81 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const applicationId = requireId(query.applicationId, "applicationId");
-  if (typeof query.employerSubsidiaryId !== "string" || query.employerSubsidiaryId.length === 0) {
-    throw new RecruitingError("INVALID_INPUT", "employerSubsidiaryId must be a non-empty string — the offer belongs to a legal entity");
+  if (
+    typeof query.employerSubsidiaryId !== "string" ||
+    query.employerSubsidiaryId.length === 0
+  ) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "employerSubsidiaryId must be a non-empty string — the offer belongs to a legal entity",
+    );
   }
-  if (typeof query.jobTitle !== "string" || query.jobTitle.trim().length === 0) {
+  if (
+    typeof query.jobTitle !== "string" ||
+    query.jobTitle.trim().length === 0
+  ) {
     throw new RecruitingError("INVALID_INPUT", "jobTitle must be non-blank");
   }
-  const proposedStartOn = requireCivilDate(query.proposedStartOn, "proposedStartOn");
-  if (typeof query.compensationAmount !== "string" || canonicalNonNegativeDecimal(query.compensationAmount, 4) === null) {
-    throw new RecruitingError("INVALID_INPUT", "compensationAmount must be a decimal with up to 4 fraction digits");
+  const proposedStartOn = requireCivilDate(
+    query.proposedStartOn,
+    "proposedStartOn",
+  );
+  if (
+    typeof query.compensationAmount !== "string" ||
+    canonicalNonNegativeDecimal(query.compensationAmount, 4) === null
+  ) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "compensationAmount must be a decimal with up to 4 fraction digits",
+    );
   }
-  if (typeof query.compensationCurrency !== "string" || !/^[A-Z]{3}$/.test(query.compensationCurrency)) {
-    throw new RecruitingError("INVALID_INPUT", "compensationCurrency must be a 3-letter code");
+  if (
+    typeof query.compensationCurrency !== "string" ||
+    !/^[A-Z]{3}$/.test(query.compensationCurrency)
+  ) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "compensationCurrency must be a 3-letter code",
+    );
   }
-  if (query.compensationBasis !== "hourly" && query.compensationBasis !== "annual") {
-    throw new RecruitingError("INVALID_INPUT", "compensationBasis must be hourly or annual — check the basis");
+  if (
+    query.compensationBasis !== "hourly" &&
+    query.compensationBasis !== "annual"
+  ) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "compensationBasis must be hourly or annual — check the basis",
+    );
   }
   const expiresOn = optionalCivilDate(query.expiresOn, "expiresOn");
-  const positionId = query.positionId === undefined || query.positionId === null ? null : requireId(query.positionId, "positionId");
-  const departmentId = query.departmentId === undefined || query.departmentId === null ? null : requireId(query.departmentId, "departmentId");
+  const positionId =
+    query.positionId === undefined || query.positionId === null
+      ? null
+      : requireId(query.positionId, "positionId");
+  const departmentId =
+    query.departmentId === undefined || query.departmentId === null
+      ? null
+      : requireId(query.departmentId, "departmentId");
   const employmentKind =
     query.employmentKind === undefined || query.employmentKind === null
       ? null
-      : typeof query.employmentKind === "string" && query.employmentKind.trim().length > 0
+      : typeof query.employmentKind === "string" &&
+          query.employmentKind.trim().length > 0
         ? query.employmentKind.trim()
         : (() => {
-            throw new RecruitingError("INVALID_INPUT", "employmentKind must be non-blank when sent");
+            throw new RecruitingError(
+              "INVALID_INPUT",
+              "employmentKind must be non-blank when sent",
+            );
           })();
 
   return withOrgTransaction(orgId, async () => {
     const application = await loadApplication(db, orgId, applicationId);
     if (!application) {
-      throw new RecruitingError("NOT_FOUND", "application is not visible in this organization");
+      throw new RecruitingError(
+        "NOT_FOUND",
+        "application is not visible in this organization",
+      );
     }
     await requireOfferManage(db, orgId, actorId, application.requisitionId);
     if (application.status !== "active") {
@@ -191,11 +288,17 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
         `a ${application.status} application takes no new offers — only active candidacies carry terms`,
       );
     }
-    const subsidiary = (await db.execute<{ one: number }>(sql`
+    const subsidiary =
+      (
+        await db.execute<{ one: number }>(sql`
       select 1 as one from subsidiaries where org_id = ${orgId} and id = ${query.employerSubsidiaryId as string} limit 1
-    `)).rows.length > 0;
+    `)
+      ).rows.length > 0;
     if (!subsidiary) {
-      throw new RecruitingError("NOT_FOUND", "employer subsidiary is not visible in this organization — check the reference");
+      throw new RecruitingError(
+        "NOT_FOUND",
+        "employer subsidiary is not visible in this organization — check the reference",
+      );
     }
     // THE ENTITY RULE (coordinator constraint: an offer links a
     // requisition, so the requisition's employer decides): the declared
@@ -204,20 +307,29 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
     // A requisition with B's employer would book the hire into the wrong
     // legal entity.
     const declared = (query.employerSubsidiaryId as string).toLowerCase();
-    const requisition = (await db.execute<{
-      employerSubsidiaryId: string;
-      positionId: string | null;
-      requisitionNumber: string;
-    }>(sql`
+    const requisition = (
+      await db.execute<{
+        employerSubsidiaryId: string;
+        positionId: string | null;
+        requisitionNumber: string;
+      }>(sql`
       select employer_subsidiary_id as "employerSubsidiaryId",
              position_id as "positionId",
              requisition_number as "requisitionNumber"
         from hrm_requisitions where org_id = ${orgId} and id = ${application.requisitionId}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!requisition) {
-      throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
+      throw new RecruitingError(
+        "NOT_FOUND",
+        "requisition is not visible in this organization",
+      );
     }
-    if (positionId !== null && requisition.positionId !== null && positionId.toLowerCase() !== requisition.positionId.toLowerCase()) {
+    if (
+      positionId !== null &&
+      requisition.positionId !== null &&
+      positionId.toLowerCase() !== requisition.positionId.toLowerCase()
+    ) {
       throw new RecruitingError(
         "INVALID_INPUT",
         "positionId must match the requisition's pinned position — omit it to inherit the opening's position or draft against that position",
@@ -231,14 +343,16 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
     }
     const refPositionId = positionId ?? requisition.positionId;
     if (refPositionId) {
-      const liveEmployer = (await db.execute<{ employerSubsidiaryId: string | null }>(sql`
+      const liveEmployer = (
+        await db.execute<{ employerSubsidiaryId: string | null }>(sql`
         select v.employer_subsidiary_id as "employerSubsidiaryId"
           from position_versions v
          where v.org_id = ${orgId} and v.position_id = ${refPositionId}
            and v.recorded_until is null
          order by v.version_no desc
          limit 1
-      `)).rows[0]?.employerSubsidiaryId;
+      `)
+      ).rows[0]?.employerSubsidiaryId;
       if (!liveEmployer) {
         throw new RecruitingError(
           "REFUSED",
@@ -254,7 +368,8 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
     }
     let inserted: OfferRow | undefined;
     try {
-      inserted = (await db.execute<OfferRow>(sql`
+      inserted = (
+        await db.execute<OfferRow>(sql`
         insert into hrm_offers
           (org_id, application_id, position_id, employer_subsidiary_id, department_id,
            job_title, employment_kind, proposed_start_on,
@@ -267,7 +382,8 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
                 ${query.compensationBasis as string},
                 'draft', ${expiresOn}::date, ${actorId}, ${actorId})
         returning ${OFFER_COLUMNS}
-      `)).rows[0];
+      `)
+      ).rows[0];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new RecruitingError(
@@ -278,7 +394,10 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
       throw error;
     }
     if (!inserted) {
-      throw new RecruitingError("REFUSED", "the offer was not stored — no row was written; retry the request");
+      throw new RecruitingError(
+        "REFUSED",
+        "the offer was not stored — no row was written; retry the request",
+      );
     }
     await appendApplicationEvent(db, {
       orgId,
@@ -311,7 +430,12 @@ export async function expireOfferIfPastDue(args: {
   const today = await businessToday(orgId);
   return withOrgTransaction(orgId, async () => {
     const current = await loadOfferForUpdate(db, orgId, offerId);
-    return materialiseOfferExpiry(db, { orgId, actorId, offer: current, businessToday: today });
+    return materialiseOfferExpiry(db, {
+      orgId,
+      actorId,
+      offer: current,
+      businessToday: today,
+    });
   });
 }
 
@@ -325,18 +449,24 @@ export async function materialiseOfferExpiry(
   },
 ): Promise<boolean> {
   const { offer } = args;
-  if (offer.status !== "sent" || offer.expiresOn === null || offer.expiresOn >= args.businessToday) {
+  if (
+    offer.status !== "sent" ||
+    offer.expiresOn === null ||
+    offer.expiresOn >= args.businessToday
+  ) {
     return false;
   }
   // Expiry revokes the outstanding signing link in the same write: an
   // expired offer is never signable, so its token must die with it.
-  const updated = (await exec.execute<OfferRow>(sql`
+  const updated = (
+    await exec.execute<OfferRow>(sql`
     update hrm_offers
        set status = 'expired', signing_token_hash = null,
            updated_by = ${args.actorId}, updated_at = now()
      where org_id = ${args.orgId} and id = ${offer.id} and status = 'sent'
     returning ${OFFER_COLUMNS}
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (!updated) return false;
   await appendApplicationEvent(exec, {
     orgId: args.orgId,
@@ -355,29 +485,82 @@ export interface SendOfferQuery {
 }
 
 /** Send a draft (sent_at stamped; the response window opens). */
-export async function sendOffer(query: SendOfferQuery): Promise<OfferDTO> {  const orgId = requireOrgId(query.orgId);
+export async function sendOffer(query: SendOfferQuery): Promise<OfferDTO> {
+  const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const offerId = requireId(query.offerId, "offerId");
   return withOrgTransaction(orgId, async () => {
     const current = await loadOfferForUpdate(db, orgId, offerId);
     const application = await loadApplication(db, orgId, current.applicationId);
     if (!application) {
-      throw new RecruitingError("NOT_FOUND", "application is not visible in this organization");
+      throw new RecruitingError(
+        "NOT_FOUND",
+        "application is not visible in this organization",
+      );
     }
     await requireOfferManage(db, orgId, actorId, application.requisitionId);
     if (current.status !== "draft") {
-      throw new RecruitingError("BAD_STATE", `a ${current.status} offer cannot be sent — only drafts send`);
+      throw new RecruitingError(
+        "BAD_STATE",
+        `a ${current.status} offer cannot be sent — only drafts send`,
+      );
     }
-    const updated = (await db.execute<OfferRow>(sql`
+    const approval = (
+      await db.execute<{
+        status: string;
+        version: number;
+        approvalVersion: number | null;
+      }>(sql`
+      select approval_status as status,version,approval_version as "approvalVersion" from hrm_offers where org_id=${orgId} and id=${offerId}`)
+    ).rows[0]!;
+    if (approval.status === "pending")
+      return toDTO(current, await businessToday(orgId));
+    if (
+      approval.status !== "approved" ||
+      approval.approvalVersion !== approval.version
+    ) {
+      const routing = await routeNativeApproval({
+        orgId,
+        actorId,
+        subjectKind: "recruiting_offer",
+        subjectId: offerId,
+      });
+      const approved = routing.policy.kind === "ungated";
+      const saved =
+        await db.execute(sql`update hrm_offers set approval_status=${approved ? "approved" : "pending"},
+        approval_version=version,submitted_by=${actorId},submission_policy=${JSON.stringify(routing.policy)}::jsonb,
+        updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${offerId} and status='draft' returning id`);
+      if (saved.rows.length !== 1)
+        throw new RecruitingError(
+          "STALE_REVISION",
+          "The offer changed during submission. Reload it before retrying.",
+        );
+      if (!approved)
+        return toDTO(
+          (await loadOffer(db, orgId, offerId))!,
+          await businessToday(orgId),
+        );
+    }
+    const updated = (
+      await db.execute<OfferRow>(sql`
       update hrm_offers
          set status = 'sent', sent_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId} and status = 'draft'
       returning ${OFFER_COLUMNS}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!updated) {
-      throw new RecruitingError("STALE_REVISION", "the offer changed while sending — reload it and try again");
+      throw new RecruitingError(
+        "STALE_REVISION",
+        "the offer changed while sending — reload it and try again",
+      );
     }
-    await appendApplicationEvent(db, { orgId, actorId, applicationId: current.applicationId, kind: "offer_sent" });
+    await appendApplicationEvent(db, {
+      orgId,
+      actorId,
+      applicationId: current.applicationId,
+      kind: "offer_sent",
+    });
     return toDTO(updated, await businessToday(orgId));
   });
 }
@@ -390,7 +573,9 @@ export interface DeclineOfferQuery {
 }
 
 /** Decline a sent offer with a reason (the funnel end for this candidacy). */
-export async function declineOffer(query: DeclineOfferQuery): Promise<OfferDTO> {
+export async function declineOffer(
+  query: DeclineOfferQuery,
+): Promise<OfferDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const offerId = requireId(query.offerId, "offerId");
@@ -405,7 +590,10 @@ export async function declineOffer(query: DeclineOfferQuery): Promise<OfferDTO> 
     const current = await loadOfferForUpdate(db, orgId, offerId);
     const application = await loadApplication(db, orgId, current.applicationId);
     if (!application) {
-      throw new RecruitingError("NOT_FOUND", "application is not visible in this organization");
+      throw new RecruitingError(
+        "NOT_FOUND",
+        "application is not visible in this organization",
+      );
     }
     await requireOfferManage(db, orgId, actorId, application.requisitionId);
     if (current.status === "expired") {
@@ -415,18 +603,26 @@ export async function declineOffer(query: DeclineOfferQuery): Promise<OfferDTO> 
       );
     }
     if (current.status !== "sent") {
-      throw new RecruitingError("BAD_STATE", `a ${current.status} offer cannot be declined — only sent offers decline`);
+      throw new RecruitingError(
+        "BAD_STATE",
+        `a ${current.status} offer cannot be declined — only sent offers decline`,
+      );
     }
     // A declined offer is never signable: revoke the outstanding link here.
-    const updated = (await db.execute<OfferRow>(sql`
+    const updated = (
+      await db.execute<OfferRow>(sql`
       update hrm_offers
          set status = 'declined', responded_at = now(), decline_reason = ${reason},
              signing_token_hash = null, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId} and status = 'sent'
       returning ${OFFER_COLUMNS}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!updated) {
-      throw new RecruitingError("STALE_REVISION", "the offer changed while declining — reload it and try again");
+      throw new RecruitingError(
+        "STALE_REVISION",
+        "the offer changed while declining — reload it and try again",
+      );
     }
     await appendApplicationEvent(db, {
       orgId,
@@ -447,7 +643,9 @@ export interface WithdrawOfferQuery {
 }
 
 /** Withdraw a draft or sent offer with a reason (frees the live-offer slot). */
-export async function withdrawOffer(query: WithdrawOfferQuery): Promise<OfferDTO> {
+export async function withdrawOffer(
+  query: WithdrawOfferQuery,
+): Promise<OfferDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const offerId = requireId(query.offerId, "offerId");
@@ -462,7 +660,10 @@ export async function withdrawOffer(query: WithdrawOfferQuery): Promise<OfferDTO
     const current = await loadOfferForUpdate(db, orgId, offerId);
     const application = await loadApplication(db, orgId, current.applicationId);
     if (!application) {
-      throw new RecruitingError("NOT_FOUND", "application is not visible in this organization");
+      throw new RecruitingError(
+        "NOT_FOUND",
+        "application is not visible in this organization",
+      );
     }
     await requireOfferManage(db, orgId, actorId, application.requisitionId);
     if (current.status === "expired") {
@@ -472,18 +673,26 @@ export async function withdrawOffer(query: WithdrawOfferQuery): Promise<OfferDTO
       );
     }
     if (current.status !== "draft" && current.status !== "sent") {
-      throw new RecruitingError("BAD_STATE", `a ${current.status} offer cannot be withdrawn — only drafts and sent offers withdraw`);
+      throw new RecruitingError(
+        "BAD_STATE",
+        `a ${current.status} offer cannot be withdrawn — only drafts and sent offers withdraw`,
+      );
     }
     // A withdrawn offer is never signable: revoke the outstanding link here.
-    const updated = (await db.execute<OfferRow>(sql`
+    const updated = (
+      await db.execute<OfferRow>(sql`
       update hrm_offers
          set status = 'withdrawn', signing_token_hash = null,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId} and status in ('draft', 'sent')
       returning ${OFFER_COLUMNS}
-    `)).rows[0];
+    `)
+    ).rows[0];
     if (!updated) {
-      throw new RecruitingError("STALE_REVISION", "the offer changed while withdrawing — reload it and try again");
+      throw new RecruitingError(
+        "STALE_REVISION",
+        "the offer changed while withdrawing — reload it and try again",
+      );
     }
     await appendApplicationEvent(db, {
       orgId,
@@ -494,4 +703,48 @@ export async function withdrawOffer(query: WithdrawOfferQuery): Promise<OfferDTO
     });
     return toDTO(updated, await businessToday(orgId));
   });
+}
+
+export async function releaseOfferApproval(args: {
+  subjectId: string;
+  outcome: "approved" | "rejected";
+  approvalRunId?: string;
+  comment?: string | null;
+  ctx: { orgId: string; userId?: string | null };
+}): Promise<void> {
+  const orgId = args.ctx.orgId,
+    actorId = requireActorId(args.ctx.userId),
+    offerId = args.subjectId;
+  const current = await loadOfferForUpdate(db, orgId, offerId);
+  const application = await loadApplication(db, orgId, current.applicationId);
+  if (!application)
+    throw new RecruitingError(
+      "NOT_FOUND",
+      "The offer application is unavailable.",
+    );
+  await requireOfferManage(db, orgId, actorId, application.requisitionId);
+  const decision = await readNativeApprovalDecision({
+    orgId,
+    actorId,
+    subjectKind: "recruiting_offer",
+    subjectId: offerId,
+    outcome: args.outcome,
+    approvalRunId: args.approvalRunId,
+  });
+  if (!decision)
+    throw new RecruitingError(
+      "REFUSED",
+      "Complete the native offer Flow gate before releasing these terms.",
+    );
+  const saved =
+    await db.execute(sql`update hrm_offers set approval_status=${args.outcome},updated_by=${actorId},updated_at=now()
+    where org_id=${orgId} and id=${offerId} and status='draft' and approval_status='pending' and approval_version=version returning id`);
+  if (saved.rows.length !== 1)
+    throw new RecruitingError(
+      "STALE_REVISION",
+      "These offer terms changed. Submit the current version through Flows.",
+    );
+  await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values
+    (${orgId},'hrm_offers',${offerId},'update',${JSON.stringify({ event: args.outcome, approvalRunId: args.approvalRunId, comment: args.comment ?? null })}::jsonb,${actorId})`);
+  if (args.outcome === "approved") await sendOffer({ orgId, actorId, offerId });
 }

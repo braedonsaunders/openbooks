@@ -50,7 +50,7 @@ export const PROJECT_HEADER_CONTROL_MESSAGES: Record<ProjectHeaderControlCode, s
   project_not_found: "Project not found",
   contract_value_controlled:
     "After billing begins, contract value must change through an approved change order. " +
-    "Record a change order under Change orders on the project's Billing tab and have a different user approve it; approval moves the contract value.",
+    "Record a change order under Change orders on the project's Billing tab and submit it through tenant Flows; release applies the contract value.",
   contract_value_controlled_type_changed:
     "After billing begins, contract value must change through an approved change order, " +
     "but this project's type no longer bills by applications for payment, so change orders are unavailable. " +

@@ -56,6 +56,8 @@ export interface InboxListContext {
   readonly orgId: string;
   readonly actorId: string;
   readonly asOf: string;
+  /** The dedicated approval worklist presents gates; task sources retain only other work. */
+  readonly approvalWorklistOwnsGates?: boolean;
   /**
    * The organization's business time zone (IANA). Due instants are compared
    * as business days in this zone, the same zone `asOf` was taken in; absent
@@ -77,20 +79,7 @@ export interface InboxListContext {
   readonly scope?: {
     readonly roles?: readonly string[];
     readonly allowedSubsidiaryIds?: readonly string[] | null;
-    readonly includeBudgets?: boolean;
   };
-  /**
-   * Direct timesheet-week approval through the native approval service.
-   * Provided by web callers (which own that service); the timesheet
-   * approval adapter calls it with the week the actor just decided, so the
-   * inbox executes the same command the drawer runs instead of a second
-   * write path. Absent in engine-only contexts, where direct approval
-   * refuses with a remedy naming Timesheets.
-   */
-  readonly approveTimesheetWeek?: (input: {
-    readonly employeePartyId: string;
-    readonly weekStart: string;
-  }) => Promise<void>;
 }
 
 /**
@@ -114,7 +103,11 @@ export function dueBusinessDay(dueAt: string, timeZone?: string): string {
  * business days: overdue only once the due day has passed, due soon from
  * three days before through the due day itself.
  */
-export function priorityForDueDate(dueAt: string | null, asOf: string, timeZone?: string): InboxPriority {
+export function priorityForDueDate(
+  dueAt: string | null,
+  asOf: string,
+  timeZone?: string,
+): InboxPriority {
   if (!dueAt) return "normal";
   const dueDay = dueBusinessDay(dueAt, timeZone);
   const today = asOf.slice(0, 10);
@@ -126,7 +119,8 @@ export function priorityForDueDate(dueAt: string | null, asOf: string, timeZone?
 
 /** Merge order: overdue → due soon → newest first, then stable id order. */
 export function compareInboxItems(a: InboxItem, b: InboxItem): number {
-  const rank = (p: InboxPriority): number => (p === "overdue" ? 0 : p === "due_soon" ? 1 : 2);
+  const rank = (p: InboxPriority): number =>
+    p === "overdue" ? 0 : p === "due_soon" ? 1 : 2;
   return (
     rank(a.priority) - rank(b.priority) ||
     (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0) ||
@@ -139,7 +133,9 @@ export function inboxItemId(kind: InboxKind, sourceId: string): string {
 }
 
 /** Split a `kind:sourceId` item id back into its source pointer. */
-export function parseInboxItemId(itemId: string): { kind: string; sourceId: string } | null {
+export function parseInboxItemId(
+  itemId: string,
+): { kind: string; sourceId: string } | null {
   const sep = itemId.indexOf(":");
   if (sep < 0) return null;
   const kind = itemId.slice(0, sep);

@@ -1,9 +1,17 @@
 'use client'
 
 import { useState } from 'react'
+import { ApprovalActions } from '@/components/approval-actions'
 import { useRouter } from 'next/navigation'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
-import { Button, Input, Label, Select, SearchSelect, Textarea } from '@openbooks/ui'
+import {
+  Button,
+  Input,
+  Label,
+  Select,
+  SearchSelect,
+  Textarea,
+} from '@openbooks/ui'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { decimalNullRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { useAppAction } from '@/lib/use-app-action'
@@ -65,10 +73,18 @@ export function CycleCreateForm({
   const [kind, setKind] = useState(kinds[0]?.value ?? 'merit')
   const [effectiveOn, setEffectiveOn] = useState('')
   const [employer, setEmployer] = useState(defaultEmployer)
-  const availableCurrencies = (entity: string) => currencyOptions.filter((option) => option.scopeValue === null || option.scopeValue === entity)
+  const availableCurrencies = (entity: string) =>
+    currencyOptions.filter(
+      (option) => option.scopeValue === null || option.scopeValue === entity,
+    )
   const initialOptions = availableCurrencies(defaultEmployer)
-  const initialCurrency = initialOptions.some((option) => option.value === defaultCurrency)
-    ? defaultCurrency : initialOptions.length === 1 ? initialOptions[0]!.value : ''
+  const initialCurrency = initialOptions.some(
+    (option) => option.value === defaultCurrency,
+  )
+    ? defaultCurrency
+    : initialOptions.length === 1
+      ? initialOptions[0]!.value
+      : ''
   const [currency, setCurrency] = useState(initialCurrency)
   const [guidelinePercentage, setGuidelinePercentage] = useState('')
   const enabledCurrencies = availableCurrencies(employer)
@@ -76,18 +92,36 @@ export function CycleCreateForm({
   // Shared action path: the refusal pins and toasts through the hook, and
   // busy always releases — a dead network can never wedge the button.
   const { busy, execute } = useAppAction()
-  const close = useDirtyUrlDrawer(name !== '' || kind !== (kinds[0]?.value ?? 'merit') || effectiveOn !== '' || currency !== initialCurrency || employer !== defaultEmployer || guidelinePercentage !== '', busy)
+  const close = useDirtyUrlDrawer(
+    name !== '' ||
+      kind !== (kinds[0]?.value ?? 'merit') ||
+      effectiveOn !== '' ||
+      currency !== initialCurrency ||
+      employer !== defaultEmployer ||
+      guidelinePercentage !== '',
+    busy,
+  )
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
-    if ((!employer && !canSelectOrgWide) || !enabledCurrencies.some((option) => option.value === currency)) {
+    if (
+      (!employer && !canSelectOrgWide) ||
+      !enabledCurrencies.some((option) => option.value === currency)
+    ) {
       setError(currencyUnavailable)
       return
     }
     const percentage = canonicalDecimal(guidelinePercentage, 6)
     if (percentage === null) {
-      setError(decimalNullRefusal('guidelinePercentage', guidelineLabel, guidelinePercentage, 6))
+      setError(
+        decimalNullRefusal(
+          'guidelinePercentage',
+          guidelineLabel,
+          guidelinePercentage,
+          6,
+        ),
+      )
       return
     }
     await execute(
@@ -109,10 +143,15 @@ export function CycleCreateForm({
         fallbackMessage: labels.failed,
         onOk: (data) => {
           const id = data.cycle?.id
-          router.push(typeof id === 'string' ? `/hrm/compensation/cycles/${id}` : '/hrm/compensation')
+          router.push(
+            typeof id === 'string'
+              ? `/hrm/compensation/cycles/${id}`
+              : '/hrm/compensation',
+          )
           router.refresh()
         },
-        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) =>
+          setError(actionError.displayMessage(labels.failed)),
       },
     )
   }
@@ -121,11 +160,21 @@ export function CycleCreateForm({
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
         <Label htmlFor="comp-cycle-name">{nameLabel}</Label>
-        <Input id="comp-cycle-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={160} />
+        <Input
+          id="comp-cycle-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          maxLength={160}
+        />
       </div>
       <div>
         <Label htmlFor="comp-cycle-kind">{kindLabel}</Label>
-        <Select id="comp-cycle-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
+        <Select
+          id="comp-cycle-kind"
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
+        >
           {kinds.map((k) => (
             <option key={k.value} value={k.value}>
               {k.label}
@@ -135,32 +184,76 @@ export function CycleCreateForm({
       </div>
       <div>
         <Label htmlFor="comp-cycle-effective">{effectiveLabel}</Label>
-        <DateField id="comp-cycle-effective" value={effectiveOn} onChange={(value) => setEffectiveOn(value)} required />
+        <DateField
+          id="comp-cycle-effective"
+          value={effectiveOn}
+          onChange={(value) => setEffectiveOn(value)}
+          required
+        />
       </div>
       <div>
         <Label htmlFor="comp-cycle-employer">{employerLabel}</Label>
-        <SearchSelect id="comp-cycle-employer" value={employer}
-          options={canSelectOrgWide ? [{ value: '', label: orgWideLabel }, ...employerOptions] : employerOptions}
+        <SearchSelect
+          id="comp-cycle-employer"
+          value={employer}
+          options={
+            canSelectOrgWide
+              ? [{ value: '', label: orgWideLabel }, ...employerOptions]
+              : employerOptions
+          }
           onChange={(value) => {
             setEmployer(value)
             const next = availableCurrencies(value)
-            if (!next.some((option) => option.value === currency)) setCurrency(next.length === 1 ? next[0]!.value : '')
-          }} disabled={busy} />
+            if (!next.some((option) => option.value === currency))
+              setCurrency(next.length === 1 ? next[0]!.value : '')
+          }}
+          disabled={busy}
+        />
       </div>
       <div>
         <Label htmlFor="comp-cycle-currency">{currencyLabel}</Label>
-        <SearchSelect id="comp-cycle-currency" value={currency} onChange={setCurrency}
-          options={enabledCurrencies} disabled={busy || enabledCurrencies.length === 0} />
-        {enabledCurrencies.length === 0 ? <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">{currencyUnavailable}</p> : null}
+        <SearchSelect
+          id="comp-cycle-currency"
+          value={currency}
+          onChange={setCurrency}
+          options={enabledCurrencies}
+          disabled={busy || enabledCurrencies.length === 0}
+        />
+        {enabledCurrencies.length === 0 ? (
+          <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
+            {currencyUnavailable}
+          </p>
+        ) : null}
       </div>
       <div>
         <Label htmlFor="comp-cycle-guideline">{guidelineLabel}</Label>
-        <Input id="comp-cycle-guideline" value={guidelinePercentage} onChange={(event) => setGuidelinePercentage(event.target.value)} inputMode="decimal" required disabled={busy} aria-describedby="comp-cycle-guideline-help" />
-        <p id="comp-cycle-guideline-help" className="mt-1 text-sm text-slate-500 dark:text-slate-400">{guidelineHelp}</p>
+        <Input
+          id="comp-cycle-guideline"
+          value={guidelinePercentage}
+          onChange={(event) => setGuidelinePercentage(event.target.value)}
+          inputMode="decimal"
+          required
+          disabled={busy}
+          aria-describedby="comp-cycle-guideline-help"
+        />
+        <p
+          id="comp-cycle-guideline-help"
+          className="mt-1 text-sm text-slate-500 dark:text-slate-400"
+        >
+          {guidelineHelp}
+        </p>
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex gap-2">
-        <Button type="submit" disabled={busy || !currency || !guidelinePercentage || (!employer && !canSelectOrgWide)}>
+        <Button
+          type="submit"
+          disabled={
+            busy ||
+            !currency ||
+            !guidelinePercentage ||
+            (!employer && !canSelectOrgWide)
+          }
+        >
           {labels.submit}
         </Button>
         <Button type="button" variant="outline" onClick={() => void close()}>
@@ -198,7 +291,10 @@ export function LineProposeForm({
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const { busy, execute } = useAppAction()
-  const close = useDirtyUrlDrawer(mode !== 'pct' || pct !== '' || rate !== '' || reason !== '', busy)
+  const close = useDirtyUrlDrawer(
+    mode !== 'pct' || pct !== '' || rate !== '' || reason !== '',
+    busy,
+  )
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -220,22 +316,26 @@ export function LineProposeForm({
     }
     await execute(
       () =>
-        fetchAction(`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=propose`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            proposedPct,
-            proposedRate: mode === 'rate' && rate !== '' ? rate.trim() : null,
-            reason: reason.trim() || null,
-          }),
-        }),
+        fetchAction(
+          `/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=propose`,
+          {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              proposedPct,
+              proposedRate: mode === 'rate' && rate !== '' ? rate.trim() : null,
+              reason: reason.trim() || null,
+            }),
+          },
+        ),
       {
         fallbackMessage: labels.failed,
         onOk: () => {
           router.push(closeHref)
           router.refresh()
         },
-        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) =>
+          setError(actionError.displayMessage(labels.failed)),
       },
     )
   }
@@ -243,8 +343,14 @@ export function LineProposeForm({
   return (
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
-        <Label htmlFor="comp-line-mode">{pctLabel} / {rateLabel}</Label>
-        <Select id="comp-line-mode" value={mode} onChange={(e) => setMode(e.target.value as 'pct' | 'rate')}>
+        <Label htmlFor="comp-line-mode">
+          {pctLabel} / {rateLabel}
+        </Label>
+        <Select
+          id="comp-line-mode"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as 'pct' | 'rate')}
+        >
           <option value="pct">{pctLabel}</option>
           <option value="rate">{rateLabel}</option>
         </Select>
@@ -252,17 +358,34 @@ export function LineProposeForm({
       {mode === 'pct' ? (
         <div>
           <Label htmlFor="comp-line-pct">{pctLabel}</Label>
-          <Input id="comp-line-pct" inputMode="decimal" value={pct} onChange={(e) => setPct(e.target.value)} required />
+          <Input
+            id="comp-line-pct"
+            inputMode="decimal"
+            value={pct}
+            onChange={(e) => setPct(e.target.value)}
+            required
+          />
         </div>
       ) : (
         <div>
           <Label htmlFor="comp-line-rate">{rateLabel}</Label>
-          <Input id="comp-line-rate" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value)} required />
+          <Input
+            id="comp-line-rate"
+            inputMode="decimal"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+            required
+          />
         </div>
       )}
       <div>
         <Label htmlFor="comp-line-reason">{reasonLabel}</Label>
-        <Textarea id="comp-line-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} />
+        <Textarea
+          id="comp-line-reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          maxLength={2000}
+        />
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex gap-2">
@@ -282,16 +405,12 @@ export function LineDecideButtons({
   lineId,
   labels,
   reasonLabel,
-  approveLabel,
-  rejectLabel,
   reopenLabel,
 }: {
   cycleId: string
   lineId: string
   labels: CompLabels
   reasonLabel: string
-  approveLabel: string
-  rejectLabel: string
   reopenLabel: string
 }) {
   const router = useRouter()
@@ -299,19 +418,23 @@ export function LineDecideButtons({
   const [error, setError] = useState<string | null>(null)
   const { busy, execute } = useAppAction()
 
-  async function act(action: 'approve' | 'reject' | 'reopen') {
+  async function act(action: 'reopen') {
     setError(null)
     await execute(
       () =>
-        fetchAction(`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=${action}`, {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ reason: reason.trim() || null }),
-        }),
+        fetchAction(
+          `/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=${action}`,
+          {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ reason: reason.trim() || null }),
+          },
+        ),
       {
         fallbackMessage: labels.failed,
         onOk: () => router.refresh(),
-        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) =>
+          setError(actionError.displayMessage(labels.failed)),
       },
     )
   }
@@ -320,17 +443,29 @@ export function LineDecideButtons({
     <div className="flex flex-col gap-3">
       <div>
         <Label htmlFor="comp-line-decide-reason">{reasonLabel}</Label>
-        <Textarea id="comp-line-decide-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} />
+        <Textarea
+          id="comp-line-decide-reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          maxLength={2000}
+        />
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" disabled={busy} onClick={() => act('approve')}>
-          {approveLabel}
-        </Button>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => act('reject')}>
-          {rejectLabel}
-        </Button>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => act('reopen')}>
+        <ApprovalActions
+          subjectKind="compensation_cycle_line"
+          subjectId={lineId}
+          submissionStatuses={['proposed']}
+          submitApprovalHref={`/api/hrm/comp-cycles/${cycleId}/lines/${lineId}?action=approve`}
+          submitApprovalMethod="PATCH"
+          submitApprovalBody={{ reason: reason.trim() || null }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => act('reopen')}
+        >
           {reopenLabel}
         </Button>
       </div>
@@ -385,7 +520,8 @@ export function CycleMoveButtons({
       {
         fallbackMessage: labels.failed,
         onOk: () => router.refresh(),
-        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) =>
+          setError(actionError.displayMessage(labels.failed)),
       },
     )
   }
@@ -394,23 +530,48 @@ export function CycleMoveButtons({
     <div className="flex flex-col gap-2">
       <div>
         <Label htmlFor="comp-cycle-cancel-reason">{cancelReasonLabel}</Label>
-        <Textarea id="comp-cycle-cancel-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={2000} />
+        <Textarea
+          id="comp-cycle-cancel-reason"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          maxLength={2000}
+        />
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" disabled={busy} onClick={() => act('open')}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => act('open')}
+        >
           {openLabel}
         </Button>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => act('submit')}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => act('submit')}
+        >
           {submitLabel}
         </Button>
         <Button type="button" disabled={busy} onClick={() => act('push')}>
           {pushLabel}
         </Button>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => act('close')}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => act('close')}
+        >
           {closeLabel}
         </Button>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => act('cancel')}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => act('cancel')}
+        >
           {cancelLabel}
         </Button>
       </div>
@@ -455,10 +616,15 @@ export function PlanCreateForm({
         fallbackMessage: labels.failed,
         onOk: (data) => {
           const id = data.plan?.id
-          router.push(typeof id === 'string' ? `/hrm/compensation/plans/${id}` : '/hrm/compensation')
+          router.push(
+            typeof id === 'string'
+              ? `/hrm/compensation/plans/${id}`
+              : '/hrm/compensation',
+          )
           router.refresh()
         },
-        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) =>
+          setError(actionError.displayMessage(labels.failed)),
       },
     )
   }
@@ -467,15 +633,31 @@ export function PlanCreateForm({
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
         <Label htmlFor="comp-plan-name">{nameLabel}</Label>
-        <Input id="comp-plan-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={160} />
+        <Input
+          id="comp-plan-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+          maxLength={160}
+        />
       </div>
       <div>
         <Label htmlFor="comp-plan-from">{fromLabel}</Label>
-        <DateField id="comp-plan-from" value={from} onChange={(value) => setFrom(value)} required />
+        <DateField
+          id="comp-plan-from"
+          value={from}
+          onChange={(value) => setFrom(value)}
+          required
+        />
       </div>
       <div>
         <Label htmlFor="comp-plan-to">{toLabel}</Label>
-        <DateField id="comp-plan-to" value={to} onChange={(value) => setTo(value)} required />
+        <DateField
+          id="comp-plan-to"
+          value={to}
+          onChange={(value) => setTo(value)}
+          required
+        />
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex gap-2">
@@ -495,43 +677,21 @@ export function PlanLineApproveButton({
   lineId,
   lineStatus,
   labels,
-  approveLabel,
 }: {
   planId: string
   lineId: string
   lineStatus: string
   labels: CompLabels
-  approveLabel: string
 }) {
-  const router = useRouter()
-  const [error, setError] = useState<string | null>(null)
-  const { busy, execute } = useAppAction()
   if (lineStatus !== 'proposed') return null
-
-  async function approve() {
-    setError(null)
-    await execute(
-      () =>
-        fetchAction(`/api/hrm/headcount-plans/${planId}/lines/${lineId}`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'approve' }),
-        }),
-      {
-        fallbackMessage: labels.failed,
-        onOk: () => router.refresh(),
-        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
-      },
-    )
-  }
-
   return (
-    <div className="flex items-center gap-2">
-      <Button type="button" disabled={busy} onClick={approve}>
-        {approveLabel}
-      </Button>
-      {error ? <span className="text-sm text-red-600">{error}</span> : null}
-    </div>
+    <ApprovalActions
+      subjectKind="headcount_plan_line"
+      subjectId={lineId}
+      submissionStatuses={['proposed']}
+      submitApprovalHref={`/api/hrm/headcount-plans/${planId}/lines/${lineId}`}
+      submitApprovalBody={{ action: 'approve' }}
+    />
   )
 }
 
@@ -554,7 +714,10 @@ export function EquityGenerateForm({
   const [groupB, setGroupB] = useState('')
   const [error, setError] = useState<string | null>(null)
   const { busy, execute } = useAppAction()
-  const close = useDirtyUrlDrawer(asOf !== '' || groupA !== '' || groupB !== '', busy)
+  const close = useDirtyUrlDrawer(
+    asOf !== '' || groupA !== '' || groupB !== '',
+    busy,
+  )
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -576,7 +739,8 @@ export function EquityGenerateForm({
           router.push('/hrm/compensation/equity')
           router.refresh()
         },
-        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) =>
+          setError(actionError.displayMessage(labels.failed)),
       },
     )
   }
@@ -585,19 +749,39 @@ export function EquityGenerateForm({
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
         <Label htmlFor="comp-gap-asof">{asOfLabel}</Label>
-        <DateField id="comp-gap-asof" value={asOf} onChange={(value) => setAsOf(value)} required />
+        <DateField
+          id="comp-gap-asof"
+          value={asOf}
+          onChange={(value) => setAsOf(value)}
+          required
+        />
       </div>
       <div>
         <Label htmlFor="comp-gap-a">{groupALabel}</Label>
-        <SearchSelect id="comp-gap-a" value={groupA} onChange={setGroupA} options={groupOptions.filter((option) => option.value !== groupB)} disabled={busy} />
+        <SearchSelect
+          id="comp-gap-a"
+          value={groupA}
+          onChange={setGroupA}
+          options={groupOptions.filter((option) => option.value !== groupB)}
+          disabled={busy}
+        />
       </div>
       <div>
         <Label htmlFor="comp-gap-b">{groupBLabel}</Label>
-        <SearchSelect id="comp-gap-b" value={groupB} onChange={setGroupB} options={groupOptions.filter((option) => option.value !== groupA)} disabled={busy} />
+        <SearchSelect
+          id="comp-gap-b"
+          value={groupB}
+          onChange={setGroupB}
+          options={groupOptions.filter((option) => option.value !== groupA)}
+          disabled={busy}
+        />
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex gap-2">
-        <Button type="submit" disabled={busy || !groupA || !groupB || groupA === groupB}>
+        <Button
+          type="submit"
+          disabled={busy || !groupA || !groupB || groupA === groupB}
+        >
           {labels.submit}
         </Button>
         <Button type="button" variant="outline" onClick={() => void close()}>
@@ -633,7 +817,8 @@ export function PayInfoRequestButton({
       {
         fallbackMessage: labels.failed,
         onOk: () => router.refresh(),
-        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) =>
+          setError(actionError.displayMessage(labels.failed)),
       },
     )
   }
@@ -660,7 +845,13 @@ export function CompensationSettingsForm({
   burdenLabel,
 }: {
   labels: CompLabels
-  initial: { comparisonAttributeKey: string; gapThresholdPct: string; responseDays: string; fteRounding: string; burdenRate: string }
+  initial: {
+    comparisonAttributeKey: string
+    gapThresholdPct: string
+    responseDays: string
+    fteRounding: string
+    burdenRate: string
+  }
   attributeLabel: string
   attributeOptions?: { value: string; label: string }[]
   thresholdLabel: string
@@ -670,7 +861,9 @@ export function CompensationSettingsForm({
   burdenLabel: string
 }) {
   const router = useRouter()
-  const [attributeKey, setAttributeKey] = useState(initial.comparisonAttributeKey)
+  const [attributeKey, setAttributeKey] = useState(
+    initial.comparisonAttributeKey,
+  )
   const [threshold, setThreshold] = useState(initial.gapThresholdPct)
   const [responseDays, setResponseDays] = useState(initial.responseDays)
   const [rounding, setRounding] = useState(initial.fteRounding)
@@ -689,7 +882,10 @@ export function CompensationSettingsForm({
           body: JSON.stringify({
             comparisonAttributeKey: attributeKey.trim() || null,
             gapThresholdPct: threshold.trim() === '' ? null : threshold.trim(),
-            responseDays: responseDays.trim() === '' ? null : Number.parseInt(responseDays, 10),
+            responseDays:
+              responseDays.trim() === ''
+                ? null
+                : Number.parseInt(responseDays, 10),
             fteRounding: rounding,
             burdenRate: burden.trim() || null,
           }),
@@ -697,7 +893,8 @@ export function CompensationSettingsForm({
       {
         fallbackMessage: labels.failed,
         onOk: () => router.refresh(),
-        onRefused: (actionError) => setError(actionError.displayMessage(labels.failed)),
+        onRefused: (actionError) =>
+          setError(actionError.displayMessage(labels.failed)),
       },
     )
   }
@@ -706,19 +903,40 @@ export function CompensationSettingsForm({
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
         <Label htmlFor="comp-set-attr">{attributeLabel}</Label>
-        <SearchSelect id="comp-set-attr" value={attributeKey} onChange={setAttributeKey} options={attributeOptions} clearable disabled={busy} />
+        <SearchSelect
+          id="comp-set-attr"
+          value={attributeKey}
+          onChange={setAttributeKey}
+          options={attributeOptions}
+          clearable
+          disabled={busy}
+        />
       </div>
       <div>
         <Label htmlFor="comp-set-threshold">{thresholdLabel}</Label>
-        <Input id="comp-set-threshold" inputMode="decimal" value={threshold} onChange={(e) => setThreshold(e.target.value)} />
+        <Input
+          id="comp-set-threshold"
+          inputMode="decimal"
+          value={threshold}
+          onChange={(e) => setThreshold(e.target.value)}
+        />
       </div>
       <div>
         <Label htmlFor="comp-set-days">{responseDaysLabel}</Label>
-        <Input id="comp-set-days" inputMode="numeric" value={responseDays} onChange={(e) => setResponseDays(e.target.value)} />
+        <Input
+          id="comp-set-days"
+          inputMode="numeric"
+          value={responseDays}
+          onChange={(e) => setResponseDays(e.target.value)}
+        />
       </div>
       <div>
         <Label htmlFor="comp-set-rounding">{roundingLabel}</Label>
-        <Select id="comp-set-rounding" value={rounding} onChange={(e) => setRounding(e.target.value)}>
+        <Select
+          id="comp-set-rounding"
+          value={rounding}
+          onChange={(e) => setRounding(e.target.value)}
+        >
           {roundingOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -728,7 +946,12 @@ export function CompensationSettingsForm({
       </div>
       <div>
         <Label htmlFor="comp-set-burden">{burdenLabel}</Label>
-        <Input id="comp-set-burden" inputMode="decimal" value={burden} onChange={(e) => setBurden(e.target.value)} />
+        <Input
+          id="comp-set-burden"
+          inputMode="decimal"
+          value={burden}
+          onChange={(e) => setBurden(e.target.value)}
+        />
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div>

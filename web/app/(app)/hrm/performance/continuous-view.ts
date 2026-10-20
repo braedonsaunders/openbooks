@@ -98,6 +98,7 @@ export interface ContinuousData {
       id: string
       name: string
       status: string
+      approvalPending: boolean
       statusLabel: string
       gridTitle: string
       gridCols: { review: string; proposed: string; decide: string }
@@ -340,6 +341,7 @@ export async function loadContinuousTab(
           id: session.id,
           name: session.name,
           status: session.status,
+          approvalPending: session.approvalPending,
           statusLabel: calibrationStatusLabel(t, session.status),
           gridTitle: t('performance.continuous.calibration.gridTitle'),
           gridCols: {

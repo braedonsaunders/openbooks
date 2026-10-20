@@ -1,5 +1,7 @@
 'use client'
 
+import { ApprovalActions } from '@/components/approval-actions'
+
 /**
  * WeeklyGrid — the weekly time-entry matrix. One row per "time line"
  * (project + item + time type + department + billable + memo); seven day
@@ -149,14 +151,16 @@ function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[], workFamily: T
   }))
 }
 
-function seedRows(payload: WeekPayload, pickers: TimesheetPickers, workFamily: TimeWorkFamily = 'project', quickProjectId?: string): GridRow[] {
+function seedRows(payload: WeekPayload, pickers: TimesheetPickers, workFamily: TimeWorkFamily = 'project', quickProjectId?: string,
+): GridRow[] {
   const rows = fromPayload(payload.rows, pickers.timeTypes,workFamily)
   if (quickProjectId && ['draft','empty','rejected'].includes(payload.status) && pickers.projects.some(project=>project.value===quickProjectId) && !rows.some(row=>row.projectId===quickProjectId)) {
     const quick = emptyRow(pickers.timeTypes, workFamily, quickProjectId, pickers.internalProjectIds ?? [])
     if (!payload.rows.length) rows[0]=quick
     else rows.push(quick)
   }
-  if ((payload.status !== 'draft' && payload.status !== 'empty') || !(payload.planned?.length)) return rows
+  if ((payload.status !== 'draft' && payload.status !== 'empty') || !payload.planned?.length
+  ) return rows
   const projectIds = new Set(pickers.projects.map((project) => project.value))
   const additions: GridRow[] = []
   for (const booking of payload.planned) {
@@ -238,9 +242,7 @@ export function WeeklyGrid({
   pickers,
   canManage,
   canApprove,
-  approveBlockedReason = null,
   canReopen,
-  requireApproval = true,
   fieldDefs = [],
   closeHref = '/timesheets',
   // HR-20: destructured beside the prop it feeds.
@@ -257,18 +259,9 @@ export function WeeklyGrid({
   pickers: TimesheetPickers
   canManage: boolean
   canApprove: boolean
-  /**
-   * Why Approve is withdrawn although the week is submitted: a pending
-   * approval flow owns the decision. The server resolves it when the drawer
-   * opens; the button stays disabled with this reason until the gates clear.
-   */
-  approveBlockedReason?: string | null
   /** Holds time.reopen — deliberately separate from approve, so the person who
    * signs off on hours is not automatically the one who can unwind that. */
   canReopen: boolean
-  /** Org policy: when false, saved hours are usable immediately and the
-   * submit/approve round trip is not offered at all. */
-  requireApproval?: boolean
   /** Org-defined custom fields for a timesheet LINE (target table time_entries).
    * A week has no record of its own — it is an aggregate over its lines — so
    * tenant extension lives on the line, rendered as extra grid columns. */
@@ -293,7 +286,8 @@ export function WeeklyGrid({
   const today = useBusinessToday()
   const [rows, setRows] = useState<GridRow[]>(() => seedRows(payload, pickers,workFamily,quickProjectId))
   const [status, setStatus] = useState(payload.status)
-  const canSubmitAdditional = canManage && requireApproval && ['approved', 'draft', 'rejected'].includes(status)
+  const canSubmitAdditional =
+    canManage && ['approved', 'draft', 'rejected'].includes(status)
   const [pendingEntries, setPendingEntries] = useState(payload.pendingEntries ?? [])
   const [additionalReview, setAdditionalReview] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -350,7 +344,7 @@ export function WeeklyGrid({
 
   // Manual approval seals the week. Automatic availability seals each saved
   // row, while later days can still be added without reopening posted history.
-  const locked = (requireApproval && status === 'approved') || !canManage || !employeeId
+  const locked = status === 'approved' || !canManage || !employeeId
   const readOnly = locked
 
   const timeTypeById = useMemo(
@@ -366,7 +360,9 @@ export function WeeklyGrid({
   const setCell = (i: number, day: number, value: string) => {
     if (rows[i]?.immutable) return
     setRows((rs) =>
-      rs.map((r, j) => (j === i ? { ...r, hours: r.hours.map((h, k) => (k === day ? value : h)) } : r)),
+      rs.map((r, j) =>
+        j === i ? { ...r, hours: r.hours.map((h, k) => (k === day ? value : h)) } : r,
+      ),
     )
     setDirty(true)
   }
@@ -376,7 +372,9 @@ export function WeeklyGrid({
   }
   const removeRow = (i: number) => {
     if (rows[i]?.immutable) return
-    setRows((rs) => (rs.length <= 1 ? [emptyRow(pickers.timeTypes,workFamily)] : rs.filter((_, j) => j !== i)))
+    setRows((rs) =>
+      rs.length <= 1 ? [emptyRow(pickers.timeTypes,workFamily)] : rs.filter((_, j) => j !== i),
+    )
     setDirty(true)
   }
 
@@ -594,16 +592,6 @@ export function WeeklyGrid({
     }
   }
 
-  const onApprove = async () => {
-    if (!employeeId) return
-    const data = await post('/api/timesheets/approve', { employee: employeeId, week }, 'POST', undefined, 'approve')
-    if (data) {
-      applyPayload(data)
-      setNotice(t('grid.approvedToast'))
-      toast.success(t('grid.approvedToast'))
-    }
-  }
-
   // An approver holding time.approve may mark a submitted line billable or
   // not (a write-off) before deciding the week. The flag posts immediately
   // through the native billable route — it is never a local draft the weekly
@@ -630,23 +618,6 @@ export function WeeklyGrid({
       applyPayload(data)
       setNotice(t('grid.billableUpdatedToast'))
       toast.success(t('grid.billableUpdatedToast'))
-    }
-  }
-
-  const onReject = async () => {
-    if (!employeeId) return
-    const reason = await promptDialog({
-      title: t('grid.rejectTitle'),
-      label: t('grid.rejectReasonLabel'),
-      placeholder: t('grid.rejectPlaceholder'),
-      confirmLabel: t('grid.reject'),
-    })
-    if (!reason) return
-    const data = await post('/api/timesheets/reject', { employee: employeeId, week, reason }, 'POST', undefined, 'reject')
-    if (data) {
-      applyPayload(data)
-      setNotice(t('grid.rejectedToast'))
-      toast.success(t('grid.rejectedToast'))
     }
   }
 
@@ -719,9 +690,10 @@ export function WeeklyGrid({
     setDirty(true)
     toast.success(tScheduling('prefill.filled', { count: result.filled, skipped: result.skipped }))
   }
-  const canSubmit = requireApproval && canManage && employeeId != null && (status === 'draft' || status === 'rejected')
-  const canDoApprove = requireApproval && canApprove && employeeId != null && status === 'submitted'
-  const canDoReject = requireApproval && canApprove && employeeId != null && status === 'submitted'
+  const canSubmit =
+    canManage &&
+    employeeId != null &&
+    (status === 'draft' || status === 'rejected')
   // Reopen is offered only when it will actually succeed: approved, held by
   // nothing downstream, and the user carries the separate reopen right.
   const weekLocked = (payload.lockReasons?.length ?? 0) > 0
@@ -738,11 +710,12 @@ export function WeeklyGrid({
   const canDoAmend = canReopen && employeeId != null && status === 'approved' && weekLocked
   // Withdraw is the submitter's own recall of a week still awaiting decision:
   // decided weeks stay decided (approved reopens, rejected is already back).
-  const canWithdraw = requireApproval && canManage && employeeId != null && status === 'submitted'
+  const canWithdraw = canManage && employeeId != null && status === 'submitted'
   // Approver billable retargeting is a submitted-week right: the per-row
   // gate below additionally requires every entry still submitted, no
   // amendment offset, and never a production line.
-  const canEditBillable = requireApproval && canApprove && employeeId != null && status === 'submitted'
+  const canEditBillable =
+    canApprove && employeeId != null && status === 'submitted'
 
   // Column widths mirror LineGrid's data-driven track model.
   // Org-defined line fields become real grid columns, between the built-in
@@ -758,14 +731,27 @@ export function WeeklyGrid({
     'w-full rounded-sm border-0 bg-transparent px-1.5 py-1 text-sm outline-none focus:ring-2 focus:ring-teal-500/60 dark:text-slate-100'
 
   if (additionalReview && canManage && status !== 'submitted') {
-    return <UrlDrawer open closeHref={closeHref} size="2xl" initialFullscreen
-      beforeClose={async () => !busy && await confirmDiscard()}
-      title={<span>{t('additional.title')} · {pickers.employees.find(employee => employee.value === employeeId)?.label}
-        {' · '}{t('grid.weekOf', weekRange(week, locale))}</span>}>
-      <AdditionalTimeReview key={`${loadedKey}:${revision}`} entries={pendingEntries} pickers={pickers}
+    return (
+      <UrlDrawer
+        open
+        closeHref={closeHref}
+        size="2xl"
+        initialFullscreen
+        beforeClose={async () => !busy && (await confirmDiscard())}
+        title={
+          <span>
+            {t('additional.title')} ·{' '}
+            {pickers.employees.find(employee => employee.value === employeeId)?.label}
+            {' · '}
+            {t('grid.weekOf', weekRange(week, locale))}
+          </span>
+        }
+      >
+        <AdditionalTimeReview key={`${loadedKey}:${revision}`} entries={pendingEntries} pickers={pickers}
         busy={busy} refusal={refusal} onBack={() => setAdditionalReview(false)} onSubmit={onSubmitAdditional}
         canSubmit={canSubmitAdditional} onCorrect={onCorrectTimeType} />
-    </UrlDrawer>
+      </UrlDrawer>
+    )
   }
   return (
     <UrlDrawer
@@ -779,7 +765,9 @@ export function WeeklyGrid({
       title={
         <span className="flex flex-wrap items-center gap-2.5">
           {t('grid.title')}
-          <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{statusLabel(status)}</Badge>
+          <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>
+            {statusLabel(status)}
+          </Badge>
         </span>
       }
       headerActions={
@@ -803,39 +791,31 @@ export function WeeklyGrid({
             <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy || dirty}>
               {pendingAction === 'submit' ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />{t('grid.submitting')}
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {t('grid.submitting')}
                 </span>
-              ) : t('grid.submitForApproval')}
+              ) : (
+                t('grid.submitForApproval')
+              )}
             </Button>
           ) : null}
           {canSubmit && grandTotal === 0 && !dirty ? (
             <Button size="sm" variant="outline" onClick={onDeclareNoHours} disabled={busy}>
               {pendingAction === 'submit' ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />{t('grid.submitting')}
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {t('grid.submitting')}
                 </span>
-              ) : t('grid.noHoursAction')}
+              ) : (
+                t('grid.noHoursAction')
+              )}
             </Button>
           ) : null}
-          {canDoApprove ? (
-            <span className="inline-flex flex-col items-start gap-1">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onApprove}
-                disabled={busy || approveBlockedReason != null}
-                title={approveBlockedReason ?? undefined}
-              >
-                {pendingAction === 'approve' ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />{t('grid.approving')}
-                  </span>
-                ) : tCommon('actions.approve')}
-              </Button>
-              {approveBlockedReason ? (
-                <span className="max-w-64 text-xs text-slate-500 dark:text-slate-400">{approveBlockedReason}</span>
-              ) : null}
-            </span>
+          {status === 'submitted' && payload.weekId ? (
+            <ApprovalActions
+              subjectKind="timesheet_week"
+              subjectId={payload.weekId}
+            />
           ) : null}
           {refusal ? (
             <div
@@ -844,7 +824,11 @@ export function WeeklyGrid({
             >
               <span className="min-w-52 flex-1">
                 {refusal.message}
-                {refusal.remedy ? <span className="mt-0.5 block text-xs opacity-90">{refusal.remedy}</span> : null}
+                {refusal.remedy ? (
+                  <span className="mt-0.5 block text-xs opacity-90">
+                    {refusal.remedy}
+                  </span>
+                ) : null}
               </span>
               {refusal.setupHref ? (
                 <Link href={refusal.setupHref} className="text-sm font-medium underline">
@@ -862,22 +846,18 @@ export function WeeklyGrid({
               <span>{notice}</span>
             </div>
           ) : null}
-          {canDoReject ? (
-            <Button size="sm" variant="outline" onClick={onReject} disabled={busy}>
-              {pendingAction === 'reject' ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />{t('grid.rejecting')}
-                </span>
-              ) : t('grid.reject')}
-            </Button>
-          ) : null}
           {canWithdraw ? (
             <Button size="sm" variant="outline" onClick={onWithdraw} disabled={busy}>
               {pendingAction === 'withdraw' ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />{t('grid.withdrawing')}
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {t('grid.withdrawing')}
                 </span>
-              ) : (<span className="inline-flex items-center gap-1.5"><Undo2 size={14} /> {t('grid.withdraw')}</span>)}
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <Undo2 size={14} /> {t('grid.withdraw')}
+                </span>
+              )}
             </Button>
           ) : null}
           {canDoReopen ? (
@@ -906,7 +886,8 @@ export function WeeklyGrid({
           </Button>
         </div>
       ) : null}
-      {/* Employee + week navigator. pb keeps the controls off the grid below. */}
+      {/* A refused save names what happened and offers the way back. The
+          grid keeps the typed hours until the editor chooses Reload. */}
       <div className="mb-5 space-y-3 border-b border-slate-200 pb-4 dark:border-slate-800">
         <div className="w-72">
           <SearchSelect
@@ -941,15 +922,18 @@ export function WeeklyGrid({
             title={t('grid.weekJump')}
           />
           {readOnly && status === 'approved' ? (
-            <span className="text-xs text-slate-400 dark:text-slate-500">{t('grid.approvedReadOnly')}</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">
+              {t('grid.approvedReadOnly')}
+            </span>
           ) : !canManage ? (
-            <span className="text-xs text-slate-400 dark:text-slate-500">{t('grid.viewOnly')}</span>
+            <span className="text-xs text-slate-400 dark:text-slate-500">
+              {t('grid.viewOnly')}
+            </span>
           ) : null}
         </div>
 
-        {/* HR-20: field flag chips — an outside fix was recorded anyway
-            (a worker must be able to clock) and routes to the approver
-            here; auto-closed pairs and photo presence ride along. */}
+        {/* A refused save names what happened and offers the way back. The
+          grid keeps the typed hours until the editor chooses Reload. */}
         {fieldFlags.filter((flag) => flag.geoCheck === 'outside' || flag.geoCheck === 'unavailable' || flag.autoClosed).length > 0 ? (
           <div className="flex flex-wrap items-center gap-1.5">
             {fieldFlags
@@ -968,10 +952,8 @@ export function WeeklyGrid({
               ))}
           </div>
         ) : null}
-        {/* HR-21: open anomaly flags overlapping this week. Informational
-            for the approver — flags never block timesheet approval itself;
-            block severity refuses the pay-run finalize, which is where the
-            checks queue link points. */}
+        {/* A refused save names what happened and offers the way back. The
+          grid keeps the typed hours until the editor chooses Reload. */}
         {anomalyFlags.length > 0 ? (
           <div className="flex flex-wrap items-center gap-1.5">
             {anomalyFlags.map((flag, index) => (
@@ -989,8 +971,8 @@ export function WeeklyGrid({
           </div>
         ) : null}
 
-        {/* Say WHY the week is pinned rather than leaving a dead Reopen button.
-            The same reasons the API enforces are the ones shown here. */}
+        {/* A refused save names what happened and offers the way back. The
+          grid keeps the typed hours until the editor chooses Reload. */}
         {weekLocked ? (
           <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
             <Lock size={13} className="mt-0.5 shrink-0" />
@@ -1032,7 +1014,9 @@ export function WeeklyGrid({
                 className="border-b border-slate-200 px-2.5 py-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400"
               >
                 {h.label}
-                {h.required && !readOnly ? <span className="text-red-500"> *</span> : null}
+                {h.required && !readOnly ? (
+                  <span className="text-red-500"> *</span>
+                ) : null}
               </div>
             ))}
             {payload.days.map((iso, i) => (
@@ -1128,15 +1112,20 @@ export function WeeklyGrid({
           )}
           <div className="flex items-center gap-5 text-sm">
             <span className="text-slate-500 dark:text-slate-400">
-              {t('labels.billable')} <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">{fmt(billableTotal, locale)}</span>
+              {t('labels.billable')}{' '}
+              <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                {fmt(billableTotal, locale)}
+              </span>
             </span>
             <span className="text-slate-500 dark:text-slate-400">
-              {t('labels.totalHours')} <span className="font-semibold tabular-nums text-teal-700 dark:text-teal-300">{fmt(grandTotal, locale)}</span>
+              {t('labels.totalHours')}{' '}
+              <span className="font-semibold tabular-nums text-teal-700 dark:text-teal-300">
+                {fmt(grandTotal, locale)}
+              </span>
             </span>
           </div>
         </div>
       ) : null}
-
     </UrlDrawer>
   )
 }
@@ -1213,11 +1202,15 @@ function RowFragment({
           <>
             <RemoteRecordChoice id={`time-order-${i}`} value={r.workOrderId} options={[]} endpoint="/api/timesheets/production-choices?workFamily=production" disabled={readOnly} clearable onChange={onWorkOrder}
               labels={{choose:tOperating('time.order'),searchPlaceholder:tOperating('time.search'),loadFailed:tOperating('loadFailed'),retry:tOperating('retry')}} />
-            {r.workOrderId ? <RemoteRecordChoice id={`time-operation-${i}`} value={r.woOperationId} options={[]} endpoint={`/api/timesheets/production-choices?workFamily=production&workOrderId=${r.workOrderId}`} disabled={readOnly} clearable onChange={onOperation}
-              labels={{choose:tOperating('time.operation'),searchPlaceholder:tOperating('time.search'),loadFailed:tOperating('loadFailed'),retry:tOperating('retry')}} /> : null}
+            {r.workOrderId ? (
+              <RemoteRecordChoice id={`time-operation-${i}`} value={r.woOperationId} options={[]} endpoint={`/api/timesheets/production-choices?workFamily=production&workOrderId=${r.workOrderId}`} disabled={readOnly} clearable onChange={onOperation}
+              labels={{choose:tOperating('time.operation'),searchPlaceholder:tOperating('time.search'),loadFailed:tOperating('loadFailed'),retry:tOperating('retry')}} />
+            ) : null}
           </>
         ) : readOnly ? (
-          <span className="px-1.5 text-sm">{label(pickers.projects, r.projectId)}</span>
+          <span className="px-1.5 text-sm">
+            {label(pickers.projects, r.projectId)}
+          </span>
         ) : (
           <SearchSelect
             value={r.projectId}
@@ -1231,7 +1224,9 @@ function RowFragment({
       </div>
       <div className={cell}>
         {readOnly ? (
-          <span className="px-1.5 text-sm">{r.itemId ? label(pickers.items, r.itemId) : '—'}</span>
+          <span className="px-1.5 text-sm">
+            {r.itemId ? label(pickers.items, r.itemId) : '—'}
+          </span>
         ) : (
           <SearchSelect
             value={r.itemId}
@@ -1246,7 +1241,9 @@ function RowFragment({
       </div>
       <div className={cell}>
         {readOnly ? (
-          <span className="px-1.5 text-sm">{label(pickers.timeTypes, r.timeTypeId)}</span>
+          <span className="px-1.5 text-sm">
+            {label(pickers.timeTypes, r.timeTypeId)}
+          </span>
         ) : (
           <Select
             value={r.timeTypeId}
@@ -1264,7 +1261,9 @@ function RowFragment({
       </div>
       <div className={cell}>
         {readOnly ? (
-          <span className="px-1.5 text-sm">{r.departmentId ? label(pickers.departments, r.departmentId) : '—'}</span>
+          <span className="px-1.5 text-sm">
+            {r.departmentId ? label(pickers.departments, r.departmentId) : '—'}
+          </span>
         ) : (
           <Select
             value={r.departmentId}
@@ -1293,7 +1292,9 @@ function RowFragment({
       </div>
       <div className={cell}>
         {r.amendsEntryId ? (
-          <Badge variant="outline" className="mr-1 shrink-0">{t('grid.amendmentLine')}</Badge>
+          <Badge variant="outline" className="mr-1 shrink-0">
+            {t('grid.amendmentLine')}
+          </Badge>
         ) : null}
         {r.plannedHours !== null ? (
           <Badge variant="outline" className="mr-1 shrink-0">
@@ -1301,7 +1302,9 @@ function RowFragment({
           </Badge>
         ) : null}
         {readOnly ? (
-          <span className="truncate px-1.5 text-sm text-slate-500 dark:text-slate-400">{r.memo || '—'}</span>
+          <span className="truncate px-1.5 text-sm text-slate-500 dark:text-slate-400">
+            {r.memo || '—'}
+          </span>
         ) : (
           <input
             value={r.memo}
@@ -1327,8 +1330,14 @@ function RowFragment({
         <div key={d} className={cn(cell, 'px-0')}>
           {readOnly ? (
             <div className="flex w-full flex-col items-center gap-1 px-1 text-center text-sm tabular-nums">
-              <span>{h === '' || Number(h) === 0 ? '' : Number(h).toFixed(2)}</span>
-              {onCorrect && r.productionEntryIds[d]?.length === 1 ? <button type="button" onClick={() => onCorrect(r.productionEntryIds[d]![0]!, h)} className="text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-300">{tOperating('time.correct')}</button> : null}
+              <span>
+                {h === '' || Number(h) === 0 ? '' : Number(h).toFixed(2)}
+              </span>
+              {onCorrect && r.productionEntryIds[d]?.length === 1 ? (
+                <button type="button" onClick={() => onCorrect(r.productionEntryIds[d]![0]!, h)} className="text-[10px] font-medium text-teal-700 hover:underline dark:text-teal-300">
+                  {tOperating('time.correct')}
+                </button>
+              ) : null}
             </div>
           ) : (
             <input

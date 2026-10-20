@@ -300,8 +300,8 @@
     "description": "Les livres auxiliaires sont verrouillés avant le GL. La base de données refuse ensuite les comptabilisations.",
     "blockedTitle": "Approbation bloquée",
     "blockedDescription": "{count, plural, one {# tâche à contrôle strict reste} other {# tâches à contrôle strict restent}}.",
-    "approvalTitle": "Approbation indépendante et verrouillage",
-    "approvalDescription": "La personne ayant lancé l’exécution ne peut pas l’approuver définitivement. Toute modification du grand livre rouvre la révision.",
+    "approvalTitle": "Approbation et verrouillage",
+    "approvalDescription": "Les Flows de l’organisation définissent les décisions requises. Toute modification du grand livre après approbation rouvre la revue.",
     "ownerTitle": "Attestation du responsable et verrouillage",
     "ownerDescription": "Pour une clôture gérée par le responsable, vérifiez les états et indiquez pourquoi la période est prête. L’attestation est liée à cet état exact du grand livre.",
     "attestationLabel": "Pourquoi ces livres sont-ils prêts à clôturer ?",
@@ -335,6 +335,7 @@
       "started": "Exécution démarrée",
       "data_changed": "Une modification du grand livre a invalidé des travaux",
       "approval_requested": "Approbation de clôture demandée",
+      "approval_withdrawn": "Approbation de clôture rappelée",
       "owner_attested": "Le responsable a attesté que les livres sont prêts",
       "approval_rejected": "Approbation de clôture refusée",
       "approved": "Clôture approuvée définitivement",
@@ -381,7 +382,7 @@
       },
       "controlledReopen": {
         "name": "Réouverture contrôlée",
-        "description": "Toute réouverture exige un motif, une approbation indépendante et une échéance."
+        "description": "Les réouvertures exigent un motif, un acheminement par les Flows de l’organisation et une date d’expiration."
       },
       "sourceReconciliationEvidence": {
         "name": "Preuve de rapprochement du système source",
@@ -444,11 +445,11 @@
     },
     "controller-approval": {
       "title": "Approbation du contrôleur",
-      "description": "Réviser indépendamment la préparation, les exceptions, les preuves et les rapports."
+      "description": "Examinez la préparation de la clôture, les exceptions, les justificatifs et les rapports."
     },
     "financial-review": {
       "title": "Réviser les états financiers",
-      "description": "Réviser la balance de vérification, le bilan et le résultat avant d’attester : exhaustivité et soldes inattendus."
+      "description": "Vérifiez que la balance générale, le bilan et le compte de résultat sont complets et ne présentent aucun solde inattendu avant de terminer la revue."
     },
     "lock-subledgers": {
       "title": "Verrouiller les livres auxiliaires",
@@ -494,7 +495,7 @@
   "setup": {
     "title": "Périodes et clôture",
     "description": "Concevez les calendriers, générez les périodes, gouvernez les verrous et réouvertures, versionnez les modèles et configurez contrôles, automatisations et dossiers.",
-    "simpleMode": "La clôture gérée par le responsable est active. Calendriers, périodes, verrous, attestations et publication immuable restent disponibles sans la complexité des flux d’entreprise.",
+    "simpleMode": "Les calendriers, périodes, verrouillages et publications immuables restent disponibles. Configurez les approbations dans Flows.",
     "enableAdvanced": "Voir la clôture avancée",
     "tabs": {
       "calendars": "Calendriers",
@@ -782,7 +783,8 @@
       "lock": "Verrouillage",
       "review": "Révision",
       "segregation": "Séparation des tâches",
-      "exception": "Exception"
+      "exception": "Exception",
+      "evidence": "Justificatifs"
     },
     "automationTriggers": {
       "run_started": "Exécution démarrée",

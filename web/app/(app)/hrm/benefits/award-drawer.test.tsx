@@ -31,7 +31,11 @@ const drawer = { award: {
   programDeliveryMethod: 'payroll', externalRef: null, voidReason: null,
 }, timelineEmpty: 'History retained.' } as never
 
-async function mount(t: TestContext, content: React.ReactNode, fetcher: typeof fetch) {
+async function mount(
+  t: TestContext,
+  content: React.ReactNode,
+  fetcher: typeof fetch,
+) {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
@@ -43,7 +47,13 @@ async function mount(t: TestContext, content: React.ReactNode, fetcher: typeof f
     host.remove()
     globalThis.fetch = previous
   })
-  await act(async () => root.render(<NextIntlClientProvider locale="en" messages={messages}>{content}</NextIntlClientProvider>))
+  await act(async () =>
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        {content}
+      </NextIntlClientProvider>,
+    ),
+  )
 }
 async function render(t: TestContext, canQueue: boolean, fetcher: typeof fetch, record: unknown = drawer) {
   await mount(t, <AwardDrawer drawer={record as never} closeHref="/hrm/benefits" canManage canQueue={canQueue} />, fetcher)
@@ -154,11 +164,32 @@ test('external rewards queue a linked native pay run instead of inventing a fulf
 for (const canConfigureApprovalPolicies of [false, true]) {
   test(`approval policy editor actions follow workflow grant ${canConfigureApprovalPolicies}`, async (t) => {
     const programDrawer = {
-      program: { id: 'program', name: 'Recognition', code: 'THANKS', family: 'reward', familyLabel: 'Reward', approvalMode: 'flows', status: 'closed', statusLabel: 'Closed', valueLabel: '$25', effectiveFrom: '2026-01-01', effectiveTo: null },
-      policyLines: [], members: [], membersEmpty: 'No members', sources: [], sourcesEmpty: 'No sources', activity: [], activityRefusal: null, activityTruncated: false,
-      drawerRefusal: null, simulation: null, simulationRefusal: null,
-      canConfigureApprovalPolicies, approvalPoliciesRefusal: null,
-      approvalPolicies: { configured: true, href: '/admin/flows', policies: [{ id: 'policy', name: 'Recognition controls', ungatedOutcome: 'require_approval', href: '/admin/flows/policy' }] },
+      program: {
+        id: 'program',
+        name: 'Recognition',
+        code: 'THANKS',
+        family: 'reward',
+        familyLabel: 'Reward',
+        status: 'closed',
+        statusLabel: 'Closed',
+        valueLabel: '$25',
+        effectiveFrom: '2026-01-01',
+        effectiveTo: null,
+      },
+      policyLines: [],
+      members: [],
+      membersEmpty: 'No members',
+      sources: [],
+      sourcesEmpty: 'No sources',
+      activity: [],
+      activityRefusal: null,
+      activityTruncated: false,
+      drawerRefusal: null,
+      simulation: null,
+      simulationRefusal: null,
+      canConfigureApprovalPolicies,
+      approvalPoliciesRefusal: null,
+      approvalPolicies: { configured: true, href: '/admin/flows', policies: [{ id: 'policy', name: 'Recognition controls', href: '/admin/flows/policy' }] },
     }
     await mount(t, <ProgramDrawer drawer={programDrawer as never} closeHref="/hrm/benefits" canManage={false} employmentOptions={[]} />, (async () => { throw new Error("No policy read expected") }) as typeof fetch)
     assert.ok(document.body.textContent?.includes('Recognition controls'), 'the configured policy remains readable')
@@ -168,38 +199,37 @@ for (const canConfigureApprovalPolicies of [false, true]) {
   })
 }
 
-for (const approvalMode of ['none', 'flows'] as const) {
-  test(`program approval controls default to none and persist ${approvalMode}`, async (t) => {
-      const writes: Record<string, unknown>[] = []
+test('program configuration delegates approvals to tenant Flows without another mode', async (t) => {
+    const writes: Record<string, unknown>[] = []
     const fetcher = (async (_url: RequestInfo | URL, init?: RequestInit) => {
       writes.push(JSON.parse(String(init?.body)))
       return Response.json({ error: 'Draft remains editable.' }, { status: 422 })
     }) as typeof fetch
     const seed = { ...emptyProgramDraft('reward'), code: 'THANKS', name: 'Recognition', currency: 'USD', effectiveFrom: '2026-01-01', fixedAmount: '25.00', capAmount: '12,34', legalEntityId: 'entity', payComponentId: 'cash-component', sourceAccountIds: [], paymentDelayDays: 0 }
-    await mount(t, <MoneyProvider currency="USD"><ProgramBuilderDrawer closeHref="/hrm/benefits" initialFamily="reward" familyLocked mode="edit" programId="program" editSeed={seed as never} currencyOptions={[{value: 'USD', label: 'USD · US Dollar', scopeValue: 'entity'}]} subsidiaryOptions={[{ value: 'entity', label: 'Employer' }]} departmentOptions={[]} projectOptions={[]} accountOptions={[]} employmentsTruncated={false} canConfigureApprovalPolicies payComponentOptions={[{ value: 'cash-component', label: 'Cash reward', paymentKind: 'cash' }]} /></MoneyProvider>, fetcher)
+    await mount(
+      t,
+      <MoneyProvider currency="USD">
+        <ProgramBuilderDrawer closeHref="/hrm/benefits" initialFamily="reward" familyLocked mode="edit" programId="program" editSeed={seed as never} currencyOptions={[{value: 'USD', label: 'USD · US Dollar', scopeValue: 'entity'}]} subsidiaryOptions={[{ value: 'entity', label: 'Employer' }]} departmentOptions={[]} projectOptions={[]} accountOptions={[]} employmentsTruncated={false} canConfigureApprovalPolicies payComponentOptions={[{ value: 'cash-component', label: 'Cash reward', paymentKind: 'cash' }]} />
+      </MoneyProvider>,
+      fetcher,
+    )
     for (let index = 0; index < 2; index++) await click('Next')
     await click('Next')
     assert.match(document.getElementById('program-builder-capAmount-error')?.textContent ?? '', /12\.34/)
     assert.equal(writes.length, 0)
     await fill('program-builder-cap', '12.34')
     for (let index = 0; index < 2; index++) await click('Next')
-    const selectControl = document.getElementById('program-builder-approvalMode')
-    assert.ok(selectControl, document.body.textContent ?? '')
-    const select = (selectControl.tagName === 'BUTTON' ? selectControl.closest('span')?.querySelector('select') : selectControl) as HTMLSelectElement
-    assert.equal(select.value, 'none')
-    assert.ok(!document.querySelector('a[href="/admin/flows"]'), 'no workflow setup action is required by the default mode')
-    assert.ok(document.body.textContent?.includes('No workflow configuration or approver is required.'))
-    await fill('program-builder-approvalMode', approvalMode)
-    assert.equal(Boolean(document.querySelector('a[href="/admin/flows"]')), approvalMode === 'flows')
+    assert.equal(document.getElementById('program-builder-approvalMode'),null);
+    assert.ok(document.querySelector('a[href="/admin/flows"]'),'the one approval configuration surface remains reachable');
     assert.equal(document.querySelectorAll('[aria-label="Program family"]').length, 0)
     await click('Next')
     await click('Next')
     await fill('program-builder-reason', 'Update approval controls')
     await click('Save changes')
     assert.equal(writes.length, 1)
-    assert.equal(writes[0]?.approvalMode, approvalMode)
+    assert.equal(Object.hasOwn(writes[0]!,'approvalMode'),false);
+    assert.equal(Object.hasOwn(writes[0]!,'requiresApproval'),false)
   })
-}
 
 test('no-approval submission states readiness without inventing an approver or requesting a flow', async (t) => {
   const seed = drawer as unknown as { award: Record<string, unknown>; timelineEmpty: string }
@@ -212,10 +242,37 @@ test('no-approval submission states readiness without inventing an approver or r
 
 test('an active program keeps lifecycle in the header and hides an empty Actions menu', async (t) => {
   const programDrawer = {
-    program: { id: 'program', name: 'Project Incentive', code: 'PROJECT', family: 'incentive', familyLabel: 'Incentive', metric: 'net_profit', approvalMode: 'none', status: 'active', statusLabel: 'Active', statusVariant: 'success', valueLabel: '5%', effectiveFrom: '2026-01-01', effectiveTo: null, programHref: '/hrm/benefits?view=programs&program=program' },
-    policyLines: [], members: [], membersEmpty: 'No members', sources: [], sourcesEmpty: 'No sources', activity: [], activityRefusal: null, activityTruncated: false,
-    drawerRefusal: null, simulation: null, simulationRefusal: null, editHref: '/hrm/benefits?view=programs&program=program&edit=1', simulateHref: '/hrm/benefits?view=programs&program=program',
-    canConfigureApprovalPolicies: false, approvalPoliciesRefusal: null, approvalPolicies: null,
+    program: {
+      id: 'program',
+      name: 'Project Incentive',
+      code: 'PROJECT',
+      family: 'incentive',
+      familyLabel: 'Incentive',
+      metric: 'net_profit',
+      status: 'active',
+      statusLabel: 'Active',
+      statusVariant: 'success',
+      valueLabel: '5%',
+      effectiveFrom: '2026-01-01',
+      effectiveTo: null,
+      programHref: '/hrm/benefits?view=programs&program=program',
+    },
+    policyLines: [],
+    members: [],
+    membersEmpty: 'No members',
+    sources: [],
+    sourcesEmpty: 'No sources',
+    activity: [],
+    activityRefusal: null,
+    activityTruncated: false,
+    drawerRefusal: null,
+    simulation: null,
+    simulationRefusal: null,
+    editHref: '/hrm/benefits?view=programs&program=program&edit=1',
+    simulateHref: '/hrm/benefits?view=programs&program=program',
+    canConfigureApprovalPolicies: false,
+    approvalPoliciesRefusal: null,
+    approvalPolicies: null,
   }
   await mount(t, <ProgramDrawer drawer={programDrawer as never} closeHref="/hrm/benefits?view=programs" canManage employmentOptions={[]} />, (async () => { throw new Error('No write expected') }) as typeof fetch)
   const labels = Array.from(document.querySelectorAll('button')).map((button) => button.textContent?.trim())
@@ -234,7 +291,13 @@ test('editing an active program sends its reason and apply-from date and keeps t
     return Response.json({ error: 'Settled periods already use these terms; choose a later apply-from date.' }, { status: 422 })
   }) as typeof fetch
   const seed = { ...emptyProgramDraft('reward'), status: 'active', businessToday: '2026-10-11', code: 'THANKS', name: 'Recognition', currency: 'USD', effectiveFrom: '2026-01-01', fixedAmount: '25.00', legalEntityId: 'entity', payComponentId: 'cash-component', sourceAccountIds: [], paymentDelayDays: 0 }
-  await mount(t, <MoneyProvider currency="USD"><ProgramBuilderDrawer closeHref="/hrm/benefits" initialFamily="reward" familyLocked mode="edit" programId="program" editSeed={seed as never} currencyOptions={[{ value: 'USD', label: 'USD · US Dollar', scopeValue: 'entity' }]} subsidiaryOptions={[{ value: 'entity', label: 'Employer' }]} departmentOptions={[]} projectOptions={[]} accountOptions={[]} employmentsTruncated={false} payComponentOptions={[{ value: 'cash-component', label: 'Cash reward', paymentKind: 'cash' }]} /></MoneyProvider>, fetcher)
+  await mount(
+    t,
+    <MoneyProvider currency="USD">
+      <ProgramBuilderDrawer closeHref="/hrm/benefits" initialFamily="reward" familyLocked mode="edit" programId="program" editSeed={seed as never} currencyOptions={[{ value: 'USD', label: 'USD · US Dollar', scopeValue: 'entity' }]} subsidiaryOptions={[{ value: 'entity', label: 'Employer' }]} departmentOptions={[]} projectOptions={[]} accountOptions={[]} employmentsTruncated={false} payComponentOptions={[{ value: 'cash-component', label: 'Cash reward', paymentKind: 'cash' }]} />
+    </MoneyProvider>,
+    fetcher,
+  )
   for (let index = 0; index < 5; index++) await click('Next')
   assert.equal((document.getElementById('program-builder-changeEffectiveFrom') as HTMLInputElement | null)?.value, '10/11/2026', 'the apply-from date defaults to the business day')
   await click('Save changes')

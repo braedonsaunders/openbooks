@@ -1,3 +1,7 @@
+import {
+  decideReopenFixture,
+  requestReviewedReopenFixture,
+} from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -8,7 +12,7 @@ import { DOCUMENT_PERMISSION_NAMESPACE } from "../records/document-kind-permissi
 import { fingerprintChangeBuckets } from "./readiness.ts";
 import { PURCHASE_RECEIPT_DOCUMENT_KIND } from "../inventory/documents-purchasing.ts";
 import { SALES_FULFILLMENT_DOCUMENT_KIND } from "../inventory/documents-customer-credits.ts";
-import { decidePeriodReopen, requestPeriodReopen } from "./reopening.ts";
+import {} from "./reopening.ts";
 import { requireLockWriteRow, setPeriodLockState } from "../periods/period-locks.ts";
 import { startCloseRun } from "./run-start.ts";
 import { db, withBypass, withOrgTransaction } from "../platform/db.ts";
@@ -287,17 +291,17 @@ async function storageBlocksWrite(
   org: ScratchOrg,
   module: string,
 ): Promise<boolean> {
-  const result = (await db.execute<{ blocked: boolean }>(sql`
+  const result = await db.execute<{ blocked: boolean }>(sql`
     select period_module_blocks_write(
              ${org.orgId}::uuid, ${org.periodId}::uuid, ${org.bookId}::uuid,
-             ${org.subsidiaryId}::uuid, ${module}, false) as blocked`));
+             ${org.subsidiaryId}::uuid, ${module}, false) as blocked`);
   return result.rows[0]!.blocked;
 }
 
 async function lockChangeCounts(
   org: ScratchOrg,
 ): Promise<{ locks: number; events: number; audits: number }> {
-  const result = (await db.execute<{
+  const result = await db.execute<{
     locks: number;
     events: number;
     audits: number;
@@ -307,7 +311,7 @@ async function lockChangeCounts(
       (select count(*)::int from close_events
         where org_id = ${org.orgId} and event_type = 'period.lock_changed') as events,
       (select count(*)::int from audit_log
-        where org_id = ${org.orgId} and table_name = 'period_locks') as audits`));
+        where org_id = ${org.orgId} and table_name = 'period_locks') as audits`);
   return result.rows[0]!;
 }
 
@@ -416,7 +420,7 @@ test(
     try {
       const actors = await seedFlowActors(org.orgId);
       await closeAllGlobally(org, actors.adminId);
-      const requestId = await requestPeriodReopen({
+      const requestId = await requestReviewedReopenFixture({
         orgId: org.orgId,
         periodId: org.periodId,
         bookId: org.bookId,
@@ -425,17 +429,17 @@ test(
         reason: "auditor requested corrections",
         actorId: actors.adminId,
       });
-      await decidePeriodReopen({
+      await decideReopenFixture({
         orgId: org.orgId,
         requestId,
         actorId: actors.approver1Id,
-        approve: true,
+        decision: "approved",
       });
-      const reopened = (await db.execute<{ state: string }>(sql`
+      const reopened = await db.execute<{ state: string }>(sql`
         select state from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and subsidiary_id = ${org.subsidiaryId}::uuid
-           and module = 'gl'`));
+           and module = 'gl'`);
       assert.equal(reopened.rows[0]!.state, "open");
 
       await assert.rejects(
@@ -476,11 +480,11 @@ test(
         actorId: actors.adminId,
         reason: "corrections complete",
       });
-      const reclosed = (await db.execute<{ state: string }>(sql`
+      const reclosed = await db.execute<{ state: string }>(sql`
         select state from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and subsidiary_id = ${org.subsidiaryId}::uuid
-           and module = 'gl'`));
+           and module = 'gl'`);
       assert.equal(reclosed.rows[0]!.state, "closed");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -496,7 +500,7 @@ test(
     try {
       const actors = await seedFlowActors(org.orgId);
       await closeAllGlobally(org, actors.adminId);
-      const requestId = await requestPeriodReopen({
+      const requestId = await requestReviewedReopenFixture({
         orgId: org.orgId,
         periodId: org.periodId,
         bookId: org.bookId,
@@ -505,11 +509,11 @@ test(
         reason: "short controlled window",
         actorId: actors.adminId,
       });
-      await decidePeriodReopen({
+      await decideReopenFixture({
         orgId: org.orgId,
         requestId,
         actorId: actors.approver1Id,
-        approve: true,
+        decision: "approved",
         hours: 1,
       });
       await db.execute(sql`
@@ -582,7 +586,7 @@ test(
           errorChainMatches(error, /period is closed for GL posting/),
       );
 
-      const requestId = await requestPeriodReopen({
+      const requestId = await requestReviewedReopenFixture({
         orgId: org.orgId,
         periodId: org.periodId,
         bookId: org.bookId,
@@ -591,20 +595,20 @@ test(
         reason: "late adjusting entry",
         actorId: actors.adminId,
       });
-      await decidePeriodReopen({
+      await decideReopenFixture({
         orgId: org.orgId,
         requestId,
         actorId: actors.approver1Id,
-        approve: true,
+        decision: "approved",
       });
-      const window = (await db.execute<{
+      const window = await db.execute<{
         state: string;
         expires: Date | null;
       }>(sql`
         select state, reopen_expires_at as expires from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and subsidiary_id = ${org.subsidiaryId}::uuid
-           and module = 'gl'`));
+           and module = 'gl'`);
       assert.equal(window.rows[0]!.state, "open");
       assert.ok(window.rows[0]!.expires != null);
       assert.ok(new Date(window.rows[0]!.expires!) > new Date());
@@ -616,8 +620,8 @@ test(
           update journal_entries set status = 'posted', posted_at = now()
            where id = ${approvedEntry}`);
       });
-      const posted = (await db.execute<{ status: string }>(sql`
-        select status from journal_entries where id = ${approvedEntry}`));
+      const posted = await db.execute<{ status: string }>(sql`
+        select status from journal_entries where id = ${approvedEntry}`);
       assert.equal(posted.rows[0]!.status, "posted");
 
       // Other scopes stay governed by the org-wide close.
@@ -665,11 +669,11 @@ test(
       }
       // Either order must end with the whole scope closed.
       assert.equal(await storageBlocksWrite(org, "ar"), true);
-      const childRows = (await db.execute<{ state: string }>(sql`
+      const childRows = await db.execute<{ state: string }>(sql`
         select state from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and subsidiary_id = ${org.subsidiaryId}::uuid
-           and module = 'ar'`));
+           and module = 'ar'`);
       assert.ok(
         childRows.rows.length === 0 || childRows.rows.every((row) => row.state === "closed"),
       );
@@ -1031,7 +1035,7 @@ test(
     try {
       const actors = await seedFlowActors(org.orgId);
       await closeAllGlobally(org, actors.adminId);
-      const requestId = await requestPeriodReopen({
+      const requestId = await requestReviewedReopenFixture({
         orgId: org.orgId,
         periodId: org.periodId,
         bookId: org.bookId,
@@ -1040,11 +1044,11 @@ test(
         reason: "auditor requested corrections",
         actorId: actors.adminId,
       });
-      await decidePeriodReopen({
+      await decideReopenFixture({
         orgId: org.orgId,
         requestId,
         actorId: actors.approver1Id,
-        approve: true,
+        decision: "approved",
       });
       // The approver owns an audit row: actor, action, scope and decision.
       const audits = (await db.execute<{ action: string; actor_id: string; changes: unknown }>(sql`
@@ -1095,7 +1099,7 @@ test(
       // role holds the reopen permission here.
       await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
       await closeAllGlobally(org, actors.adminId);
-      const rejectedId = await requestPeriodReopen({
+      const rejectedId = await requestReviewedReopenFixture({
         orgId: org.orgId,
         periodId: org.periodId,
         bookId: org.bookId,
@@ -1104,12 +1108,12 @@ test(
         reason: "too broad a window",
         actorId: actors.adminId,
       });
-      await decidePeriodReopen({
+      await decideReopenFixture({
         orgId: org.orgId,
         requestId: rejectedId,
         actorId: actors.approver1Id,
-        approve: false,
-        decisionReason: "Window is broader than the correction needs",
+        decision: "rejected",
+        reason: "Window is broader than the correction needs",
       });
       const rejection = (await db.execute<{ action: string; actor_id: string }>(sql`
         select action, actor_id from audit_log
@@ -1120,7 +1124,7 @@ test(
       assert.equal(rejection[0]!.actor_id, actors.approver1Id);
       // A decision that never commits (self-approval) must never leave an
       // audit row claiming it did.
-      const ownId = await requestPeriodReopen({
+      const ownId = await requestReviewedReopenFixture({
         orgId: org.orgId,
         periodId: org.periodId,
         bookId: org.bookId,
@@ -1130,18 +1134,27 @@ test(
         actorId: actors.adminId,
       });
       await assert.rejects(
-        decidePeriodReopen({ orgId: org.orgId, requestId: ownId, actorId: actors.adminId, approve: true }),
-        (error: unknown) => errorChainMatches(error, /independent approval/),
+        decideReopenFixture({
+          orgId: org.orgId,
+          requestId: ownId,
+          actorId: actors.adminId,
+          decision: "approved",
+        }),
+        (error: unknown) =>
+          errorChainMatches(
+            error,
+            /not an approver|self-approval|own submission/,
+          ),
       );
-      const none = (await db.execute<{ count: number }>(sql`
+      const none = await db.execute<{ count: number }>(sql`
         select count(*)::int as count from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
-           and row_id = ${ownId} and action in ('approve', 'self_approve')`));
+           and row_id = ${ownId} and action in ('approve', 'self_approve')`);
       assert.equal(none.rows[0]?.count, 0);
-      const noEvents = (await db.execute<{ count: number }>(sql`
+      const noEvents = await db.execute<{ count: number }>(sql`
         select count(*)::int as count from close_events
          where org_id = ${org.orgId} and event_type = 'period.reopen_decision'
-           and payload->>'requestId' = ${ownId}`));
+           and payload->>'requestId' = ${ownId}`);
       assert.equal(noEvents.rows[0]?.count, 0);
     } finally {
       await dropScratchOrg(org.orgId);

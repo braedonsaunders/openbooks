@@ -342,26 +342,6 @@ export function AutomationDrawer({
                     ariaLabel={t("automationConfig.ownerRole")}
                   />
                 </Field>
-                <Field label={t("automationConfig.reviewer")}>
-                  <SearchSelect
-                    value={String(config.reviewerUserId ?? "")}
-                    onChange={(v) => setConfig({ reviewerUserId: v })}
-                    options={userOptions}
-                    clearable
-                    searchable
-                    ariaLabel={t("automationConfig.reviewer")}
-                  />
-                </Field>
-                <Field label={t("automationConfig.reviewerRole")}>
-                  <SearchSelect
-                    value={String(config.reviewerRoleKey ?? "")}
-                    onChange={(v) => setConfig({ reviewerRoleKey: v })}
-                    options={roleOptions}
-                    clearable
-                    searchable
-                    ariaLabel={t("automationConfig.reviewerRole")}
-                  />
-                </Field>
               </div>
             </>
           ) : null}

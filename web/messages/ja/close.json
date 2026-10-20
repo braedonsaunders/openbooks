@@ -300,8 +300,8 @@
     "description": "業務補助元帳は総勘定元帳より先にロックされます。ロック適用後、データベースは記帳を拒否します。",
     "blockedTitle": "承認がブロックされています",
     "blockedDescription": "{count, plural, one {# 件のハードゲート付きタスクが残っています} other {# 件のハードゲート付きタスクが残っています}}。",
-    "approvalTitle": "独立した承認とロック",
-    "approvalDescription": "決算実行の開始者は最終承認を付与できません。承認後の元帳変更はレビューを再開させます。",
+    "approvalTitle": "承認とロック",
+    "approvalDescription": "必要な承認は組織の Flows で定義されます。承認後に元帳が変更されると、レビューが再開されます。",
     "ownerTitle": "担当者の証明とロック",
     "ownerDescription": "担当者主導の決算では、財務諸表を確認し、期間の準備が整っている理由を記録します。証明はこの元帳状態そのものに紐付けられます。",
     "attestationLabel": "これらの帳簿が締めの準備ができている理由は何ですか?",
@@ -335,6 +335,7 @@
       "started": "決算実行を開始しました",
       "data_changed": "元帳の変更により従前の作業が無効化されました",
       "approval_requested": "決算承認を依頼しました",
+      "approval_withdrawn": "決算承認を取り下げました",
       "owner_attested": "担当者が帳簿の準備完了を証明しました",
       "approval_rejected": "決算承認が却下されました",
       "approved": "決算が最終承認を受けました",
@@ -381,7 +382,7 @@
       },
       "controlledReopen": {
         "name": "統制された再オープン",
-        "description": "再オープンには理由、独立した承認、有効期限が必要です。"
+        "description": "再開には理由、組織の Flows による処理、有効期限が必要です。"
       },
       "sourceReconciliationEvidence": {
         "name": "ソースシステム消込の証跡",
@@ -444,11 +445,11 @@
     },
     "controller-approval": {
       "title": "コントローラーの承認",
-      "description": "準備状況、例外、証跡、報告成果物を独立してレビューします。"
+      "description": "決算の準備状況、例外、証跡、レポートを確認します。"
     },
     "financial-review": {
       "title": "財務諸表をレビューする",
-      "description": "証明の前に、試算表、貸借対照表、損益計算書の網羅性と異常残高をレビューします。"
+      "description": "レビューを完了する前に、試算表、貸借対照表、損益計算書の完全性と予期しない残高を確認します。"
     },
     "lock-subledgers": {
       "title": "業務補助元帳をロックする",
@@ -494,7 +495,7 @@
   "setup": {
     "title": "期間・決算",
     "description": "会計カレンダーを設計し、期間を生成し、ロックと再オープンを統制し、決算ブループリントをバージョン管理し、統制、自動処理、報告パッケージを設定します。",
-    "simpleMode": "担当者主導の決算が有効です。カレンダー、期間、ロック、証明、改ざん不可の公表は、エンタープライズ級のワークフローの負荷なく利用できます。",
+    "simpleMode": "カレンダー、会計期間、ロック、変更できない公開記録を引き続き利用できます。承認は Flows で設定してください。",
     "enableAdvanced": "高度な決算を確認",
     "tabs": {
       "calendars": "カレンダー",
@@ -782,7 +783,8 @@
       "lock": "ロック",
       "review": "レビュー",
       "segregation": "職務分掌",
-      "exception": "例外"
+      "exception": "例外",
+      "evidence": "証跡"
     },
     "automationTriggers": {
       "run_started": "実行開始",

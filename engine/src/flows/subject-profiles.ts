@@ -12,7 +12,17 @@ import { DOCUMENT_KINDS } from "../periods/period-policy.ts";
  * The profile is collapsed onto the single `documents` supertype.
  */
 
-export const NON_POSTING_DOC_KINDS: readonly string[] = ["sales_order", "purchase_order", "quote", "pick_list", "shipment", "rma", "purchase_receipt", "sales_fulfillment", "field_ticket"];
+export const NON_POSTING_DOC_KINDS: readonly string[] = [
+  "sales_order",
+  "purchase_order",
+  "quote",
+  "pick_list",
+  "shipment",
+  "rma",
+  "purchase_receipt",
+  "sales_fulfillment",
+  "field_ticket",
+];
 
 /**
  * Document kinds flows can run over. The posting kinds are derived from the
@@ -98,16 +108,31 @@ export const DOCUMENT_FIELDS: FlowFieldDef[] = [
   { key: "documentDate", label: "Document date", type: "date" },
   { key: "postingDate", label: "Posting date", type: "date" },
   { key: "dueDate", label: "Due date", type: "date", writable: true },
-  { key: "expectedPayDate", label: "Expected pay date", type: "date", writable: true },
+  {
+    key: "expectedPayDate",
+    label: "Expected pay date",
+    type: "date",
+    writable: true,
+  },
   { key: "currency", label: "Currency", type: "enum" },
   { key: "subtotal", label: "Subtotal", type: "number" },
   { key: "taxTotal", label: "Tax total", type: "number" },
   { key: "total", label: "Total", type: "number" },
   { key: "openBalance", label: "Open balance", type: "number" },
   { key: "memo", label: "Memo", type: "text", writable: true },
-  { key: "internalNotes", label: "Internal notes", type: "text", writable: true },
+  {
+    key: "internalNotes",
+    label: "Internal notes",
+    type: "text",
+    writable: true,
+  },
   { key: "referenceNumber", label: "Reference number", type: "text" },
-  { key: "paymentHoldReason", label: "Payment hold reason", type: "text", writable: true },
+  {
+    key: "paymentHoldReason",
+    label: "Payment hold reason",
+    type: "text",
+    writable: true,
+  },
   { key: "billingMethod", label: "Billing method", type: "enum" },
   { key: "isFinalInvoice", label: "Final invoice", type: "bool" },
   { key: "departmentId", label: "Department", type: "text", writable: true },
@@ -125,8 +150,16 @@ export const DOCUMENT_FIELDS: FlowFieldDef[] = [
   // "total or tax total changed".
   { key: "previousTotal", label: "Previous total (on update)", type: "number" },
   { key: "totalChanged", label: "Total changed (on update)", type: "bool" },
-  { key: "changedFields", label: "Changed header fields (on update)", type: "text" },
-  { key: "changedLineFields", label: "Changed line fields (on update)", type: "text" },
+  {
+    key: "changedFields",
+    label: "Changed header fields (on update)",
+    type: "text",
+  },
+  {
+    key: "changedLineFields",
+    label: "Changed line fields (on update)",
+    type: "text",
+  },
   { key: "old_total", label: "Old total (on update)", type: "number" },
   { key: "old_taxTotal", label: "Old tax total (on update)", type: "number" },
   // Injected on every dispatch: where the mutation came from
@@ -139,9 +172,21 @@ export const DOCUMENT_FIELDS: FlowFieldDef[] = [
     options: [...EVENT_SOURCE_OPTIONS],
   },
   // Present only while resolving MANUAL buttons (viewer-aware showIf):
-  { key: "current_user_id", label: "Current user (manual buttons)", type: "user" },
-  { key: "is_submitter", label: "Viewer is submitter (manual buttons)", type: "bool" },
-  { key: "is_pending_approver", label: "Viewer has a pending gate (manual buttons)", type: "bool" },
+  {
+    key: "current_user_id",
+    label: "Current user (manual buttons)",
+    type: "user",
+  },
+  {
+    key: "is_submitter",
+    label: "Viewer is submitter (manual buttons)",
+    type: "bool",
+  },
+  {
+    key: "is_pending_approver",
+    label: "Viewer has a pending gate (manual buttons)",
+    type: "bool",
+  },
 ];
 
 function titleize(kind: string): string {
@@ -154,7 +199,8 @@ export function documentSubjectProfile(kind: string): FlowSubjectProfile {
   // Order-cycle records are created and edited through the order pipeline
   // (twin: ORDER_KINDS in web/lib/order-kinds.ts), which emits no
   // create/update flow events — the lint names such triggers never firing.
-  const orderRecord = kind === "quote" || kind === "sales_order" || kind === "purchase_order";
+  const orderRecord =
+    kind === "quote" || kind === "sales_order" || kind === "purchase_order";
   return {
     subjectKind: kind,
     label: titleize(kind),
@@ -182,13 +228,37 @@ export function documentSubjectProfile(kind: string): FlowSubjectProfile {
       ...(canPost ? (["post_document"] as const) : []),
     ],
     statuses: [...DOCUMENT_STATUSES],
-    fields: DOCUMENT_FIELDS.map((field) =>
-      field.key === "status"
-        ? { ...field, options: DOCUMENT_STATUSES.map((status) => ({ ...status })) }
-        : field.key === "kind"
-          ? { ...field, options: [{ value: kind, label: titleize(kind) }] }
-          : field,
-    ),
+    fields: [
+      ...DOCUMENT_FIELDS.map((field) =>
+        field.key === "status"
+          ? {
+              ...field,
+              options: DOCUMENT_STATUSES.map((status) => ({ ...status })),
+            }
+          : field.key === "kind"
+            ? { ...field, options: [{ value: kind, label: titleize(kind) }] }
+            : field,
+      ),
+      ...(kind === "quote"
+        ? [
+            {
+              key: "subscriptionDiscountPercent",
+              label: "Subscription discount (%)",
+              type: "number" as const,
+            },
+            {
+              key: "subscriptionFloorBreached",
+              label: "Subscription price below catalog",
+              type: "bool" as const,
+            },
+            {
+              key: "subscriptionTotalContractValue",
+              label: "Subscription contract value",
+              type: "number" as const,
+            },
+          ]
+        : []),
+    ],
     roles: [...BUILT_IN_ROLE_NAMES],
   };
 }

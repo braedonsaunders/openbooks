@@ -29,7 +29,14 @@ export function awardResourceUrl(awardId: string): string {
   return `${BENEFIT_AWARDS_API}/${encodeURIComponent(awardId)}`
 }
 
-export const PROGRAM_ACTIONS = ['create', 'update', 'activate', 'close', 'addMember', 'removeMember'] as const
+export const PROGRAM_ACTIONS = [
+  'create',
+  'update',
+  'activate',
+  'close',
+  'addMember',
+  'removeMember',
+] as const
 export type ProgramAction = (typeof PROGRAM_ACTIONS)[number]
 
 export const AWARD_ACTIONS = [
@@ -54,18 +61,36 @@ import type {
   BenefitPeriodBasis as PeriodBasis,
   BenefitAwardStatus as AwardStatus,
 } from '@openbooks/engine/hrm/benefits/calculation'
-export type { ProgramFamily, ProgramStatus, DeliveryMethod, Valuation, BenefitMetric, MetricScope, Allocation, Frequency, PeriodBasis, AwardStatus }
+export type {
+  ProgramFamily,
+  ProgramStatus,
+  DeliveryMethod,
+  Valuation,
+  BenefitMetric,
+  MetricScope,
+  Allocation,
+  Frequency,
+  PeriodBasis,
+  AwardStatus,
+}
 import { parseCivilDate } from '@openbooks/engine/hrm/benefits/calculation'
 import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import { APPROVALS_HOME_HREF } from '@openbooks/engine/navigation/approvals-home'
 import { decimalNullCause, suppliedValue } from '../payroll-decimal-refusal'
 
 /** Benefits destinations separate the program catalog, employee relationships and delivery work. */
-export const PORTFOLIO_VIEWS = ['overview', 'programs', 'employees', 'delivery'] as const
+export const PORTFOLIO_VIEWS = [
+  'overview',
+  'programs',
+  'employees',
+  'delivery',
+] as const
 export type PortfolioView = (typeof PORTFOLIO_VIEWS)[number]
 
 export function parsePortfolioView(value: string | undefined): PortfolioView {
-  return value === 'programs' || value === 'employees' || value === 'delivery' ? value : 'overview'
+  return value === 'programs' || value === 'employees' || value === 'delivery'
+    ? value
+    : 'overview'
 }
 
 /** One portfolio card: title, destination, and an optional live count. */
@@ -97,7 +122,14 @@ export interface VitalsLabels {
 
 /** Each program type opens its own native configuration form from the shared catalog. */
 export interface ProgramTypeCard {
-  key: 'health' | 'retirement' | 'time_off' | 'allowance' | 'reward' | 'incentive' | 'custom'
+  key:
+    | 'health'
+    | 'retirement'
+    | 'time_off'
+    | 'allowance'
+    | 'reward'
+    | 'incentive'
+    | 'custom'
   family: ProgramFamily | null
   iconKey: string
 }
@@ -128,7 +160,6 @@ export interface ProgramDraft {
   effectiveTo: string
   payComponentId: string
   deliveryMethod: DeliveryMethod
-  approvalMode: 'none' | 'flows'
   valuation: Valuation
   metric: '' | BenefitMetric
   metricScope: MetricScope
@@ -168,7 +199,6 @@ export function emptyProgramDraft(family: ProgramFamily): ProgramDraft {
     effectiveTo: '',
     payComponentId: '',
     deliveryMethod: 'payroll',
-    approvalMode: 'none',
     valuation: family === 'incentive' ? 'pool' : 'fixed',
     metric: family === 'incentive' ? 'revenue' : '',
     metricScope: 'company',
@@ -198,7 +228,12 @@ export function emptyProgramDraft(family: ProgramFamily): ProgramDraft {
 }
 
 export function isCivilDate(value: string): boolean {
-  try { parseCivilDate(value); return true } catch { return false }
+  try {
+    parseCivilDate(value)
+    return true
+  } catch {
+    return false
+  }
 }
 const ISO_CURRENCY_RE = /^[A-Z]{3}$/
 
@@ -212,7 +247,8 @@ export type FieldErrors = Partial<Record<keyof ProgramDraft | 'form', string>>
 export function validateProgramDraft(draft: ProgramDraft): FieldErrors {
   const errors: FieldErrors = {}
   if (draft.code.trim() === '') errors.code = 'portfolio.validation.programCode'
-  if (draft.legalEntityId === '') errors.legalEntityId = 'portfolio.validation.legalEntity'
+  if (draft.legalEntityId === '')
+    errors.legalEntityId = 'portfolio.validation.legalEntity'
   if (draft.name.trim() === '') errors.name = 'portfolio.validation.programName'
   if (!ISO_CURRENCY_RE.test(draft.currency.trim())) {
     errors.currency = 'portfolio.validation.currency'
@@ -230,8 +266,14 @@ export function validateProgramDraft(draft: ProgramDraft): FieldErrors {
   ) {
     errors.effectiveTo = 'portfolio.validation.dateOrder'
   }
-  if ((draft.valuation === 'fixed' || draft.valuation === 'per_unit') && draft.fixedAmount.trim() === '') {
-    errors.fixedAmount = draft.valuation === 'per_unit' ? 'portfolio.validation.unitRate' : 'portfolio.validation.fixedAmount'
+  if (
+    (draft.valuation === 'fixed' || draft.valuation === 'per_unit') &&
+    draft.fixedAmount.trim() === ''
+  ) {
+    errors.fixedAmount =
+      draft.valuation === 'per_unit'
+        ? 'portfolio.validation.unitRate'
+        : 'portfolio.validation.fixedAmount'
   }
   if (draft.valuation === 'percent' && draft.percentRate.trim() === '') {
     errors.percentRate = 'portfolio.validation.percentRate'
@@ -242,7 +284,12 @@ export function validateProgramDraft(draft: ProgramDraft): FieldErrors {
   if (draft.family === 'incentive' && draft.metric === '') {
     errors.metric = 'portfolio.validation.metric'
   }
-  if (draft.family === 'incentive' && draft.metricScope !== 'company' && draft.scopeIds.length === 0 && (draft.metricScope !== 'project' || draft.scopeCustomerIds.length === 0)) {
+  if (
+    draft.family === 'incentive' &&
+    draft.metricScope !== 'company' &&
+    draft.scopeIds.length === 0 &&
+    (draft.metricScope !== 'project' || draft.scopeCustomerIds.length === 0)
+  ) {
     errors.scopeIds = 'portfolio.validation.scopeIds'
   }
   if (
@@ -254,7 +301,10 @@ export function validateProgramDraft(draft: ProgramDraft): FieldErrors {
   ) {
     errors.sourceAccountIds = 'portfolio.validation.sourceAccounts'
   }
-  if ((draft.frequency === 'quarterly' || draft.frequency === 'annual') && draft.periodBasis === '') {
+  if (
+    (draft.frequency === 'quarterly' || draft.frequency === 'annual') &&
+    draft.periodBasis === ''
+  ) {
     errors.periodBasis = 'portfolio.validation.periodBasis'
   }
   if (draft.payComponentId.trim() === '') {
@@ -296,7 +346,6 @@ export interface ProgramEditSeed {
   effectiveTo: string | null
   payComponentId: string | null
   deliveryMethod: ProgramDraft['deliveryMethod']
-  approvalMode: ProgramDraft['approvalMode']
   valuation: ProgramDraft['valuation']
   metric: ProgramDraft['metric']
   metricScope: ProgramDraft['metricScope']
@@ -361,7 +410,11 @@ export function totalsByCurrency(
     .sort((a, b) => (a.currency < b.currency ? -1 : 1))
 }
 
-export function portfolioHref(basePath: string, view: string | undefined, extra: Record<string, string>): string {
+export function portfolioHref(
+  basePath: string,
+  view: string | undefined,
+  extra: Record<string, string>,
+): string {
   const params = new URLSearchParams()
   if (view && view !== 'overview') params.set('view', view)
   for (const [key, value] of Object.entries(extra)) params.set(key, value)
@@ -387,7 +440,9 @@ export function buildAttentionQueue(input: {
     items.push({
       key: 'pending-enrollments',
       tone: 'warning',
-      text: input.format('portfolio.attention.pendingEnrollments', { count: input.pendingEnrollments }),
+      text: input.format('portfolio.attention.pendingEnrollments', {
+        count: input.pendingEnrollments,
+      }),
       href: portfolioHref(input.basePath, 'employees', {}),
     })
   }
@@ -395,7 +450,9 @@ export function buildAttentionQueue(input: {
     items.push({
       key: 'pending-awards',
       tone: 'warning',
-      text: input.format('portfolio.attention.pendingAwards', { count: input.pendingAwards }),
+      text: input.format('portfolio.attention.pendingAwards', {
+        count: input.pendingAwards,
+      }),
       href: APPROVALS_HOME_HREF,
     })
   }
@@ -403,7 +460,9 @@ export function buildAttentionQueue(input: {
     items.push({
       key: 'queued-awards',
       tone: 'warning',
-      text: input.format('portfolio.attention.queuedAwards', { count: input.queuedAwards }),
+      text: input.format('portfolio.attention.queuedAwards', {
+        count: input.queuedAwards,
+      }),
       href: portfolioHref(input.basePath, 'delivery', {}),
     })
   }
@@ -411,7 +470,9 @@ export function buildAttentionQueue(input: {
     items.push({
       key: 'draft-programs',
       tone: 'warning',
-      text: input.format('portfolio.attention.draftPrograms', { count: input.draftPrograms }),
+      text: input.format('portfolio.attention.draftPrograms', {
+        count: input.draftPrograms,
+      }),
       href: portfolioHref(input.basePath, 'programs', {}),
     })
   }
@@ -419,7 +480,9 @@ export function buildAttentionQueue(input: {
     items.push({
       key: `missing-component-${program.id}`,
       tone: 'negative',
-      text: input.format('portfolio.attention.missingComponent', { code: program.code }),
+      text: input.format('portfolio.attention.missingComponent', {
+        code: program.code,
+      }),
       href: portfolioHref(input.basePath, 'programs', { program: program.id }),
     })
   }
@@ -437,8 +500,14 @@ export interface BenefitPayComponentOption extends BuilderOption {
   paymentKind: 'cash' | 'non_cash'
 }
 
-export function componentsForDelivery(options: BenefitPayComponentOption[], delivery: DeliveryMethod): BenefitPayComponentOption[] {
-  return options.filter((option) => option.paymentKind === (delivery === 'external' ? 'non_cash' : 'cash'))
+export function componentsForDelivery(
+  options: BenefitPayComponentOption[],
+  delivery: DeliveryMethod,
+): BenefitPayComponentOption[] {
+  return options.filter(
+    (option) =>
+      option.paymentKind === (delivery === 'external' ? 'non_cash' : 'cash'),
+  )
 }
 
 /** Loader-resolved text for the program portfolio table. */
@@ -452,7 +521,8 @@ export interface UnifiedProgramRow {
   effectiveFrom: string | null
   effectiveTo: string | null
   statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  statusVariant:
+    'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   programHref: string
   /** Active and draft programs are current; closed and inactive ones are history. */
   lifecycle?: 'current' | 'closed'
@@ -496,22 +566,34 @@ export interface AwardDraft {
   recordReference: string
 }
 
-export type AwardFieldErrors = Partial<Record<keyof AwardDraft | 'form', string>>
+export type AwardFieldErrors = Partial<
+  Record<keyof AwardDraft | 'form', string>
+>
 
 export function validateAwardDraft(draft: AwardDraft): AwardFieldErrors {
   const errors: AwardFieldErrors = {}
-  if (draft.programId.trim() === '') errors.programId = 'portfolio.validation.awardProgram'
-  if (draft.employmentId.trim() === '') errors.employmentId = 'portfolio.validation.awardRecipient'
-  if (!isCivilDate(draft.periodFrom)) errors.periodFrom = 'portfolio.validation.periodFrom'
+  if (draft.programId.trim() === '')
+    errors.programId = 'portfolio.validation.awardProgram'
+  if (draft.employmentId.trim() === '')
+    errors.employmentId = 'portfolio.validation.awardRecipient'
+  if (!isCivilDate(draft.periodFrom))
+    errors.periodFrom = 'portfolio.validation.periodFrom'
   if (draft.periodTo.trim() !== '' && !isCivilDate(draft.periodTo)) {
     errors.periodTo = 'portfolio.validation.periodTo'
   }
-  if (isCivilDate(draft.periodFrom) && isCivilDate(draft.periodTo) && draft.periodTo < draft.periodFrom) errors.periodTo = 'portfolio.validation.dateOrder'
-  if (draft.value.trim() === '') errors.value = 'portfolio.validation.awardValue'
+  if (
+    isCivilDate(draft.periodFrom) &&
+    isCivilDate(draft.periodTo) &&
+    draft.periodTo < draft.periodFrom
+  )
+    errors.periodTo = 'portfolio.validation.dateOrder'
+  if (draft.value.trim() === '')
+    errors.value = 'portfolio.validation.awardValue'
   if (!ISO_CURRENCY_RE.test(draft.currency.trim())) {
     errors.currency = 'portfolio.validation.currency'
   }
-  if (draft.reason.trim() === '') errors.reason = 'portfolio.validation.awardReason'
+  if (draft.reason.trim() === '')
+    errors.reason = 'portfolio.validation.awardReason'
   return errors
 }
 
@@ -525,17 +607,34 @@ export interface MembershipDraft {
   excluded?: boolean
 }
 
-export type MembershipFieldErrors = Partial<Record<keyof MembershipDraft | 'form', string>>
+export type MembershipFieldErrors = Partial<
+  Record<keyof MembershipDraft | 'form', string>
+>
 
-export function validateMembershipDraft(draft: MembershipDraft): MembershipFieldErrors {
+export function validateMembershipDraft(
+  draft: MembershipDraft,
+): MembershipFieldErrors {
   const errors: MembershipFieldErrors = {}
-  if (draft.employmentId.trim() === '') errors.employmentId = 'portfolio.validation.memberEmployment'
-  if (!isCivilDate(draft.effectiveFrom)) errors.effectiveFrom = 'portfolio.validation.membershipFrom'
+  if (draft.employmentId.trim() === '')
+    errors.employmentId = 'portfolio.validation.memberEmployment'
+  if (!isCivilDate(draft.effectiveFrom))
+    errors.effectiveFrom = 'portfolio.validation.membershipFrom'
   if (draft.effectiveTo.trim() !== '' && !isCivilDate(draft.effectiveTo)) {
     errors.effectiveTo = 'portfolio.validation.effectiveTo'
   }
-  if (isCivilDate(draft.effectiveFrom) && isCivilDate(draft.effectiveTo) && draft.effectiveTo < draft.effectiveFrom) errors.effectiveTo = 'portfolio.validation.dateOrder'
-  if (draft.weight.trim() !== '' && (canonicalDecimal(draft.weight.trim(), 4) === null || draft.weight.trim().startsWith('-') || /^0(?:\.0*)?$/.test(draft.weight.trim()))) errors.weight = 'portfolio.validation.weight'
+  if (
+    isCivilDate(draft.effectiveFrom) &&
+    isCivilDate(draft.effectiveTo) &&
+    draft.effectiveTo < draft.effectiveFrom
+  )
+    errors.effectiveTo = 'portfolio.validation.dateOrder'
+  if (
+    draft.weight.trim() !== '' &&
+    (canonicalDecimal(draft.weight.trim(), 4) === null ||
+      draft.weight.trim().startsWith('-') ||
+      /^0(?:\.0*)?$/.test(draft.weight.trim()))
+  )
+    errors.weight = 'portfolio.validation.weight'
   return errors
 }
 
@@ -546,7 +645,11 @@ export function decimalFieldRefusal(
   t: (key: string, params?: Record<string, string | number>) => string,
 ): string {
   const detail = decimalNullCause(raw)
-  const params: Record<string, string | number> = { field, value: suppliedValue(raw), places: 4 }
+  const params: Record<string, string | number> = {
+    field,
+    value: suppliedValue(raw),
+    places: 4,
+  }
   if ('dotted' in detail) params.dotted = detail.dotted
   if ('grouped' in detail) params.grouped = detail.grouped
   if ('symbol' in detail) params.symbol = detail.symbol
@@ -554,11 +657,12 @@ export function decimalFieldRefusal(
   return t(`portfolio.decimal.${detail.cause}`, params)
 }
 
-export function translatedFieldErrors<T extends Record<string, string | undefined>>(
-  errors: T,
-  t: (key: string) => string,
-): T {
-  return Object.fromEntries(Object.entries(errors).map(([field, key]) => [field, key ? t(key) : key])) as T
+export function translatedFieldErrors<
+  T extends Record<string, string | undefined>,
+>(errors: T, t: (key: string) => string): T {
+  return Object.fromEntries(
+    Object.entries(errors).map(([field, key]) => [field, key ? t(key) : key]),
+  ) as T
 }
 
 /** One delivery row retains its governing program and native downstream record. */
@@ -571,7 +675,8 @@ export interface BenefitDeliveryRow {
   onDate: string
   valueLabel: string
   statusLabel: string
-  statusVariant: 'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
+  statusVariant:
+    'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
   recordHref: string | null
   recordLabel: string
 }

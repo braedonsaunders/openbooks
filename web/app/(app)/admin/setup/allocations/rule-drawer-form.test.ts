@@ -68,7 +68,6 @@ test('definition form reads the version with multi-selects as id arrays', () => 
     solveMethod: 'sequential',
     runPolicy: 'manual',
     runOffsetDays: 0,
-    approvalFlowId: null,
     memoTemplate: '',
     lineDescriptionTemplate: null,
   })
@@ -97,14 +96,13 @@ test('definition payload nulls empties and only sends tiers when stepped', () =>
     driverId: 'drv-1',
     memoTemplate: '',
     runOffsetDays: '5',
-    approvalFlowId: '',
     tiers: [{ upTo: '10', targetKey: '' }],
   }
   const payload = definitionPayload(base, 'rev-2') as Record<string, unknown>
   assert.equal(payload['effectiveTo'], null)
   assert.equal(payload['memoTemplate'], null)
   assert.equal(payload['runOffsetDays'], 5)
-  assert.equal(payload['approvalFlowId'], null)
+  assert.equal(Object.hasOwn(payload,'approvalFlowId'),false,'approval requirements belong only to tenant Flows')
   assert.ok(!('basisConfig' in payload), 'non-stepped versions leave basis_config alone')
   assert.equal(payload['expectedRevision'], 'rev-2')
 

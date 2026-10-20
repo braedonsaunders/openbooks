@@ -1,3 +1,6 @@
+import { installEngineSeams } from "../../composition/install.ts";
+import { seedApprovalFlow } from "../../testing/fixtures.ts";
+import { decideGate } from "../../flows/gates.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
@@ -12,15 +15,17 @@ import { createTrainingCourse, transitionTrainingCourse, createTrainingSession, 
   respondTrainingInvitation, completeTrainingParticipant, voidTrainingOutcome, getTrainingParticipant, listTrainingCourses, listOwnTraining,
   recordTrainingFeedback, getTrainingCourse, getTrainingSession } from "./store.ts";
 
-const spec = { features: ["hrm", "hrmCertifications", "hrmTraining"], country: "CA", users: [
+const spec = { features: ["hrm", "hrmCertifications", "hrmTraining", "flows"], country: "CA", users: [
   { key: "authorId", name: "Course author", handle: "training_author", permissions: ["hrm.certifications.read", "hrm.certifications.manage"], link: true, partyKey: "authorPartyId" },
   { key: "reviewerId", name: "Course reviewer", handle: "training_reviewer", permissions: ["hrm.certifications.read", "hrm.certifications.manage"], link: true },
   { key: "aliasId", name: "Author alternate login", handle: "training_alias", permissions: ["hrm.certifications.manage"], link: true },
   { key: "employeeId", name: "Training participant", handle: "training_employee", permissions: ["hrm.self.read", "hrm.self.request"], link: true, partyKey: "employeePartyId" },
   { key: "outsiderId", name: "Other employee", handle: "training_outsider", permissions: ["hrm.self.read", "hrm.self.request"], link: true },
-] } as const;
+],
+} as const;
 
 async function setup() {
+  installEngineSeams();
   return setupHarness(spec, async f => {
     await db.execute(sql`update users set party_id=${f.authorPartyId} where org_id=${f.org.orgId} and id=${f.aliasId}`);
     const worker = await seedEmployment(f.org.orgId, f.org.subsidiaryId, { workerPartyId: f.employeePartyId, from: "2026-01-01" });
@@ -33,8 +38,18 @@ async function setup() {
   });
 }
 type Fixture = Awaited<ReturnType<typeof setup>>;
-async function delivery(f: Fixture, overrides: { capacity?: number; code?: string; start?: boolean } = {}) {
-  await transitionTrainingCourse({ ...f.actor, actorId: f.reviewerId, courseId: f.course.id, expectedRevision: f.course.revision, action: "approve", reason: "Independent policy review" });
+async function delivery(
+  f: Fixture,
+  overrides: { capacity?: number; code?: string; start?: boolean } = {},
+) {
+  await transitionTrainingCourse({
+    ...f.actor,
+    actorId: f.reviewerId,
+    courseId: f.course.id,
+    expectedRevision: f.course.revision,
+    action: "submit",
+    reason: "Independent policy review",
+  });
   const created = await createTrainingSession({ ...f.actor, id: randomUUID(), courseId: f.course.id, name: overrides.code ?? "January safety training", location: "Training room",
     startsAt: "2026-01-09T10:00:00Z", endsAt: "2026-01-09T11:00:00Z", timeZone: "America/Toronto", capacity: overrides.capacity ?? 10, reason: "Scheduled delivery" });
   const scheduled = await transitionTrainingSession({ ...f.actor, sessionId: created.id, expectedRevision: created.revision, action: "schedule", reason: "Published employee invitations" });
@@ -69,14 +84,154 @@ test("course delivery creates pending qualification evidence once, preserves aud
   });
 });
 
-test("course approval resolves person identity rather than accepting a second login for the author", { skip: !DB }, async () => {
-  await withHarness(setup, async f => {
-    for (const actorId of [f.authorId, f.aliasId]) await assert.rejects(transitionTrainingCourse({ ...f.actor, actorId, courseId: f.course.id, expectedRevision: f.course.revision, action: "approve", reason: "Review attempt" }), /independently identified person.*someone other than the author/);
-    const approved = await transitionTrainingCourse({ ...f.actor, actorId: f.reviewerId, courseId: f.course.id, expectedRevision: f.course.revision, action: "approve", reason: "Independent review" });
-    assert.equal(approved.decidedBy, f.reviewerId);
-    await assert.rejects(createTrainingCourse({ ...f.request, id: randomUUID(), version: 2 }).then(row => transitionTrainingCourse({ ...f.actor, actorId: f.reviewerId, courseId: row.id, expectedRevision: row.revision, action: "approve", reason: "Review overlapping dates" })), /Approved course versions overlap.*non-overlapping effective dates/);
-  });
-});
+test(
+  "zero-gate course submission permits its author and preserves effective-date exclusions",
+  { skip: !DB },
+  async () => {
+    await withHarness(setup, async (f) => {
+      const approved = await transitionTrainingCourse({
+        ...f.actor,
+        courseId: f.course.id,
+        expectedRevision: f.course.revision,
+        action: "submit",
+        reason: "Publish validated course terms",
+      });
+      assert.equal(approved.status, "approved");
+      assert.equal(approved.decidedBy, f.authorId);
+      const receipt = (
+        await db.execute<{ kind: string }>(
+          sql`select policy->>'kind' as kind from flow_submissions where org_id=${f.org.orgId} and subject_kind='training_course' and subject_id=${f.course.id}`,
+        )
+      ).rows;
+      assert.deepEqual(receipt, [{ kind: "ungated" }]);
+      await assert.rejects(
+        createTrainingCourse({ ...f.request, id: randomUUID(), version: 2 }).then((row) =>
+          transitionTrainingCourse({
+            ...f.actor,
+            courseId: row.id,
+            expectedRevision: row.revision,
+            action: "submit",
+            reason: "Publish overlapping dates",
+          }),
+        ),
+        /Approved course versions overlap.*non-overlapping effective dates/,
+      );
+    });
+  },
+);
+
+test(
+  "every configured course gate must complete and the frozen tenant policy excludes an author's alternate login",
+  { skip: !DB },
+  async () => {
+    await withHarness(setup, async (f) => {
+      for (let i = 0; i < 10; i++)
+        await seedApprovalFlow(f.org.orgId, {
+          subjectKind: "training_course",
+          assignees: [{ type: "user", userId: f.reviewerId }],
+          mode: "all",
+          preventSelfApproval: true,
+        });
+      const pending = await transitionTrainingCourse({
+        ...f.actor,
+        courseId: f.course.id,
+        expectedRevision: f.course.revision,
+        action: "submit",
+        reason: "Publish reviewed training policy",
+      });
+      assert.equal(pending.status, "draft");
+      const gates = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='training_course' and subject_id=${f.course.id} order by id`,
+        )
+      ).rows;
+      assert.equal(gates.length, 10);
+      await assert.rejects(
+        decideGate({
+          gateId: gates[0]!.id,
+          userId: f.aliasId,
+          decision: "approved",
+        }),
+      );
+      await assert.rejects(
+        transitionTrainingCourse({
+          ...f.actor,
+          actorId: f.reviewerId,
+          courseId: f.course.id,
+          expectedRevision: f.course.revision,
+          action: "submit",
+          reason: "Changed submission terms",
+        }),
+        /different revision or command|different revision|different.*command/i,
+      );
+      for (const gate of gates.slice(0, -1)) {
+        await decideGate({
+          gateId: gate.id,
+          userId: f.reviewerId,
+          decision: "approved",
+        });
+        assert.equal(
+          (await getTrainingCourse({ ...f.actor, courseId: f.course.id }))
+            .course.status,
+          "draft",
+        );
+      }
+      await decideGate({
+        gateId: gates.at(-1)!.id,
+        userId: f.reviewerId,
+        decision: "approved",
+      });
+      const { course: published } = await getTrainingCourse({ ...f.actor, courseId: f.course.id });
+      assert.equal(published.status, "approved");
+      assert.equal(published.decidedBy, f.reviewerId);
+      await assert.rejects(
+        decideGate({
+          gateId: gates.at(-1)!.id,
+          userId: f.reviewerId,
+          decision: "approved",
+        }),
+        /resolved/,
+      );
+    });
+  },
+);
+
+test(
+  "a tenant course Flow can permit its author to decide without creating a second approval policy",
+  { skip: !DB },
+  async () => {
+    await withHarness(setup, async (f) => {
+      await seedApprovalFlow(f.org.orgId, {
+        subjectKind: "training_course",
+        assignees: [{ type: "user", userId: f.authorId }],
+        mode: "all",
+        preventSelfApproval: false,
+      });
+      await transitionTrainingCourse({
+        ...f.actor,
+        courseId: f.course.id,
+        expectedRevision: f.course.revision,
+        action: "submit",
+        reason: "Publish authored course policy",
+      });
+      const gate = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${f.course.id} and status='pending'`,
+        )
+      ).rows[0]!;
+      await decideGate({
+        gateId: gate.id,
+        userId: f.authorId,
+        decision: "approved",
+      });
+      assert.equal(
+        (await getTrainingCourse({ ...f.actor, courseId: f.course.id })).course
+          .status,
+        "approved",
+      );
+    });
+  },
+);
 
 test("session capacity is serialized, discarded invitations free a place, and unfinished outcomes cannot close delivery", { skip: !DB }, async () => {
   await withHarness(setup, async f => {

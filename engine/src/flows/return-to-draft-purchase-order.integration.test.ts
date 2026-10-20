@@ -158,7 +158,7 @@ test("a flow-governed purchase order resubmits into a new run after return", { s
     });
     const orderId = await seedDraftDocument(org.orgId, { kind: "purchase_order", createdBy: actors.submitterId });
 
-    const first = await submitForApproval("purchase_order", orderId);
+    const first = await submitForApproval("purchase_order", orderId, actors.submitterId);
     assert.equal(first.gated, true);
     const firstRunId = first.runId!;
     const gates = (await db.execute<{ id: string }>(sql`

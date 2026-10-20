@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { uuidString } from "@openbooks/engine/platform/identifiers";
-import { defineRoute } from "@/lib/api/route";
+import { z } from 'zod'
+import { uuidString } from '@openbooks/engine/platform/identifiers'
+import { defineRoute } from '@/lib/api/route'
 
 import { NextResponse } from 'next/server'
 import { decideGate } from '@openbooks/engine/flows/module'
@@ -9,46 +9,56 @@ import { isUuid } from '../../../../../lib/list-params'
 import { gateErrorResponse, loadGateHeader } from '../../_lib'
 
 const requestBodySchema = z.object({
-  gateId: uuidString(), decision: z.enum(["approved", "rejected"]),
-  comment: z.string().max(2000).optional(), signature: z.string().max(400_000).optional(),
-});
-
+  gateId: uuidString(),
+  decision: z.enum(['approved', 'rejected']),
+  comment: z.string().max(2000).optional(),
+  signature: z.string().max(400_000).optional(),
+})
 
 export const runtime = 'nodejs'
 
 /**
  * Approve/reject one flow gate. The route enforces session + org scoping (404
  * outside the caller's org) and the already-resolved fast path; decideGate() is
- * the SINGLE authority for who may decide — the row's assignee, an org admin, or
- * an active delegate, and it refuses the submitter. Authorization lives in one
+ * the SINGLE authority for who may decide — the configured assignee or
+ * active delegate, governed by the frozen tenant self-approval policy. Authorization lives in one
  * place so the route and engine can't drift.
  */
 
-
 export const POST = defineRoute({
-  public: "session",
+  public: 'session',
   body: requestBodySchema,
   handler: async ({ body, authz: routeAuthz }) => {
-
     const authz = routeAuthz
 
-
-
-
-
-    if (!body.gateId || !isUuid(body.gateId) || !['approved', 'rejected'].includes(body.decision ?? '')) {
-      return NextResponse.json({ error: 'gateId and decision required' }, { status: 400 })
+    if (
+      !body.gateId ||
+      !isUuid(body.gateId) ||
+      !['approved', 'rejected'].includes(body.decision ?? '')
+    ) {
+      return NextResponse.json(
+        { error: 'gateId and decision required' },
+        { status: 400 },
+      )
     }
 
-    const gate = await loadGateHeader(body.gateId, authz.user.orgId, authz.allowedSubsidiaryIds)
-    if (!gate) return NextResponse.json({ error: 'approval not found' }, { status: 404 })
+    const gate = await loadGateHeader(
+      body.gateId,
+      authz.user.orgId,
+      authz.allowedSubsidiaryIds,
+    )
+    if (!gate)
+      return NextResponse.json({ error: 'approval not found' }, { status: 404 })
     // A gate assignment is not a grant to every legal entity. Keep the same
     // direct-record subsidiary boundary as the rest of the API before allowing
     // the engine to resume a consequential branch.
     const subsidiaryDenied = guardSubsidiaryScope(authz, gate.subsidiary_id)
     if (subsidiaryDenied) return subsidiaryDenied
     if (gate.status !== 'pending') {
-      return NextResponse.json({ error: 'this approval was already resolved' }, { status: 409 })
+      return NextResponse.json(
+        { error: 'this approval was already resolved' },
+        { status: 409 },
+      )
     }
 
     try {
@@ -74,4 +84,5 @@ export const POST = defineRoute({
     }
   },
 
-  feature: "flows",});
+  feature: 'flows',
+})

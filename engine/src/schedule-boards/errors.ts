@@ -34,7 +34,7 @@ const CHECK_REFUSALS: Record<string, readonly [string, string]> = {
   schedule_boards_weekend_days: ["The weekend days are not valid.", "Select days of the week in Board settings."],
   schedule_boards_distribution_entity: ["Whole-board reports need a legal entity.", "Choose a legal entity in Board Settings or use personal reports."],
   schedule_entries_subject: ["A booking needs exactly one person or resource.", "Reload the board and select a row belonging to its resource kind."],
-  schedule_boards_governed_from: ["Governed publication needs the first governed booking date.", "Choose the date from which bookings need an independent approver, or choose live or staged publishing."],
+  schedule_boards_governed_from: ["Approval requirements belong to tenant Flows.", "Choose live or staged submission timing and configure approval gates in Flows."],
   schedule_patterns_slots: ["The pattern's slots are not valid.", "Give each slot a cycle day, start, end and break that leaves working time, with no overlapping slots."],
   schedule_pattern_assignments_ended: ["An ended assignment needs its end date.", "Choose the first date the person no longer works the pattern."],
 };

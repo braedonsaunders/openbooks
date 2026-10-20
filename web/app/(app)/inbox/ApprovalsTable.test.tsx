@@ -35,7 +35,6 @@ function row(
 ): ApprovalRow {
   return {
     key,
-    timesheetItemId: null,
     gateId,
     documentNumber: key,
     kind: 'vendor_bill',
@@ -273,7 +272,7 @@ test('the organization view offers decisions only on rows the viewer may decide'
       row('OTHER-1', '00000000-0000-4000-8000-000000000002', false, { canDecide: false, assignee: 'Dana Approver' }),
       row('OTHER-2', '00000000-0000-4000-8000-000000000003', false, { canDecide: false, canDelegate: true, assignee: 'Controllers' }),
       row('SOD-1', '00000000-0000-4000-8000-000000000004', false, { awaitingAnotherApprover: true }),
-      row('WEEK-1', null, false, { timesheetItemId: 'timesheet_approval:week', canDecide: false }),
+      row('WEEK-1', null, false, {kind:'timesheet_week',canDecide:false}),
     ],
     { bulk: false, users: [{ id: '00000000-0000-4000-8000-0000000000aa', name: 'Riley Delegate' }] },
   )

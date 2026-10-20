@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { encryptAccountNumber } from "@openbooks/engine/payments-core/rail-settings";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { runRecordFlows } from '@openbooks/engine/flows/run'
+import { routeSubjectSubmission } from '@openbooks/engine/flows/submission-policy'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/flows/bank-accounts-adapter'
 import { defineRoute } from '../../../../../lib/api/route'
 import { authorizePartyBankWrite, denyLockedOutsidePartyScope, denyOutsidePartyScope } from './party-scope'
@@ -15,7 +15,6 @@ import { normalizeCountryCode } from '../../../../../lib/countries'
 import { documentRevisionSql } from "@openbooks/engine/records/revision";
 import { isDocumentRevisionToken } from '../../../../../lib/api/registry-data'
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = 'nodejs'
 
@@ -96,95 +95,96 @@ export const POST = defineRoute({
   feature: { none: 'Party bank details are governed by party permissions and approval flows.' },
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
-  const { user } = gate
-  const { id: partyId } = params
-  if (!isUuid(partyId)) return NextResponse.json({ error: 'bad party id' }, { status: 400 })
+    const { user } = gate
+    const { id: partyId } = params
+    if (!isUuid(partyId)) return NextResponse.json({ error: 'bad party id' }, { status: 400 })
 
-  const scopeDenied = await denyOutsidePartyScope(gate, partyId)
-  if (scopeDenied) return scopeDenied
+    const scopeDenied = await denyOutsidePartyScope(gate, partyId)
+    if (scopeDenied) return scopeDenied
 
-  const parsedBody = await parseJsonBody(req, bankAccountCreateBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as Body
-  // Party bank-account currency is Multi-currency configuration. Turning that
-  // switch off must refuse a new write; omitting currency keeps the create
-  // path and stored accounts with a null currency.
-  if (
+    const parsedBody = await parseJsonBody(req, bankAccountCreateBody);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data as Body
+    // Party bank-account currency is Multi-currency configuration. Turning that
+    // switch off must refuse a new write; omitting currency keeps the create
+    // path and stored accounts with a null currency.
+    if (
     body.currency !== undefined &&
     !(await isFeatureEnabled(user.orgId, 'multiCurrency'))
   ) {
     return notFound("record")
   }
-  const validationError = validateBody(body, true)
-  if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
-  const accountNumber = body.accountNumber!.trim()
-  const country = normalizeCountryCode(body.country) ?? null
+    const validationError = validateBody(body, true)
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
+    const accountNumber = body.accountNumber!.trim()
+    const country = normalizeCountryCode(body.country) ?? null
 
-  // The insert runs under the party lock with the scope rechecked: the
-  // unlocked precheck above may have authorized a party a concurrent rehome
-  // moves before this commits.
-  const accountId = await withOrgTransaction(user.orgId, async () => {
-    const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
-    if (lockedDenied) return lockedDenied
-    const inserted = (await db.execute<{ id: string }>(sql`
+    // The insert runs under the party lock with the scope rechecked: the
+    // unlocked precheck above may have authorized a party a concurrent rehome
+    // moves before this commits.
+    return withOrgTransaction(user.orgId, async () => {
+      const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
+      if (lockedDenied) return lockedDenied
+      const inserted = await db.execute<{ id: string }>(sql`
       insert into party_bank_accounts
         (org_id, party_id, bank_name, country, currency, routing,
          account_number_encrypted, account_last_four, approval_status, is_active,
          approved_at, approved_by, submitted_by, submitted_at, created_by)
       values (${user.orgId}, ${partyId}, ${body.bankName?.trim() ?? null}, ${country},
-              ${body.currency !== undefined ? (body.currency?.trim().toUpperCase() || null) : null}, ${JSON.stringify(body.routing ?? {})}::jsonb,
+              ${body.currency !== undefined ? body.currency?.trim().toUpperCase() || null : null}, ${JSON.stringify(body.routing ?? {})}::jsonb,
               ${encryptAccountNumber(accountNumber, { orgId: user.orgId })}, ${accountNumber.slice(-4)},
               'pending', false, null, null, ${user.id}, now(), ${user.id})
       returning id
-    `))
-    return inserted.rows[0]!.id
-  })
-  if (accountId instanceof NextResponse) return accountId
-
-  const dispatch = await runRecordFlows(
-    { kind: 'on_create', source: 'ui' },
-    BANK_ACCOUNT_SUBJECT_KIND,
-    accountId,
-    { orgId: user.orgId, userId: user.id },
-  )
-  // Approvals are optional Flows: with no enabled flow listening, the new
-  // details apply directly (audited) instead of stranding pending with no
-  // run and no gate. A failed dispatch stays pending — its failed run is
-  // retryable and must never auto-release.
-  if (!dispatch.failed && dispatch.runs.length === 0) {
-    const today = await businessToday(user.orgId)
-    await withOrgTransaction(user.orgId, async () => {
-      const applied = (await db.execute(sql`
+    `)
+      const accountId = inserted.rows[0]?.id
+      if (!accountId) throw new Error('The bank details were not saved.')
+      const routed = await routeSubjectSubmission({
+        orgId: user.orgId,
+        actorId: user.id,
+        subjectKind: BANK_ACCOUNT_SUBJECT_KIND,
+        subjectId: accountId,
+        event: { kind: 'on_create', source: 'ui' },
+      })
+      // Approvals are optional Flows: with no enabled flow listening, the new
+      // details apply directly (audited) instead of stranding pending with no
+      // run and no gate. A failed dispatch stays pending — its failed run is
+      // retryable and must never auto-release.
+      if (routed.policy.kind === 'ungated') {
+        const today = await businessToday(user.orgId)
+        {
+          const applied = await db.execute(sql`
         update party_bank_accounts
            set approval_status = 'approved', approved_at = ${today},
                approved_by = ${user.id}, is_active = true,
                updated_at = now(), updated_by = ${user.id}
          where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
            and approval_status = 'pending' and retired_at is null
-         returning id`))
-      if (!applied.rows[0]) {
+         returning id`)
+          if (!applied.rows[0]) {
         return NextResponse.json(
           { error: 'these bank details changed while being recorded; reload and review the latest revision' },
           { status: 409 },
         )
       }
-      await db.execute(sql`
+          await db.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (
           ${user.orgId}, 'party_bank_accounts', ${accountId}, 'approve',
           ${JSON.stringify({
-            mode: 'bank_detail_direct_apply',
+            mode: 'ungated',
             outcome: 'approved',
-            reason: 'no enabled approval flow governs new bank details',
+            submissionId: routed.submissionId,
+            policy: routed.policy,
           })}::jsonb,
           ${user.id}, ${req.headers.get('X-Request-Id')}
         )
       `)
+        }
+        return NextResponse.json({ id: accountId, approvalStatus: 'approved' }, { status: 201 })
+      }
+      return NextResponse.json({ id: accountId, approvalStatus: 'pending' }, { status: 201 })
     })
-    return NextResponse.json({ id: accountId, approvalStatus: 'approved' }, { status: 201 })
-  }
-  return NextResponse.json({ id: accountId, approvalStatus: 'pending' }, { status: 201 })
   },
 })
 
@@ -193,71 +193,71 @@ export const PATCH = defineRoute({
   feature: { none: 'Party bank details are governed by party permissions and approval flows.' },
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
-  const { user } = gate
-  const { id: partyId } = params
+    const { user } = gate
+    const { id: partyId } = params
 
-  const url = new URL(req.url)
-  const accountId = url.searchParams.get('accountId') ?? ''
-  if (!isUuid(partyId) || !isUuid(accountId)) {
+    const url = new URL(req.url)
+    const accountId = url.searchParams.get('accountId') ?? ''
+    if (!isUuid(partyId) || !isUuid(accountId)) {
     return NextResponse.json({ error: 'bad ids' }, { status: 400 })
   }
-  const partyDenied = await denyOutsidePartyScope(gate, partyId)
-  if (partyDenied) return partyDenied
-  // Keep the OCC token in PostgreSQL's six-digit wire form. Mapping
-  // timestamptz to Date first would discard microseconds before the CAS.
-  const parsedBody2 = await parseJsonBody(req, bankAccountPatchBody);
-  if (!parsedBody2.ok) return parsedBody2.response;
-  const body = (parsedBody2.data) as Body
-  // Party bank-account currency is Multi-currency configuration. Turning that
-  // switch off must refuse a currency write; omitting currency keeps the
-  // stored account.
-  if (
+    const partyDenied = await denyOutsidePartyScope(gate, partyId)
+    if (partyDenied) return partyDenied
+    // Keep the OCC token in PostgreSQL's six-digit wire form. Mapping
+    // timestamptz to Date first would discard microseconds before the CAS.
+    const parsedBody2 = await parseJsonBody(req, bankAccountPatchBody);
+    if (!parsedBody2.ok) return parsedBody2.response;
+    const body = parsedBody2.data as Body
+    // Party bank-account currency is Multi-currency configuration. Turning that
+    // switch off must refuse a currency write; omitting currency keeps the
+    // stored account.
+    if (
     body.currency !== undefined &&
     !(await isFeatureEnabled(user.orgId, 'multiCurrency'))
   ) {
     return notFound("record")
   }
-  const validationError = validateBody(body, false)
-  if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
-  const changedFields = MATERIAL_COLUMNS.filter((k) => body[k as keyof Body] !== undefined)
-  if (changedFields.length === 0) {
+    const validationError = validateBody(body, false)
+    if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
+    const changedFields = MATERIAL_COLUMNS.filter((k) => body[k as keyof Body] !== undefined)
+    if (changedFields.length === 0) {
     return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
   }
-  const reason = body.changeReason?.trim() ?? ''
-  if (reason.length < 5 || reason.length > 500) {
+    const reason = body.changeReason?.trim() ?? ''
+    if (reason.length < 5 || reason.length > 500) {
     return NextResponse.json({ error: 'a change reason between 5 and 500 characters is required' }, { status: 422 })
   }
-  const expectedUpdatedAt = canonicalRevision(body.expectedUpdatedAt)
-  // A material edit re-enters approval (below), so it must never mutate the
-  // evidence an in-flight payment instruction was approved against: those
-  // instructions keep paying exactly what their file generation locked, but a
-  // fresh edit here would leave them pointing at unapproved details. Refuse at
-  // the mutation boundary — same dependency rule as retirement (DELETE).
-  const accountNumber = body.accountNumber?.trim()
-  const country = body.country === undefined ? undefined : normalizeCountryCode(body.country)
-  // Keep the material reset, stale-gate cancellation, run completion, audit
-  // evidence, and replacement flow dispatch in one tenant transaction. The
-  // db handle follows this pinned context, so a failure cannot publish only
-  // part of the new bank-detail revision.
-  return withOrgTransaction(user.orgId, async () => {
-    // A stale unlocked preflight must never reveal whether a rehomed party's
-    // bank account exists or which revision it has.
-    const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
-    if (lockedDenied) return lockedDenied
-    const existing = (await db.execute<{ approvalStatus: string; updatedAt: string }>(sql`
+    const expectedUpdatedAt = canonicalRevision(body.expectedUpdatedAt)
+    // A material edit re-enters approval (below), so it must never mutate the
+    // evidence an in-flight payment instruction was approved against: those
+    // instructions keep paying exactly what their file generation locked, but a
+    // fresh edit here would leave them pointing at unapproved details. Refuse at
+    // the mutation boundary — same dependency rule as retirement (DELETE).
+    const accountNumber = body.accountNumber?.trim()
+    const country = body.country === undefined ? undefined : normalizeCountryCode(body.country)
+    // Keep the material reset, stale-gate cancellation, run completion, audit
+    // evidence, and replacement flow dispatch in one tenant transaction. The
+    // db handle follows this pinned context, so a failure cannot publish only
+    // part of the new bank-detail revision.
+    return withOrgTransaction(user.orgId, async () => {
+      // A stale unlocked preflight must never reveal whether a rehomed party's
+      // bank account exists or which revision it has.
+      const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
+      if (lockedDenied) return lockedDenied
+      const existing = await db.execute<{ approvalStatus: string; updatedAt: string }>(sql`
       select approval_status as "approvalStatus",
              ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
         from party_bank_accounts
        where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
-    `))
-    if (existing.rows.length === 0) return notFound("record")
-    if (!expectedUpdatedAt || expectedUpdatedAt !== existing.rows[0]!.updatedAt) {
+    `)
+      if (existing.rows.length === 0) return notFound("record")
+      if (!expectedUpdatedAt || expectedUpdatedAt !== existing.rows[0]!.updatedAt) {
       return NextResponse.json(
         { error: 'these bank details changed after you opened them; reload and review the latest revision' },
         { status: 409 },
       )
     }
-    const dependencies = (await db.execute<{ inFlightPayment: boolean }>(sql`
+      const dependencies = await db.execute<{ inFlightPayment: boolean }>(sql`
       select exists (
         select 1
           from payment_instructions instruction
@@ -265,16 +265,16 @@ export const PATCH = defineRoute({
            and instruction.payee_bank_account_id = ${accountId}
            and instruction.status in ('pending', 'approved', 'generated', 'sent')
       ) as "inFlightPayment"
-    `))
-    if (dependencies.rows[0]?.inFlightPayment) {
+    `)
+      if (dependencies.rows[0]?.inFlightPayment) {
       return NextResponse.json(
         { error: 'cancel in-flight payment instructions referencing these bank details before editing them' },
         { status: 422 },
       )
     }
-    // Any material edit re-enters approval: pending + inactive + approval
-    // cleared, compared against the stored row before the update.
-    const updated = (await db.execute<{ id: string }>(sql`
+      // Any material edit re-enters approval: pending + inactive + approval
+      // cleared, compared against the stored row before the update.
+      const updated = await db.execute<{ id: string }>(sql`
       update party_bank_accounts set
         bank_name = ${body.bankName !== undefined ? body.bankName?.trim() || null : sql`bank_name`},
         country = ${body.country !== undefined ? country : sql`country`},
@@ -291,14 +291,14 @@ export const PATCH = defineRoute({
         and updated_at = ${expectedUpdatedAt}::timestamptz
         and retired_at is null
       returning id
-    `))
-    if (!updated.rows[0]) {
+    `)
+      if (!updated.rows[0]) {
       return NextResponse.json(
         { error: 'these bank details changed or were retired; reload and review the latest revision' },
         { status: 409 },
       )
     }
-    const cancelledRuns = (await db.execute<{ run_id: string }>(sql`
+      const cancelledRuns = await db.execute<{ run_id: string }>(sql`
       update flow_gates
          set status = 'cancelled', updated_at = now()
        where org_id = ${user.orgId}
@@ -306,9 +306,9 @@ export const PATCH = defineRoute({
          and subject_id = ${accountId}
          and status in ('pending', 'escalated')
        returning run_id
-    `))
-    const runIds = [...new Set(cancelledRuns.rows.map((row) => row.run_id))]
-    if (runIds.length > 0) {
+    `)
+      const runIds = [...new Set(cancelledRuns.rows.map((row) => row.run_id))]
+      if (runIds.length > 0) {
       await db.execute(sql`
         update flow_runs
            set status = 'completed',
@@ -319,7 +319,7 @@ export const PATCH = defineRoute({
            and status = 'waiting'
       `)
     }
-    await db.execute(sql`
+      await db.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id, request_id)
       values (
@@ -334,49 +334,44 @@ export const PATCH = defineRoute({
       )
     `)
 
-    const flows = await runRecordFlows(
-      { kind: 'on_update', source: 'ui', changedFields },
-      BANK_ACCOUNT_SUBJECT_KIND,
-      accountId,
-      { orgId: user.orgId, userId: user.id },
-    )
-    // runRecordFlows records failures instead of throwing so non-transactional
-    // callers can observe them. Here the dispatch is part of the edit's
-    // transaction: a failed replacement workflow must roll back the material
-    // change, cancelled approvals, and audit evidence together.
-    if (flows.failed) {
-      throw new Error('bank-detail approval routing failed; the bank details were not changed')
-    }
-    // Approvals are optional Flows: with no enabled flow listening, the
-    // edited details apply directly (audited) instead of stranding pending
-    // with no run and no gate.
-    if (flows.runs.length === 0) {
-      const today = await businessToday(user.orgId)
-      await db.execute(sql`
+      const routed = await routeSubjectSubmission({
+        orgId: user.orgId,
+        actorId: user.id,
+        subjectKind: BANK_ACCOUNT_SUBJECT_KIND,
+        subjectId: accountId,
+        event: { kind: 'on_update', source: 'ui', changedFields },
+      })
+      if (routed.policy.kind === 'ungated') {
+        const today = await businessToday(user.orgId)
+        const applied = await db.execute(sql`
         update party_bank_accounts
            set approval_status = 'approved', approved_at = ${today},
                approved_by = ${user.id}, is_active = true,
                updated_at = now(), updated_by = ${user.id}
          where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
+         and approval_status='pending' and retired_at is null returning id
       `)
-      await db.execute(sql`
+        if (applied.rows.length !== 1)
+          throw new Error('The bank details changed before release.')
+        await db.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (
           ${user.orgId}, 'party_bank_accounts', ${accountId}, 'update',
           ${JSON.stringify({
-            mode: 'bank_detail_direct_apply',
+            mode: 'ungated',
             outcome: 'approved',
             changedFields,
-            reason: 'no enabled approval flow governs changed bank details',
+            submissionId: routed.submissionId,
+            policy: routed.policy,
           })}::jsonb,
           ${user.id}, ${req.headers.get('X-Request-Id')}
         )
       `)
-      return NextResponse.json({ id: accountId, approvalStatus: 'approved', changedFields })
-    }
-    return NextResponse.json({ id: accountId, approvalStatus: 'pending', changedFields })
-  })
+        return NextResponse.json({ id: accountId, approvalStatus: 'approved', changedFields })
+      }
+      return NextResponse.json({ id: accountId, approvalStatus: 'pending', changedFields })
+    })
   },
 })
 
@@ -386,34 +381,34 @@ export const DELETE = defineRoute({
   feature: { none: 'Party bank details are governed by party permissions and approval flows.' },
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
-  const { user } = gate
-  const { id: partyId } = params
-  const accountId = new URL(req.url).searchParams.get('accountId') ?? ''
-  if (!isUuid(partyId) || !isUuid(accountId)) {
+    const { user } = gate
+    const { id: partyId } = params
+    const accountId = new URL(req.url).searchParams.get('accountId') ?? ''
+    if (!isUuid(partyId) || !isUuid(accountId)) {
     return NextResponse.json({ error: 'bad ids' }, { status: 400 })
   }
-  const partyDenied = await denyOutsidePartyScope(gate, partyId)
-  if (partyDenied) return partyDenied
-  const parsedBody3 = await parseJsonBody(req, bankAccountRetirementBody);
-  if (!parsedBody3.ok) return parsedBody3.response;
-  const body = parsedBody3.data
-  const reason = body.retirementReason.trim()
-  if (!body.expectedUpdatedAt) {
+    const partyDenied = await denyOutsidePartyScope(gate, partyId)
+    if (partyDenied) return partyDenied
+    const parsedBody3 = await parseJsonBody(req, bankAccountRetirementBody);
+    if (!parsedBody3.ok) return parsedBody3.response;
+    const body = parsedBody3.data
+    const reason = body.retirementReason.trim()
+    if (!body.expectedUpdatedAt) {
     return NextResponse.json({ error: 'the bank-detail revision is required; reload and try again' }, { status: 409 })
   }
-  const expectedUpdatedAt = canonicalRevision(body.expectedUpdatedAt)
-  if (!expectedUpdatedAt) {
+    const expectedUpdatedAt = canonicalRevision(body.expectedUpdatedAt)
+    if (!expectedUpdatedAt) {
     return NextResponse.json(
       { error: 'these bank details changed or were already retired; reload and review the latest revision' },
       { status: 409 },
     )
   }
-  // Retirement and its fraud evidence are one commit unit; an audit failure
-  // must leave the bank details available for a safe retry.
-  return withOrgTransaction(user.orgId, async () => {
-    const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
-    if (lockedDenied) return lockedDenied
-    const dependencies = (await db.execute<{ in_flight_payment: boolean; live_mandate: boolean }>(sql`
+    // Retirement and its fraud evidence are one commit unit; an audit failure
+    // must leave the bank details available for a safe retry.
+    return withOrgTransaction(user.orgId, async () => {
+      const lockedDenied = await denyLockedOutsidePartyScope(db, gate, partyId)
+      if (lockedDenied) return lockedDenied
+      const dependencies = await db.execute<{ in_flight_payment: boolean; live_mandate: boolean }>(sql`
       select
         exists (
           select 1
@@ -429,16 +424,16 @@ export const DELETE = defineRoute({
              and mandate.party_bank_account_id = ${accountId}
              and mandate.status in ('pending', 'active', 'suspended')
         ) as live_mandate
-    `))
-    if (dependencies.rows[0]?.in_flight_payment || dependencies.rows[0]?.live_mandate) {
+    `)
+      if (dependencies.rows[0]?.in_flight_payment || dependencies.rows[0]?.live_mandate) {
       return NextResponse.json(
         { error: 'cancel in-flight payment instructions and revoke live mandates before retiring these bank details' },
         { status: 422 },
       )
     }
-    // Bind the caller's canonical six-digit token as timestamptz; a Date or
-    // millisecond JSON round-trip would spuriously miss a microsecond row.
-    const updated = (await db.execute<{ id: string }>(sql`
+      // Bind the caller's canonical six-digit token as timestamptz; a Date or
+      // millisecond JSON round-trip would spuriously miss a microsecond row.
+      const updated = await db.execute<{ id: string }>(sql`
       update party_bank_accounts
          set is_active = false,
              retired_at = now(),
@@ -450,14 +445,14 @@ export const DELETE = defineRoute({
          and retired_at is null
          and updated_at = ${expectedUpdatedAt}::timestamptz
        returning id
-    `))
-    if (!updated.rows[0]) {
+    `)
+      if (!updated.rows[0]) {
       return NextResponse.json(
         { error: 'these bank details changed or were already retired; reload and review the latest revision' },
         { status: 409 },
       )
     }
-    await db.execute(sql`
+      await db.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id, request_id)
       values (
@@ -466,7 +461,7 @@ export const DELETE = defineRoute({
         ${user.id}, 'ui'
       )
     `)
-    return NextResponse.json({ ok: true })
-  })
+      return NextResponse.json({ ok: true })
+    })
   },
 })

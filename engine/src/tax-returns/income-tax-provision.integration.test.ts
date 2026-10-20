@@ -1,3 +1,4 @@
+import {seedCloseRunApprovalFixture} from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -1433,6 +1434,8 @@ test("mark-filed accepts complete subsidiary closure without implying an org-wid
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const {grantScratchPermissions}=await import("../testing/fixtures.ts");
+    await grantScratchPermissions(org.orgId,userId,["close.run"]);
     const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
     const taxCodeId = await seedFilingFingerprintFixture(org);
     await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-5", taxAmount: "11.00" });
@@ -1448,10 +1451,7 @@ test("mark-filed accepts complete subsidiary closure without implying an org-wid
       actorId: userId,
       subsidiaryIds: [org.subsidiaryId, childId],
     });
-    await db.execute(sql`
-      update close_runs set status = 'approved', current_stage = 'lock', approved_at = now(),
-             approved_by = ${userId}, updated_at = now(), updated_by = ${userId}
-       where id = ${runId} and org_id = ${org.orgId}`);
+    await seedCloseRunApprovalFixture(org.orgId,runId,userId);
     await closeApprovedRun(org.orgId, runId, userId);
 
     // The tenant-wide rows remain OPEN (with a lapsed reopen window), while

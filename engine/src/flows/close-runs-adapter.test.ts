@@ -11,15 +11,18 @@ test("period close is a first-class configurable flow subject", () => {
   assert.equal(CLOSE_RUN_SUBJECT_KIND, "close_run");
   assert.equal(getFlowAdapter("close_run"), closeRunsFlowAdapter);
   assert.ok(
-    listFlowSubjectProfiles().some((profile) => profile.subjectKind === "close_run"),
+    listFlowSubjectProfiles().some(
+      (profile) => profile.subjectKind === "close_run",
+    ),
   );
   assert.deepEqual(closeRunSubjectProfile.triggers, ["on_submit"]);
   assert.ok(closeRunSubjectProfile.actions.includes("notify"));
-  assert.ok(closeRunSubjectProfile.fields.some((field) => field.key === "periodType"));
+  assert.ok(
+    closeRunSubjectProfile.fields.some((field) => field.key === "periodType"),
+  );
 });
 
 test("period close freezes its configurable approval policy", () => {
-  assert.equal(closeRunsFlowAdapter.selfApprovalPolicy, "configurable");
   assert.equal(closeRunSubjectProfile.pinsSubmissionPolicy, true);
   assert.equal(
     closeRunsFlowAdapter.deepLink("00000000-0000-0000-0000-000000000001"),
@@ -29,7 +32,11 @@ test("period close freezes its configurable approval policy", () => {
 
 test("a close run is titled by its fiscal period label, not its stored name", () => {
   assert.equal(
-    closeRunsFlowAdapter.label("run-1", { periodName: "2026-12", periodLabel: "P12 FY2026", bookName: "Primary" }),
+    closeRunsFlowAdapter.label("run-1", {
+      periodName: "2026-12",
+      periodLabel: "P12 FY2026",
+      bookName: "Primary",
+    }),
     "P12 FY2026 close · Primary",
   );
 });

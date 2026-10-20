@@ -52,7 +52,7 @@
     "timingAdvance": "Por adelantado",
     "timingArrears": "A posteriori",
     "singlePeriodNote": "Las rampas multiperíodo necesitan suscripciones avanzadas; si no, esta línea se factura como un período único.",
-    "approvalHint": "Los descuentos superiores al {threshold} % — o las líneas bajo catálogo — requieren aprobación de Flows antes del envío.",
+    "approvalHint": "Las aprobaciones de presupuestos se configuran en los Flows de su organización.",
     "sendForSignature": "Enviar para firmar",
     "signerName": "Nombre del firmante",
     "signerEmail": "Correo del firmante",

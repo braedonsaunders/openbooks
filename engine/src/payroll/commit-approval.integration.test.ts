@@ -8,8 +8,12 @@ import { commitPayRun } from "./run-commit.ts";
 import { payRunStaleness } from "./readiness.ts";
 import { payRunApprovalState, recalculateStaleApprovedPayRun } from "./approval.ts";
 import { seedAdoption, calculatedRun } from "./filing-test-fixtures.ts";
-import { dropScratchOrg, seedApprovalFlow, seedFlowActors } from "../testing/fixtures.ts";
+import { dropScratchOrg, seedApprovalFlow, seedFlowActors, grantScratchPermissions } from "../testing/fixtures.ts";
 import { PayrollError } from "./error.ts";
+
+async function payrollReviewActors(orgId:string){
+ const actors=await seedFlowActors(orgId);await grantScratchPermissions(orgId,actors.approver1Id,['payroll.manage']);return actors;
+}
 
 /**
  * A pay run behind an approval policy must still be committable after the
@@ -40,7 +44,7 @@ async function runStatus(orgId: string, documentId: string): Promise<string> {
 test("an approved pay run commits (second-user approval releases the commit)", { skip: !DB }, async () => {
   const fx = await seedAdoption();
   try {
-    const actors = await seedFlowActors(fx.orgId);
+    const actors = await payrollReviewActors(fx.orgId);
     await seedApprovalFlow(fx.orgId, {
       subjectKind: "pay_run",
       assignees: [{ type: "user", userId: actors.approver1Id }],
@@ -79,7 +83,7 @@ test("an approved pay run commits (second-user approval releases the commit)", {
 test("a rejected pay run stays committable-free (rejection is not a release)", { skip: !DB }, async () => {
   const fx = await seedAdoption();
   try {
-    const actors = await seedFlowActors(fx.orgId);
+    const actors = await payrollReviewActors(fx.orgId);
     await seedApprovalFlow(fx.orgId, {
       subjectKind: "pay_run",
       assignees: [{ type: "user", userId: actors.approver1Id }],
@@ -105,18 +109,13 @@ test("a rejected pay run stays committable-free (rejection is not a release)", {
   }
 });
 
-test("an approval withdrawn mid-commit is refused by name at the terminal write", { skip: !DB }, async () => {
-  // The outside-the-transaction defect: the approval check ran on the default
-  // executor BEFORE the commit's writes, so an approval withdrawn between the
-  // pre-check and the terminal status flip committed without a live approval.
-  // The gate is now asked inside the commit transaction AND re-asked beside
-  // the terminal staleness recheck. Barrier: the commit is stalled inside the
-  // run_scope statement (past the pre-check, before the terminal write) while
-  // the approval is reopened; the commit must then refuse, not ride under a
-  // release answer that was true when it was taken.
+test("a concurrent attempt to rewrite a recorded gate is refused while the approved payroll commits", { skip: !DB }, async () => {
+  // Hold the source population while commit is in flight, then attempt to
+  // rewrite its retained gate. The decision must remain immutable and the
+  // native commit must consume the unchanged approval evidence.
   const fx = await seedAdoption();
   try {
-    const actors = await seedFlowActors(fx.orgId);
+    const actors = await payrollReviewActors(fx.orgId);
     await seedApprovalFlow(fx.orgId, {
       subjectKind: "pay_run",
       assignees: [{ type: "user", userId: actors.approver1Id }],
@@ -175,7 +174,7 @@ test("an approval withdrawn mid-commit is refused by name at the terminal write"
         (error: unknown) => ({ rejected: true as const, message: String((error as Error)?.message ?? error) }),
       );
       // Wait until the commit is genuinely parked INSIDE the run_scope
-      // statement before withdrawing — otherwise the withdrawal lands before
+      // statement before the rewrite attempt — otherwise the attempt lands before
       // the pre-check and the test cannot fail for the right reason. Parked
       // means: a live backend whose current statement names run_scope and is
       // in a lock wait, stable across two polls. pg_locks cannot prove this:
@@ -211,15 +210,18 @@ test("an approval withdrawn mid-commit is refused by name at the terminal write"
            where datname = current_database() and pid <> pg_backend_pid() and state <> 'idle'
            order by pid`));
         assert.fail(
-          `the commit never parked inside run_scope before the approval was withdrawn `
+          `the commit never parked inside run_scope during the attempted approval rewrite `
           + `(live backends: ${JSON.stringify(live.rows)})`,
         );
       }
 
-      // The approval is withdrawn: the decided gate reopens.
-      await db.execute(sql`
-        update flow_gates set status = 'pending', decided_by = null, decided_at = null
-         where org_id = ${fx.orgId} and id = ${decidedGateId}`);
+      await assert.rejects(db.execute(sql`
+        update flow_gates set status='pending',decided_by=null,decided_at=null
+          where org_id=${fx.orgId} and id=${decidedGateId}`),
+        (error:unknown)=>error instanceof Error && /recorded gate decision is immutable/.test(
+          error.message+" "+((error as {cause?:Error}).cause?.message??"")));
+      assert.equal((await db.execute<{status:string}>(sql`select status from flow_gates
+        where org_id=${fx.orgId} and id=${decidedGateId}`)).rows[0]?.status,"approved");
     } finally {
       releaseResolve();
       assert.equal(
@@ -228,13 +230,12 @@ test("an approval withdrawn mid-commit is refused by name at the terminal write"
       );
     }
     const outcome = await Promise.race([committer!, barrierTimeout("commit outcome")]);
-    assert.equal(outcome.rejected, true, "a commit racing a withdrawn approval must refuse");
-    assert.match(outcome.message, /awaiting 1 approval/);
-    assert.equal(await runStatus(fx.orgId, input.documentId), "calculated");
+    assert.equal(outcome.rejected, false, outcome.message);
+    assert.equal(await runStatus(fx.orgId, input.documentId), "committed");
     const lines = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from document_lines
        where org_id = ${fx.orgId} and document_id = ${input.documentId}`)).rows[0]!.n;
-    assert.equal(lines, 0, "a refused commit materializes no GL projection");
+    assert.ok(lines > 0, "the unchanged native approval permits the balanced payroll projection");
   } finally {
     await dropScratchOrg(fx.orgId);
   }
@@ -255,7 +256,7 @@ async function pendingGateId(subjectId: string): Promise<string> {
 
 /** A calculated run submitted and approved by the second user, as production does it. */
 async function approvedPayRun(fx: Awaited<ReturnType<typeof seedAdoption>>) {
-  const actors = await seedFlowActors(fx.orgId);
+  const actors = await payrollReviewActors(fx.orgId);
   await db.execute(sql`
     insert into user_permission_overrides (org_id, user_id, permission, effect)
     values (${fx.orgId}, ${actors.submitterId}, 'payroll.run', 'grant'),

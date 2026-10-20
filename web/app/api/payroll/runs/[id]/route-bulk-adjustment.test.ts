@@ -72,7 +72,7 @@ const mockSources = new Map<string, string>([
       export async function recalculateStaleApprovedPayRun() { throw new Error('not under test') }
     `,
   ],
-  ['mock:flows', `export async function submitForApproval() { throw new Error('not under test') }`],
+  ['mock:flows', `export async function submitAndReleaseIfUngated() { throw new Error('not under test') }`],
   ['mock:payroll-outputs', `export async function emailRunStubs() { throw new Error('not under test') }`],
   ['mock:payroll-evidence', `export async function assemblePayRunEvidence() { throw new Error('not under test') }`],
   ['mock:payroll-scope', `export async function lockAndCheckPayrollRunPopulation() { throw new Error('not under test') }`],

@@ -11,7 +11,15 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import { assertFinancialChangeApproved, completeFinancialChange, existingFinancialChange, financialChangeFlowConfigured, loadFinancialChange, proposeFinancialChange, MANUFACTURING_BOM_APPROVAL_OPERATION, MANUFACTURING_STANDARD_ROLLUP_OPERATION } from "../platform/financial-changes.ts";
+import {
+  assertFinancialChangeApproved,
+  completeFinancialChange,
+  existingFinancialChange,
+  loadFinancialChange,
+  proposeFinancialChange,
+  MANUFACTURING_BOM_APPROVAL_OPERATION,
+  MANUFACTURING_STANDARD_ROLLUP_OPERATION,
+} from "../platform/financial-changes.ts";
 import type { FinancialChange } from "../platform/financial-changes.ts";
 
 export class BomPolicyError extends Error {
@@ -33,13 +41,19 @@ export interface BomPolicyInput {
 type StoredLine = BomPolicyLine & { id: string };
 
 /** The editor, approval and replacement command share this concurrency token. */
-export async function readBomPolicyVersion(tx: SqlExecutor, orgId: string, assemblyItemId: string) {
-  return (await tx.execute<{ version: string | null }>(sql`
+export async function readBomPolicyVersion(
+  tx: SqlExecutor,
+  orgId: string,
+  assemblyItemId: string,
+) {
+  return (
+    (await tx.execute<{ version: string | null }>(sql`
     select md5(string_agg(id::text || ':' || updated_at::text || ':' || component_item_id::text || ':' ||
       quantity_per::text || ':' || sort_order::text || ':' || coalesce(effective_from::text,'') || ':' ||
       coalesce(effective_to::text,'') || ':' || coalesce(operation_seq::text,'') || ':' || coalesce(scrap_pct::text,'') || ':' || is_byproduct::text || ':' || quantity_basis || ':' || formula_output_quantity::text || ':' || coalesce(output_cost_weight::text,''),
       ',' order by sort_order,component_item_id,operation_seq nulls first,is_byproduct,effective_from nulls first,effective_to nulls first)) as version
-    from bom_components where org_id=${orgId} and assembly_item_id=${assemblyItemId}`)).rows[0]?.version ?? null;
+    from bom_components where org_id=${orgId} and assembly_item_id=${assemblyItemId}`)).rows[0]?.version ?? null
+  );
 }
 
 function normalize(input: BomPolicyInput): BomPolicyLine[] {
@@ -56,8 +70,16 @@ function normalize(input: BomPolicyInput): BomPolicyLine[] {
     if (!isUuid(line.componentItemId) || line.componentItemId === input.assemblyItemId) throw new BomPolicyError(`Choose a valid component other than the assembly on line ${index + 1}.`);
     if (quantityPer === null || !fitsLedgerRange(quantityPer) || compareDecimal(quantityPer, "0") <= 0) throw new BomPolicyError(`Component quantity on line ${index + 1} must be positive with at most four decimal places.`);
     if (line.scrapPct !== null && (scrapPct === null || compareDecimal(scrapPct, "0") < 0 || compareDecimal(scrapPct, "100") >= 0)) throw new BomPolicyError(`Scrap on line ${index + 1} must be at least zero and less than 100 percent.`);
-    if ([line.effectiveFrom, line.effectiveTo].some(date => date !== null && !isIsoCalendarDate(date)) || line.effectiveFrom !== null && line.effectiveTo !== null && line.effectiveTo <= line.effectiveFrom) throw new BomPolicyError(`Choose a valid half-open effectivity window on line ${index + 1}.`);
-    if (line.operationSeq !== null && (!Number.isSafeInteger(line.operationSeq) || line.operationSeq <= 0 || line.operationSeq > 2_147_483_647) || typeof line.isByproduct !== "boolean") throw new BomPolicyError(`Choose a positive operation sequence and a valid by-product designation on line ${index + 1}.`);
+    if (
+      [line.effectiveFrom, line.effectiveTo].some(date => date !== null && !isIsoCalendarDate(date)) ||
+      (line.effectiveFrom !== null && line.effectiveTo !== null && line.effectiveTo <= line.effectiveFrom)
+    )
+      throw new BomPolicyError(`Choose a valid half-open effectivity window on line ${index + 1}.`);
+    if (
+      (line.operationSeq !== null && (!Number.isSafeInteger(line.operationSeq) || line.operationSeq <= 0 || line.operationSeq > 2_147_483_647)) ||
+      typeof line.isByproduct !== "boolean"
+    )
+      throw new BomPolicyError(`Choose a positive operation sequence and a valid by-product designation on line ${index + 1}.`);
     return { ...line, ...quantityPolicy,quantityPer, scrapPct,outputCostWeight, sortOrder: index };
   });
   for (let left = 0; left < lines.length; left++) for (let right = left + 1; right < lines.length; right++) {
@@ -75,10 +97,23 @@ function normalize(input: BomPolicyInput): BomPolicyLine[] {
 }
 
 /** Recipe revisions require setup management, manufacturing revisions manufacturing management too. */
-export async function assertBomRevisionAuthority(tx: SqlExecutor, orgId: string, actorId: string, manufacturing: boolean) {
-  if (!await lockActorIdentity(tx,orgId,actorId)) throw new ScopeNotFoundError();
-  if (await lockActorCommandAuthority(tx, orgId, actorId, null, "admin.setup.manage") !== null) throw new ScopeNotFoundError();
-  if (manufacturing && await lockActorCommandAuthority(tx, orgId, actorId, null, "manufacturing.manage") !== null) throw new ScopeNotFoundError();
+export async function assertBomRevisionAuthority(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  manufacturing: boolean,
+) {
+  if (!(await lockActorIdentity(tx,orgId,actorId)))
+    throw new ScopeNotFoundError();
+  if (
+    (await lockActorCommandAuthority(tx, orgId, actorId, null, "admin.setup.manage")) !== null
+  )
+    throw new ScopeNotFoundError();
+  if (
+    manufacturing &&
+    (await lockActorCommandAuthority(tx, orgId, actorId, null, "manufacturing.manage")) !== null
+  )
+    throw new ScopeNotFoundError();
 }
 
 /** The recipe state a revision proposes from: parent kind, concurrency version and stored lines. */
@@ -129,13 +164,24 @@ async function validateReferences(tx: SqlExecutor, orgId: string, assemblyItemId
  * back-dated revision is admitted for a first recipe or a later revision
  * alike whenever no production has posted on or after its start; anything
  * posted keeps the back-date refused, naming it. */
-async function preserveHistory(tx: SqlExecutor, orgId: string, assemblyItemId: string, before: StoredLine[], next: BomPolicyLine[], today: string) {
+async function preserveHistory(
+  tx: SqlExecutor,
+  orgId: string,
+  assemblyItemId: string,
+  before: StoredLine[],
+  next: BomPolicyLine[],
+  today: string,
+) {
   const semantic = (line: BomPolicyLine) => ({ componentItemId: line.componentItemId, quantityPer: canonicalDecimal(line.quantityPer,4), operationSeq: line.operationSeq, scrapPct: canonicalDecimal(line.scrapPct ?? "0",4), isByproduct: line.isByproduct,quantityBasis:line.quantityBasis??'per_unit',formulaOutputQuantity:canonicalDecimal(line.formulaOutputQuantity??'1',4), effectiveFrom: line.effectiveFrom });
   const matched = new Set<number>();
   for (const old of before) {
     if (old.effectiveFrom !== null && old.effectiveFrom >= today) continue;
-    const index = next.findIndex((line, i) => !matched.has(i) && canonicalJson(semantic(line)) === canonicalJson(semantic(old)) &&
-      (line.effectiveTo === old.effectiveTo || (old.effectiveTo === null || old.effectiveTo > today) && line.effectiveTo !== null && line.effectiveTo >= today && (old.effectiveTo === null || line.effectiveTo <= old.effectiveTo)));
+    const index = next.findIndex(
+      (line, i) =>
+        !matched.has(i) && canonicalJson(semantic(line)) === canonicalJson(semantic(old)) &&
+        (line.effectiveTo === old.effectiveTo ||
+          ((old.effectiveTo === null || old.effectiveTo > today) && line.effectiveTo !== null && line.effectiveTo >= today && (old.effectiveTo === null || line.effectiveTo <= old.effectiveTo))),
+    );
     if (index < 0) throw new BomPolicyError("Retain earlier component quantities and effectivity. End the current line today or later and add its successor with a new effective start.",409,"bom_history_immutable");
     matched.add(index);
   }
@@ -220,10 +266,16 @@ async function replace(tx: SqlExecutor, orgId: string, actorId: string, input: B
 }
 
 /** Inventory and virtual kits retain their native direct save; manufacturing proposes a revision. */
-export async function saveBomPolicy(tx: SqlExecutor, orgId: string, actorId: string, input: BomPolicyInput) {
+export async function saveBomPolicy(
+  tx: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  input: BomPolicyInput,
+) {
   const lines = normalize(input);
   await tx.execute(sql`lock table bom_components in row exclusive mode`);
-  if (!await lockAndCheckOrgFeature(tx,orgId,"inventory")) throw new ScopeNotFoundError();
+  if (!(await lockAndCheckOrgFeature(tx,orgId,"inventory")))
+    throw new ScopeNotFoundError();
   const manufacturingEnabled = await lockAndCheckOrgFeature(tx,orgId,"manufacturing");
   await assertBomRevisionAuthority(tx,orgId,actorId,false);
   // Request-key lock precedes subject locks, matching the approval apply order.
@@ -239,13 +291,28 @@ export async function saveBomPolicy(tx: SqlExecutor, orgId: string, actorId: str
     if (!input.subsidiaryId || !isUuid(input.subsidiaryId) || !input.requestKey || input.requestKey.length>120 || input.reason.trim().length<8 || input.reason.trim().length>1000) throw new BomPolicyError("Choose a booking entity, provide a request key and enter an approval reason between 8 and 1,000 characters.");
     if (!(await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`)).rows.length) throw new ScopeNotFoundError();
     const retained = (await tx.execute<{effective_on:string}>(sql`select effective_on::text from financial_changes where org_id=${orgId} and idempotency_key=${input.requestKey}`)).rows[0];
-    const directEvidence = !(await financialChangeFlowConfigured(tx,orgId));
-    const effectiveOn = retained?.effective_on ?? await businessTodayInTx(tx,orgId);
+    const effectiveOn =
+      retained?.effective_on ?? (await businessTodayInTx(tx, orgId));
     // A re-added line carries a blank sequence until the routing places it;
     // defaulting precedes the history match so a retained line still matches.
     const routed = await defaultOperationSequences(tx,orgId,input.assemblyItemId,lines,effectiveOn);
-    const proposal = {orgId,actorId,subsidiaryId:input.subsidiaryId,domain:"manufacturing" as const,subjectId:input.assemblyItemId,operation:MANUFACTURING_BOM_APPROVAL_OPERATION,
-      effectiveOn,reason:input.reason,idempotencyKey:input.requestKey,payload:{assemblyItemId:input.assemblyItemId,expectedVersion:input.expectedVersion,components:routed,requiredSubsidiaryIds:[input.subsidiaryId],...(directEvidence ? {decision:{mode:"automatic",policy:{flowConfigured:false}}} : {})}};
+    const proposal = {
+      orgId,
+      actorId,
+      subsidiaryId: input.subsidiaryId,
+      domain: "manufacturing" as const,
+      subjectId: input.assemblyItemId,
+      operation:MANUFACTURING_BOM_APPROVAL_OPERATION,
+      effectiveOn,
+      reason: input.reason,
+      idempotencyKey: input.requestKey,
+      payload: {
+        assemblyItemId: input.assemblyItemId,
+        expectedVersion: input.expectedVersion,
+        components: routed,
+        requiredSubsidiaryIds:[input.subsidiaryId],
+      },
+    };
     // Replays remain available after application, with current authority still required.
     const prior = await existingFinancialChange(tx,proposal);
     if (prior) return {changeId:prior,approvalRequired:true as const};
@@ -259,10 +326,15 @@ export async function saveBomPolicy(tx: SqlExecutor, orgId: string, actorId: str
   return replace(tx,orgId,actorId,input,before,lines);
 }
 
-export async function applyBomRevision(orgId: string, actorId: string, changeId: string) {
-  return withOrgTransaction(orgId,async()=>{
+export async function applyBomRevision(
+  orgId: string,
+  actorId: string,
+  changeId: string,
+) {
+  return withOrgTransaction(orgId, async () => {
     await db.execute(sql`lock table bom_components in row exclusive mode`);
-    if (!await lockAndCheckOrgFeature(db,orgId,"manufacturing")) throw new ScopeNotFoundError();
+    if (!(await lockAndCheckOrgFeature(db,orgId,"manufacturing")))
+      throw new ScopeNotFoundError();
     await assertBomRevisionAuthority(db,orgId,actorId,true);
     const change = await loadFinancialChange(db,orgId,changeId);
     if (change.domain!=="manufacturing" || change.operation!==MANUFACTURING_BOM_APPROVAL_OPERATION) throw new ScopeNotFoundError();

@@ -20,7 +20,7 @@
 // The trigger/action vocabulary follows the OpenBooks ERP document lifecycle
 // described in the flow execution contract.
 
-import { z } from 'zod'
+import { z } from "zod";
 import { uuidString } from './identifiers'
 import {
   defaultValueExpressionSchema,
@@ -248,8 +248,8 @@ export const automationEdgeSchema = z.object({
 })
 export type AutomationEdge = z.infer<typeof automationEdgeSchema>
 
-export const MAX_FLOW_NODES = 200
-export const MAX_FLOW_EDGES = 400
+export const MAX_FLOW_NODES = 200;
+export const MAX_FLOW_EDGES = 400;
 /** A flow can name at most 100 legal entities in its subject scope. */
 export const MAX_FLOW_SUBJECT_SCOPE_ENTITIES = 100
 
@@ -276,13 +276,11 @@ export type FlowGraphSubjectScope = z.infer<typeof flowGraphSubjectScopeSchema>
 
 export const automationGraphSchema = z.object({
   schemaVersion: z.literal(1),
-  /** Explicit tenant policy for a matched submission path that reaches no approval gate. */
-  ungatedOutcome: z.literal('apply').optional(),
   /** Legal entities this flow applies to; absent means organization-wide. */
   subjectScope: flowGraphSubjectScopeSchema.optional(),
   nodes: z.array(automationNodeSchema).max(MAX_FLOW_NODES),
   edges: z.array(automationEdgeSchema).max(MAX_FLOW_EDGES),
-})
+}).strict();
 export type AutomationGraph = z.infer<typeof automationGraphSchema>
 
 export function emptyAutomationGraph(): AutomationGraph {
@@ -456,11 +454,10 @@ export type TriggerEvent = (
 export type PlannedGate = { nodeId: string; gate: GateData }
 export type PlannedAction = { nodeId: string; action: ActionData }
 export type AutomationPlan = {
-  ungatedOutcome?: 'apply'
-  actions: ActionData[]
-  actionNodes: PlannedAction[]
-  gates: PlannedGate[]
-}
+  actions: ActionData[];
+  actionNodes: PlannedAction[];
+  gates: PlannedGate[];
+};
 
 const EMPTY_PLAN: AutomationPlan = Object.freeze({ actions: [], actionNodes: [], gates: [] })
 
@@ -539,7 +536,7 @@ export function planAutomation(
     triggerNodeIds?: string[]
   },
 ): AutomationPlan {
-  const startIds: string[] = []
+  const startIds: string[] = [];
   for (const node of graph.nodes) {
     if (node.data.kind !== 'trigger' || node.data.trigger.trigger !== event.kind) continue
     if (opts?.triggerNodeIds && !opts.triggerNodeIds.includes(node.id)) continue
@@ -558,7 +555,7 @@ export function planAutomation(
   }
   if (startIds.length === 0) return { ...EMPTY_PLAN }
   const plan = collect(graph, evalCtx, startIds)
-  return event.kind === 'on_submit' && graph.ungatedOutcome === 'apply' ? { ...plan, ungatedOutcome: 'apply' } : plan
+  return plan;
 }
 
 /**
@@ -591,7 +588,7 @@ export function lintAutomationGraph(
   fieldIds: Set<string>,
   profile?: FlowSubjectProfile,
 ): string[] {
-  const errors: string[] = []
+  const errors: string[] = [];
   if (graph.subjectScope) {
     if (graph.subjectScope.subsidiaryIds.length === 0) {
       errors.push('Flow is limited by legal entity but names none — choose at least one legal entity or remove the limit.')
@@ -607,7 +604,7 @@ export function lintAutomationGraph(
       }
     }
   }
-  if (graph.ungatedOutcome && profile && !profile.supportsUngatedSubmission) errors.push(`${profile.label} does not support automatic submission release.`)
+
   const ids = new Set(graph.nodes.map((n) => n.id))
 
   if (graph.nodes.length > MAX_FLOW_NODES) {
@@ -659,7 +656,10 @@ export function lintAutomationGraph(
   // with one branch intentionally ends the run on the other.
   const outboundFrom = new Set(graph.edges.map((e) => e.source))
   for (const n of graph.nodes) {
-    if (n.data.kind === 'trigger' && !outboundFrom.has(n.id) && !(graph.ungatedOutcome === 'apply' && n.data.trigger.trigger === 'on_submit')) {
+    if (
+      n.data.kind === 'trigger' && !outboundFrom.has(n.id) &&
+      (n.data.trigger.trigger !== "on_submit" || graph.nodes.some(node=>node.id!==n.id))
+    ) {
       errors.push(`Trigger ${n.id} has no outgoing step — connect it to the first step or the flow never runs.`)
     }
   }
@@ -779,7 +779,7 @@ export function lintAutomationGraph(
   }
 
   errors.push(...lintWorkerTriggerCompatibility(graph))
-  return errors
+  return errors;
 }
 
 const WORKER_ONLY_TRIGGERS = new Set<TriggerKind>(['scheduled'])

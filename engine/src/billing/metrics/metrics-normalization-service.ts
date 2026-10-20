@@ -1,3 +1,9 @@
+import {
+  routeNativeApproval,
+  readNativeApprovalDecision,
+  cancelNativeApprovals,
+} from "../../platform/approval-routing.ts";
+import { lockActorCommandAuthority } from "../../organization/actor-command-authority.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {
@@ -21,12 +27,12 @@ import {
 } from "./metrics-ledger.ts";
 
 /**
- * Audited two-person normalization service for SaaS metrics.
+ * Audited tenant-governed normalization service for SaaS metrics.
  *
  * Normal recompute stays frozen for closed months. The only path that may
  * replace legacy rows — including rows in a closed month — is an approved
  * correction request executed here: exactly one org and month per request,
- * a requester who cannot approve their own request, a fenced lease token
+ * a frozen tenant Flow policy, a fenced lease token
  * that serializes workers, a byte-for-byte proof of the legacy row set
  * before any write, the same v1 computation and writers the ordinary
  * recompute uses, per-row before/after evidence in the canonical audit_log,
@@ -232,8 +238,10 @@ function missingRequest(requestId: string): UsageBillingError {
 }
 
 function liveRequestRemedy(existing: NormalizationRequestRecord): string {
-  return `Request ${existing.id} for ${existing.month} is already ${existing.status}. ` +
-    "Wait for it to finish, cancel it, or open it in Company Setup → SaaS Metrics to follow its progress.";
+  return (
+    `Request ${existing.id} for ${existing.month} is already ${existing.status}. ` +
+    "Wait for it to finish, cancel it, or open it in Company Setup → SaaS Metrics to follow its progress."
+  );
 }
 
 /**
@@ -246,14 +254,20 @@ function claimStateRemedy(existing: NormalizationRequestRecord): string {
     case "running":
       return liveRequestRemedy(existing);
     case "succeeded":
-      return `Request ${existing.id} for ${existing.month} already succeeded. ` +
-        "Review the stored month and its recorded result in Company Setup → SaaS Metrics; file a new request for further work.";
+      return (
+        `Request ${existing.id} for ${existing.month} already succeeded. ` +
+        "Review the stored month and its recorded result in Company Setup → SaaS Metrics; file a new request for further work."
+      );
     case "failed":
-      return `Request ${existing.id} for ${existing.month} already failed. ` +
-        "Retry the failed request in Company Setup → SaaS Metrics to open a fresh lease, then continue.";
+      return (
+        `Request ${existing.id} for ${existing.month} already failed. ` +
+        "Retry the failed request in Company Setup → SaaS Metrics to open a fresh lease, then continue."
+      );
     case "cancelled":
-      return `Request ${existing.id} for ${existing.month} was cancelled and is immutable. ` +
-        "File a new request in Company Setup → SaaS Metrics for further work.";
+      return (
+        `Request ${existing.id} for ${existing.month} was cancelled and is immutable. ` +
+        "File a new request in Company Setup → SaaS Metrics for further work."
+      );
     default:
       return liveRequestRemedy(existing);
   }
@@ -296,6 +310,28 @@ export async function createNormalizationRequest(args: {
             "Confirm the organization still exists in Company Setup → SaaS Metrics, then submit again.",
           );
         }
+        const id = inserted[0]!.id;
+        await lockActorCommandAuthority(
+          db,
+          orgId,
+          requestedBy,
+          null,
+          "usage.manage",
+        );
+        const routing = await routeNativeApproval({
+          orgId,
+          actorId: requestedBy,
+          subjectKind: "metrics_normalization",
+          subjectId: id,
+        });
+        if (routing.policy.kind === "ungated") {
+          const released = await approveAndExecuteNormalizationRequest({
+            orgId,
+            requestId: id,
+            approverId: requestedBy,
+          });
+          return { request: released.request, created: true };
+        }
         return { request: toRecord(inserted[0]!), created: true };
       } catch (error) {
         if ((error as { code?: string } | null)?.code !== "23505") throw error;
@@ -330,23 +366,23 @@ export async function createNormalizationRequest(args: {
     };
     const byKey = await readRequestByKey(db, orgId, idempotencyKey);
     if (byKey) {
-      if (byKey.request_hash === bodyHash) return { request: toRecord(byKey), created: false };
-      throw refusal(
-        "saas_normalization_idempotency_conflict",
-        `Idempotency key ${idempotencyKey} already belongs to request ${byKey.id} with a different body.`,
-        "Reuse the original request body with this idempotency key, or generate a new idempotency key in Company Setup → SaaS Metrics.",
-        { field: "idempotency_key", status: 409 },
-      );
-    }
+        if (byKey.request_hash === bodyHash) return { request: toRecord(byKey), created: false };
+        throw refusal(
+          "saas_normalization_idempotency_conflict",
+          `Idempotency key ${idempotencyKey} already belongs to request ${byKey.id} with a different body.`,
+          "Reuse the original request body with this idempotency key, or generate a new idempotency key in Company Setup → SaaS Metrics.",
+          { field: "idempotency_key", status: 409 },
+        );
+      }
     const live = await readLiveRequest(db, orgId, month);
     if (live) {
-      throw refusal(
-        "saas_normalization_request_live",
-        `A ${live.status} normalization request ${live.id} already covers ${month}.`,
-        liveRequestRemedy(toRecord(live)),
-        { field: "month", status: 409 },
-      );
-    }
+        throw refusal(
+          "saas_normalization_request_live",
+          `A ${live.status} normalization request ${live.id} already covers ${month}.`,
+          liveRequestRemedy(toRecord(live)),
+          { field: "month", status: 409 },
+        );
+      }
     return (await attemptInsert()) ?? replayOrRefuse();
   });
 }
@@ -378,14 +414,14 @@ async function readLiveRequest(
 }
 
 /**
- * Record a distinct approver on a pending request. Self-approval refuses
- * even when the actor holds every permission; permission checks themselves
- * stay at the E boundary. Re-approval by the recorded approver replays.
+ * Record the actor authorized by the request's complete tenant Flow submission.
+ * Releasing the same approved request preserves its recorded evidence.
  */
 export async function approveNormalizationRequest(args: {
   orgId: string;
   requestId: string;
   approverId: string;
+  approvalRunId?: string;
 }): Promise<NormalizationRequestRecord> {
   const orgId = requireUuid(args.orgId, "org_id");
   const requestId = requireUuid(args.requestId, "request_id");
@@ -393,14 +429,12 @@ export async function approveNormalizationRequest(args: {
   return withOrgTransaction(orgId, async () => {
     const existing = await readRequest(db, orgId, requestId);
     if (!existing) throw missingRequest(requestId);
-    if (approverId === existing.requested_by) {
-      throw refusal(
-        "saas_normalization_self_approval",
-        `Request ${requestId} cannot be approved by its requester.`,
-        "Have a different authorized approver approve the request in Company Setup → SaaS Metrics.",
-        { field: "approved_by", status: 409 },
-      );
-    }
+    await requireNormalizationApproval(
+      orgId,
+      requestId,
+      approverId,
+      args.approvalRunId,
+    );
     if (existing.status !== "pending") {
       throw refusal(
         "saas_normalization_approval_state",
@@ -473,7 +507,7 @@ export async function claimNormalizationRequest(args: {
       throw refusal(
         "saas_normalization_claim_unapproved",
         `Request ${requestId} has no recorded approval and cannot be claimed.`,
-        "Record a distinct approver on the pending request in Company Setup → SaaS Metrics, then claim.",
+        "Submit the pending request through tenant Flows in Company Setup → SaaS Metrics, then claim its released correction.",
         { status: 409 },
       );
     }
@@ -814,7 +848,7 @@ async function assertLiveClaim(
       "saas_normalization_execute_state",
       `Request ${requestId} is ${existing.status} and cannot execute.`,
       existing.status === "pending"
-        ? "Record a distinct approval and claim the request in Company Setup → SaaS Metrics, then execute."
+        ? "Complete the request’s tenant Flow gates and claim its released correction in Company Setup → SaaS Metrics, then execute."
         : existing.status === "failed"
           ? "Retry the failed request in Company Setup → SaaS Metrics to open a fresh lease, then execute."
           : SETUP_LIST_REMEDY,
@@ -1494,21 +1528,21 @@ export async function executeNormalizationRequest(args: {
 }
 
 /**
- * The one E-facing approval action: record the distinct approver and the
+ * Release a correction authorized by its tenant Flow policy and record the
  * first pending-to-running claim atomically in a single transaction, then
  * execute the fenced correction with the lease token held server-side. No
  * externally committed approved-but-unclaimed gap can exist through this
  * entrypoint: either both guarded statements commit together or the
  * concurrent loser refuses on zero rows. The raw token is never returned;
  * callers receive the request record and the recorded result only.
- * Lower-level approve, claim, and execute calls remain for recovery and
- * tests, never for the E orchestration path.
+ * Recovery claim and execute commands retain the same native authorization proof.
  */
 export async function approveAndExecuteNormalizationRequest(args: {
   orgId: string;
   requestId: string;
   approverId: string;
   leaseTtlMinutes?: number;
+  approvalRunId?: string;
 }): Promise<{ request: NormalizationRequestRecord; result: NormalizationExecutionResult }> {
   const orgId = requireUuid(args.orgId, "org_id");
   const requestId = requireUuid(args.requestId, "request_id");
@@ -1535,14 +1569,14 @@ export async function approveAndExecuteNormalizationRequest(args: {
       { status: 409 },
     );
   }
-  if (approverId === peek.requested_by) {
-    throw refusal(
-      "saas_normalization_self_approval",
-      `Request ${requestId} cannot be approved by its requester.`,
-      "Have a different authorized approver approve the request in Company Setup → SaaS Metrics.",
-      { field: "approved_by", status: 409 },
-    );
-  }
+  await withOrgTransaction(orgId, () =>
+    requireNormalizationApproval(
+      orgId,
+      requestId,
+      approverId,
+      args.approvalRunId,
+    ),
+  );
   if (peek.approved_by !== null && peek.approved_by !== approverId) {
     throw refusal(
       "saas_normalization_approver_recorded",
@@ -1657,7 +1691,7 @@ export async function approveAndExecuteNormalizationRequest(args: {
  * stored row on the all-null legacy triple. Empty months, mixed legacy/v1
  * sets, partial triples, unsupported versions, multiple currencies, and
  * malformed or mismatched results are refused by name with the request and
- * distinct-approval remedy — never silently labelled ready. A cancelled
+ * tenant Flow remedy — never silently labelled ready. A cancelled
  * request falls back to the stored-row classification while its token-free
  * identity stays visible. Terminal precedence is deterministic: the latest
  * non-cancelled request by creation time, id breaking ties, so an older
@@ -1713,7 +1747,7 @@ type MonthRequestRow = {
 };
 
 const MONTH_REQUEST_REMEDY =
-  "File a normalization request for the month in Company Setup → SaaS Metrics and have a different authorized approver approve it; the approved correction re-proves the stored rows before any write.";
+  "Submit a normalization request for the month in Company Setup → SaaS Metrics and complete any tenant Flow gates; the released correction re-proves the stored rows before any write.";
 
 function monthRequestState(
   month: string,
@@ -1931,4 +1965,80 @@ export async function listNormalizationMonthStates(orgId: string): Promise<Norma
       return monthRequestState(month, shape, terminal, fallback);
     });
   });
+}
+
+async function requireNormalizationApproval(
+  orgId: string,
+  requestId: string,
+  actorId: string,
+  approvalRunId?: string,
+): Promise<void> {
+  await lockActorCommandAuthority(db, orgId, actorId, null, "usage.manage");
+  await lockActorCommandAuthority(db, orgId, actorId, null, "close.reopen");
+  const decision = await readNativeApprovalDecision({
+    orgId,
+    actorId,
+    subjectKind: "metrics_normalization",
+    subjectId: requestId,
+    outcome: "approved",
+    approvalRunId,
+  });
+  const ungated =
+    !approvalRunId &&
+    (
+      await db.execute<{ allowed: boolean }>(
+        sql`select public.normalization_request_flow_authorized(${orgId},${requestId},${actorId},'approved') as allowed`,
+      )
+    ).rows[0]?.allowed === true;
+  if (!decision && !ungated)
+    throw refusal(
+      "saas_normalization_approval_required",
+      "Complete the tenant's native Flow gates before executing this correction.",
+      "Open the pending SaaS metrics correction in Approvals.",
+      { status: 409 },
+    );
+}
+
+export async function releaseNormalizationApproval(args: {
+  subjectId: string;
+  outcome: "approved" | "rejected";
+  approvalRunId?: string;
+  comment?: string | null;
+  ctx: { orgId: string; userId?: string | null };
+}): Promise<void> {
+  const actorId = args.ctx.userId;
+  if (!actorId)
+    throw new Error("A metrics correction requires a named operator.");
+  const orgId = args.ctx.orgId,
+    requestId = args.subjectId;
+  const decision = await readNativeApprovalDecision({
+    orgId,
+    actorId,
+    subjectKind: "metrics_normalization",
+    subjectId: requestId,
+    outcome: args.outcome,
+    approvalRunId: args.approvalRunId,
+  });
+  if (!decision)
+    throw refusal(
+      "saas_normalization_approval_required",
+      "Complete the native Flow gate before deciding this correction.",
+      "Use the pending correction Flow gate.",
+      { status: 409 },
+    );
+  if (args.outcome === "approved") {
+    await approveAndExecuteNormalizationRequest({
+      orgId,
+      requestId,
+      approverId: actorId,
+      approvalRunId: args.approvalRunId,
+    });
+    return;
+  }
+  await lockActorCommandAuthority(db, orgId, actorId, null, "usage.manage");
+  await lockActorCommandAuthority(db, orgId, actorId, null, "close.reopen");
+  const changed =
+    await db.execute(sql`update saas_metrics_normalization_requests set status='cancelled',updated_by=${actorId}
+    where org_id=${orgId} and id=${requestId} and status='pending' returning id`);
+  if (changed.rows.length !== 1) throw missingRequest(requestId);
 }

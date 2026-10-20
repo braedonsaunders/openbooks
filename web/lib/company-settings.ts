@@ -129,57 +129,54 @@ function fiscalCalendarLockedResponse(): CompanySettingsResult {
 
 /** The Company & Accounting settings view (identity, locale, frameworks) —
  *  the same shape the settings screen renders. */
-export async function readCompanySettings(orgId: string): Promise<CompanySettingsResult> {
+export async function readCompanySettings(orgId: string,
+): Promise<CompanySettingsResult> {
 
   const org = await db.execute(sql`
     select id, name, legal_name, country, tax_ids, settings
       from orgs where id = ${orgId}`);
 
-  const row = org.rows[0];
+  const row = org.rows[0]
   if (!row)
     return { status: 404, body: { error: "org not found" } };
   const settings = (row.settings ?? {}) as Record<string, unknown>;
 
-  return { status: 200, body: {
-    org: {
-      name: row.name as string,
-      legalName: (row.legal_name as string | null) ?? "",
-      country: row.country as string,
-      // Legal identity: registered address, legal form, tax classification
-      // and the tax/registration identifiers documents print.
-      address: readCompanyAddress(settings.companyAddress),
-      legalForm: isLegalForm(settings.legalForm) ? settings.legalForm : null,
-      taxClassification: isTaxClassification(settings.taxClassification) ? settings.taxClassification : null,
-      taxIds: readTaxIds(row.tax_ids),
-      defaultLocale: isLocale(settings.defaultLocale)
+  return {
+    status: 200,
+    body: {
+      org: {
+        name: row.name as string,
+        legalName: (row.legal_name as string | null) ?? "",
+        country: row.country as string,
+        // Legal identity: registered address, legal form, tax classification
+        // and the tax/registration identifiers documents print.
+        address: readCompanyAddress(settings.companyAddress),
+        legalForm: isLegalForm(settings.legalForm) ? settings.legalForm : null,
+        taxClassification: isTaxClassification(settings.taxClassification) ? settings.taxClassification : null,
+        taxIds: readTaxIds(row.tax_ids),
+        defaultLocale: isLocale(settings.defaultLocale)
         ? settings.defaultLocale
         : DEFAULT_LOCALE,
-      timeZone: canonicalTimeZone(settings.timeZone) ?? "UTC",
-      reportingFramework:
+        timeZone: canonicalTimeZone(settings.timeZone) ?? "UTC",
+        reportingFramework:
         settings.reportingFramework === "ifrs" ||
         settings.reportingFramework === "us_gaap"
           ? settings.reportingFramework
           : null,
-      taxFramework:
+        taxFramework:
         settings.taxFramework === "ias12" ? "ias12" : "asc740",
-      requireVendorBillApproval:
-        (settings.approvals as Record<string, unknown> | undefined)
-          ?.requireVendorBillApproval === true,
-      requireStockCountReview:
-        (settings.approvals as Record<string, unknown> | undefined)
-          ?.requireStockCountReview === true,
-      // The company default payment terms are core billing configuration,
-      // always visible; only the till defaults below are feature-gated.
-      billing: readBillingSettings(settings.billing),
-      // A gated feature's settings stay hidden while the gate is off; the
-      // stored values are kept and reappear with the switch.
-      ...((await isFeatureEnabled(orgId, "cashSales"))
+        // The company default payment terms are core billing configuration,
+        // always visible; only the till defaults below are feature-gated.
+        billing: readBillingSettings(settings.billing),
+        // A gated feature's settings stay hidden while the gate is off; the
+        // stored values are kept and reappear with the switch.
+        ...((await isFeatureEnabled(orgId, "cashSales"))
         ? { cashSales: readCashSalesSettings(settings.cashSales) }
         : {}),
+      },
     },
-  } };
+  }
 }
-
 
 /**
  * The one authoritative Company & Accounting settings mutation. The
@@ -193,32 +190,30 @@ export async function updateCompanySettings(
   rawBody: Record<string, unknown>,
 ): Promise<CompanySettingsResult> {
   assertUnrestrictedScope(actor.allowedSubsidiaryIds);
-  const { orgId } = actor;
+  const { orgId } = actor
   const body = rawBody as {
-    name?: unknown;
-    legalName?: unknown;
-    country?: unknown;
-    baseCurrency?: unknown;
-    fiscalYearStartMonth?: unknown;
-    reportingFramework?: unknown;
-    taxFramework?: unknown;
-    controlAccounts?: unknown;
-    cashSales?: unknown;
-    billing?: unknown;
-    defaultLocale?: unknown;
-    timeZone?: unknown;
-    reportPdfStyle?: unknown;
-    fairValueRangePolicy?: unknown;
-    contractCreation?: unknown;
-    saasMetrics?: unknown;
-    requireVendorBillApproval?: unknown;
-    requireStockCountReview?: unknown;
-    partylessControlPolicy?: unknown;
-    address?: unknown;
-    legalForm?: unknown;
-    taxClassification?: unknown;
-    taxIds?: unknown;
-  };
+    name?: unknown
+    legalName?: unknown
+    country?: unknown
+    baseCurrency?: unknown
+    fiscalYearStartMonth?: unknown
+    reportingFramework?: unknown
+    taxFramework?: unknown
+    controlAccounts?: unknown
+    cashSales?: unknown
+    billing?: unknown
+    defaultLocale?: unknown
+    timeZone?: unknown
+    reportPdfStyle?: unknown
+    fairValueRangePolicy?: unknown
+    contractCreation?: unknown
+    saasMetrics?: unknown
+    partylessControlPolicy?: unknown
+    address?: unknown
+    legalForm?: unknown
+    taxClassification?: unknown
+    taxIds?: unknown
+  }
 
   // This feature probe does not contribute persisted state. Do it before the
   // row lock so disabled-feature requests cannot hold an accounting-policy
@@ -260,13 +255,13 @@ export async function updateCompanySettings(
     const existing = await tx.execute(sql`
     select name, legal_name, base_currency, country, tax_ids, settings
       from orgs where id = ${orgId} for update`);
-    const cur = existing.rows[0];
+    const cur = existing.rows[0]
     if (!cur)
       return { status: 404, body: { error: "org not found" } };
     const settings = (cur.settings ?? {}) as Record<string, unknown>;
 
     const changes: Record<string, unknown> = {};
-    const sets: SQL[] = [];
+    const sets: SQL[] = []
 
     // --- display name (required) ---
     if (body.name !== undefined) {
@@ -323,7 +318,7 @@ export async function updateCompanySettings(
       identitySettings.push({ key: "companyAddress", value: result.address });
     }
     const storedLegalForm: LegalForm | null = isLegalForm(settings.legalForm) ? settings.legalForm : null;
-    let effectiveLegalForm = storedLegalForm;
+    let effectiveLegalForm = storedLegalForm
     if (body.legalForm !== undefined) {
       if (body.legalForm !== null && !isLegalForm(body.legalForm)) {
         return { status: 400, body: { error: "legal form is not one of the supported business structures", code: "invalid-legal-form" } };
@@ -620,7 +615,7 @@ export async function updateCompanySettings(
     }
 
     // --- fiscal year start month ---
-    let nextStartMonth: number | undefined;
+    let nextStartMonth: number | undefined
     if (body.fiscalYearStartMonth !== undefined) {
       const m = Number(body.fiscalYearStartMonth);
       if (!Number.isInteger(m) || m < 1 || m > 12) {
@@ -637,7 +632,7 @@ export async function updateCompanySettings(
     const startMonthChanged =
       nextStartMonth !== undefined && nextStartMonth !== curStartMonth;
     const nextSettings = { ...settings } as Record<string, unknown>;
-    let settingsChanged = false;
+    let settingsChanged = false
     if (nextStartMonth !== undefined && nextStartMonth !== curStartMonth) {
       nextSettings.fiscalYearStartMonth = nextStartMonth;
       changes.fiscalYearStartMonth = [curStartMonth, nextStartMonth];
@@ -862,7 +857,7 @@ export async function updateCompanySettings(
       }
     }
     if (body.saasMetrics !== undefined) {
-      const candidate = body.saasMetrics;
+      const candidate = body.saasMetrics
       if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
         return { status: 400, body: { error: "saasMetrics must be an object" } };
       }
@@ -880,9 +875,10 @@ export async function updateCompanySettings(
         return { status: 400, body: { error: "customerCreditsReduceBillings must be a boolean" } };
       }
       const currentValue = settings.saasMetrics;
-      const current = currentValue !== null && typeof currentValue === "object" && !Array.isArray(currentValue)
-        ? currentValue as Record<string, unknown>
-        : {};
+      const current =
+        currentValue !== null && typeof currentValue === "object" && !Array.isArray(currentValue)
+          ? (currentValue as Record<string, unknown>)
+          : {}
       const before = {
         evergreenBookingMonths: current.evergreenBookingMonths ?? "12",
         billingsUsePreTaxSubtotal: current.billingsUsePreTaxSubtotal ?? true,
@@ -896,47 +892,6 @@ export async function updateCompanySettings(
       if (JSON.stringify(before) !== JSON.stringify(next)) {
         nextSettings.saasMetrics = next;
         changes.saasMetrics = [before, next];
-        settingsChanged = true;
-      }
-    }
-    // --- vendor-bill release policy (approvals): when on, an ungated vendor
-    // bill is refused by name instead of auto-releasing. Default OFF (absent
-    // reads as false), so existing orgs keep today's behaviour. Turning the
-    // requirement off preserves the stored value's history in audit_log and
-    // never touches already-posted documents.
-    if (body.requireVendorBillApproval !== undefined) {
-      if (typeof body.requireVendorBillApproval !== "boolean") {
-        return { status: 400, body: { error: "requireVendorBillApproval must be a boolean" } };
-      }
-      const curApprovals = (settings.approvals ?? {}) as Record<string, unknown>;
-      const curRequired = curApprovals.requireVendorBillApproval === true;
-      if (body.requireVendorBillApproval !== curRequired) {
-        nextSettings.approvals = {
-          ...curApprovals,
-          requireVendorBillApproval: body.requireVendorBillApproval,
-        };
-        changes.requireVendorBillApproval = [curRequired, body.requireVendorBillApproval];
-        settingsChanged = true;
-      }
-    }
-    // --- stock-count posting policy (approvals): when on, the user who
-    // recorded or submitted a count cannot post it — a different user with
-    // posting authority must. Default OFF (absent reads as false), so
-    // existing orgs keep today's behaviour. Turning the requirement off
-    // preserves the stored value's history in audit_log and never touches
-    // already-posted counts.
-    if (body.requireStockCountReview !== undefined) {
-      if (typeof body.requireStockCountReview !== "boolean") {
-        return { status: 400, body: { error: "requireStockCountReview must be a boolean" } };
-      }
-      const curApprovals = (settings.approvals ?? {}) as Record<string, unknown>;
-      const curRequired = curApprovals.requireStockCountReview === true;
-      if (body.requireStockCountReview !== curRequired) {
-        nextSettings.approvals = {
-          ...curApprovals,
-          requireStockCountReview: body.requireStockCountReview,
-        };
-        changes.requireStockCountReview = [curRequired, body.requireStockCountReview];
         settingsChanged = true;
       }
     }
@@ -1100,5 +1055,5 @@ export async function updateCompanySettings(
       changed: true,
       periodsRederived: startMonthChanged,
     } };
-  });
+  })
 }

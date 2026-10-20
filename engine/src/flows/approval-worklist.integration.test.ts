@@ -2,14 +2,18 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, type SqlExecutor } from "../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { readBomPolicyVersion, saveBomPolicy } from "../inventory/bom-policy.ts";
 import { submitBomRevision } from "./financial-changes-adapter.ts";
 import { createManufacturingOperator } from "../testing/manufacturing.ts";
 import { worklistApprovals, worklistApprovalsCount, worklistApprovalsPage, type WorklistPageScope } from "./approval-worklist.ts";
 import { createDelegation, revokeDelegation } from "./delegations.ts";
-import { submitForApproval } from "./submit.ts";
+import { submitForApproval, submitAndReleaseIfUngated } from "./submit.ts";
+import { submitBudgetScenario } from "./budget-submission.ts";
+import { decideGate } from "./gates.ts";
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } from "./payment-runs-adapter.ts";
 import { submitPaymentRun } from "../payments/operations.ts";
 import {
@@ -19,25 +23,22 @@ import {
   seedApprovalFlow,
   seedDraftDocument,
   seedFlowActors,
+  grantScratchPermissions,
 } from "../testing/fixtures.ts";
 
-/**
- * The approvals worklist must show everything awaiting the caller — not just
- * Flows gates. Documents sitting in pending_approval with no pending gate
- * (migrated rows, abandoned runs, legacy direct writes) are invisible to
- * worklistGates, so an approver would see [] while work waits. The unified
- * reader returns gates (payment runs among them) AND gateless document
- * approvals, deduplicated so a gated document appears once (through its
- * gate), and never shows a caller their own submissions.
- */
+/** Native gates are the sole approval population across lists and badges. */
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function assertCountMatchesWorklist(orgId: string, userId: string, scope: WorklistPageScope): Promise<number> {
+async function assertCountMatchesWorklist(
+  orgId: string,
+  userId: string,
+  scope: WorklistPageScope,
+): Promise<number> {
   const count = await worklistApprovalsCount(orgId, userId, scope);
   const page = await worklistApprovalsPage(orgId, userId, scope, { limit: 1, offset: 0 });
   assert.equal(count, page.total, "badge and paged worklist count the same scoped union");
   const items = await worklistApprovals(orgId, userId, scope);
-  const visible = scope.includeFlows === false ? items.filter((item) => item.kind === "budget") : items;
+  const visible = scope.includeFlows === false ? [] : items;
   assert.equal(count, visible.length, "count includes every visible item without the page limit");
   return count;
 }
@@ -67,267 +68,289 @@ async function seedSubmittedRun(orgId: string, bankId: string, submitterId: stri
   return runId;
 }
 
-test("unified worklist shows gates, gateless documents, and payment runs", { skip: !DB }, async () => {
-  await assertDedicatedFixtureDatabase();
-  const org = await createScratchOrg();
-  try {
-    const actors = await seedFlowActors(org.orgId);
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "vendor_bill",
-      assignees: [{ type: "user", userId: actors.approver1Id }],
-      mode: "any",
-    });
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
-      assignees: [{ type: "user", userId: actors.approver1Id }],
-      mode: "any",
-    });
-    // Gated document: gate pending, visible through the gate only.
-    const gatedId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    const submitted = await submitForApproval("vendor_bill", gatedId);
-    assert.equal(submitted.gated, true);
-    // Gateless document: pending_approval with no flow run behind it.
-    const gatelessId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
-    await db.execute(sql`update documents set status='pending_approval', submitted_by=${actors.submitterId},
-      submitted_at=now(), updated_by=${actors.submitterId}, updated_at=now()
-      where id=${gatelessId} and org_id=${org.orgId}`);
-    const runId = await seedSubmittedRun(org.orgId, org.accounts.bank, actors.submitterId);
-
-    const items = await worklistApprovals(org.orgId, actors.approver1Id, {
+test(
+  "worklist lists configured document and payment gates once and honors live delegation and scope",
+  { skip: !DB },
+  async () => {
+    await assertDedicatedFixtureDatabase();
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      const zero = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+      await submitAndReleaseIfUngated("vendor_bill", zero, actors.submitterId);
+      for (const kind of ["vendor_bill", OUTBOUND_PAYMENT_RUN_SUBJECT_KIND])
+        await seedApprovalFlow(org.orgId, {
+          subjectKind: kind,
+          assignees: [{ type: "user", userId: actors.approver1Id }],
+          mode: "any",
+        });
+      const id = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+      await submitForApproval("vendor_bill", id, actors.submitterId);
+      const run = await seedSubmittedRun(org.orgId, org.accounts.bank, actors.submitterId);
+      const scope = {
       roles: ["approver"],
       allowedSubsidiaryIds: null,
-    });
-    const byId = new Map(items.map((item) => [item.id, item]));
-    assert.equal(byId.get(gatedId)?.kind, undefined, "gated document must not also appear as a document row");
-    const gateHit = items.find((item) => item.kind === "flow_gate" && item.gate.subjectId === gatedId);
-    assert.ok(gateHit, "pending gate must appear");
-    assert.equal(byId.get(gatelessId)?.kind, "document", "gateless pending document must appear");
-    const runGate = items.find((item) => item.kind === "flow_gate" && item.gate.subjectId === runId);
-    assert.equal(runGate?.kind === "flow_gate" && runGate.gate.subjectKind, OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
-      "a payment run awaiting approval appears through its gate");
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
-      roles: ["approver"], allowedSubsidiaryIds: null,
-    }), 3);
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
-      roles: ["approver"], allowedSubsidiaryIds: new Set<string>(),
-    }), 0, "an empty legal-entity scope withholds both document and gate counts");
-
-    // The submitter cannot approve their own work anywhere.
-    const own = await worklistApprovals(org.orgId, actors.submitterId, {
-      roles: ["accountant"],
-      allowedSubsidiaryIds: null,
-    });
-    assert.deepEqual(own, [], "submitter sees none of their own submissions");
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.submitterId, {
+    };
+      const items = await worklistApprovals(
+        org.orgId,
+        actors.approver1Id,
+        scope,
+      );
+      assert.deepEqual(
+        new Set(items.map((item) => item.gate.subjectId)),
+        new Set([id, run]),
+      );
+      assert.ok(items.every((item) => item.kind === "flow_gate"));
+      assert.equal(
+        await assertCountMatchesWorklist(org.orgId, actors.approver1Id, scope),
+        2,
+      );
+      assert.equal(
+        await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
+          ...scope,
+          allowedSubsidiaryIds: new Set<string>(),
+        }),
+        0,
+      );
+      assert.equal(await assertCountMatchesWorklist(org.orgId, actors.submitterId, {
       roles: ["accountant"], allowedSubsidiaryIds: null,
     }), 0);
-
-    const delegateScope = { roles: ["approver"], allowedSubsidiaryIds: null };
-    const beforeDelegation = await assertCountMatchesWorklist(org.orgId, actors.approver2Id, delegateScope);
-    const now = (await db.execute<{ now: Date | string }>(sql`select now() as now`)).rows[0]!.now;
-    const nowMs = now instanceof Date ? now.getTime() : +new Date(now);
-    const start = new Date(nowMs - 60_000);
-    const end = new Date(nowMs + 3_600_000);
-    const delegate = () => createDelegation({
-      orgId: org.orgId, fromUserId: actors.approver1Id, toUserId: actors.approver2Id,
-      startsAt: start, endsAt: end, reason: "Approval coverage",
-    });
-    const first = await delegate();
-    const overlapping = await delegate();
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver2Id, delegateScope),
-      beforeDelegation + 2, "overlapping delegations count each borrowed gate once");
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, delegateScope), 3,
-      "the principal retains the same direct gate population");
-    await revokeDelegation(org.orgId, first.delegation.id, actors.approver1Id);
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver2Id, delegateScope), beforeDelegation + 2);
-    await revokeDelegation(org.orgId, overlapping.delegation.id, actors.approver1Id);
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver2Id, delegateScope), beforeDelegation,
-      "the next count observes native revocation without a cached delegation grant");
-  } finally {
+      const now = Date.now();
+      const delegate = () =>
+        createDelegation({
+          orgId: org.orgId,
+          fromUserId: actors.approver1Id,
+          toUserId: actors.approver2Id,
+          startsAt: new Date(now - 60000),
+          endsAt: new Date(now + 3600000),
+          reason: "Approval coverage",
+        });
+      const first = await delegate();
+      const second = await delegate();
+      assert.equal(
+        await assertCountMatchesWorklist(org.orgId, actors.approver2Id, scope),
+        2,
+        "overlapping delegations do not duplicate gates",
+      );
+      await revokeDelegation(org.orgId, first.delegation.id, actors.approver1Id);
+      assert.equal(
+        await assertCountMatchesWorklist(org.orgId, actors.approver2Id, scope),
+        2,
+      );
+      await revokeDelegation(
+        org.orgId,
+        second.delegation.id,
+        actors.approver1Id,
+      );
+      assert.equal(
+        await assertCountMatchesWorklist(org.orgId, actors.approver2Id, scope),
+        0,
+      );
+    } finally {
     await dropScratchOrg(org.orgId);
   }
-});
+  },
+);
 
-async function seedPendingBudget(
+async function seedBudget(
   orgId: string,
   bookId: string,
   periodId: string,
   accountId: string,
   submitterId: string,
   name: string,
-): Promise<string> {
+) {
   const id = randomUUID();
-  await db.execute(sql`
-    insert into budget_scenarios
-      (id, org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
-    values (${id}, ${orgId}, ${bookId}, 2026, ${name}, 'budget', 'draft', ${submitterId}, ${submitterId})`);
-  await db.execute(sql`
-    insert into budget_lines (org_id, scenario_id, account_id, period_id, amount, created_by, updated_by)
-    values (${orgId}, ${id}, ${accountId}, ${periodId}, '140000.0000', ${submitterId}, ${submitterId})`);
-  await db.execute(sql`
-    update budget_scenarios set status = 'pending_approval', revision = revision + 1,
-           submitted_at = now(), submitted_by = ${submitterId},
-           updated_at = now(), updated_by = ${submitterId}
-     where id = ${id} and org_id = ${orgId}`);
+  await db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name,kind,status,created_by,updated_by)
+   values(${id},${orgId},${bookId},2026,${name},'budget','draft',${submitterId},${submitterId})`);
+  await db.execute(sql`insert into budget_lines(org_id,scenario_id,account_id,period_id,amount,created_by,updated_by)
+   values(${orgId},${id},${accountId},${periodId},'140000.0000',${submitterId},${submitterId})`);
+  const row = (
+    await db.execute<{ revision: number }>(
+      sql`select revision from budget_scenarios where org_id=${orgId} and id=${id}`,
+    )
+  ).rows[0]!;
+  await submitBudgetScenario(orgId, submitterId, id, row.revision);
   return id;
 }
 
-/**
- * A budget submitted through the direct maker/checker path creates
- * no flow gate, so the approvals inbox (which reads this union) showed an
- * empty worklist while the budget waited. Pending scenarios must appear for
- * approvers — never for the submitter, never twice when a gate does exist.
- */
-test("unified worklist shows gateless pending budgets", { skip: !DB }, async () => {
-  await assertDedicatedFixtureDatabase();
-  const org = await createScratchOrg();
-  try {
-    const actors = await seedFlowActors(org.orgId);
-    const pendingId = await seedPendingBudget(
-      org.orgId, org.bookId, org.periodId, org.accounts.revenue, actors.submitterId, "FY2026 operating",
-    );
-    const draftId = randomUUID();
-    await db.execute(sql`
-      insert into budget_scenarios
-        (id, org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
-      values (${draftId}, ${org.orgId}, ${org.bookId}, 2026, 'Draft never submitted', 'budget',
-              'draft', ${actors.submitterId}, ${actors.submitterId})`);
-
-    const items = await worklistApprovals(org.orgId, actors.approver1Id, {
+test(
+  "budgets use the same Flow population and all configured gates before release",
+  { skip: !DB },
+  async () => {
+    await assertDedicatedFixtureDatabase();
+    const org = await createScratchOrg();
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      await db.execute(
+        sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`,
+      );
+      const scope = {
       roles: ["approver"],
       allowedSubsidiaryIds: null,
-      includeBudgets: true,
-    });
-    const byId = new Map(items.map((item) => [item.id, item]));
-    const row = byId.get(pendingId);
-    assert.equal(row?.kind, "budget", "gateless pending budget must appear");
-    if (row?.kind === "budget") {
-      assert.equal(row.budget.name, "FY2026 operating");
-      assert.equal(row.budget.total, "140000.0000");
-    }
-    assert.equal(byId.get(draftId)?.kind, undefined, "draft budgets must not appear");
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
-      roles: ["approver"], allowedSubsidiaryIds: null, includeBudgets: true,
-    }), 1);
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
-      roles: ["approver"], allowedSubsidiaryIds: null, includeBudgets: true, includeFlows: false,
-    }), 1, "the budgets grant independently admits the gateless budget leg");
-
-    // Without the budgets grant the leg stays out of the worklist.
-    const unscoped = await worklistApprovals(org.orgId, actors.approver1Id, {
-      roles: ["approver"],
-      allowedSubsidiaryIds: null,
-    });
-    assert.ok(!unscoped.some((item) => item.kind === "budget"), "budget leg needs includeBudgets");
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
-      roles: ["approver"], allowedSubsidiaryIds: null,
-    }), 0);
-
-    // The submitter cannot approve their own budget.
-    const own = await worklistApprovals(org.orgId, actors.submitterId, {
-      roles: ["accountant"],
-      allowedSubsidiaryIds: null,
-      includeBudgets: true,
-    });
-    assert.ok(!own.some((item) => item.id === pendingId), "submitter must not see their own budget");
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.submitterId, {
-      roles: ["accountant"], allowedSubsidiaryIds: null, includeBudgets: true,
-    }), 0);
-
-    // A gated budget rides its gate, never a second budget row.
-    const { flowId } = await seedApprovalFlow(org.orgId, {
-      subjectKind: "budget_scenario",
-      assignees: [{ type: "user", userId: actors.approver1Id }],
-      mode: "any",
-    });
-    const runId = randomUUID();
-    await db.execute(sql`
-      insert into flow_runs
-        (id, org_id, flow_id, subject_kind, subject_id, trigger, status, context,
-         started_at, created_at, updated_at)
-      values (${runId}, ${org.orgId}, ${flowId}, 'budget_scenario', ${pendingId}, 'manual',
-              'waiting', '{}'::jsonb, now(), now(), now())`);
-    await db.execute(sql`
-      insert into flow_gates
-        (org_id, flow_id, run_id, node_id, subject_kind, subject_id, title,
-         assignee_user_id, group_key, status, created_at, updated_at)
-      values (${org.orgId}, ${flowId}, ${runId}, 'gate', 'budget_scenario', ${pendingId},
-              'Budget approval', ${actors.approver1Id}, 'g1', 'pending', now(), now())`);
-    const rerouted = await worklistApprovals(org.orgId, actors.approver1Id, {
-      roles: ["approver"],
-      allowedSubsidiaryIds: null,
-      includeBudgets: true,
-    });
-    const dupes = rerouted.filter((item) => item.id === pendingId || (item.kind === "flow_gate" && item.gate.subjectId === pendingId));
-    assert.equal(dupes.length, 1, "gated budget must appear exactly once");
-    assert.equal(dupes[0]?.kind, "flow_gate", "gated budget must appear through its gate");
-    assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
-      roles: ["approver"], allowedSubsidiaryIds: null, includeBudgets: true,
-    }), 1, "a routed budget is counted only through its live gate");
-  } finally {
+    };
+      const zero = await seedBudget(
+        org.orgId,
+        org.bookId,
+        org.periodId,
+        org.accounts.revenue,
+        actors.submitterId,
+        "Immediate operating budget",
+      );
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from budget_scenarios where org_id=${org.orgId} and id=${zero}`,
+          )
+        ).rows[0]?.status,
+        "approved",
+      );
+      assert.equal(
+        await assertCountMatchesWorklist(org.orgId, actors.approver1Id, scope),
+        0,
+      );
+      for (let i = 0; i < 2; i++)
+        await seedApprovalFlow(org.orgId, {
+          subjectKind: "budget_scenario",
+          assignees: [{ type: "user", userId: actors.approver1Id }],
+          mode: "all",
+        });
+      const id = await seedBudget(
+        org.orgId,
+        org.bookId,
+        org.periodId,
+        org.accounts.revenue,
+        actors.submitterId,
+        "Reviewed operating budget",
+      );
+      const items = await worklistApprovals(
+        org.orgId,
+        actors.approver1Id,
+        scope,
+      );
+      assert.equal(items.length, 2);
+      assert.ok(items.every((item) => item.gate.subjectId === id));
+      assert.equal(
+        await assertCountMatchesWorklist(org.orgId, actors.approver1Id, scope),
+        2,
+      );
+      assert.equal(
+        await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
+          ...scope,
+          includeFlows: false,
+        }),
+        0,
+      );
+      await decideGate({
+        gateId: items[0]!.id,
+        userId: actors.approver1Id,
+        decision: "approved",
+      });
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from budget_scenarios where org_id=${org.orgId} and id=${id}`,
+          )
+        ).rows[0]?.status,
+        "pending_approval",
+      );
+      assert.equal(
+        await assertCountMatchesWorklist(org.orgId, actors.approver1Id, scope),
+        1,
+      );
+      await decideGate({
+        gateId: items[1]!.id,
+        userId: actors.approver1Id,
+        decision: "approved",
+      });
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`select status from budget_scenarios where org_id=${org.orgId} and id=${id}`,
+          )
+        ).rows[0]?.status,
+        "approved",
+      );
+      assert.equal(
+        await assertCountMatchesWorklist(org.orgId, actors.approver1Id, scope),
+        0,
+      );
+    } finally {
     await dropScratchOrg(org.orgId);
   }
-});
+  },
+);
 
-test("inbox text search matches non-document subject labels", { skip: !DB }, async () => {
-  await assertDedicatedFixtureDatabase();
-  const org = await createScratchOrg();
-  function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> { return withBypassContext(() => db.transaction(work)); }
-  try {
-    const actors = await seedFlowActors(org.orgId);
-    await seedApprovalFlow(org.orgId, {
+test(
+  "inbox text search matches non-document subject labels",
+  { skip: !DB },
+  async () => {
+    await assertDedicatedFixtureDatabase();
+    const org = await createScratchOrg();
+    function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+      return withOrgTransaction(org.orgId,()=>work(db));
+    }
+    try {
+      const actors = await seedFlowActors(org.orgId);
+      await seedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
     });
-    const gatedId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId, number: "VB-SEARCH-1" });
-    const submitted = await submitForApproval("vendor_bill", gatedId);
-    assert.equal(submitted.gated, true);
-    // A pending recipe revision for FG-GUJI through its own approval flow.
-    await withBypassContext(async () => {
+      const gatedId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId, number: "VB-SEARCH-1" });
+      const submitted = await submitForApproval(
+        "vendor_bill",
+        gatedId,
+        actors.submitterId,
+      );
+      assert.equal(submitted.gated, true);
+      await grantScratchPermissions(org.orgId,actors.approver1Id,['manufacturing.manage']);
+      // A pending recipe revision for FG-GUJI through its own approval flow.
+      await withBypassContext(async () => {
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb) where id=${org.orgId}`);
       await db.execute(sql`update items set code='FG-GUJI', name='Guji Widget' where org_id=${org.orgId} and id=${org.items.assembly}`);
     });
-    const maker = await withBypassContext(() => createManufacturingOperator(org.orgId, "Shop lead"));
-    await withBypassContext(() => seedApprovalFlow(org.orgId, {
+      const maker = await withBypassContext(() => createManufacturingOperator(org.orgId, "Shop lead"));
+      await withBypassContext(() => seedApprovalFlow(org.orgId, {
       subjectKind: "financial_change",
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
     }));
-    await run((tx) => businessTodayInTx(tx, org.orgId));
-    const version = await run((tx) => readBomPolicyVersion(tx, org.orgId, org.items.assembly));
-    const proposal = await run((tx) => saveBomPolicy(tx, org.orgId, maker, {
+      await run((tx) => businessTodayInTx(tx, org.orgId));
+      const version = await run((tx) => readBomPolicyVersion(tx, org.orgId, org.items.assembly));
+      const proposal = await run((tx) => saveBomPolicy(tx, org.orgId, maker, {
       assemblyItemId: org.items.assembly, expectedVersion: version, reason: "Approve the next material requirement",
       subsidiaryId: org.subsidiaryId, requestKey: randomUUID(),
       components: [{ componentItemId: org.items.component, quantityPer: "2", effectiveFrom: null, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false }],
     }));
-    assert.ok("changeId" in proposal);
-    await withBypassContext(() => submitBomRevision(org.orgId, maker, proposal.changeId as string));
-    const scope: WorklistPageScope = { roles: ["approver"], allowedSubsidiaryIds: null };
-    // By assembly SKU.
-    let page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "FG-GUJI" });
-    const bomGate = (items: typeof page.items) => items.find((item) => item.kind === "flow_gate" && item.gate.subjectKind === "financial_change");
-    assert.ok(bomGate(page.items), "a pending recipe revision is found by its assembly SKU");
-    assert.equal(page.total, 1, "the SKU search counts exactly the matching gate");
-    const hit = bomGate(page.items);
-    assert.equal(hit?.kind === "flow_gate" ? hit.gate.subjectLabel : null, "FG-GUJI — Guji Widget");
-    // By item name, case-insensitively.
-    page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "guji widget" });
-    assert.ok(bomGate(page.items), "a pending recipe revision is found by its item name");
-    assert.equal(page.total, 1);
-    // A document gate is still found by its number, without the recipe gate.
-    page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "vb-search-1" });
-    assert.ok(page.items.some((item) => item.kind === "flow_gate" && item.gate.subjectId === gatedId), "a document gate is found by its number");
-    assert.ok(!bomGate(page.items), "the recipe revision does not match the document number");
-    // A non-matching query returns nothing on rows and counts alike.
-    page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "no-such-subject-zzz" });
-    assert.deepEqual(page.items, []);
-    assert.equal(page.total, 0);
-    // The unfiltered union still carries both gates.
-    page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0 });
-    assert.equal(page.total, 2);
-    assert.ok(bomGate(page.items) && page.items.some((item) => item.kind === "flow_gate" && item.gate.subjectId === gatedId));
-  } finally {
+      assert.ok("changeId" in proposal);
+      await withBypassContext(() => submitBomRevision(org.orgId, maker, proposal.changeId as string));
+      const scope: WorklistPageScope = { roles: ["approver"], allowedSubsidiaryIds: null };
+      // By assembly SKU.
+      let page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "FG-GUJI" });
+      const bomGate = (items: typeof page.items) => items.find((item) => item.kind === "flow_gate" && item.gate.subjectKind === "financial_change");
+      assert.ok(bomGate(page.items), "a pending recipe revision is found by its assembly SKU");
+      assert.equal(page.total, 1, "the SKU search counts exactly the matching gate");
+      const hit = bomGate(page.items);
+      assert.equal(hit?.kind === "flow_gate" ? hit.gate.subjectLabel : null, "FG-GUJI — Guji Widget");
+      // By item name, case-insensitively.
+      page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "guji widget" });
+      assert.ok(bomGate(page.items), "a pending recipe revision is found by its item name");
+      assert.equal(page.total, 1);
+      // A document gate is still found by its number, without the recipe gate.
+      page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "vb-search-1" });
+      assert.ok(page.items.some((item) => item.kind === "flow_gate" && item.gate.subjectId === gatedId), "a document gate is found by its number");
+      assert.ok(!bomGate(page.items), "the recipe revision does not match the document number");
+      // A non-matching query returns nothing on rows and counts alike.
+      page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0, query: "no-such-subject-zzz" });
+      assert.deepEqual(page.items, []);
+      assert.equal(page.total, 0);
+      // The unfiltered union still carries both gates.
+      page = await worklistApprovalsPage(org.orgId, actors.approver1Id, scope, { limit: 25, offset: 0 });
+      assert.equal(page.total, 2);
+      assert.ok(bomGate(page.items) && page.items.some((item) => item.kind === "flow_gate" && item.gate.subjectId === gatedId));
+    } finally {
     await dropScratchOrg(org.orgId);
   }
-});
+  },
+);

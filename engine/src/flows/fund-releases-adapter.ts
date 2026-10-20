@@ -1,8 +1,15 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
-import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
-import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
+import {
+  BUILT_IN_ROLE_NAMES,
+  EVENT_SOURCE_OPTIONS,
+} from "./subject-profiles.ts";
+import type {
+  FlowExecCtx,
+  FlowSubjectAdapter,
+  FlowSubjectContext,
+} from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 
 export const FUND_RELEASE_SUBJECT_KIND = "fund_release";
@@ -25,13 +32,22 @@ export const fundReleaseSubjectProfile: FlowSubjectProfile = {
     { key: "releaseNumber", label: "Release number", type: "text" },
     { key: "releaseDate", label: "Release date", type: "text" },
     { key: "fromFundCode", label: "From fund", type: "text" },
-    { key: "fromRestrictionClass", label: "From restriction class", type: "text" },
+    {
+      key: "fromRestrictionClass",
+      label: "From restriction class",
+      type: "text",
+    },
     { key: "toFundCode", label: "To fund", type: "text" },
     { key: "toRestrictionClass", label: "To restriction class", type: "text" },
     { key: "amount", label: "Amount", type: "number" },
     { key: "purpose", label: "Purpose", type: "text" },
     { key: "satisfactionRef", label: "Satisfaction reference", type: "text" },
-    { key: "status", label: "Status", type: "enum", options: [...FUND_RELEASE_STATUSES] },
+    {
+      key: "status",
+      label: "Status",
+      type: "enum",
+      options: [...FUND_RELEASE_STATUSES],
+    },
     {
       key: "event_source",
       label: "Event source",
@@ -60,8 +76,11 @@ interface FundReleaseFlowRow extends Record<string, unknown> {
   to_class: string;
 }
 
-async function loadRelease(subjectId: string): Promise<FundReleaseFlowRow | null> {
-  const row = (await db.execute<FundReleaseFlowRow>(sql`
+async function loadRelease(
+  subjectId: string,
+): Promise<FundReleaseFlowRow | null> {
+  const row = (
+    await db.execute<FundReleaseFlowRow>(sql`
     select r.org_id, r.release_number, r.release_date::text, r.amount::text,
            r.purpose, r.satisfaction_ref, r.status,
            r.submitted_by::text, r.created_by::text,
@@ -75,18 +94,22 @@ async function loadRelease(subjectId: string): Promise<FundReleaseFlowRow | null
       join funds to_fund on to_fund.org_id = r.org_id and to_fund.id = r.to_fund_id
       join segment_values to_value on to_value.org_id = r.org_id and to_value.id = to_fund.id
      where r.id = ${subjectId}
-  `)).rows[0];
+  `)
+  ).rows[0];
   return row ?? null;
 }
 
 export const fundReleasesFlowAdapter: FlowSubjectAdapter = {
   subjectKind: FUND_RELEASE_SUBJECT_KIND,
   // Releases post at the primary book's root and carry no subsidiary.
-  permissions: { read: "funds.read", edit: "funds.manage", approve: "funds.manage" },
+  permissions: {
+    read: "funds.read",
+    edit: "funds.manage",
+    approve: "funds.manage",
+  },
   scope: { via: "none" },
   profile: fundReleaseSubjectProfile,
   writableFields: new Set<string>(),
-  selfApprovalPolicy: "configurable",
   releaseViaHandler: true,
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
@@ -129,7 +152,9 @@ export const fundReleasesFlowAdapter: FlowSubjectAdapter = {
   },
 
   async changeStatus(): Promise<void> {
-    throw new Error("fund release status is changed by the release approval lifecycle");
+    throw new Error(
+      "fund release status is changed by the release approval lifecycle",
+    );
   },
 
   async releaseApproval(
@@ -158,12 +183,14 @@ export const fundReleasesFlowAdapter: FlowSubjectAdapter = {
         `findCandidateIds for "${FUND_RELEASE_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
       );
     }
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = (
+      await db.execute<{ id: string }>(sql`
       select id::text as id from fund_releases
        where org_id = ${orgId} and status = 'pending_approval'
        order by submitted_at desc, id
        limit ${limit}
-    `)).rows;
+    `)
+    ).rows;
     return rows.map((row) => row.id);
   },
 };

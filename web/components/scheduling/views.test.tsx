@@ -394,7 +394,7 @@ test('a managed shift roster adds its Roster tools, attendance badges and public
   const draft = { ...people.entries[1]!, id: 'aa010000-0000-4000-8000-000000000009', status: 'draft' as const }
   const roster = {
     ...people,
-    board: { ...people.board, boardType: 'shift_roster', publishPolicy: 'governed' as const, governedFrom: people.from },
+    board: { ...people.board, boardType: 'shift_roster', publishPolicy: 'staged' as const },
     entries: [{ ...people.entries[0]!, governed: true, attendance: { status: 'present' as const, late: true, leftEarly: false, overBreak: false } }, draft],
     pendingPublication: { id: 'aa010000-0000-4000-8000-000000000010', createdAt: `${people.from}T12:00:00Z`, flowGated: true, entryIds: [draft.id] },
     canManage: true,

@@ -3320,15 +3320,11 @@
       "title": "Genehmigungskontrollen",
       "openFlows": "Flows öffnen",
       "hint": "Flows wendet die konfigurierten Genehmigungsstufen und Bedingungen für dieses Programm an.",
-      "unconfigured": "Keine Genehmigungsrichtlinie für Leistungen konfiguriert. Konfigurieren Sie Flows vor dem Einreichen von Prämien.",
+      "unconfigured": "Kein Leistungs-Flow ist aktiviert. Gültige Prämieneinreichungen werden sofort ohne Genehmiger freigegeben.",
       "policiesHint": "Aktive Richtlinien werden beim Einreichen einer Prämie ausgewertet.",
       "openApprovals": "Genehmigungen öffnen",
       "administratorRemedy": "Bitten Sie den Workflow-Administrator Ihres Unternehmens, Genehmigungsrichtlinien zu konfigurieren oder zu ändern.",
-      "unconfiguredStatus": "Keine Genehmigungsrichtlinie für Leistungen konfiguriert.",
-      "modes": {
-        "none": "Keine Genehmigungen erforderlich",
-        "flows": "Genehmigungen über Flows"
-      },
+      "unconfiguredStatus": "Kein Leistungs-Flow ist aktiviert. Gültige Prämieneinreichungen werden sofort ohne Genehmiger freigegeben.",
       "noneHint": "Autorisierte Einreichungen werden für die Lohnabrechnung bereitgestellt. Eine Workflow-Konfiguration oder genehmigende Person ist nicht erforderlich."
     },
     "externalPayrollProcessed": "In der Gehaltsabrechnung verarbeitet · Erfüllung ausstehend",
