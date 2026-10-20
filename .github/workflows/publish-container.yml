@@ -216,7 +216,7 @@ jobs:
             engine/src/ledger/document-subledger.integration.test.ts
             web/lib/assistant/tools-orders.integration.test.ts
             engine/src/provisioning/built-in-role-seed.integration.test.ts
-            engine/src/sync/netsuite-fixed-assets-history.integration.test.ts
+            engine/src/sync/source-managed-assets-history.integration.test.ts
           )
           # Batch-specific native controls run against this same source and
           # database, alongside the mandatory financial release controls.
