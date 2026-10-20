@@ -66,6 +66,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          # Inspect the publishable branch history. GitHub's temporary PR
+          # merge identity is generated from the actor's profile and is not
+          # part of the source history that will be published.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - name: Reject private-data provenance in reachable history
         run: npm run check:history-hygiene

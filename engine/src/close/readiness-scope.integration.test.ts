@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../platform/db.ts";
+import { db } from "../platform/db.ts";
 import {requestCloseApproval} from "./approvals.ts";
 import {updateCloseTask} from "./tasks.ts";
 import {seedApprovalFlow} from "../testing/fixtures.ts";

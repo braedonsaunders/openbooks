@@ -399,20 +399,23 @@ type FinancialChangeSubmission = (
   changeId: string,
   actorId: string,
 ) => Promise<void>;
-let financialChangeSubmission: FinancialChangeSubmission | null = null;
+const financialChangeComposition = globalThis as typeof globalThis & {
+  __openbooksFinancialChangeSubmission?: FinancialChangeSubmission;
+};
 export function registerFinancialChangeSubmission(
   handler: FinancialChangeSubmission,
 ): void {
-  financialChangeSubmission = handler;
+  financialChangeComposition.__openbooksFinancialChangeSubmission = handler;
 }
 export async function submitNativeFinancialChange(
   orgId: string,
   changeId: string,
   actorId: string,
 ): Promise<void> {
-  if (!financialChangeSubmission)
+  const handler = financialChangeComposition.__openbooksFinancialChangeSubmission;
+  if (!handler)
     throw new FinancialChangeConflictError(
       "Native Flow submission is unavailable; retry after the application starts.",
     );
-  await financialChangeSubmission(orgId, changeId, actorId);
+  await handler(orgId, changeId, actorId);
 }

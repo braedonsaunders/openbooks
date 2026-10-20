@@ -9,7 +9,7 @@ import { ManufacturingError } from "./errors.ts";
 import { createScratchOrg, dropScratchOrg, seedApprovalFlow, type ScratchOrg } from "../testing/fixtures.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
 import { decideGate } from "../flows/gates.ts";
-import { MANUFACTURING_BOM_APPROVAL_OPERATION, proposeFinancialChange } from "../platform/financial-changes.ts";
+
 import { createWorkCenter } from "./work-centers.ts";
 import {
   activateRouting,

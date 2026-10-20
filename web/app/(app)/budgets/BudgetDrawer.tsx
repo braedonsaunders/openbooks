@@ -17,7 +17,7 @@ import { Pagination } from '../../../components/pagination'
 import { mergeHref } from '../../../lib/list-params'
 import { readApiErrorMessage, refusalMessageFromBody } from '../../../lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
-import { promptDialog } from '@/lib/prompt'
+
 import { budgetFromUnits, budgetToUnits, spreadBudgetTotal, upliftBudgetAmount } from '../../../lib/budget-math'
 import type { BudgetDimensions, BudgetStatus, BudgetWorkspace } from '../../../lib/budgets'
 import { ReadOnlyValue } from '../../../components/read-only-value'

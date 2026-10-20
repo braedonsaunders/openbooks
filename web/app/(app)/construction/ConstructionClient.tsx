@@ -326,7 +326,6 @@ export function ApplicationsBillingWorkspace({
               defaultIncomeAccountId={data.defaultIncomeAccountId}
               onChange={post}
               canCreate={canCreate}
-              canApprove={canApprove}
               busy={busy}
               approvalBlocked={data.payApplications.some((app) => app.status === "draft" || app.status === "submitted" || app.status === "approved")}
             />
@@ -632,7 +631,6 @@ function ChangeOrdersSection({
   defaultIncomeAccountId,
   onChange,
   canCreate,
-  canApprove,
   busy,
   approvalBlocked,
 }: {
@@ -643,7 +641,6 @@ function ChangeOrdersSection({
   defaultIncomeAccountId: string | null;
   onChange: (payload: Record<string, unknown>) => Promise<unknown>;
   canCreate: boolean;
-  canApprove: boolean;
   busy: boolean;
   /** An open application blocks change-order approval server-side. */
   approvalBlocked: boolean;

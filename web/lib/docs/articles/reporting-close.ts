@@ -310,7 +310,7 @@ every governing gate must finish before the run is released. An unresolved
 assignee or failed Flow refuses submission with its cause. Each gate's submitted
 separation policy determines whether the initiator can decide an assigned gate.
 
-Every approval is tied to the validated ledger fingerprint. If ledger data changes
+Every approval is tied to the validated ledger fingerprint and retained manual evidence. If ledger data changes
 while review is pending or after final approval, open gates are cancelled, prior
 sign-off is invalidated, and the run returns to review. Revalidate the close,
 repeat affected work, and request a new approval round.
@@ -338,14 +338,15 @@ restatement, and a note is required.
 ## Reopen carefully
 
 Reopening is a controlled exception requiring the appropriate permission and
-business reason. A reopen is requested on the period in **Settings → Setup →
-Close** and decided by someone else who holds the reopen permission: the
-requester can never approve their own request. An approver rejects a request with
-a recorded reason, and the requester withdraws their own pending request with a
-reason, which is recorded as withdrawn rather than rejected. Approvers find pending requests
-in their **Inbox** under My tasks and at **Accounting → Reopen Requests**, which
-needs only the reopen permission. Because a reopen affects the whole
-organization's close, the approver's role must cover every subsidiary.
+business reason. File a request from the period in **Settings → Setup → Close**
+or **Accounting → Reopen Requests**, choose its bounded access window, and
+submit it through Flows. With zero applicable gates, the native command opens
+the requested scope immediately; otherwise every governing gate must complete.
+The submitted window and policy remain frozen, including each gate’s choice
+about self-approval. Rejection and withdrawal retain their reason and history.
+Reviewers use the assigned gates on the request or in Approvals. Every actor
+must hold the reopen permission and cover the request’s legal-entity scope;
+an organization-wide request requires access to every subsidiary.
 
 Identify every report, reconciliation, downstream period, and
 stakeholder affected. Make the correction through the governed transaction path,

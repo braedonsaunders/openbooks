@@ -305,7 +305,7 @@ export async function recordRebateSettlementDocument(
   claimId: string,
   documentId: string,
 ) {
-  const { claim, agreement: owningAgreement } = await rebateClaimContext(db,orgId,actorId,claimId);
+  const { claim } = await rebateClaimContext(db,orgId,actorId,claimId);
   if (claim.status!=='approved') throw new RebateError('Only an approved claim can create a settlement document');
   if (!(await db.execute(sql`update rebate_claims set status='document_pending',settlement_document_id=${documentId},updated_by=${actorId},updated_at=now()
     where org_id=${orgId} and id=${claimId} and status='approved' returning id`)).rows[0]) throw new RebateError('Settlement document could not be linked');
@@ -448,7 +448,7 @@ export async function cancelRebateClaim(
   if(reason.trim().length<8) throw new RebateError('Enter a cancellation reason');
   return withOrg(orgId, async () => {
     await lockLedgerSetupFence(db,orgId,'shared');
-    const { claim, agreement: owningAgreement } = await rebateClaimContext(db,orgId,actorId,id);
+    const { claim } = await rebateClaimContext(db,orgId,actorId,id);
     if(!['draft','approved'].includes(claim.status)||claim.settlement_document_id) throw new RebateError('Void or reverse the linked settlement before cancelling this claim');
     if(!(await db.execute(sql`update rebate_claims set status='cancelled',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and status in ('draft','approved') returning id`)).rows[0]) throw new RebateError('Claim cancellation could not be saved');
     await audit(db,orgId,actorId,'rebate_claims',id,'cancel',reason,claim,{status:'cancelled'});

@@ -55,7 +55,7 @@ registerScopedHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
+const { createScratchOrg, dropScratchOrg } = await import(
   "@openbooks/engine/testing/fixtures"
 );
 const { loadApprovals } = await import("./view.ts");

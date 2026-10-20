@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-// The drawer is the only place in the app that files an exception, and since
-// requests file as pending, it must also be the place that approves them: a
-// pending row carries a Pending approval badge, a waive-holder who did not
-// request it gets an Approve action, the requester does not, and a refused
-// approval pins the server's message to its row.
+// Exception decisions use the tenant Flow's record state and gate endpoint.
+// The drawer must never infer approval authority from the waiver permission
+// or from whether the viewer is the requester.
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
@@ -49,7 +47,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const settleTabs = () => new Promise((resolve) => setTimeout(resolve, 800));
 
 const REQUESTER = "00000000-0000-4000-8000-000000000011";
-const APPROVER = "00000000-0000-4000-8000-000000000022";
+const GATE_ID = "00000000-0000-4000-8000-000000000022";
 const EXCEPTION_ID = "00000000-0000-4000-8000-000000000033";
 
 function pendingException() {
@@ -92,7 +90,19 @@ function drawerData() {
   };
 }
 
-const patchCalls: { url: string; body: unknown }[] = [];
+const decisionCalls: { url: string; body: unknown }[] = [];
+
+function approvalState(canDecide: boolean) {
+  return {
+    approvalState: {
+      status: "pending_approval",
+      pendingWith: [{ name: "Assigned reviewer", gateId: GATE_ID, since: "2026-07-01T12:00:00.000Z" }],
+      myActions: canDecide ? { gateId: GATE_ID, signatureRequired: false } : null,
+    },
+    history: [], failedRun: null, neverSubmitted: false,
+    canRetry: false, submittedByViewer: false,
+  };
+}
 
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
@@ -105,7 +115,7 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
   };
 }
 
-async function mountExceptions(currentUserId: string) {
+async function mountExceptions() {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -120,7 +130,6 @@ async function mountExceptions(currentUserId: string) {
             canManage={false}
             canVerify={false}
             canWaive={true}
-            currentUserId={currentUserId}
           />
         </BusinessDateProvider>
       </NextIntlClientProvider>,
@@ -164,76 +173,54 @@ async function click(button: HTMLButtonElement) {
   await settleTabs();
 }
 
-test("a pending exception shows Approve to a second user but not to the requester", async () => {
-  const restoreFetch = scriptFetch(() => null);
+test("a waiver permission alone cannot approve an exception without an assigned Flow gate", async () => {
+  const restoreFetch = scriptFetch((url) => url.startsWith('/api/flows/record-state?') ? Response.json(approvalState(false)) : null);
   try {
-    const requester = await mountExceptions(REQUESTER);
+    const view = await mountExceptions();
     try {
-      assert.ok(
-        document.body.textContent?.includes("Pending approval"),
-        "the requester sees the pending badge",
-      );
-      assert.deepEqual(buttonsNamed("Approve"), [], "the requester gets no Approve action");
-    } finally {
-      await requester.unmount();
-    }
-    const approver = await mountExceptions(APPROVER);
-    try {
-      assert.ok(
-        document.body.textContent?.includes("Pending approval"),
-        "the approver sees the pending badge",
-      );
-      assert.equal(buttonsNamed("Approve").length, 1, "a second user gets the Approve action");
-    } finally {
-      await approver.unmount();
-    }
-  } finally {
-    restoreFetch();
-  }
+      assert.ok(document.body.textContent?.includes("Pending approval"));
+      assert.deepEqual(buttonsNamed("Approve"), []);
+      assert.ok(document.body.textContent?.includes("Assigned reviewer"));
+    } finally { await view.unmount(); }
+  } finally { restoreFetch(); }
 });
 
-test("approving sends the approve transition for that exception", async () => {
-  patchCalls.length = 0;
+test("an assigned exception reviewer decides the exact Flow gate", async () => {
+  decisionCalls.length = 0;
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/compliance/waivers/${EXCEPTION_ID}` && init?.method === "PATCH") {
-      patchCalls.push({ url, body: JSON.parse(String(init.body)) });
-      return Response.json({ id: EXCEPTION_ID, status: "approved" });
+    if (url.startsWith('/api/flows/record-state?')) return Response.json(approvalState(true));
+    if (init?.method && init.method !== 'GET') {
+      decisionCalls.push({ url, body: JSON.parse(String(init.body)) });
+      return Response.json({ resumed: null });
     }
     return null;
   });
   try {
-    const view = await mountExceptions(APPROVER);
+    const view = await mountExceptions();
     try {
+      assert.equal(buttonsNamed("Approve").length, 1);
       await click(buttonsNamed("Approve")[0]!);
-      assert.equal(patchCalls.length, 1, "one approve transition is sent");
-      assert.deepEqual(patchCalls[0]!.body, { action: "approve" });
-    } finally {
-      await view.unmount();
-    }
-  } finally {
-    restoreFetch();
-  }
+      assert.deepEqual(decisionCalls, [{
+        url: '/api/flows/gates/decide',
+        body: { gateId: GATE_ID, decision: 'approved' },
+      }]);
+    } finally { await view.unmount(); }
+  } finally { restoreFetch(); }
 });
 
-test("a refused approval pins the server message to its row", async () => {
+test("a refused Flow decision keeps its actionable message beside the exception", async () => {
   const restoreFetch = scriptFetch((url, init) => {
-    if (url === `/api/compliance/waivers/${EXCEPTION_ID}` && init?.method === "PATCH") {
-      return Response.json({ error: "not found or already decided" }, { status: 404 });
+    if (url.startsWith('/api/flows/record-state?')) return Response.json(approvalState(true));
+    if (url === '/api/flows/gates/decide' && init?.method === 'POST') {
+      return Response.json({ error: 'This gate was already decided; refresh the exception.' }, { status: 409 });
     }
     return null;
   });
   try {
-    const view = await mountExceptions(APPROVER);
+    const view = await mountExceptions();
     try {
       await click(buttonsNamed("Approve")[0]!);
-      assert.ok(
-        document.body.textContent?.includes("not found or already decided"),
-        "the refusal is pinned to the row",
-      );
-    } finally {
-      await view.unmount();
-    }
-  } finally {
-    restoreFetch();
-  }
+      assert.ok(view.host.textContent?.includes('This gate was already decided; refresh the exception.'));
+    } finally { await view.unmount(); }
+  } finally { restoreFetch(); }
 });

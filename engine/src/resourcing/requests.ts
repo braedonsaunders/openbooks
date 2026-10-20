@@ -21,8 +21,6 @@ import { assertSundayWindow, weeksBetween } from "./weeks.ts";
 
 type RequestRow = typeof resRequests.$inferSelect;
 type RequestWriteRow = RequestRow & Record<string, unknown>;
-type RequestIdWriteRow = { id: string } & Record<string, unknown>;
-type RequestGateWriteRow = { id: string; status: string } & Record<string, unknown>;
 type RequestAuditLogWriteRow = { row_id: string } & Record<string, unknown>;
 type RequestAuditRow = { id: string } & Record<string, unknown>;
 type RequestTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];

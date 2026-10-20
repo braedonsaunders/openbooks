@@ -12,7 +12,7 @@ import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./type
 import { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
 import { DOCUMENT_FLOW_KINDS } from "./subject-profiles.ts";
 import { resolveSubjectSubsidiaries, subjectSubsidiarySql } from "./subject-scope.ts";
-import { CLOSE_RUN_SUBJECT_KIND, closeRunsFlowAdapter } from "./close-runs-adapter.ts";
+import { CLOSE_RUN_SUBJECT_KIND } from "./close-runs-adapter.ts";
 import { canonicalPeriodLabelSql } from "../periods/period-policy.ts";
 import { MANUFACTURING_BOM_APPROVAL_OPERATION, MANUFACTURING_LOSS_DISPOSITION_OPERATION, MANUFACTURING_ROUTING_APPROVAL_OPERATION, MANUFACTURING_SCRAP_RESTATEMENT_OPERATION, MANUFACTURING_STANDARD_ROLLUP_OPERATION } from "../platform/financial-changes.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -31,7 +31,7 @@ import { emailActionUrls } from "./email-tokens.ts";
 import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { resolveApprovalRequestNotices } from "./approval-notices.ts";
 import { sanitizeDecisionCause } from "./decision-cause.ts";
-import { sodBlockedIds } from "./sod.ts";
+
 
 export { sodBlockedIds } from "./sod.ts";
 

@@ -91,7 +91,6 @@ export function VendorComplianceDrawer({
   canManage,
   canVerify,
   canWaive,
-  currentUserId,
 }: {
   data: VendorDrawerData
   closeHref: string
@@ -99,7 +98,6 @@ export function VendorComplianceDrawer({
   canManage: boolean
   canVerify: boolean
   canWaive: boolean
-  currentUserId: string
 }) {
   const t = useTranslations('compliance')
   const router = useRouter()
@@ -107,7 +105,6 @@ export function VendorComplianceDrawer({
   const [tab, setTab] = useState<Tab>('certificates')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [rowError, setRowError] = useState<Record<string, string>>({})
   const [pending, startTransition] = useTransition()
   const [newCert, setNewCert] = useState({
     requirementId: '',
@@ -252,34 +249,6 @@ export function VendorComplianceDrawer({
       // reads the cleared form as coverage.
       setNotice(t('exceptions.requestFiled'))
     }
-  }
-
-  async function approveException(id: string) {
-    setRowError((prev) => {
-      const next = { ...prev }
-      delete next[id]
-      return next
-    })
-    const res = await fetch(`/api/compliance/waivers/${id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'approve' }),
-    })
-    if (!res.ok) {
-      // The refusal belongs to the row it refused — a request decided
-      // elsewhere while this screen was open reads the server's reason
-      // here, pinned to its row, rather than as a detached toast.
-      setRowError((prev) => {
-        const next = { ...prev }
-        delete next[id]
-        return next
-      })
-      void readApiErrorMessage(res, t('errors.saveFailed')).then((message) =>
-        setRowError((prev) => ({ ...prev, [id]: message })),
-      )
-      return
-    }
-    startTransition(() => router.refresh())
   }
 
   async function revokeException(id: string) {
@@ -870,7 +839,6 @@ export function VendorComplianceDrawer({
               <ul className="space-y-2">
                 {data.exceptions.map((row) => {
                   const isPending = row.status === 'pending_approval'
-                  const mayApprove = canWaive && isPending
                   return (
                     <li
                       key={row.id}
@@ -896,27 +864,13 @@ export function VendorComplianceDrawer({
                           {row.projectName ? ` · ${row.projectName}` : ''}
                           {row.approvedByName ? ` · ${row.approvedByName}` : ''}
                         </p>
-                        {rowError[row.id] ? (
-                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-                            {rowError[row.id]}
-                          </p>
-                        ) : null}
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        {mayApprove ? (
-                          <>
-                            <ApprovalActions
-                              subjectKind="compliance_waiver"
-                              subjectId={row.id}
-                            />
-                            <Button
-                              size="sm"
-                              disabled={pending}
-                              onClick={() => approveException(row.id)}
-                            >
-                              {t('exceptions.approve')}
-                            </Button>
-                          </>
+                        {isPending ? (
+                          <ApprovalActions
+                            subjectKind="compliance_waiver"
+                            subjectId={row.id}
+                          />
                         ) : null}
                         {canWaive ? (
                           <Button

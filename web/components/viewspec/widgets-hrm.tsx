@@ -758,20 +758,14 @@ export const HRM_WIDGETS = {
       />
     )
   },
-  /** One headcount plan line's approve button: the island itself renders
-   *  nothing unless the line is proposed; null labels (readers) render
-   *  nothing. The approve endpoint owns the grant and the transition. */
+  /** Only compensation managers can submit a proposed line to its tenant Flow. */
   'hrm-plan-line-approve': (props) => {
-    const approve = props.approve as
-      | (ComponentProps<typeof PlanLineApproveButton>['labels'] & { approve: string })
-      | null
-    if (!approve) return null
+    if (props.approve !== true) return null
     return (
       <PlanLineApproveButton
         planId={str(props, 'planId') ?? ''}
         lineId={str(props, 'lineId') ?? ''}
         lineStatus={str(props, 'lineStatus') ?? ''}
-        labels={{ failed: approve.failed, submit: approve.submit, cancel: approve.cancel }}
       />
     )
   },

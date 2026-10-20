@@ -6,20 +6,7 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, type SqlExecutor } from "@openbooks/engine/platform/db";
-import {
-  ConstructionBillingError,
-  assertProjectIncomeAccountUsable,
-  approvePayApplication,
-  createPayApplication,
-  generatePayApplicationInvoice,
-  projectRetainageHeldSql,
-  projectDefaultIncomeAccount,
-  releaseRetainage,
-  requireIsoDate,
-  revisedScheduleValue,
-  submitPayApplication,
-  voidPayApplication,
-} from "@openbooks/engine/projects/construction-billing"
+import { ConstructionBillingError, assertProjectIncomeAccountUsable, approvePayApplication, createPayApplication, generatePayApplicationInvoice, projectRetainageHeldSql, projectDefaultIncomeAccount, releaseRetainage, requireIsoDate, submitPayApplication, voidPayApplication } from "@openbooks/engine/projects/construction-billing"
 import { projectBillingHasBegun } from "@openbooks/engine/projects/header-controls";
 import {
   ScopeNotFoundError,
@@ -29,7 +16,7 @@ import {
 import { can, guardSubsidiaryScope } from "../../../lib/authz";
 import { isUuid } from "../../../lib/list-params";
 import { projectCostSummary } from "../../../lib/project-costing";
-import { add, cmp, normalizeMoney, sum, wholeDigits } from "@openbooks/engine/money";
+import { cmp, normalizeMoney, sum, wholeDigits } from "@openbooks/engine/money";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import {
   moneyRefusal,

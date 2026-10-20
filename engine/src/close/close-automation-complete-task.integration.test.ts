@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
 import { addCloseEvidence, updateCloseTask } from "./tasks.ts";
-import { CloseError } from "../periods/period-policy.ts";
+
 import {
   dropScratchOrg, seedApprovalFlow, grantScratchPermissions, seedDraftDocument,
 } from "../testing/fixtures.ts";
@@ -78,13 +78,6 @@ async function taskSignoffCount(h: Harness, taskId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from close_signoffs
      where org_id = ${h.orgId} and run_id = ${h.runId} and task_id = ${taskId}`)).rows[0]!.n;
-}
-
-async function failedExecutionCount(h: Harness, taskId: string): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from close_automation_executions
-     where org_id = ${h.orgId} and run_id = ${h.runId} and task_id = ${taskId}
-       and status = 'failed'`)).rows[0]!.n;
 }
 
 async function insertRule(h: Harness): Promise<void> {
@@ -351,5 +344,22 @@ test("closing refuses changed manual evidence and retains its invalidation witho
     on r.org_id=l.org_id and r.period_id=l.period_id and r.book_id=l.book_id
     where r.org_id=${h.orgId} and r.id=${h.runId} and l.state='closed'`)).rows[0]?.count,0);
   assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${h.orgId} and subject_kind='close_run' and subject_id=${h.runId}`)).rows.length,1,"the earlier decision receipt remains retained");
+ }finally{await dropScratchOrg(h.orgId);}
+});
+
+
+test("period locking follows its current native duty independently from preparation",{skip:!DB},async()=>{
+ const h=await setupCompleteTaskHarness();
+ const {closeApprovedRun}=await import("./run-completion.ts");
+ const {withOrgTransaction}=await import("../platform/db.ts");
+ const {actorHasPermission}=await import("../organization/actor-permissions.ts");
+ try{
+  await requestCloseApproval(h.orgId,h.runId,h.submitterId);
+  await db.execute(sql`update user_permission_overrides set effect='deny' where org_id=${h.orgId} and user_id=${h.submitterId} and permission='close.approve'`);
+  await assert.rejects(closeApprovedRun(h.orgId,h.runId,h.submitterId));
+  assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where org_id=${h.orgId} and id=${h.runId}`)).rows[0]?.status,"approved");
+  assert.equal(await withOrgTransaction(h.orgId,()=>actorHasPermission(db,h.orgId,h.approver1Id,"close.run")),false);
+  await closeApprovedRun(h.orgId,h.runId,h.approver1Id);
+  assert.equal((await db.execute<{status:string;closed_by:string}>(sql`select status,closed_by from close_runs where org_id=${h.orgId} and id=${h.runId}`)).rows[0]?.closed_by,h.approver1Id);
  }finally{await dropScratchOrg(h.orgId);}
 });

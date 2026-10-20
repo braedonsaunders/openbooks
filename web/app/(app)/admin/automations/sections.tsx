@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import type { ComponentProps } from 'react'
+
 import { AutomationRowActions, NewAutomationButton } from './AutomationsClient'
 
 /**

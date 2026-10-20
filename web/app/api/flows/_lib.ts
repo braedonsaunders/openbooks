@@ -10,7 +10,7 @@ import {
 } from '@openbooks/engine/flows/subject-scope'
 import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
-import { canReadFlowSubject,canReadSubjectRecord } from '../../../lib/flow-subject-authz'
+import { canReadSubjectRecord } from '../../../lib/flow-subject-authz'
 import { notFound } from "@/lib/api/responses";
 
 /** Session + Flows feature gate for /api/flows/* (pages already 404 when off). */

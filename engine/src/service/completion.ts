@@ -19,7 +19,7 @@ import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { issueInventory } from "../inventory/movement-issue.ts";
 import { assertNoFieldTimeSourceCollision, lockEmployeeTimeSources } from "../hrm/field-time/source-collision.ts";
 import { FieldTimeError } from "../hrm/field-time/errors.ts";
-import { runRecordFlows } from "../flows/run.ts";
+
 import { SERVICE_VISIT_COMPLETION_SUBJECT_KIND } from "../flows/service-visit-adapter.ts";
 import {
   auditService, lockDependentFeature, optionalText, optionalUuid, requireActiveItem, requireInstant, requireOne, requireQuantity, requiredText,
@@ -212,7 +212,6 @@ type ReviewRouting = { gated: boolean; runId: string | null; failed: boolean; er
 async function routeCompletionReview(
   actor: ServiceActor,
   visitId: string,
-  revision: number,
 ): Promise<ReviewRouting> {
   const result = (
     await routeSubjectSubmission({
@@ -269,7 +268,7 @@ export async function completeVisit(
       to: "completed", reason: "Work completed", workerPartyId: technician,
       set: sql`work_notes = ${workNotes}, completed_at = now(), completed_by = ${actor.actorId}, review_status = 'not_required', review_flow_run_id = null`,
     });
-    const routing = await routeCompletionReview(actor, visit.id, revision);
+    const routing = await routeCompletionReview(actor, visit.id);
     if (routing.failed) {
       throw new ServiceError(`The completion review could not be routed: ${routing.error ?? "an enabled review Flow failed"}.`, {
         code: "service_review_unroutable", remedy: "Fix or disable the Service visit completion Flow, then complete the visit again. Nothing was saved.",

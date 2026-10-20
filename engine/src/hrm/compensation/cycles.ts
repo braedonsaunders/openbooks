@@ -7,7 +7,7 @@ import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
-import { completedGateAllowsSelfApproval, completedGateDecisionPolicy } from "../../flows/approval-decision-policy.ts";
+import { completedGateDecisionPolicy } from "../../flows/approval-decision-policy.ts";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";

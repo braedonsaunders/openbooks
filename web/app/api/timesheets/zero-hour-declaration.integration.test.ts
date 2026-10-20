@@ -43,7 +43,6 @@ async function fixture() {
   session.user = { id: actor, orgId: org.orgId, name: 'Auditor', email: 'auditor@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
   const employee = randomUUID()
   const leaveType = randomUUID()
-  let leaveRequest: string
   await withBypassContext(async () => {
     await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom) values (${employee},${org.orgId},'employee','Leave Worker',${org.subsidiaryId},true,'{}'::jsonb)`)
     await db.execute(sql`insert into employee_roles(id,org_id,party_id,is_active) values (${randomUUID()},${org.orgId},${employee},true)`)
@@ -56,7 +55,7 @@ async function fixture() {
   const {employmentId}=await withBypassContext(()=>seedEmployment(org.orgId,org.subsidiaryId,{workerPartyId:employee,from:'2026-01-01'}));
   await withOrgContext(org.orgId,()=>createLeavePolicy({orgId:org.orgId,actorId:actor,leaveTypeId:leaveType,accrualRule:{kind:'unlimited'},effectiveFrom:'2026-01-01'}));
   const leave=await withOrgContext(org.orgId,()=>fileLeaveRequest({orgId:org.orgId,actorId:actor,employmentId,leaveTypeId:leaveType,startsOn:'2026-08-03',endsOn:'2026-08-07',hours:'40.00',reason:'Family week'}));
-  leaveRequest=leave.id;
+  const leaveRequest=leave.id;
   await withOrgContext(org.orgId,()=>submitLeaveRequest({orgId:org.orgId,actorId:actor,requestId:leaveRequest}));
   const put = (rows: unknown[], expectedRevision?: string) => withOrgContext(org.orgId, async () => {
     const revision = expectedRevision ?? (await loadWeek(org.orgId, employee, WEEK)).revision

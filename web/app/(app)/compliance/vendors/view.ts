@@ -178,7 +178,6 @@ export async function loadComplianceVendors(
           canManage: can(authz, 'compliance.manage'),
           canVerify: can(authz, 'compliance.verify'),
           canWaive: can(authz, 'compliance.waive'),
-          currentUserId: authz.user.id,
         }
       : null,
   }

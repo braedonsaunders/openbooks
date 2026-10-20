@@ -123,15 +123,6 @@ export async function CloseSetupPage({
         policyList.query,
         "defaultData.policies.materialVariance.description",
       ),
-    independentApproval:
-      translatedMatch(
-        policyList.query,
-        "defaultData.policies.independentApproval.name",
-      ) ||
-      translatedMatch(
-        policyList.query,
-        "defaultData.policies.independentApproval.description",
-      ),
     controlledReopen:
       translatedMatch(
         policyList.query,
@@ -275,13 +266,13 @@ export async function CloseSetupPage({
     db.execute<PolicyRow>(sql`
       select * from close_policies
        where org_id = ${orgId} and policy_type not in ('review','segregation')
-         ${policyList.query ? sql`and (name ilike ${`%${policyList.query}%`} or code ilike ${`%${policyList.query}%`} or policy_type ilike ${`%${policyList.query}%`} or (${policyDefaultMatches.materialVariance} and name = 'close.defaultData.policies.materialVariance.name') or (${policyDefaultMatches.independentApproval} and name = 'close.defaultData.policies.independentApproval.name') or (${policyDefaultMatches.controlledReopen} and name = 'close.defaultData.policies.controlledReopen.name'))` : sql``}
+         ${policyList.query ? sql`and (name ilike ${`%${policyList.query}%`} or code ilike ${`%${policyList.query}%`} or policy_type ilike ${`%${policyList.query}%`} or (${policyDefaultMatches.materialVariance} and name = 'close.defaultData.policies.materialVariance.name') or (${policyDefaultMatches.controlledReopen} and name = 'close.defaultData.policies.controlledReopen.name'))` : sql``}
        order by policy_type, name
        limit ${CONFIG_PER_PAGE} offset ${policyList.offset}`),
     db.execute(sql`
       select count(*) as count from close_policies
        where org_id = ${orgId} and policy_type not in ('review','segregation')
-         ${policyList.query ? sql`and (name ilike ${`%${policyList.query}%`} or code ilike ${`%${policyList.query}%`} or policy_type ilike ${`%${policyList.query}%`} or (${policyDefaultMatches.materialVariance} and name = 'close.defaultData.policies.materialVariance.name') or (${policyDefaultMatches.independentApproval} and name = 'close.defaultData.policies.independentApproval.name') or (${policyDefaultMatches.controlledReopen} and name = 'close.defaultData.policies.controlledReopen.name'))` : sql``}`),
+         ${policyList.query ? sql`and (name ilike ${`%${policyList.query}%`} or code ilike ${`%${policyList.query}%`} or policy_type ilike ${`%${policyList.query}%`} or (${policyDefaultMatches.materialVariance} and name = 'close.defaultData.policies.materialVariance.name') or (${policyDefaultMatches.controlledReopen} and name = 'close.defaultData.policies.controlledReopen.name'))` : sql``}`),
     db.execute<AutomationRow>(sql`
       select * from close_automation_rules
        where org_id = ${orgId}

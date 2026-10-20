@@ -7,12 +7,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction, withBypass } from "../../platform/db.ts";
-import {
-  createScratchOrg,
-  grantScratchPermissions,
-  dropScratchOrg,
-  type ScratchOrg,
-} from "../../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../../testing/fixtures.ts";
 import {
   enableHrm,
   mkHr,

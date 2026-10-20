@@ -401,7 +401,7 @@ export function ManufacturingRecordHost({
       : [];
   const actions =
     visibleData && canManage
-      ? recordCommands(view, visibleData, options, canPost, canBuy).filter(
+      ? recordCommands(view, visibleData, options, canPost).filter(
           (action) => !['activate'].includes(action.key) || canGovernRevisions,
         )
       : []

@@ -1,11 +1,8 @@
 import { z } from 'zod'
 import { uuidString } from '@openbooks/engine/platform/identifiers'
-import {
-  getWorkOrder,
-  releaseWorkOrder,
-} from '@openbooks/engine/manufacturing/work-orders'
+import { releaseWorkOrder } from '@openbooks/engine/manufacturing/work-orders'
 import { db } from '@openbooks/engine/platform/db'
-import { ManufacturingError } from '@openbooks/engine/manufacturing/errors'
+
 import { defineRoute } from '@/lib/api/route'
 import { manufacturingTransaction } from '../../../_transaction'
 import { loadScopedWorkOrder } from '../../_scope'

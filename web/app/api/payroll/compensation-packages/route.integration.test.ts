@@ -122,7 +122,7 @@ test('native package endpoints preserve independent decisions, exact previews an
     const assignmentRevision = assignment.revision
     assignment = await saved<{ id: string; revision: number }>(await post(assignmentAction.PATCH, { ...employeeInput, inputs: { allowance: '620' }, expectedRevision: assignmentRevision, reason: 'Employee draft refinement' }, employeeParams, null, 'PATCH'))
     await refusal(await post(assignmentAction.PATCH, { ...employeeInput, inputs: { allowance: '310' }, expectedRevision: assignmentRevision, reason: 'Stale employee editor' }, employeeParams, null, 'PATCH'), 422, /revision changed.*reload/i)
-    const proposed = await saved<{ revision: number }>(await post(assignmentAction.POST, { expectedRevision: assignment.revision, action: 'submit', reason: 'Employee proposal review' }, employeeParams))
+    await saved<{ revision: number }>(await post(assignmentAction.POST, { expectedRevision: assignment.revision, action: 'submit', reason: 'Employee proposal review' }, employeeParams))
     state.actorId = f.approverId
     const assignmentGate=(await withOrgContext(f.org.orgId,()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${assignment.id} and status='pending'`))).rows[0]!
     await decideGate({gateId:assignmentGate.id,userId:f.approverId,decision:'approved',comment:'Review the employee assignment terms'})

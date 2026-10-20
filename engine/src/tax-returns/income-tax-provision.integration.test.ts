@@ -1435,7 +1435,7 @@ test("mark-filed accepts complete subsidiary closure without implying an org-wid
   try {
     const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
     const {grantScratchPermissions}=await import("../testing/fixtures.ts");
-    await grantScratchPermissions(org.orgId,userId,["close.run"]);
+    await grantScratchPermissions(org.orgId,userId,["close.run","close.approve"]);
     const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
     const taxCodeId = await seedFilingFingerprintFixture(org);
     await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-5", taxAmount: "11.00" });

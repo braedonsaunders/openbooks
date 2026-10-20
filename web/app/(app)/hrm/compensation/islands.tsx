@@ -676,12 +676,10 @@ export function PlanLineApproveButton({
   planId,
   lineId,
   lineStatus,
-  labels,
 }: {
   planId: string
   lineId: string
   lineStatus: string
-  labels: CompLabels
 }) {
   if (lineStatus !== 'proposed') return null
   return (

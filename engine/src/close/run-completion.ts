@@ -16,7 +16,7 @@ export async function closeApprovedRun(
   const refusal = await withOrgTransaction(orgId, async () => {
     const tx=db;
     if(!await lockAndCheckOrgFeature(db,orgId,"continuousClose"))throw new CloseError("Enable Continuous Close in Company Settings → Features before locking a close run.");
-    if(await lockActorCommandAuthority(db,orgId,actorId,null,"close.run")!==null)throw new CloseError("Close run commands require access to the whole organization.");
+    if(await lockActorCommandAuthority(db,orgId,actorId,null,"close.approve")!==null)throw new CloseError("Close run commands require access to the whole organization.");
     const target = (await tx.execute<{ period_id: string; book_id: string }>(sql`
       select period_id, book_id from close_runs where id = ${runId} and org_id = ${orgId}`));
     if (!target.rows[0]) throw new CloseError("close run not found");

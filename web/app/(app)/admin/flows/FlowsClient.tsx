@@ -5,15 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import {
-  Button,
-  Drawer,
-  Input,
-  Label,
-  SearchSelect,
-  Select,
-  cn,
-} from '@openbooks/ui'
+import { Button, Drawer, Input, Label, SearchSelect, cn } from '@openbooks/ui'
 import { ApiResponseError, apiJson } from '../../../../lib/api-error'
 import { confirmDialog } from '../../../../lib/confirm'
 

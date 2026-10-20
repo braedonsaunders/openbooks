@@ -36,10 +36,6 @@ function requireUuid(value: string, what: string): string {
   return value;
 }
 
-function isNonBlank(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
 /** Resolve every authority claim from the canonical immutable Flow submission ledger. */
 export async function resolveMappingApprovalSnapshots(
   orgId: string,

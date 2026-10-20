@@ -45,12 +45,6 @@ const { ReopenDecision } = await import('./ReopenDecision')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
-function setNativeValue(element: HTMLTextAreaElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!
-  setter.call(element, value)
-  element.dispatchEvent(new window.Event('input', { bubbles: true }))
-}
-
 async function mountDecision(requestId: string, ownRequest: boolean) {
   globalThis.__reopenTestRouter = { push() {}, refresh() {}, replace() {} }
   globalThis.__reopenTestToasts = []

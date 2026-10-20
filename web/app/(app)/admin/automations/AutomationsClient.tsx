@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 

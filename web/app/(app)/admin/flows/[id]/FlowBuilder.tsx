@@ -32,16 +32,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import './_flow-canvas.css'
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Button,
-  EmptyState,
-  Label,
-  Select,
-  cn,
-} from '@openbooks/ui'
+import { Alert, AlertDescription, AlertTitle, Button, EmptyState, cn } from '@openbooks/ui'
 import {
   flowReadiness,
   lintAutomationGraph,

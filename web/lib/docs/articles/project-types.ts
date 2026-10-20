@@ -78,19 +78,20 @@ application stages. They are not billing methods and are never feature toggles.
 
 ### Controlled Applications for Payment lifecycle
 
-Applications for Payment use an enforced maker-checker workflow:
+Applications for Payment use native submission and the tenant’s Flow policy:
 
 1. A preparer creates a **Draft** and enters the current draw by SOV line.
 2. **Submit** persists and validates every draw line atomically, including
    cumulative overbilling and retainage bounds.
-3. A different user with AR approval permission moves the application to
-   **Approved**. The preparer cannot approve their own application.
+3. Submission evaluates the tenant’s configured Flows. Zero applicable gates
+   release the application to **Approved**; otherwise every governing gate must
+   complete. Each gate determines its assignees and self-approval policy.
 4. A user with AR posting permission creates the controlled draft customer
    invoice. The application becomes **Invoiced** and cannot generate another.
 
 Only one draft/submitted/approved application can exist for a project at a time.
 Once an SOV line has appeared in an application it is immutable; contract changes
-must flow through an independently approved change order. An additive change may
+use a native change order governed by the tenant’s Flows. An additive change may
 create a new SOV line or revise an existing one. A deductive change must identify
 an existing line and cannot reduce it below zero or below the amount already
 invoiced. Retainage releases are reserved against the GL-backed retained balance

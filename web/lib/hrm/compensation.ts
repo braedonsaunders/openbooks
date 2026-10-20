@@ -937,13 +937,8 @@ export interface CompPlanDetailData {
   backHref: string
   backLabel: string
   approveLabel: string
-  /**
-   * Per-line approve button labels. Present only for compensation
-   * managers — the approve endpoint requires hrm.compensation.manage.
-   * The island itself renders nothing unless the line is proposed; the
-   * service refuses anything else by name.
-   */
-  lineApprove: { failed: string; submit: string; cancel: string; approve: string } | null
+  /** Whether the viewer may submit a proposed line to its tenant Flow. */
+  lineApprove: boolean
 }
 
 export async function loadHeadcountPlanDetail(
@@ -999,14 +994,7 @@ export async function loadHeadcountPlanDetail(
     backHref: '/hrm/compensation?view=plans',
     backLabel: t('compensation.back'),
     approveLabel: t('compensation.approveLine'),
-    lineApprove: can(authz, 'hrm.compensation.manage')
-      ? {
-          failed: t('compensation.drawer.failed'),
-          submit: t('compensation.drawer.submit'),
-          cancel: t('compensation.drawer.cancel'),
-          approve: t('compensation.approveLine'),
-        }
-      : null,
+    lineApprove: can(authz, 'hrm.compensation.manage'),
   }
 }
 

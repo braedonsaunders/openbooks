@@ -191,7 +191,6 @@ export function recordCommands(
   data: ManufacturingRecordData,
   options: ManufacturingOptions,
   canPost: boolean,
-  canBuy: boolean,
 ): Command[] {
   const r = data.record,
     base = "/api/manufacturing/" + view + "/" + r.id,

@@ -16,7 +16,7 @@ import { returnFinancialStage, withdrawReturnReceipts } from "./psp-return-stage
 import { reversePaymentForReturn } from "./payment-return.ts";
 import { PSP_AUTOMATION_SYSTEM_ACTOR_ID, type ProviderRefundEvent, type RefundAutomationOutcome, PspAutomationError, loadAutomationContext,
 } from "./psp-automation-context.ts";
-import { insertDisputeRow, transitionDisputeRow, disputeRow, parkForReview, type ProviderDisputeEvent, type PendingAction, findDisputeByRef, historyHasEvent, pendingActionOf, pendingEventOf, parkDisputeForReview, asDocIds } from "./psp-automation-disputes.ts";
+import { insertDisputeRow, transitionDisputeRow, disputeRow, parkForReview, type ProviderDisputeEvent, findDisputeByRef, historyHasEvent, pendingActionOf, pendingEventOf, parkDisputeForReview, asDocIds } from "./psp-automation-disputes.ts";
 import { voidAndReissueRemainder, refundAgainstCredit, openCreditCovering, setAttemptRefunded, openDisputeHold } from "./psp-automation-postings.ts";
 import { transitionDisputeOutcome, eventFee } from "./psp-automation-dispute-outcomes.ts";
 
@@ -56,7 +56,6 @@ import { transitionDisputeOutcome, eventFee } from "./psp-automation-dispute-out
 export async function processProviderRefundEvent(
   orgId: string,
   event: ProviderRefundEvent,
-  opts: { resumeReview?: true } = {},
 ): Promise<RefundAutomationOutcome> {
   return withOrg(orgId, async () => {
     if (!(await orgFeatureEnabled(orgId, "onlinePayments"))) {
@@ -408,7 +407,6 @@ async function runApprovedRefund(
   const outcome = await processProviderRefundEvent(
     orgId,
     { ...event, providerEventId: event.providerEventId.replace(/#approved$/, "") },
-    { resumeReview: true },
   );
   if (outcome.status === "duplicate" || outcome.disputeId !== disputeId) return outcome;
   return outcome;

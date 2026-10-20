@@ -6,13 +6,13 @@ export const automations: DocArticle = {
   category: 'administration',
   order: 12,
   summary:
-    'Trigger-based recipes on Flows: schedule, date-relative, field-change, event, document, and manual triggers firing ordered actions with rules, conditions, exception-only approval, simulation, and a run log.',
-  updated: '2026-09-20',
-  keywords: ['automation', 'trigger', 'workflow', 'recipe', 'schedule', 'webhook', 'simulate', 'run log', 'exception approval'],
+    'Trigger-based recipes on Flows: schedule, date-relative, field-change, event, document, and manual triggers firing ordered actions with rules, conditions, tenant Flow routing, simulation, and a run log.',
+  updated: '2026-10-20',
+  keywords: ['automation', 'trigger', 'workflow', 'recipe', 'schedule', 'webhook', 'simulate', 'run log', 'approval conditions'],
   related: ['hrm-processes', 'setup-company-group'],
   body: `# Automations
 
-Automations are the trigger side Flows does not have on its own: time, date-relative, field-change, document, and approvable-event triggers firing ordered actions — create tasks, send email and notifications, start processes, update allowlisted fields, call declared webhooks, wait, and auto-approve steps. Approval chains, gates, delegations, and escalation stay in Flows; automations only decide when a recipe fires and what it runs.
+Automations are the trigger side Flows does not have on its own: time, date-relative, field-change, document, and approvable-event triggers firing ordered actions — create tasks, send email and notifications, start processes, update allowlisted fields, and call declared webhooks. Approval chains, gates, delegations, and escalation stay in Flows; automations only decide when a recipe fires and what it runs.
 
 Enable the module in Company Settings → Features → Automations (under Flows), with sub-features for date triggers, field triggers, webhooks, and the simulator. While the feature is off, recipes stop firing and the builder 404s; rows stay and resume when it returns.
 
@@ -22,9 +22,11 @@ A recipe names its trigger (one of six kinds), who it applies to (entity scope f
 
 Five recipes ship as templates: welcome tasks three days before start, the probation-end reminder, the qualification-expiring warning, document-signed starts onboarding, and the unsubmitted-timesheet nudge.
 
-## Exception-only approval
+## Tenant approval policy
 
-Per subject kind, approval settings tune the existing Flows gates instead of replacing them: within the configured thresholds (hours, days, amounts) the gate auto-approves as a system decision naming every threshold checked with its value; outside them the normal human route runs untouched. Delegation after N days reuses out-of-office delegations, and the initiator can never approve their own request.
+Configure approval conditions, assignees, quorum, self-approval, signatures, reminders and escalation in Flows for the native record kind. Conditions can use the record's hours, dates, amounts and other declared facts. A submission with zero applicable gates releases through its native command without inventing a human decision; otherwise every governing gate must complete. A failed Flow or unresolved assignee refuses submission with its cause and remedy.
+
+Automations can start native routing, but cannot replace a gate decision or supply a second approval policy. A deferred follow-up uses a separate scheduled or date-relative recipe.
 
 ## Simulation and the run log
 

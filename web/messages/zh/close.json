@@ -852,10 +852,8 @@
       "amountHint": "以本位币计价的绝对变动（例如 10,000）。",
       "percent": "百分比阈值",
       "percentHint": "相对上期的变动比例。",
-      "approvalRequired": "重新开启已锁定期间须经独立审批",
       "defaultHours": "默认重新开启窗口（小时）",
       "maxHours": "最长重新开启窗口（小时）",
-      "prohibitSelfApproval": "禁止审批自己的工作",
       "advancedIntro": "该政策类型没有内置设置。如工作流需要，可添加自定义键值设置。",
       "noSettings": "该政策类型无需额外设置。"
     },

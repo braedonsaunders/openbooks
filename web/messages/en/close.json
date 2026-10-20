@@ -852,10 +852,8 @@
       "amountHint": "Absolute change in base currency (e.g. 10,000).",
       "percent": "Percent threshold",
       "percentHint": "Relative change vs. the prior period.",
-      "approvalRequired": "Require independent approval to reopen a locked period",
       "defaultHours": "Default reopen window (hours)",
       "maxHours": "Maximum reopen window (hours)",
-      "prohibitSelfApproval": "Prevent people from approving their own work",
       "advancedIntro": "This policy type has no built-in settings. Add custom key/value settings if your workflow needs them.",
       "noSettings": "This policy type needs no additional settings."
     },

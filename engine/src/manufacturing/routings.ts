@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { assertManufacturingFeature } from "./gate.ts";
-import { ManufacturingError, ManufacturingIdempotencyConflictError, ManufacturingNotFoundError } from "./errors.ts";
+import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue, isoDate, refused, storageCode } from "./master-support.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { assertManufacturingItemExists } from "./item-policies.ts";

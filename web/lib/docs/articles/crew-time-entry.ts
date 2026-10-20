@@ -50,10 +50,11 @@ events either way.
 
 Approval routing is authored in Flows: a flow on the crew time batch
 record with one approval step per stage — supervisor, project manager,
-payroll, with any quorum. Without a flow, a time approver approves the
-batch directly. While a flow's approval gates are open, the flow owns
-the batch and it cannot be approved or rejected directly; the batch
-turns approved when the flow releases it. Rejection returns the batch
+payroll, with the tenant’s chosen quorum and self-approval policy. Zero
+applicable gates release the submitted batch immediately. Otherwise every
+governing gate must complete before the batch becomes approved. Reviewers
+use the assigned Flow gates on the record or in Approvals; there is no
+separate direct decision. Rejection returns the batch
 with the reason attached. A batch moves through draft, submitted,
 approved, rejected, and posted.
 

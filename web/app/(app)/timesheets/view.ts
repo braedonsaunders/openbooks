@@ -33,7 +33,7 @@ import {
 } from '../../../lib/hrm/ai-rails'
 // HR-20: approver flag chips over the week's clock pairs.
 import { approvalFlags } from '@openbooks/engine/hrm/field-time/reads'
-import { TIMESHEET_WEEK_SUBJECT_KIND } from '@openbooks/engine/flows/timesheet-weeks-adapter'
+
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import {
   currentWeekStart,

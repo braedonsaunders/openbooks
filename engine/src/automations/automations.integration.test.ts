@@ -1,7 +1,7 @@
 import { installEngineSeams } from "../composition/install.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {

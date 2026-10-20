@@ -852,10 +852,8 @@
       "amountHint": "Absolute Veränderung in Basiswährung (z. B. 10.000).",
       "percent": "Prozentschwelle",
       "percentHint": "Relative Veränderung gegenüber der Vorperiode.",
-      "approvalRequired": "Unabhängige Genehmigung zum Wiedereröffnen einer gesperrten Periode verlangen",
       "defaultHours": "Standard-Wiedereröffnungsfenster (Stunden)",
       "maxHours": "Maximales Wiedereröffnungsfenster (Stunden)",
-      "prohibitSelfApproval": "Verhindern, dass Personen ihre eigene Arbeit genehmigen",
       "advancedIntro": "Dieser Richtlinientyp hat keine integrierten Einstellungen. Fügen Sie bei Bedarf benutzerdefinierte Schlüssel/Wert-Einstellungen hinzu.",
       "noSettings": "Dieser Richtlinientyp benötigt keine zusätzlichen Einstellungen."
     },

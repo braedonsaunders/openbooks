@@ -60,3 +60,17 @@ test("record facts and withdrawal projections share their installed server compo
   await releases.withdrawFlowCommandSubject(input);
   assert.deepEqual(restored, [input.subjectId]);
 });
+
+test("financial change submission shares its installed server composition", async () => {
+  const installed = await import("../platform/financial-changes.ts");
+  const other = await import(new URL("../platform/financial-changes.ts?server-instance", import.meta.url).href);
+  assert.notEqual(other.submitNativeFinancialChange, installed.submitNativeFinancialChange);
+  const ids = [randomUUID(), randomUUID(), randomUUID()] as const;
+  const seen: string[][] = [];
+  installed.registerFinancialChangeSubmission(async (...args) => { seen.push(args); });
+  await other.submitNativeFinancialChange(...ids);
+  assert.deepEqual(seen, [[...ids]]);
+  other.registerFinancialChangeSubmission(async (...args: string[]) => { seen.push(args); });
+  await installed.submitNativeFinancialChange(...ids);
+  assert.deepEqual(seen, [[...ids], [...ids]]);
+});

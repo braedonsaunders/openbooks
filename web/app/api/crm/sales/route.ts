@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { salesCommandSchema } from '@/lib/crm/sales-schema'
-import { SalesError, writeSalesCommand } from '@openbooks/engine/crm/sales'
+import { writeSalesCommand } from '@openbooks/engine/crm/sales'
 import { canonicalizeSalesGeography } from '@/lib/crm/territory-boundaries'
 
 export const runtime = 'nodejs'

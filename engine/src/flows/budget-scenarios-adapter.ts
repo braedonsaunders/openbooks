@@ -3,11 +3,7 @@ import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
-import type {
-  FlowExecCtx,
-  FlowSubjectAdapter,
-  FlowSubjectContext,
-} from "./types.ts";
+import type { FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 export const BUDGET_SCENARIO_SUBJECT_KIND = "budget_scenario";

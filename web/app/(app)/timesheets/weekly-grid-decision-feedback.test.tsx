@@ -88,16 +88,6 @@ const PICKERS = {
   departments: [],
 };
 
-function approvedPayload() {
-  const payload = weekPayload() as unknown as Record<string, unknown>;
-  return { ...payload, status: "approved", revision: "rev-2", rows: [] };
-}
-
-function rejectedPayload() {
-  const payload = weekPayload() as unknown as Record<string, unknown>;
-  return { ...payload, status: "rejected", revision: "rev-2", rejectionReason: "Needs rework before approval", rows: [] };
-}
-
 async function mountGrid() {
   script.toasts = [];
   script.posts = [];

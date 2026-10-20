@@ -852,10 +852,8 @@
       "amountHint": "Variation absolue en devise de base (p. ex. 10 000).",
       "percent": "Seuil de pourcentage",
       "percentHint": "Variation relative par rapport à la période précédente.",
-      "approvalRequired": "Exiger une approbation indépendante pour rouvrir une période verrouillée",
       "defaultHours": "Fenêtre de réouverture par défaut (heures)",
       "maxHours": "Fenêtre de réouverture maximale (heures)",
-      "prohibitSelfApproval": "Empêcher l’approbation de son propre travail",
       "advancedIntro": "Ce type de politique n’a aucun paramètre intégré. Ajoutez des paramètres clé/valeur personnalisés si votre flux l’exige.",
       "noSettings": "Ce type de politique ne requiert aucun paramètre supplémentaire."
     },

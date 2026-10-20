@@ -852,10 +852,8 @@
       "amountHint": "Variação absoluta na moeda base (ex.: 10.000).",
       "percent": "Limite de percentual",
       "percentHint": "Variação relativa ao período anterior.",
-      "approvalRequired": "Exigir aprovação independente para reabrir um período bloqueado",
       "defaultHours": "Janela de reabertura padrão (horas)",
       "maxHours": "Janela de reabertura máxima (horas)",
-      "prohibitSelfApproval": "Impedir a aprovação do próprio trabalho",
       "advancedIntro": "Este tipo de política não tem configurações integradas. Adicione configurações personalizadas de chave/valor se o seu fluxo precisar.",
       "noSettings": "Este tipo de política não precisa de configurações adicionais."
     },
