@@ -69,8 +69,8 @@ test("financial change submission shares its installed server composition", asyn
   const seen: string[][] = [];
   installed.registerFinancialChangeSubmission(async (...args) => { seen.push(args); });
   await other.submitNativeFinancialChange(...ids);
-  assert.deepEqual(seen, [[...ids]]);
+  assert.deepEqual([...seen], [[...ids]]);
   other.registerFinancialChangeSubmission(async (...args: string[]) => { seen.push(args); });
   await installed.submitNativeFinancialChange(...ids);
-  assert.deepEqual(seen, [[...ids], [...ids]]);
+  assert.deepEqual([...seen], [[...ids], [...ids]]);
 });
