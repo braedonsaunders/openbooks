@@ -20,7 +20,7 @@ export function ReverseDepreciationButton({ assetId, lineId }: { assetId: string
     },{fallback:t('failed')}),{fallbackMessage:t('failed')})
     if(ok){setOpen(false);setReason('');router.refresh()}
   }
-  return <Popover open={open} onOpenChange={setOpen} trigger={<Button size="sm" variant="outline">{t('action')}</Button>}>
+  return <Popover open={open} onOpenChange={setOpen} trigger={<Button size="sm" variant="outline" onClick={()=>setOpen(true)}>{t('action')}</Button>}>
     <div className="w-80 space-y-3 p-3">
       <p className="text-sm">{t('help')}</p>
       <Label htmlFor={id}>{t('reason')}</Label>
