@@ -1172,7 +1172,7 @@
       },
       "customer_rebate_claims": {
         "label": "Customer rebate claims",
-        "description": "Earned claims, independent approvals and native settlement instruments."
+        "description": "Earned claims, tenant Flow approvals and native settlement instruments."
       },
       "vendor_rebate_accruals": {
         "label": "Vendor rebate accruals",
@@ -1180,7 +1180,7 @@
       },
       "vendor_rebate_claims": {
         "label": "Vendor rebate claims",
-        "description": "Earned claims, independent approvals and native settlement instruments."
+        "description": "Earned claims, tenant Flow approvals and native settlement instruments."
       },
       "service_jobs_by_status": {
         "label": "Service jobs by status",
@@ -3737,7 +3737,7 @@
     },
     "customer-rebate-claims": {
       "name": "Customer rebate claims",
-      "description": "Earned claims, independent approvals and native settlement instruments."
+      "description": "Earned claims, tenant Flow approvals and native settlement instruments."
     },
     "vendor-rebate-accruals": {
       "name": "Vendor rebate accruals",
@@ -3745,7 +3745,7 @@
     },
     "vendor-rebate-claims": {
       "name": "Vendor rebate claims",
-      "description": "Earned claims, independent approvals and native settlement instruments."
+      "description": "Earned claims, tenant Flow approvals and native settlement instruments."
     },
     "contract-cost-rollforward": {
       "name": "Contract cost roll-forward",

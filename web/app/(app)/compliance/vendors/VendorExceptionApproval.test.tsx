@@ -224,3 +224,31 @@ test("a refused Flow decision keeps its actionable message beside the exception"
     } finally { await view.unmount(); }
   } finally { restoreFetch(); }
 });
+
+test("an unsubmitted pending exception uses the native Flow submission control", async () => {
+  decisionCalls.length = 0;
+  const state = approvalState(false);
+  state.approvalState.pendingWith = [];
+  state.neverSubmitted = true;
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url.startsWith('/api/flows/record-state?')) return Response.json(state);
+    if (init?.method && init.method !== 'GET') {
+      decisionCalls.push({ url, body: JSON.parse(String(init.body)) });
+      return Response.json({ id: EXCEPTION_ID, status: 'approved' });
+    }
+    return null;
+  });
+  try {
+    const view = await mountExceptions();
+    try {
+      assert.equal(buttonsNamed("Approve").length, 0);
+      const submit = buttonsNamed(messages.common.approvalFlow.submitRun)[0];
+      assert.ok(submit, 'the shared native submission action is available');
+      await click(submit);
+      assert.deepEqual(decisionCalls, [{
+        url: `/api/compliance/waivers/${EXCEPTION_ID}`,
+        body: { action: 'approve' },
+      }]);
+    } finally { await view.unmount(); }
+  } finally { restoreFetch(); }
+});

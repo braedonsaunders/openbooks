@@ -212,8 +212,8 @@
     "window": "{from} → {to}",
     "pendingApproval": "Aprovação pendente",
     "approve": "Aprovar",
-    "requestFiled": "Solicitação registrada. Ela só vale após a aprovação de outra pessoa.",
-    "requestHint": "Uma solicitação só vale após a aprovação de outra pessoa."
+    "requestFiled": "Solicitação enviada aos Flows do locatário. Consulte o status para verificar se a exceção está em vigor.",
+    "requestHint": "As aprovações seguem os Flows do locatário. Sem etapas aplicáveis, o comando nativo libera a operação imediatamente; caso contrário, todas as etapas exigidas devem ser concluídas."
   },
   "lienWaivers": {
     "title": "Quitações",

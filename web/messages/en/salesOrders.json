@@ -12,7 +12,7 @@
   },
   "agency": {
     "title": "Assess principal or agent",
-    "hint": "Assess whether the company controls the specified goods before transfer. Obtain independent approval before confirming shipment or approving an invoice or bill. An agent reports its arranging fee and carries the vendor entitlement as a pass-through liability.",
+    "hint": "Assess whether the company controls the specified goods before transfer. Submit the assessment through the tenant’s Flows before shipment or invoice release. An agent reports its arranging fee and carries the vendor entitlement as a pass-through liability.",
     "line": "Paired sales-order line",
     "choose": "Choose…",
     "date": "Effective date",

@@ -8436,7 +8436,7 @@
     },
     "advancedClose": {
       "title": "Advanced close governance",
-      "description": "Evidence-heavy close blueprints, independent approval routing, controlled locks, and governed close-package publication. Core month-end close remains available when this is off."
+      "description": "Evidence-heavy close blueprints, tenant Flow approvals, controlled locks, and governed close-package publication. Core month-end close remains available when this is off."
     },
     "flows": {
       "title": "Flows & approvals",

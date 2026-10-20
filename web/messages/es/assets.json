@@ -413,7 +413,7 @@
   "change": {
     "actionName": "Baja parcial / transferencia",
     "title": "Cambiar la titularidad o dar de baja un componente",
-    "description": "Revise el impacto por libro y envíe la propuesta para aprobación independiente.",
+    "description": "Revise el impacto por libro y envíe la propuesta mediante los Flows del tenant.",
     "preparing": "Preparando…",
     "prepare": "Preparar propuesta",
     "loadFailed": "No se pudieron cargar las opciones de modificación",
@@ -573,7 +573,7 @@
     "fieldGainAccount": "Cuenta de ganancias / pérdidas",
     "gainAria": "Cuenta de ganancias o pérdidas",
     "fieldScopeRemoved": "Alcance del derecho de uso retirado (%)",
-    "proposalHint": "Esto crea una propuesta inmutable. Se requiere aprobación independiente antes de que cambien los saldos o pagos futuros.",
+    "proposalHint": "Esto crea una propuesta inmutable. Los Flows del tenant regulan su liberación antes de cambiar saldos o pagos futuros.",
     "commence": "Iniciar el contrato",
     "commenced": "Contrato iniciado",
     "postThrough": "Contabilizar hasta",

@@ -131,7 +131,7 @@
   "modify": {
     "trigger": "Modificar contrato",
     "title": "Modificar {number}",
-    "description": "Los asientos originales se conservan. Envíe esta evaluación a aprobación independiente antes de cambiar la asignación.",
+    "description": "Los asientos originales se conservan. Envíe esta evaluación mediante los Flows del tenant antes de cambiar la asignación.",
     "fieldEffectiveDate": "Fecha efectiva",
     "fieldEntity": "Entidad jurídica",
     "entityAria": "Entidad jurídica del contrato",

@@ -12,7 +12,7 @@
   },
   "agency": {
     "title": "Prinzipal- oder Agentenrolle beurteilen",
-    "hint": "Beurteilen Sie, ob das Unternehmen die bezeichneten Waren vor der Übertragung kontrolliert. Holen Sie eine unabhängige Genehmigung ein, bevor Sie den Versand bestätigen oder eine Kunden- oder Lieferantenrechnung genehmigen. Ein Agent weist seine Vermittlungsgebühr aus und führt den Lieferantenanspruch als durchlaufende Verbindlichkeit.",
+    "hint": "Beurteilen Sie, ob das Unternehmen die bezeichneten Waren vor der Übertragung kontrolliert. Reichen Sie die Beurteilung vor Versand- oder Rechnungsfreigabe über die Flows des Mandanten ein. Ein Agent weist seine Vermittlungsgebühr aus und führt den Lieferantenanspruch als durchlaufende Verbindlichkeit.",
     "line": "Zugeordnete Kundenauftragszeile",
     "choose": "Auswählen…",
     "date": "Gültigkeitsdatum",

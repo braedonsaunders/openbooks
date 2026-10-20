@@ -277,8 +277,7 @@
       "loading": "Cargando conteo…",
       "noLines": "Sin líneas en este conteo.",
       "postedBadge": "Contabilizado",
-      "unpostedBadge": "Sin contabilizar",
-      "noIndependentReviewWarning": "La revisión independiente está desactivada — el mismo usuario que realizó este recuento puede contabilizarlo. Exija un segundo usuario en Configuración de la empresa → Aprobaciones."
+      "unpostedBadge": "Sin contabilizar"
     },
     "list": {
       "showMore": "Mostrar más ({loaded} de {total})",

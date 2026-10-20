@@ -8480,7 +8480,7 @@
     },
     "advancedClose": {
       "title": "Gouvernance de clôture avancée",
-      "description": "Plans de clôture exigeants en preuves, acheminement d’approbation indépendant, verrous contrôlés et publication encadrée du dossier de clôture. La clôture mensuelle de base reste disponible quand ceci est désactivé."
+      "description": "Plans de clôture exigeants en preuves, approbations via les Flows du locataire, verrous contrôlés et publication encadrée du dossier de clôture. La clôture mensuelle de base reste disponible quand ceci est désactivé."
     },
     "advancedSubscriptions": {
       "title": "Cycle de vie avancé des abonnements",

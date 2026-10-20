@@ -1172,7 +1172,7 @@
       },
       "customer_rebate_claims": {
         "label": "客户返利申领",
-        "description": "已获得申领、独立审批和系统原生结算工具。"
+        "description": "已获得申领、租户 Flows 审批及原生结算凭据。"
       },
       "vendor_rebate_accruals": {
         "label": "供应商返利计提",
@@ -1180,7 +1180,7 @@
       },
       "vendor_rebate_claims": {
         "label": "供应商返利申领",
-        "description": "已获得申领、独立审批和系统原生结算工具。"
+        "description": "已获得申领、租户 Flows 审批及原生结算凭据。"
       },
       "service_jobs_by_status": {
         "label": "按状态统计的服务工单",
@@ -3737,7 +3737,7 @@
     },
     "customer-rebate-claims": {
       "name": "客户返利申领",
-      "description": "已赚取的申领、独立审批及原生结算凭据。"
+      "description": "已获得申领、租户 Flows 审批及原生结算凭据。"
     },
     "vendor-rebate-accruals": {
       "name": "供应商返利计提",
@@ -3745,7 +3745,7 @@
     },
     "vendor-rebate-claims": {
       "name": "供应商返利申领",
-      "description": "已赚取的申领、独立审批及原生结算凭据。"
+      "description": "已获得申领、租户 Flows 审批及原生结算凭据。"
     },
     "contract-cost-rollforward": {
       "name": "合同成本调节表",

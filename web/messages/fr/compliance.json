@@ -212,8 +212,8 @@
     "window": "{from} → {to}",
     "pendingApproval": "Approbation en attente",
     "approve": "Approuver",
-    "requestFiled": "Demande enregistrée. Elle ne s'applique que lorsqu'une autre personne l'approuve.",
-    "requestHint": "Une demande ne s'applique que lorsqu'une autre personne l'approuve."
+    "requestFiled": "Demande soumise aux Flows du locataire. Consultez son statut pour vérifier si la dérogation est effective.",
+    "requestHint": "Les approbations suivent les Flows du locataire. Sans étape applicable, la commande native libère immédiatement l’opération ; sinon, toutes les étapes requises doivent être terminées."
   },
   "lienWaivers": {
     "title": "Renonciations au privilège",

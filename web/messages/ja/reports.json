@@ -1172,7 +1172,7 @@
       },
       "customer_rebate_claims": {
         "label": "顧客リベート請求",
-        "description": "獲得済み請求、独立した承認、および標準の決済手段。"
+        "description": "獲得済み請求、テナントの Flows による承認、標準の決済手段。"
       },
       "vendor_rebate_accruals": {
         "label": "仕入先リベート計上",
@@ -1180,7 +1180,7 @@
       },
       "vendor_rebate_claims": {
         "label": "仕入先リベート請求",
-        "description": "獲得済み請求、独立した承認、および標準の決済手段。"
+        "description": "獲得済み請求、テナントの Flows による承認、標準の決済手段。"
       },
       "service_jobs_by_status": {
         "label": "ステータス別サービス作業指示",
@@ -3737,7 +3737,7 @@
     },
     "customer-rebate-claims": {
       "name": "顧客リベート請求",
-      "description": "獲得済み請求、独立した承認、標準の決済手段。"
+      "description": "獲得済み請求、テナントの Flows による承認、標準の決済手段。"
     },
     "vendor-rebate-accruals": {
       "name": "仕入先リベート計上",
@@ -3745,7 +3745,7 @@
     },
     "vendor-rebate-claims": {
       "name": "仕入先リベート請求",
-      "description": "獲得済み請求、独立した承認、標準の決済手段。"
+      "description": "獲得済み請求、テナントの Flows による承認、標準の決済手段。"
     },
     "contract-cost-rollforward": {
       "name": "契約コストロールフォワード",

@@ -131,7 +131,7 @@
   "modify": {
     "trigger": "Modifier le contrat",
     "title": "Modifier {number}",
-    "description": "Les écritures d'origine sont conservées. Soumettez cette analyse à une approbation indépendante avant de modifier l'affectation.",
+    "description": "Les écritures d’origine sont conservées. Soumettez cette analyse aux Flows du locataire avant de modifier l’affectation.",
     "fieldEffectiveDate": "Date d'effet",
     "fieldEntity": "Entité juridique",
     "entityAria": "Entité juridique du contrat",

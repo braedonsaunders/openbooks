@@ -212,8 +212,8 @@
     "window": "{from} → {to}",
     "pendingApproval": "Aprobación pendiente",
     "approve": "Aprobar",
-    "requestFiled": "Solicitud registrada. No aplica hasta que otra persona la apruebe.",
-    "requestHint": "Una solicitud no aplica hasta que otra persona la apruebe."
+    "requestFiled": "Solicitud enviada a los Flows del tenant. Consulte su estado para comprobar si la excepción está vigente.",
+    "requestHint": "Las aprobaciones siguen los Flows del tenant. Sin etapas aplicables, el comando nativo libera la operación de inmediato; de lo contrario, deben completarse todas las etapas requeridas."
   },
   "lienWaivers": {
     "title": "Renuncias de gravamen",

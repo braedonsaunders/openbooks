@@ -1172,7 +1172,7 @@
       },
       "customer_rebate_claims": {
         "label": "Kundenbonusansprüche",
-        "description": "Verdiente Ansprüche, unabhängige Genehmigungen und systemeigene Abrechnungsbelege."
+        "description": "Verdiente Ansprüche, Genehmigungen über Mandanten-Flows und native Abrechnungsbelege."
       },
       "vendor_rebate_accruals": {
         "label": "Abgegrenzte Lieferantenboni",
@@ -1180,7 +1180,7 @@
       },
       "vendor_rebate_claims": {
         "label": "Lieferantenbonusansprüche",
-        "description": "Verdiente Ansprüche, unabhängige Genehmigungen und systemeigene Abrechnungsbelege."
+        "description": "Verdiente Ansprüche, Genehmigungen über Mandanten-Flows und native Abrechnungsbelege."
       },
       "service_jobs_by_status": {
         "label": "Serviceaufträge nach Zustand",
@@ -3737,7 +3737,7 @@
     },
     "customer-rebate-claims": {
       "name": "Kundenbonusansprüche",
-      "description": "Verdiente Ansprüche, unabhängige Genehmigungen und systemeigene Abrechnungsbelege."
+      "description": "Verdiente Ansprüche, Genehmigungen über Mandanten-Flows und native Abrechnungsbelege."
     },
     "vendor-rebate-accruals": {
       "name": "Abgegrenzte Lieferantenboni",
@@ -3745,7 +3745,7 @@
     },
     "vendor-rebate-claims": {
       "name": "Lieferantenbonusansprüche",
-      "description": "Verdiente Ansprüche, unabhängige Genehmigungen und systemeigene Abrechnungsbelege."
+      "description": "Verdiente Ansprüche, Genehmigungen über Mandanten-Flows und native Abrechnungsbelege."
     },
     "contract-cost-rollforward": {
       "name": "Vertragskosten-Rollforward",

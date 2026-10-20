@@ -413,7 +413,7 @@
   "change": {
     "actionName": "Teilabgang / Transfer",
     "title": "Eigentümerwechsel oder Komponentenabgang",
-    "description": "Buchspezifische Auswirkungen prüfen und den Vorschlag zur unabhängigen Freigabe einreichen.",
+    "description": "Prüfen Sie die Auswirkungen je Buch und reichen Sie den Vorschlag über die Flows des Mandanten ein.",
     "preparing": "Wird vorbereitet…",
     "prepare": "Vorschlag vorbereiten",
     "loadFailed": "Optionen für Anlagenänderung konnten nicht geladen werden",
@@ -573,7 +573,7 @@
     "fieldGainAccount": "Gewinn- / Verlustkonto",
     "gainAria": "Gewinn- oder Verlustkonto",
     "fieldScopeRemoved": "Entfallener Nutzungsrechtsumfang (%)",
-    "proposalHint": "Dies erstellt einen unveränderlichen Vorschlag. Vor jeder Salden- oder Zahlungsänderung ist eine unabhängige Genehmigung erforderlich.",
+    "proposalHint": "Dies erstellt einen unveränderlichen Vorschlag. Die Flows des Mandanten regeln die Freigabe, bevor Salden oder künftige Zahlungen geändert werden.",
     "commence": "Vertrag beginnen",
     "commenced": "Vertrag begonnen",
     "postThrough": "Buchen bis",

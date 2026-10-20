@@ -413,7 +413,7 @@
   "change": {
     "actionName": "部分处置 / 划转",
     "title": "变更资产所有权或处置组成部分",
-    "description": "按账套复核影响，然后提交提案以进行独立审批。",
+    "description": "按账簿复核影响，然后通过租户的 Flows 提交提案。",
     "preparing": "准备中…",
     "prepare": "准备提案",
     "loadFailed": "无法加载资产变更选项",
@@ -573,7 +573,7 @@
     "fieldGainAccount": "利得 / 损失科目",
     "gainAria": "利得或损失科目",
     "fieldScopeRemoved": "移除的使用权范围 (%)",
-    "proposalHint": "这将创建不可变的提议。在余额或未来付款变动之前，需要独立审批。",
+    "proposalHint": "这将创建不可变的提案。在余额或未来付款变更前，由租户的 Flows 管理放行。",
     "commence": "起租",
     "commenced": "租赁已起租",
     "postThrough": "过账至",

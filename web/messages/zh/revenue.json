@@ -131,7 +131,7 @@
   "modify": {
     "trigger": "修改合同",
     "title": "修改{number}",
-    "description": "原始分录予以保留。在更改分摊之前，请将本评估提交独立审批。",
+    "description": "原始分录予以保留。更改分摊前，请通过租户的 Flows 提交本评估。",
     "fieldEffectiveDate": "生效日期",
     "fieldEntity": "法人实体",
     "entityAria": "合同法人实体",

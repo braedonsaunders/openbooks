@@ -131,7 +131,7 @@
   "modify": {
     "trigger": "Vertrag ändern",
     "title": "Ändern {number}",
-    "description": "Die ursprünglichen Buchungen bleiben bestehen. Diese Beurteilung zur unabhängigen Genehmigung vorlegen, bevor die Allokation geändert wird.",
+    "description": "Die ursprünglichen Buchungen bleiben erhalten. Reichen Sie diese Beurteilung über die Flows des Mandanten ein, bevor Sie die Zuordnung ändern.",
     "fieldEffectiveDate": "Wirksamkeitsdatum",
     "fieldEntity": "Rechtsträger",
     "entityAria": "Vertrags-Rechtsträger",

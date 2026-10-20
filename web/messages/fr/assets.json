@@ -413,7 +413,7 @@
   "change": {
     "actionName": "Cession partielle / transfert",
     "title": "Changer la propriété ou céder un composant",
-    "description": "Vérifier l’impact par registre, puis soumettre la proposition pour approbation indépendante.",
+    "description": "Vérifiez l’impact par livre, puis soumettez la proposition aux Flows du locataire.",
     "preparing": "Préparation…",
     "prepare": "Préparer la proposition",
     "loadFailed": "Impossible de charger les options de modification",
@@ -573,7 +573,7 @@
     "fieldGainAccount": "Compte de gains / pertes",
     "gainAria": "Compte de gains ou pertes",
     "fieldScopeRemoved": "Périmètre du droit d’utilisation retiré (%)",
-    "proposalHint": "Ceci crée une proposition immuable. Une approbation indépendante est requise avant toute variation des soldes ou des paiements futurs.",
+    "proposalHint": "Ceci crée une proposition immuable. Les Flows du locataire régissent sa libération avant toute modification des soldes ou paiements futurs.",
     "commence": "Démarrer le contrat",
     "commenced": "Contrat démarré",
     "postThrough": "Comptabiliser jusqu’au",

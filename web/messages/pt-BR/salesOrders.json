@@ -12,7 +12,7 @@
   },
   "agency": {
     "title": "Avaliar a função de principal ou agente",
-    "hint": "Avalie se a empresa controla os bens especificados antes da transferência. Obtenha aprovação independente antes de confirmar o envio ou aprovar uma fatura de cliente ou fornecedor. Um agente reconhece sua comissão de intermediação e mantém o direito do fornecedor como um passivo de repasse.",
+    "hint": "Avalie se a empresa controla os bens antes da transferência. Envie a avaliação pelos Flows do locatário antes de liberar o envio ou a fatura. Um agente reconhece sua comissão de intermediação e o direito do fornecedor como um passivo de repasse.",
     "line": "Linha vinculada do pedido de venda",
     "choose": "Escolher…",
     "date": "Data de vigência",

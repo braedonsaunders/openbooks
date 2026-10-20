@@ -8356,7 +8356,7 @@
     },
     "advancedClose": {
       "title": "Erweiterte Abschlusssteuerung",
-      "description": "Nachweislastige Abschlussblaupausen, unabhängige Genehmigungsrouten, kontrollierte Sperren und geregelte Abschlusspaket-Veröffentlichung. Der Kern-Monatsabschluss bleibt verfügbar, wenn dies aus ist."
+      "description": "Nachweislastige Abschlussblaupausen, Genehmigungen über Mandanten-Flows, kontrollierte Sperren und geregelte Abschlusspaket-Veröffentlichung. Der Kern-Monatsabschluss bleibt verfügbar, wenn dies aus ist."
     },
     "advancedSubscriptions": {
       "title": "Erweiterter Abonnement-Lebenszyklus",

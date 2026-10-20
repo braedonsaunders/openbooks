@@ -8436,7 +8436,7 @@
     },
     "advancedClose": {
       "title": "Governança avançada de fechamento",
-      "description": "Blueprints de fechamento com muitas evidências, roteamento de aprovação independente, travas controladas e publicação governada do pacote. O fechamento mensal núcleo segue disponível com isto desligado."
+      "description": "Blueprints de fechamento com muitas evidências, aprovações pelos Flows do locatário, travas controladas e publicação governada do pacote. O fechamento mensal núcleo segue disponível com isto desligado."
     },
     "flows": {
       "title": "Fluxos e aprovações",

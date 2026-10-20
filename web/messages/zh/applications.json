@@ -47,11 +47,11 @@
     "title": "变更单", "number": "变更单编号", "description": "说明", "amount": "金额", "applyTo": "应用于", "incomeAccount": "收入科目", "defaultIncomeAccount": "默认收入科目", "newScheduleLine": "新建清单行（增加变更）", "deductiveHint": "扣减变更必须减少现有清单行。", "additiveHint": "选择要修订的清单行，或新建增加行。", "adjusts": "调整 {description}", "approve": "批准", "approvalBlockedHint": "请先完成或作废未结的付款申请", "void": "作废", "voidConfirm": "作废变更单 {number}？审计历史将保留。", "add": "添加变更单", "empty": "没有变更单。", "status": { "draft": "草稿", "approved": "已批准", "void": "已作废" },
     "statusLabel": "状态",
     "workspaceHint": "经批准的变更会修订工程量清单，但不会重写其历史记录。",
-    "formHint": "记录一项增加或扣减的合同变更，以进行独立审批。",
+    "formHint": "记录合同增加或扣减变更，并通过租户的 Flows 提交。",
     "cancel": "取消"
   },
   "payApplications": {
-    "title": "付款申请", "applicationNumber": "申请 #{number}", "retainage": "保留款", "enterDraws": "录入本期完成额", "hideDraws": "隐藏完成额", "approve": "批准", "createInvoice": "创建发票", "void": "作废", "voidConfirm": "作废申请 #{number}？完成额和审计历史将保留。", "item": "项目", "description": "说明", "workThisPeriod": "本期完成工作", "materialsStored": "现场存料", "submit": "提交审批", "submittedMessage": "申请已提交独立审批", "billedMessage": "已开票 {number} — 本期应付 {currentDue}，保留款 {retainage}", "empty": "没有付款申请。", "periodEnding": "期间截止日", "newApplication": "新建申请", "status": { "draft": "草稿", "submitted": "已提交", "approved": "已批准", "invoiced": "已开票", "posted": "已开票", "void": "已作废" },
+    "title": "付款申请", "applicationNumber": "申请 #{number}", "retainage": "保留款", "enterDraws": "录入本期完成额", "hideDraws": "隐藏完成额", "approve": "批准", "createInvoice": "创建发票", "void": "作废", "voidConfirm": "作废申请 #{number}？完成额和审计历史将保留。", "item": "项目", "description": "说明", "workThisPeriod": "本期完成工作", "materialsStored": "现场存料", "submit": "提交审批", "submittedMessage": "已通过租户的 Flows 提交", "billedMessage": "已开票 {number} — 本期应付 {currentDue}，保留款 {retainage}", "empty": "没有付款申请。", "periodEnding": "期间截止日", "newApplication": "新建申请", "status": { "draft": "草稿", "submitted": "已提交", "approved": "已批准", "invoiced": "已开票", "posted": "已开票", "void": "已作废" },
     "application": "申请",
     "workspaceHint": "每份申请从工程量录入开始，经过审批，直至关联的客户发票。",
     "newHint": "为本项目的开票期创建下一份累计申请。",

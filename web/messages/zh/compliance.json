@@ -212,8 +212,8 @@
     "window": "{from} → {to}",
     "pendingApproval": "待审批",
     "approve": "批准",
-    "requestFiled": "请求已提交，在其他人批准之前不生效。",
-    "requestHint": "请求在其他人批准之前不生效。"
+    "requestFiled": "请求已提交至租户的 Flows。请查看当前状态，确认例外是否生效。",
+    "requestHint": "审批遵循租户的 Flows。没有适用审批环节时，原生命令立即放行；否则必须完成所有必需环节。"
   },
   "lienWaivers": {
     "title": "留置权弃权书",

@@ -212,8 +212,8 @@
     "window": "{from} → {to}",
     "pendingApproval": "Ausstehende Genehmigung",
     "approve": "Genehmigen",
-    "requestFiled": "Anfrage erfasst. Sie gilt erst, wenn eine andere Person sie genehmigt.",
-    "requestHint": "Eine Anfrage gilt erst, wenn eine andere Person sie genehmigt."
+    "requestFiled": "Anfrage an die Flows des Mandanten übermittelt. Der aktuelle Status zeigt, ob die Ausnahme wirksam ist.",
+    "requestHint": "Genehmigungen folgen den Flows des Mandanten. Ohne zutreffende Genehmigungsstufen erfolgt die native Freigabe sofort; andernfalls müssen alle erforderlichen Stufen abgeschlossen sein."
   },
   "lienWaivers": {
     "title": "Verzichtserklärungen",

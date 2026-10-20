@@ -413,7 +413,7 @@
   "change": {
     "actionName": "Baixa parcial / transferência",
     "title": "Alterar a titularidade ou baixar um componente",
-    "description": "Revise o impacto por livro e envie a proposta para aprovação independente.",
+    "description": "Revise o impacto por livro e envie a proposta pelos Flows do locatário.",
     "preparing": "Preparando…",
     "prepare": "Preparar proposta",
     "loadFailed": "Não foi possível carregar as opções de alteração",
@@ -573,7 +573,7 @@
     "fieldGainAccount": "Conta de ganhos / perdas",
     "gainAria": "Conta de ganhos ou perdas",
     "fieldScopeRemoved": "Escopo do direito de uso removido (%)",
-    "proposalHint": "Isto cria uma proposta imutável. É necessária aprovação independente antes que saldos ou pagamentos futuros mudem.",
+    "proposalHint": "Isso cria uma proposta imutável. Os Flows do locatário regem sua liberação antes de alterar saldos ou pagamentos futuros.",
     "commence": "Iniciar o contrato",
     "commenced": "Contrato iniciado",
     "postThrough": "Contabilizar até",

@@ -8480,7 +8480,7 @@
     },
     "advancedClose": {
       "title": "Gobernanza de cierre avanzado",
-      "description": "Plantillas de cierre con abundante evidencia, enrutamiento de aprobación independiente, bloqueos controlados y publicación gobernada del paquete de cierre. El cierre mensual básico sigue disponible cuando esto está desactivado."
+      "description": "Plantillas de cierre con abundante evidencia, aprobaciones mediante los Flows del tenant, bloqueos controlados y publicación gobernada del paquete de cierre. El cierre mensual básico sigue disponible cuando esto está desactivado."
     },
     "advancedSubscriptions": {
       "title": "Ciclo de vida avanzado de suscripciones",

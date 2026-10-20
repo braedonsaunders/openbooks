@@ -245,8 +245,7 @@ export function VendorComplianceDrawer({
         reason: '',
         expiresOn: '',
       })
-      // Filing is not granting: say so where the request was made, so nobody
-      // reads the cleared form as coverage.
+      // The retained status identifies immediate release or outstanding gates.
       setNotice(t('exceptions.requestFiled'))
     }
   }
@@ -870,6 +869,10 @@ export function VendorComplianceDrawer({
                           <ApprovalActions
                             subjectKind="compliance_waiver"
                             subjectId={row.id}
+                            submitApprovalHref={canWaive ? `/api/compliance/waivers/${row.id}` : undefined}
+                            submitApprovalMethod="PATCH"
+                            submitApprovalBody={{ action: 'approve' }}
+                            submissionStatuses={['pending_approval']}
                           />
                         ) : null}
                         {canWaive ? (

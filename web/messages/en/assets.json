@@ -413,7 +413,7 @@
   "change": {
     "actionName": "Partial disposal / transfer",
     "title": "Change asset ownership or dispose a component",
-    "description": "Review the book-specific impact, then submit the proposal for independent approval.",
+    "description": "Review the book-specific impact, then submit the proposal through the tenant’s Flows.",
     "preparing": "Preparing…",
     "prepare": "Prepare proposal",
     "loadFailed": "Unable to load asset change options",
@@ -573,7 +573,7 @@
     "fieldGainAccount": "Gain / loss account",
     "gainAria": "Gain or loss account",
     "fieldScopeRemoved": "Right-of-use scope removed (%)",
-    "proposalHint": "This creates an immutable proposal. Independent approval is required before balances or future payments change.",
+    "proposalHint": "This creates an immutable proposal. The tenant’s Flows govern release before balances or future payments change.",
     "commence": "Commence lease",
     "commenced": "Lease commenced",
     "postThrough": "Post through date",

@@ -1172,7 +1172,7 @@
       },
       "customer_rebate_claims": {
         "label": "Demandes de ristournes clients",
-        "description": "Demandes acquises, approbations indépendantes et moyens de règlement natifs."
+        "description": "Demandes acquises, approbations par les Flows du locataire et instruments de règlement natifs."
       },
       "vendor_rebate_accruals": {
         "label": "Ristournes fournisseurs acquises",
@@ -1180,7 +1180,7 @@
       },
       "vendor_rebate_claims": {
         "label": "Demandes de ristournes fournisseurs",
-        "description": "Demandes acquises, approbations indépendantes et moyens de règlement natifs."
+        "description": "Demandes acquises, approbations par les Flows du locataire et instruments de règlement natifs."
       },
       "service_jobs_by_status": {
         "label": "Bons de travail par statut",
@@ -3716,7 +3716,7 @@
     },
     "customer-rebate-claims": {
       "name": "Demandes de ristournes clients",
-      "description": "Demandes acquises, approbations indépendantes et instruments de règlement natifs."
+      "description": "Demandes acquises, approbations par les Flows du locataire et instruments de règlement natifs."
     },
     "vendor-rebate-accruals": {
       "name": "Ristournes fournisseurs acquises",
@@ -3724,7 +3724,7 @@
     },
     "vendor-rebate-claims": {
       "name": "Demandes de ristournes fournisseurs",
-      "description": "Demandes acquises, approbations indépendantes et instruments de règlement natifs."
+      "description": "Demandes acquises, approbations par les Flows du locataire et instruments de règlement natifs."
     },
     "contract-cost-rollforward": {
       "name": "Variation des coûts de contrat",

@@ -1172,7 +1172,7 @@
       },
       "customer_rebate_claims": {
         "label": "Solicitudes de descuentos de clientes",
-        "description": "Derechos adquiridos, aprobaciones independientes e instrumentos de liquidación nativos."
+        "description": "Derechos adquiridos, aprobaciones por los Flows del tenant e instrumentos de liquidación nativos."
       },
       "vendor_rebate_accruals": {
         "label": "Descuentos devengados de proveedores",
@@ -1180,7 +1180,7 @@
       },
       "vendor_rebate_claims": {
         "label": "Solicitudes de descuentos de proveedores",
-        "description": "Derechos adquiridos, aprobaciones independientes e instrumentos de liquidación nativos."
+        "description": "Derechos adquiridos, aprobaciones por los Flows del tenant e instrumentos de liquidación nativos."
       },
       "service_jobs_by_status": {
         "label": "Trabajos de servicio por estado",
@@ -3716,7 +3716,7 @@
     },
     "customer-rebate-claims": {
       "name": "Solicitudes de descuentos de clientes",
-      "description": "Reclamaciones ganadas, aprobaciones independientes e instrumentos de liquidación nativos."
+      "description": "Derechos adquiridos, aprobaciones por los Flows del tenant e instrumentos de liquidación nativos."
     },
     "vendor-rebate-accruals": {
       "name": "Descuentos devengados de proveedores",
@@ -3724,7 +3724,7 @@
     },
     "vendor-rebate-claims": {
       "name": "Solicitudes de descuentos de proveedores",
-      "description": "Reclamaciones ganadas, aprobaciones independientes e instrumentos de liquidación nativos."
+      "description": "Derechos adquiridos, aprobaciones por los Flows del tenant e instrumentos de liquidación nativos."
     },
     "contract-cost-rollforward": {
       "name": "Evolución de costos de contrato",

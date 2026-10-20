@@ -12,7 +12,7 @@
   },
   "agency": {
     "title": "Evaluar la función de principal o agente",
-    "hint": "Evalúe si la empresa controla los bienes especificados antes de transferirlos. Obtenga aprobación independiente antes de confirmar el envío o aprobar una factura de cliente o proveedor. Un agente registra su comisión de intermediación y mantiene el derecho del proveedor como un pasivo de tránsito.",
+    "hint": "Evalúe si la empresa controla los bienes antes de transferirlos. Envíe la evaluación mediante los Flows del tenant antes de liberar el envío o la factura. Un agente registra su comisión de intermediación y el derecho del proveedor como un pasivo de tránsito.",
     "line": "Línea de pedido de venta vinculada",
     "choose": "Elegir…",
     "date": "Fecha de vigencia",

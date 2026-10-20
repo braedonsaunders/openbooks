@@ -83,7 +83,7 @@
     "add": "Add change order",
     "empty": "No change orders.",
     "workspaceHint": "Approved changes revise the contract schedule without rewriting its history.",
-    "formHint": "Record an additive or deductive contract change for independent approval.",
+    "formHint": "Record an additive or deductive contract change and submit it through the tenant’s Flows.",
     "cancel": "Cancel",
     "status": {
       "draft": "Draft",
@@ -107,7 +107,7 @@
     "workThisPeriod": "Work this period",
     "materialsStored": "Materials stored",
     "submit": "Submit for approval",
-    "submittedMessage": "Application submitted for independent approval",
+    "submittedMessage": "Submitted through the tenant’s Flows",
     "billedMessage": "Billed {number} — current due {currentDue}, retainage {retainage}",
     "empty": "No applications yet.",
     "periodEnding": "Period ending",

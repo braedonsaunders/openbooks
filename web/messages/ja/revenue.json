@@ -131,7 +131,7 @@
   "modify": {
     "trigger": "契約を変更",
     "title": "{number}を変更",
-    "description": "元の仕訳は残ります。配分を変更する前に、この評価を独立した承認に提出してください。",
+    "description": "元の仕訳は保持されます。配分を変更する前に、この評価をテナントの Flows から提出してください。",
     "fieldEffectiveDate": "発効日",
     "fieldEntity": "法人",
     "entityAria": "契約法人",

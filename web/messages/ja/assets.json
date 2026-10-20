@@ -413,7 +413,7 @@
   "change": {
     "actionName": "一部除却 / 移転",
     "title": "所有権の変更または構成要素の除却",
-    "description": "帳簿別の影響を確認し、独立した承認のために提案を提出してください。",
+    "description": "帳簿別の影響を確認し、テナントの Flows から提案を提出してください。",
     "preparing": "準備中…",
     "prepare": "提案を準備",
     "loadFailed": "資産変更オプションを読み込めませんでした",
@@ -573,7 +573,7 @@
     "fieldGainAccount": "利得 / 損失勘定",
     "gainAria": "利得または損失勘定",
     "fieldScopeRemoved": "除却使用権範囲 (%)",
-    "proposalHint": "不変の提案を作成します。残高や将来支払が変わる前に独立した承認が必要です。",
+    "proposalHint": "不変の提案を作成します。残高や将来の支払を変更する前のリリースは、テナントの Flows に従います。",
     "commence": "リース開始",
     "commenced": "リースを開始しました",
     "postThrough": "転記期限",

@@ -1172,7 +1172,7 @@
       },
       "customer_rebate_claims": {
         "label": "Solicitações de bonificação de clientes",
-        "description": "Direitos adquiridos, aprovações independentes e instrumentos nativos de liquidação."
+        "description": "Direitos adquiridos, aprovações pelos Flows do locatário e instrumentos nativos de liquidação."
       },
       "vendor_rebate_accruals": {
         "label": "Bonificações apropriadas de fornecedores",
@@ -1180,7 +1180,7 @@
       },
       "vendor_rebate_claims": {
         "label": "Solicitações de bonificação de fornecedores",
-        "description": "Direitos adquiridos, aprovações independentes e instrumentos nativos de liquidação."
+        "description": "Direitos adquiridos, aprovações pelos Flows do locatário e instrumentos nativos de liquidação."
       },
       "service_jobs_by_status": {
         "label": "Serviços por situação",
@@ -3737,7 +3737,7 @@
     },
     "customer-rebate-claims": {
       "name": "Solicitações de bonificação de clientes",
-      "description": "Pedidos ganhos, aprovações independentes e instrumentos de liquidação nativos."
+      "description": "Direitos adquiridos, aprovações pelos Flows do locatário e instrumentos nativos de liquidação."
     },
     "vendor-rebate-accruals": {
       "name": "Bonificações apropriadas de fornecedores",
@@ -3745,7 +3745,7 @@
     },
     "vendor-rebate-claims": {
       "name": "Solicitações de bonificação de fornecedores",
-      "description": "Pedidos ganhos, aprovações independentes e instrumentos de liquidação nativos."
+      "description": "Direitos adquiridos, aprovações pelos Flows do locatário e instrumentos nativos de liquidação."
     },
     "contract-cost-rollforward": {
       "name": "Evolução de custos de contrato",

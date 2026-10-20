@@ -131,7 +131,7 @@
   "modify": {
     "trigger": "Modificar contrato",
     "title": "Modificar {number}",
-    "description": "Os lançamentos originais são preservados. Submeta esta avaliação à aprovação independente antes de alterar a alocação.",
+    "description": "Os lançamentos originais são preservados. Envie esta avaliação pelos Flows do locatário antes de alterar a alocação.",
     "fieldEffectiveDate": "Data efetiva",
     "fieldEntity": "Entidade jurídica",
     "entityAria": "Entidade jurídica do contrato",

@@ -277,8 +277,7 @@
       "loading": "Carregando contagem…",
       "noLines": "Sem linhas nesta contagem.",
       "postedBadge": "Contabilizado",
-      "unpostedBadge": "Não contabilizado",
-      "noIndependentReviewWarning": "A revisão independente está desativada — o mesmo usuário que contou pode lançar. Exija um segundo usuário em Configurações da empresa → Aprovações."
+      "unpostedBadge": "Não contabilizado"
     },
     "list": {
       "showMore": "Mostrar mais ({loaded} de {total})",

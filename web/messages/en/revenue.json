@@ -131,7 +131,7 @@
   "modify": {
     "trigger": "Modify contract",
     "title": "Modify {number}",
-    "description": "The original journals remain. Submit this assessment for independent approval before changing the allocation.",
+    "description": "The original journals remain. Submit this assessment through the tenant’s Flows before changing the allocation.",
     "fieldEffectiveDate": "Effective date",
     "fieldEntity": "Legal entity",
     "entityAria": "Contract legal entity",

@@ -47,11 +47,11 @@
     "title": "変更注文", "number": "変更注文番号", "description": "説明", "amount": "金額", "applyTo": "適用先", "incomeAccount": "収益勘定", "defaultIncomeAccount": "既定の収益勘定", "newScheduleLine": "新規明細行（増額変更）", "deductiveHint": "減額変更は既存の明細行を減額する必要があります。", "additiveHint": "変更する明細行を選択するか、新しい増額行を作成します。", "adjusts": "{description} を調整", "approve": "承認", "approvalBlockedHint": "先に未処理の申請を完了または無効化してください", "void": "無効化", "voidConfirm": "変更注文 {number} を無効にしますか？監査履歴は保持されます。", "add": "変更注文を追加", "empty": "変更注文はありません。", "status": { "draft": "下書き", "approved": "承認済み", "void": "無効" },
     "statusLabel": "ステータス",
     "workspaceHint": "承認された変更は、履歴を書き換えることなく出来高明細を改訂します。",
-    "formHint": "独立した承認のために加算または減算の契約変更を記録します。",
+    "formHint": "契約の増額または減額を記録し、テナントの Flows から提出します。",
     "cancel": "キャンセル"
   },
   "payApplications": {
-    "title": "支払申請", "applicationNumber": "申請 #{number}", "retainage": "保留金", "enterDraws": "出来高を入力", "hideDraws": "出来高を非表示", "approve": "承認", "createInvoice": "請求書を作成", "void": "無効化", "voidConfirm": "申請 #{number} を無効にしますか？出来高と監査履歴は保持されます。", "item": "項目", "description": "説明", "workThisPeriod": "当期出来高", "materialsStored": "保管材料", "submit": "承認申請", "submittedMessage": "独立承認のため申請を提出しました", "billedMessage": "{number} を請求済み — 当期請求額 {currentDue}、保留金 {retainage}", "empty": "支払申請はありません。", "periodEnding": "期間終了日", "newApplication": "新規申請", "status": { "draft": "下書き", "submitted": "提出済み", "approved": "承認済み", "invoiced": "請求済み", "posted": "請求済み", "void": "無効" },
+    "title": "支払申請", "applicationNumber": "申請 #{number}", "retainage": "保留金", "enterDraws": "出来高を入力", "hideDraws": "出来高を非表示", "approve": "承認", "createInvoice": "請求書を作成", "void": "無効化", "voidConfirm": "申請 #{number} を無効にしますか？出来高と監査履歴は保持されます。", "item": "項目", "description": "説明", "workThisPeriod": "当期出来高", "materialsStored": "保管材料", "submit": "承認申請", "submittedMessage": "テナントの Flows から提出しました", "billedMessage": "{number} を請求済み — 当期請求額 {currentDue}、保留金 {retainage}", "empty": "支払申請はありません。", "periodEnding": "期間終了日", "newApplication": "新規申請", "status": { "draft": "下書き", "submitted": "提出済み", "approved": "承認済み", "invoiced": "請求済み", "posted": "請求済み", "void": "無効" },
     "application": "申請",
     "workspaceHint": "各申請は出来高入力から承認を経て、関連する顧客請求書へと進みます。",
     "newHint": "このプロジェクトの請求期間に対する次の累積申請を開始します。",
