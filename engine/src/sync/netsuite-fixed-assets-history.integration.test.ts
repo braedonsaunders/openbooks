@@ -39,7 +39,7 @@ test('source-managed depreciation correction preserves posted evidence and resto
     await assert.rejects(()=>buildSchedule(asset.id,org.orgId,actorId),/source-managed/);
     await assert.rejects(()=>previewDepreciation(org.orgId,{asOfDate:'2026-07-31',assetIds:[asset.id]}),/source-managed/);
     await assert.rejects(()=>runDepreciation(org.orgId,'2026-07-31',actorId,asset.id),/source-managed/);
-    await assert.rejects(()=>db.execute(sql`insert into depreciation_schedule_lines(org_id,schedule_id,period_id,sequence,planned_amount,source) values(${org.orgId},${asset.schedule_id},${org.periodId},11,'2','formula')`),/source depreciation/);
+    await assert.rejects(()=>db.execute(sql`insert into depreciation_schedule_lines(org_id,schedule_id,period_id,sequence,planned_amount,source) values(${org.orgId},${asset.schedule_id},${org.periodId},11,'2','formula')`),error=>error instanceof Error && error.cause instanceof Error && /source depreciation/.test(error.cause.message));
     const input={orgId:org.orgId,assetId:asset.id,lineId:local.id,actorId,reason:'Correct local depreciation to preserve the source accounting authority'};
     await db.transaction(tx=>upsertLock({tx,orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,module:'assets',state:'closed',actorId,reason:'Close the measurement period'}));
     await assert.rejects(()=>reverseSourceManagedDepreciation(input),/closed/);
@@ -57,7 +57,7 @@ test('source-managed depreciation correction preserves posted evidence and resto
     assert.deepEqual(replay,{...corrected,created:false});
     await assert.rejects(()=>reverseSourceManagedDepreciation({...input,reason:'A different correction request'}),/retained correction/);
     assert.deepEqual((await db.execute(sql`select to_jsonb(l) as evidence from depreciation_schedule_lines l where org_id=${org.orgId} and id=${local.id}`)).rows[0],original);
-    await assert.rejects(()=>db.execute(sql`update depreciation_schedule_lines set posted_amount=0 where org_id=${org.orgId} and id=${local.id}`),/immutable/);
+    await assert.rejects(()=>db.execute(sql`update depreciation_schedule_lines set posted_amount=0 where org_id=${org.orgId} and id=${local.id}`),error=>error instanceof Error && error.cause instanceof Error && /immutable/.test(error.cause.message));
     const journals=(await db.execute(sql`select id,status,reverses_entry_id,posting_date::text from journal_entries where org_id=${org.orgId} and id in(${posted.entryId},${corrected.reversalEntryId}) order by status`)).rows;
     assert.equal(journals.find(j=>j.id===posted.entryId)!.status,'reversed');
     assert.equal(journals.find(j=>j.id===corrected.reversalEntryId)!.posting_date,'2026-07-31');
