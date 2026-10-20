@@ -985,5 +985,14 @@
       "description": "描述",
       "removeReason": "移除资产的原因"
     }
+  },
+  "depreciationCorrection": {
+    "action": "冲销折旧",
+    "help": "此操作将按原始日期冲销本地分录，并保留两笔分录。已关闭的期间需要经批准后重新开放。",
+    "reason": "更正原因",
+    "failed": "无法完成折旧更正。",
+    "evidence": "折旧冲销",
+    "reversed": "已冲销",
+    "sourceManaged": "折旧由来源连接管理。请更新来源系统并同步；无法在本地重新计算或过账。"
   }
 }

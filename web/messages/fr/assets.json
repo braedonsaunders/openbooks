@@ -985,5 +985,14 @@
       "description": "Libellé",
       "removeReason": "Motif du retrait d’une immobilisation"
     }
+  },
+  "depreciationCorrection": {
+    "action": "Contrepasser l’amortissement",
+    "help": "Cette action contrepassera l’écriture locale à sa date initiale et conservera les deux écritures. Une période clôturée nécessite une réouverture approuvée.",
+    "reason": "Motif de correction",
+    "failed": "La correction de l’amortissement n’a pas pu être effectuée.",
+    "evidence": "Contrepassation d’amortissement",
+    "reversed": "Contrepassé",
+    "sourceManaged": "L’amortissement est géré par la connexion source. Modifiez la source et synchronisez. Le recalcul et la comptabilisation locale ne sont pas disponibles."
   }
 }

@@ -985,5 +985,14 @@
       "description": "Descrição",
       "removeReason": "Motivo da remoção de um ativo"
     }
+  },
+  "depreciationCorrection": {
+    "action": "Estornar depreciação",
+    "help": "O lançamento local será estornado na data original e ambos os lançamentos serão preservados. Um período fechado exige reabertura aprovada.",
+    "reason": "Motivo da correção",
+    "failed": "Não foi possível concluir a correção de depreciação.",
+    "evidence": "Estorno de depreciação",
+    "reversed": "Estornado",
+    "sourceManaged": "A depreciação é gerenciada pela conexão de origem. Atualize a origem e sincronize. O recálculo e a contabilização local não estão disponíveis."
   }
 }

@@ -201,6 +201,7 @@
     "./manufacturing": "./src/manufacturing/public.ts",
     "./hrm/change-requests": "./src/hrm/public-change-requests.ts",
     "./ledger/cash-deposits": "./src/ledger/public-cash-deposits.ts",
+    "./assets/depreciation-reversal": "./src/assets/depreciation-reversal.ts",
     "./assets/depreciation": "./src/assets/depreciation.ts",
     "./banking/banking": "./src/banking/banking.ts",
     "./banking/match-scoring": "./src/banking/match-scoring.ts",

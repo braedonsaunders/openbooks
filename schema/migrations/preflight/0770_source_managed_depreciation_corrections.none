@@ -1,0 +1,1 @@
+The migration adds nullable correction references, validates every new reversal, and retains all existing depreciation rows unchanged. Existing source-managed local postings remain visible for governed correction.

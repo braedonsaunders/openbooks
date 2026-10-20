@@ -1,4 +1,5 @@
 /** Read-only depreciation preview. Split from assets/depreciation.ts (pure moves only). */
+import { assertLocalDepreciationSelection } from "./depreciation-ownership.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
@@ -98,6 +99,7 @@ export async function previewDepreciation(
 ): Promise<DepreciationPreview> {
   const scopedAssetIds =
     input.assetIds && input.assetIds.length > 0 ? [...new Set(input.assetIds)] : undefined;
+  await assertLocalDepreciationSelection(db,orgId,scopedAssetIds,input.allowedSubsidiaryIds);
   const due = (await db.execute<{
     line_id: string;
     asset_id: string;
@@ -157,7 +159,7 @@ export async function previewDepreciation(
       left join locations loc on loc.id = a.location_id and loc.org_id = a.org_id
      where l.org_id = ${orgId}
        and l.posted_amount is null
-       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
+       and a.custom->'sourceManaged' is distinct from 'true'::jsonb and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${input.asOfDate}
        ${input.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(input.allowedSubsidiaryIds)}::uuid[])` : sql``}
        ${scopedAssetIds ? sql`and a.id = any(${uuidArray(scopedAssetIds)}::uuid[])` : sql``}
@@ -257,7 +259,7 @@ export async function previewDepreciation(
       join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
       join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_active
      where s.org_id = ${orgId}
-       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
+       and a.custom->'sourceManaged' is distinct from 'true'::jsonb and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and (s.method not in ('manual', 'units_of_production') or s.depreciation_method_id is not null)
        ${input.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(input.allowedSubsidiaryIds)}::uuid[])` : sql``}
        ${scopedAssetIds ? sql`and a.id = any(${uuidArray(scopedAssetIds)}::uuid[])` : sql``}

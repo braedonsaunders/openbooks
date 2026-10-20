@@ -1,4 +1,5 @@
 /** Shared run/confirm/preview scope: fingerprint rows, claim shapes, confirm gate. Split from assets/depreciation.ts (pure moves only). */
+import { assertLocalDepreciation } from "./depreciation-ownership.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -85,7 +86,7 @@ export async function reconcileAssetDepreciationStatusWithRunner(
   // The caller keeps these locks through its financial transaction.
   await runner.execute(sql`
     select id from fixed_assets
-     where org_id = ${orgId} and status in ('in_service', 'fully_depreciated')
+     where org_id = ${orgId} and custom->'sourceManaged' is distinct from 'true'::jsonb and status in ('in_service', 'fully_depreciated')
        ${allowedSubsidiaryIds ? sql`and subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
        ${assetId ? sql`and id = ${assetId}` : sql``}
      order by id for update`);
@@ -97,7 +98,7 @@ export async function reconcileAssetDepreciationStatusWithRunner(
         from fixed_assets a
         join accounting_books book on book.org_id = a.org_id and book.is_primary and book.is_active and book.posts_gl
         join asset_book_carrying_values carrying_values on carrying_values.org_id=a.org_id and carrying_values.asset_id=a.id and carrying_values.book_id=book.id
-       where a.org_id = ${orgId} and a.status in ('in_service', 'fully_depreciated')
+       where a.org_id = ${orgId} and a.custom->'sourceManaged' is distinct from 'true'::jsonb and a.status in ('in_service', 'fully_depreciated')
          ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
          ${assetId ? sql`and a.id = ${assetId}` : sql``}
     ), changed as (
@@ -196,8 +197,8 @@ export async function assertConfirmSetCurrent(
   const alreadyPosted: AlreadyPostedDepreciationLine[] = [];
   if (lineIds.length === 0) return alreadyPosted;
 
-  const assets = (await tx.execute<{ id: string; category_id: string }>(sql`
-    select id, category_id from fixed_assets
+  const assets = (await tx.execute<{ id: string; category_id: string; custom: unknown; asset_number: string }>(sql`
+    select id, category_id, custom, asset_number from fixed_assets
      where org_id = ${orgId} and id = any(${uuidArray(assetIds)}::uuid[])
      order by id for update`));
   const foundAssets = new Set(assets.rows.map((row) => String(row.id)));
@@ -205,6 +206,7 @@ export async function assertConfirmSetCurrent(
   if (missingAsset) {
     throw new StalePreviewError(`asset ${missingAsset} left the confirmed scope; re-preview before confirming`);
   }
+  for (const asset of assets.rows) assertLocalDepreciation(asset.custom,asset.asset_number);
   const categoryIds = [...new Set(assets.rows.map((row) => String(row.category_id)))].sort();
   await tx.execute(sql`
     select id from asset_categories
@@ -263,7 +265,7 @@ export async function assertConfirmSetCurrent(
       join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.id = any(${uuidArray(lineIds)}::uuid[])
-       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
+       and a.custom->'sourceManaged' is distinct from 'true'::jsonb and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${input.asOfDate}
        ${input.bookId ? sql`and s.book_id = ${input.bookId}` : sql``}
        ${input.periodId ? sql`and l.period_id = ${input.periodId}` : sql``}

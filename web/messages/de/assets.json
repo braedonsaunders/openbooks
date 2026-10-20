@@ -985,5 +985,14 @@
       "description": "Beschreibung",
       "removeReason": "Grund für das Entfernen einer Anlage"
     }
+  },
+  "depreciationCorrection": {
+    "action": "Abschreibung stornieren",
+    "help": "Die lokale Buchung wird zum ursprünglichen Datum storniert. Beide Journaleinträge bleiben erhalten. Eine geschlossene Periode erfordert eine genehmigte Wiedereröffnung.",
+    "reason": "Korrekturgrund",
+    "failed": "Die Abschreibungskorrektur konnte nicht abgeschlossen werden.",
+    "evidence": "Abschreibungsstorno",
+    "reversed": "Storniert",
+    "sourceManaged": "Die Abschreibung wird über die Quellverbindung verwaltet. Aktualisieren Sie das Quellsystem und synchronisieren Sie. Lokale Neuberechnungen und Buchungen sind nicht verfügbar."
   }
 }

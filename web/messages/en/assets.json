@@ -985,5 +985,14 @@
       "description": "Description",
       "removeReason": "Reason for removing an asset"
     }
+  },
+  "depreciationCorrection": {
+    "action": "Reverse depreciation",
+    "help": "This reverses the local posting on its original date and retains both journal entries. A closed period requires an approved reopening.",
+    "reason": "Correction reason",
+    "failed": "The depreciation correction could not be completed.",
+    "evidence": "Depreciation reversal",
+    "reversed": "Reversed",
+    "sourceManaged": "Depreciation is managed by the source connection. Update the source and synchronize; local rebuilding and posting are unavailable."
   }
 }

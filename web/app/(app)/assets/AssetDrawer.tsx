@@ -46,6 +46,7 @@ import { GroupValuationButton } from './GroupValuationButton'
 import { AssetChangeButton } from './AssetChangeButton'
 import { DisposeButton } from './DisposeButton'
 import { RemeasureButton } from './RemeasureButton'
+import { ReverseDepreciationButton } from './ReverseDepreciationButton'
 import { ReverseEventButton } from './ReverseEventButton'
 import { RunDepreciationButton } from './RunDepreciationButton'
 import { DepreciationInputButton } from './DepreciationInputButton'
@@ -130,6 +131,7 @@ export function AssetDrawer({
   subsidiaries,
   canManage,
   canManageSetup = false,
+  canPostGl = false,
   canCustomize,
   layout,
   forms,
@@ -146,6 +148,7 @@ export function AssetDrawer({
   accounts: AccountOpt[]
   taxConfigurations: TaxConfiguration[]
   subsidiaries: SubsidiaryOpt[]
+  canPostGl?: boolean
   canManage: boolean
   /** May manage Admin Setup (asset-categories): gates the setup link in the
    *  empty-category prerequisite. Readers without it name the grant instead. */
@@ -181,6 +184,7 @@ export function AssetDrawer({
 
   const formId = useId()
   const a = payload.asset
+  const sourceManaged = a.custom.sourceManaged === true
   const isDraft = a.status === 'draft'
   const canEditStatus = a.status === 'draft' || a.status === 'in_service'
   const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
@@ -650,8 +654,8 @@ export function AssetDrawer({
       {forms.length > 0 ? <div className="mb-1 border-b border-slate-200 p-2 dark:border-slate-800"><Label className="mb-1 block text-xs">{t('drawer.customForm')}</Label><Select value={currentFormId ?? ''} onChange={(event) => selectForm(event.target.value)}>{forms.map((form) => <option key={form.id} value={form.id}>{form.name}</option>)}</Select></div> : null}
       <div className="space-y-0.5 [&_button]:h-8 [&_button]:w-full [&_button]:justify-start [&_button]:rounded [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-2 [&_button]:text-xs [&_button]:shadow-none [&_button:hover]:bg-slate-100 dark:[&_button:hover]:bg-slate-800">
         {!createMode && canManage && isDraft ? <Button variant="ghost" className={actionClass} disabled={busy} onClick={placeInService}>{t('drawer.placeInService')}</Button> : null}
-        {!createMode && canManage && ['in_service', 'fully_depreciated'].includes(status) ? payload.books.map((book) => <RunDepreciationButton key={book.id} assetId={a.id} assetNumber={a.asset_number ?? ''} assetName={a.name ?? ''} lockBookId={book.id} books={payload.books.map((item) => ({ id: item.id, name: item.name, is_primary: item.isPrimary }))} periods={periods} variant="ghost" className={actionClass} label={t('drawer.runForBook', { book: book.name })} />) : null}
-        {!createMode && canManage && status === 'in_service' && inputSchedules.length > 0 ? <DepreciationInputButton assetId={a.id} schedules={inputSchedules} /> : null}
+        {!createMode && canManage && !sourceManaged && ['in_service', 'fully_depreciated'].includes(status) ? payload.books.map((book) => <RunDepreciationButton key={book.id} assetId={a.id} assetNumber={a.asset_number ?? ''} assetName={a.name ?? ''} lockBookId={book.id} books={payload.books.map((item) => ({ id: item.id, name: item.name, is_primary: item.isPrimary }))} periods={periods} variant="ghost" className={actionClass} label={t('drawer.runForBook', { book: book.name })} />) : null}
+        {!createMode && canManage && !sourceManaged && status === 'in_service' && inputSchedules.length > 0 ? <DepreciationInputButton assetId={a.id} schedules={inputSchedules} /> : null}
         {!createMode && canManage && ['in_service','fully_depreciated'].includes(status) ? <>{status === 'in_service' ? <RemeasureButton assetId={a.id} /> : null}<AssetChangeButton assetId={a.id} accounts={accountOptions} categories={categories} /><GroupValuationButton assetId={a.id} /></> : null}
         {!createMode && canManage && (status === 'in_service' || status === 'fully_depreciated') ? <DisposeButton assetId={a.id} accountOptions={accountOptions} /> : null}
         {!createMode && canManage && hasAccountingEvidence ? <ReverseEventButton assetId={a.id} /> : null}
@@ -686,10 +690,11 @@ export function AssetDrawer({
       </section>
     })}</div> : null}
     {tab === 'schedule' ? <div className="space-y-3 p-1">
+      {sourceManaged ? <p role="status" className="text-sm text-slate-500">{t('depreciationCorrection.sourceManaged')}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput paramKey="deprq" pageParamKey="deprpage" placeholder={t('drawer.searchSchedule')} />
         <FilterChips basePath={pathname} currentParams={currentParams} paramKey="deprbook" pageParamKey="deprpage" label={t('run.book')} options={payload.books.map((book) => ({ value: book.id, label: book.name }))} />
-        {canManage && !createMode && a.status !== 'draft' ? (
+        {canManage && !sourceManaged && !createMode && a.status !== 'draft' ? (
           <Button size="sm" variant="outline" disabled={rebuilding} onClick={rebuildSchedule}>
             {rebuilding ? t('review.rebuilding') : t('review.rebuild')}
           </Button>
@@ -702,7 +707,9 @@ export function AssetDrawer({
         <TableCell className="font-mono text-[13px]">{line.journalEntryId ? <JournalEntryLink entryId={line.journalEntryId} className="text-teal-700 hover:underline dark:text-teal-300">{line.periodName}</JournalEntryLink> : line.periodName}</TableCell>
         <TableCell className="text-right tabular-nums">{money(line.plannedAmount)}</TableCell>
         <TableCell className="text-right tabular-nums">{line.postedAmount != null ? <Badge variant="success">{money(line.postedAmount)}</Badge> : <span className="text-slate-400">—</span>}</TableCell>
-        <TableCell className="max-w-56 text-xs">{line.input ? <div><a href={`/api/file-cabinet/files/${line.input.evidenceFileId}/download`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{line.input.evidenceFileName}</a><p className="truncate text-slate-500 dark:text-slate-400">{line.input.memo}</p>{line.input.productionUnits ? <p className="tabular-nums text-slate-500">{t('drawer.productionUnits', { units: line.input.productionUnits })}</p> : null}</div> : line.source === 'imported' ? <span className="text-slate-500 dark:text-slate-400">{t('drawer.importedEvidence')}</span> : <span className="text-slate-400">{t('drawer.formulaGenerated')}</span>}</TableCell>
+        <TableCell className="max-w-56 text-xs">{line.source === 'reversal' ? <span>{t('depreciationCorrection.evidence')} · {line.reversalReason}</span> : line.input ? <div><a href={`/api/file-cabinet/files/${line.input.evidenceFileId}/download`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{line.input.evidenceFileName}</a><p className="truncate text-slate-500 dark:text-slate-400">{line.input.memo}</p>{line.input.productionUnits ? <p className="tabular-nums text-slate-500">{t('drawer.productionUnits', { units: line.input.productionUnits })}</p> : null}</div> : line.source === 'imported' ? <span className="text-slate-500 dark:text-slate-400">{t('drawer.importedEvidence')}</span> : <span className="text-slate-400">{t('drawer.formulaGenerated')}</span>}
+          {sourceManaged && canManage && canPostGl && line.journalEntryId && line.source !== 'reversal' && line.source !== 'imported' ? line.isReversed ? <p>{t('depreciationCorrection.reversed')}</p> : <ReverseDepreciationButton assetId={a.id} lineId={line.id} /> : null}
+        </TableCell>
         <TableCell className="text-right tabular-nums">{money(line.accumulated)}</TableCell><TableCell className="text-right tabular-nums">{money(line.netBookValue)}</TableCell>
       </TableRow>)}</TableBody>
     </Table>}

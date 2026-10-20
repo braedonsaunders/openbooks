@@ -1,4 +1,5 @@
 /** Manual/usage depreciation input recording. Split from assets/depreciation.ts (pure moves only). */
+import { assertLocalDepreciation } from "./depreciation-ownership.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
@@ -83,6 +84,8 @@ export async function recordDepreciationInput(
       method: DepreciationMethod;
       units_total: string | null;
       book_id: string;
+      custom: unknown;
+      asset_number: string;
       subsidiary_id: string;
       acquisition_cost: string;
       salvage_value: string;
@@ -96,7 +99,7 @@ export async function recordDepreciationInput(
       period_ends_on: string;
     }>(sql`
       select s.id, s.method, s.units_total, s.book_id,
-             a.subsidiary_id,
+             a.subsidiary_id, a.custom, a.asset_number,
              a.acquisition_cost, a.salvage_value, a.status, a.in_service_on,
              a.opening_accumulated_depreciation::text as opening_accumulated_depreciation,
              p.id as period_id, p.fiscal_year, p.period_number,
@@ -120,6 +123,7 @@ export async function recordDepreciationInput(
     if (args.allowedSubsidiaryIds && !args.allowedSubsidiaryIds.includes(row.subsidiary_id)) {
       throw new DepreciationRefusalError("asset is outside your subsidiary scope");
     }
+    assertLocalDepreciation(row.custom, row.asset_number);
     if (row.status !== "in_service")
       throw new DepreciationRefusalError("depreciation inputs require an in-service asset");
     if (args.effectiveDate < row.in_service_on)

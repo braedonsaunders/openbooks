@@ -1,4 +1,5 @@
 /** Schedule persistence: plan loading, carrying value, build paths. Split from assets/depreciation.ts (pure moves only). */
+import { assertLocalDepreciation } from "./depreciation-ownership.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
@@ -69,9 +70,11 @@ async function loadUnremeasuredAssetPlan(
   orgId: string,
   forBookId?: string,
   allowedSubsidiaryIds?: readonly string[] | null,
+  forLocalPlanning = false,
 ) {
   const assetRes = await runner.execute<{
     id: string;
+    custom: unknown;
     category_id: string;
     asset_number: string;
     status: string;
@@ -88,7 +91,7 @@ async function loadUnremeasuredAssetPlan(
     opening_accumulated_depreciation: string | null;
     opening_accumulated_as_of: string | null;
   }>(sql`
-    select id, org_id, category_id, asset_number, status, subsidiary_id, in_service_on, acquisition_cost, salvage_value,
+    select id, org_id, custom, category_id, asset_number, status, subsidiary_id, in_service_on, acquisition_cost, salvage_value,
            depreciation_method, depreciation_method_id, useful_life_months, depreciation_rate_percent,
            depreciation_convention, depreciation_units_total,
            opening_accumulated_depreciation::text as opening_accumulated_depreciation,
@@ -102,6 +105,7 @@ async function loadUnremeasuredAssetPlan(
   if (allowedSubsidiaryIds && !allowedSubsidiaryIds.includes(asset.subsidiary_id)) {
     throw new DepreciationRefusalError("asset is outside your subsidiary scope");
   }
+  if (forLocalPlanning) assertLocalDepreciation(asset.custom,asset.asset_number);
   assertPostableDepreciationStatus(asset.status, asset.asset_number);
   if (!asset.in_service_on) throw new DepreciationRefusalError("asset has no in-service date");
 
@@ -476,7 +480,7 @@ export async function buildScheduleWithRunner(
     plan,
     opening,
     basisChange,
-  } = await loadUnremeasuredAssetPlan(runner, assetId, orgId, forBookId, allowedSubsidiaryIds);
+  } = await loadUnremeasuredAssetPlan(runner, assetId, orgId, forBookId, allowedSubsidiaryIds, true);
   // Continue-from-accumulated pre-validation (migration 0156). Pre-as-of
   // native months are covered by the opening figure and must never be
   // scheduled — but a zero opening covers nothing, so dropping months for it

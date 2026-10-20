@@ -9,6 +9,7 @@
  */
 export class DepreciationRefusalError extends Error {
   readonly name = "DepreciationRefusalError";
+  readonly status = 409;
 }
 
 /**

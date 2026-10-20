@@ -766,11 +766,22 @@ export async function syncNetSuiteFixedAssets(
       ).rows[0]?.convention;
       if (scheduleId) {
         const localPosted = (await db.execute<{ count: number }>(sql`
-          select count(*)::int as count from depreciation_schedule_lines
+          select count(*)::int as count from depreciation_schedule_lines local
            where org_id = ${options.orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null
+             and not exists (
+               select 1 from depreciation_schedule_lines correction
+               join depreciation_schedule_lines original on original.org_id=correction.org_id and original.id=correction.reverses_line_id
+               join journal_entries reversal on reversal.org_id=correction.org_id and reversal.id=correction.journal_entry_id
+               join journal_entries source on source.org_id=original.org_id and source.id=original.journal_entry_id
+               where correction.org_id=local.org_id and correction.source='reversal'
+                 and correction.schedule_id=local.schedule_id and original.schedule_id=local.schedule_id
+                 and correction.period_id=original.period_id and correction.posted_amount=-original.posted_amount
+                 and reversal.reverses_entry_id=source.id and source.status='reversed' and reversal.status='posted'
+                 and (local.id=original.id or local.id=correction.id)
+             )
         `));
         if (Number(localPosted.rows[0]?.count ?? 0) > 0) {
-          throw new Error(`NetSuite-managed asset ${text(asset.name) ?? state.sourceId} has locally posted depreciation`);
+          throw new Error(`NetSuite-managed asset ${text(asset.name) ?? state.sourceId} has locally posted depreciation. Open the asset schedule and correct its local posting through Reverse depreciation, then synchronize again.`);
         }
         await db.execute(sql`
           update depreciation_schedules

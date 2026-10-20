@@ -87,7 +87,9 @@ interface AssetScheduleLineRow extends Record<string, unknown> {
   posted_amount: string | null
   accumulated: string
   journal_entry_id: string | null
-  source: 'formula' | 'manual' | 'production_usage' | 'imported'
+  source: 'formula' | 'manual' | 'production_usage' | 'imported' | 'reversal'
+  reversal_reason: string | null
+  is_reversed: boolean
   input_id: string | null
   input_kind: 'manual' | 'production_usage' | null
   production_units: string | null
@@ -146,7 +148,9 @@ export interface AssetPayload {
     accumulated: string
     netBookValue: string
     journalEntryId: string | null
-    source: 'formula' | 'manual' | 'production_usage' | 'imported'
+    source: 'formula' | 'manual' | 'production_usage' | 'imported' | 'reversal'
+    reversalReason?: string | null
+    isReversed?: boolean
     input: {
       id: string
       kind: 'manual' | 'production_usage'
@@ -367,7 +371,8 @@ export async function loadAssetWithRunner(
       );
   const linesRes = await tx.execute<AssetScheduleLineRow>(sql`
     with schedule_rows as (
-      select l.id, l.sequence, l.planned_amount, l.posted_amount, l.journal_entry_id, l.source,
+      select l.id, l.sequence, l.planned_amount, l.posted_amount, l.journal_entry_id, l.source, l.reversal_reason,
+             exists(select 1 from depreciation_schedule_lines correction where correction.org_id=l.org_id and correction.reverses_line_id=l.id) as is_reversed,
              s.book_id, b.code as book_code, b.name as book_name,
              i.id as input_id, i.kind as input_kind, i.production_units, i.memo as input_memo,
              i.evidence_file_id, ef.name as evidence_file_name,
@@ -426,7 +431,9 @@ export async function loadAssetWithRunner(
         : fromUnits(cost + basis.cost + valuation.delta - toUnits(accumulated)),
       journalEntryId: (l.journal_entry_id as string | null) ?? null,
       source: l.source as
-        "formula" | "manual" | "production_usage" | "imported",
+        "formula" | "manual" | "production_usage" | "imported" | "reversal",
+      reversalReason: l.reversal_reason,
+      isReversed: l.is_reversed,
       input: l.input_id
         ? {
             id: l.input_id as string,

@@ -1,4 +1,5 @@
 /** Depreciation run: claim reload, confirm batch, recognition. Split from assets/depreciation.ts (pure moves only). */
+import { assertLocalDepreciation, assertLocalDepreciationSelection } from "./depreciation-ownership.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withTransactionSavepoint } from "../platform/db.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
@@ -30,8 +31,8 @@ export async function reloadClaimLine(
   asOfDate: string,
   allowedSubsidiaryIds: string[] | undefined,
 ): Promise<ClaimedDepreciationLine | null> {
-  const claim = await runner.execute<ClaimedDepreciationLine>(sql`
-    select l.id as line_id,
+  const claim = await runner.execute<ClaimedDepreciationLine & { custom: unknown }>(sql`
+    select a.custom, l.id as line_id,
            l.planned_amount,
            l.period_id,
            s.book_id,
@@ -67,10 +68,12 @@ export async function reloadClaimLine(
      where l.id = ${lineId}
        and l.org_id = ${orgId}
        and l.posted_amount is null
+       and a.custom->'sourceManaged' is distinct from 'true'::jsonb
        and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${asOfDate}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
      for update of l for share of bk`);
+  if (claim.rows[0]) assertLocalDepreciation(claim.rows[0].custom, claim.rows[0].asset_number);
   return claim.rows[0] ?? null;
 }
 
@@ -150,6 +153,7 @@ async function runConfirmBatch(
       join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.posted_amount is null
+       and a.custom->'sourceManaged' is distinct from 'true'::jsonb
        and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${asOfDate}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
@@ -425,6 +429,7 @@ export async function runDepreciation(
       : assetId
         ? [assetId]
         : undefined;
+  await assertLocalDepreciationSelection(db,orgId,scopedAssetIds,allowedSubsidiaryIds);
   const result: RunDepreciationResult = {
     posted: 0,
     recorded: 0,
@@ -459,6 +464,7 @@ export async function runDepreciation(
       join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
       join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_active
      where s.org_id = ${orgId}
+       and a.custom->'sourceManaged' is distinct from 'true'::jsonb
        and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and (s.method not in ('manual', 'units_of_production') or s.depreciation_method_id is not null)
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
@@ -537,6 +543,7 @@ export async function runDepreciation(
       join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.posted_amount is null
+       and a.custom->'sourceManaged' is distinct from 'true'::jsonb
        and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${asOfDate}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
@@ -846,7 +853,8 @@ export async function runDepreciation(
         join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
        where l.org_id = ${orgId}
          and l.posted_amount is null
-         and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
+         and a.custom->'sourceManaged' is distinct from 'true'::jsonb
+       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
          ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
          ${scopedAssetIds ? sql`and a.id = any(${`{${scopedAssetIds.join(",")}}`}::uuid[])` : sql``}
          ${bookId ? sql`and s.book_id = ${bookId}` : sql``}

@@ -1,3 +1,4 @@
+import { assertLocalDepreciation } from "./depreciation-ownership.ts";
 import { sql } from "drizzle-orm";
 import { cmp } from "../money/money.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
@@ -47,6 +48,7 @@ export async function linkManualDepreciationEntry(
   return withOrgTransaction(orgId, async () => {
     const lines = (await db.execute<{
       id: string;
+      custom: unknown;
       asset_id: string;
       asset_number: string;
       asset_name: string;
@@ -69,7 +71,7 @@ export async function linkManualDepreciationEntry(
       cat_expense: string | null;
       book_id: string;
     }>(sql`
-      select l.id, s.asset_id::text as asset_id, a.asset_number, a.name as asset_name, a.status as asset_status,
+      select l.id, a.custom, s.asset_id::text as asset_id, a.asset_number, a.name as asset_name, a.status as asset_status,
              a.subsidiary_id::text as asset_subsidiary_id, l.period_id::text as period_id,
              p.fiscal_year, p.period_number, p.is_adjustment,
              p.starts_on::text as period_starts_on, p.ends_on::text as period_ends_on,
@@ -91,6 +93,7 @@ export async function linkManualDepreciationEntry(
     if (!line) {
       throw new DepreciationRefusalError("that schedule line does not belong to this asset");
     }
+    assertLocalDepreciation(line.custom, line.asset_number);
     const periodRef: PeriodDisplayInput = {
       fiscalYear: Number(line.fiscal_year),
       periodNumber: Number(line.period_number),

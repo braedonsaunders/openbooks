@@ -166,8 +166,8 @@ export async function loadAssets(
     // Picker rows for the review drawer: live depreciable register only.
     // Reader-scoped like the drawer payload — never the whole tenant.
     db.execute<DepreciationCandidateRow>(authz.allowedSubsidiaryIds
-      ? sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and status in ('in_service','fully_depreciated') and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[]) order by asset_number`
-      : sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and status in ('in_service','fully_depreciated') order by asset_number`),
+      ? sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and custom->'sourceManaged' is distinct from 'true'::jsonb and status in ('in_service','fully_depreciated') and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[]) order by asset_number`
+      : sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and custom->'sourceManaged' is distinct from 'true'::jsonb and status in ('in_service','fully_depreciated') order by asset_number`),
   ])
   const subsidiaries = authz.allowedSubsidiaryIds
     ? allSubsidiaries.filter((subsidiary) => authz.allowedSubsidiaryIds!.has(subsidiary.id))
@@ -274,6 +274,7 @@ export async function loadAssets(
       taxConfigurations: createPickers[2].rows,
       subsidiaries: multiSub ? subsidiaries : [],
       canManage,
+      canPostGl: can(authz,'gl.post'),
       canManageSetup: canSetupTaxDepreciation,
       canCustomize,
       layout: createForm.layout,
@@ -332,7 +333,8 @@ export async function loadAssets(
         taxConfigurations: pickers[2].rows,
         subsidiaries: multiSub ? subsidiaries : [],
         canManage,
-        canManageSetup: canSetupTaxDepreciation,
+        canPostGl: can(authz,'gl.post'),
+      canManageSetup: canSetupTaxDepreciation,
         canCustomize,
         layout: resolvedForm.layout,
         forms: resolvedForm.available,

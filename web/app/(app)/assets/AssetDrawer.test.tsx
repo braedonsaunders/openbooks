@@ -48,6 +48,31 @@ const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../messages/en')).default
 const { MoneyProvider } = await import('../../../components/money-provider')
 const { AssetDrawer } = await import('./AssetDrawer')
+const { ReverseDepreciationButton } = await import('./ReverseDepreciationButton')
+
+test('depreciation correction keeps a closed-period refusal and remedy beside its reason',async(t)=>{
+  const calls:{url:string;body:unknown}[]=[]
+  t.mock.method(globalThis,'fetch',async(url:RequestInfo|URL,init?:RequestInit)=>{
+    calls.push({url:String(url),body:JSON.parse(String(init?.body))})
+    return Response.json({error:'The asset period is closed.',remedy:'Request an approved reopening before correcting the original posting.'},{status:409})
+  })
+  const root=createRoot(document.body)
+  t.after(async()=>{await act(async()=>root.unmount());document.body.replaceChildren()})
+  await act(async()=>root.render(<NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}><ReverseDepreciationButton assetId="asset-1" lineId="line-1" /></NextIntlClientProvider>))
+  const trigger=Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Reverse depreciation')!
+  await act(async()=>{trigger.click();await tick()})
+  const reason=document.querySelector('textarea')!
+  await act(async()=>{setJsdomInput(reason,'Correct the unsupported source-managed depreciation');await tick()})
+  const confirm=Array.from(document.querySelectorAll('button')).filter(b=>b.textContent==='Reverse depreciation').at(-1)!
+  await act(async()=>{confirm.click();await tick()})
+  assert.equal(calls.length,1)
+  assert.equal(calls[0]!.url,'/api/assets/asset-1/reverse-depreciation')
+  assert.deepEqual(calls[0]!.body,{lineId:'line-1',reason:'Correct the unsupported source-managed depreciation'})
+  assert.match(document.body.textContent??'',/The asset period is closed/)
+  assert.match(document.body.textContent??'',/approved reopening/)
+  assert.equal(reason.value,'Correct the unsupported source-managed depreciation')
+  assert.equal(confirm.disabled,false)
+})
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 

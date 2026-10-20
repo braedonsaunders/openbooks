@@ -985,5 +985,14 @@
       "description": "Descripción",
       "removeReason": "Motivo para retirar un activo"
     }
+  },
+  "depreciationCorrection": {
+    "action": "Revertir depreciación",
+    "help": "Se revierte el asiento local en su fecha original y se conservan ambos asientos. Un período cerrado requiere una reapertura aprobada.",
+    "reason": "Motivo de corrección",
+    "failed": "No se pudo completar la corrección de depreciación.",
+    "evidence": "Reversión de depreciación",
+    "reversed": "Revertido",
+    "sourceManaged": "La depreciación se gestiona mediante la conexión de origen. Actualice el origen y sincronice. El recálculo y la contabilización local no están disponibles."
   }
 }
