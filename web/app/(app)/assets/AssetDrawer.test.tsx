@@ -62,7 +62,12 @@ test('depreciation correction keeps a closed-period refusal and remedy beside it
   const trigger=Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Reverse depreciation')!
   await act(async()=>{trigger.click();await tick()})
   const reason=document.querySelector('textarea')!
-  await act(async()=>{setJsdomInput(reason,'Correct the unsupported source-managed depreciation');await tick()})
+  await act(async()=>{
+    const realm=reason.ownerDocument.defaultView!
+    Object.getOwnPropertyDescriptor(realm.HTMLTextAreaElement.prototype,'value')!.set!.call(reason,'Correct the unsupported source-managed depreciation')
+    reason.dispatchEvent(new realm.Event('input',{bubbles:true}))
+    await tick()
+  })
   const confirm=Array.from(document.querySelectorAll('button')).filter(b=>b.textContent==='Reverse depreciation').at(-1)!
   await act(async()=>{confirm.click();await tick()})
   assert.equal(calls.length,1)
