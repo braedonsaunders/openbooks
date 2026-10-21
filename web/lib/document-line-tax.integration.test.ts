@@ -15,6 +15,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 );
 const { saveMarketplaceFacilitator } = await import("@openbooks/engine/testing/tax/marketplace-facilitators");
 const { API_RECORD_TYPES, toResolved } = await import("./api/registry-data.ts");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 const { createRecord, updateRecord } = await import("./api/writers.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -95,12 +96,14 @@ test("moving a draft's date across a rate change refuses a header-only save", { 
     const taxTotal = async () => (await withOrgContext(f.org.orgId, () => db.execute<{ t: string }>(sql`
       select tax_total::text as t from documents where id = ${id} and org_id = ${f.org.orgId}`))).rows[0]!.t;
     assert.equal(await taxTotal(), "50.0000");
+    const expectedUpdatedAt = (await withOrgContext(f.org.orgId, () => db.execute<{ revision: string }>(sql`
+      select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where org_id=${f.org.orgId} and id=${id}`))).rows[0]!.revision;
     // The stored 5% would otherwise post on an August date where 6% applies.
-    const headerOnly = await withOrgContext(f.org.orgId, () => updateRecord(f.user, invoices, [], id, { documentDate: "2026-08-15" }, { source: "api", allowedSubsidiaryIds: null }));
+    const headerOnly = await withOrgContext(f.org.orgId, () => updateRecord(f.user, invoices, [], id, { expectedUpdatedAt, documentDate: "2026-08-15" }, { source: "api", allowedSubsidiaryIds: null }));
     assert.equal(headerOnly.status, 422);
     assert.match(JSON.stringify(headerOnly.body), /Line 1 carries LINE-TAX at 5\.0000%, but 6\.0000% is in effect on 2026-08-15/);
     assert.equal(await taxTotal(), "50.0000");
-    const withLines = await withOrgContext(f.org.orgId, () => updateRecord(f.user, invoices, [], id, { documentDate: "2026-08-15", lines: [line] }, { source: "api", allowedSubsidiaryIds: null }));
+    const withLines = await withOrgContext(f.org.orgId, () => updateRecord(f.user, invoices, [], id, { expectedUpdatedAt, documentDate: "2026-08-15", lines: [line] }, { source: "api", allowedSubsidiaryIds: null }));
     assert.ok(withLines.status < 300, JSON.stringify(withLines.body));
     assert.equal(await taxTotal(), "60.0000");
   } finally {

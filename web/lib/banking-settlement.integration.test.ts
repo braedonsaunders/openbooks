@@ -76,7 +76,7 @@ async function fixture(options: {
   const currency = options.currency ?? "CAD";
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Bank Reviewer", "bank_preparer"));
-  await withBypassContext(() => grantScratchPermissions(org.orgId, actorId, options.permissions ?? ["banking.reconcile", side === "ar" ? "ar.pay" : "ap.pay"]));
+  await withBypassContext(() => grantScratchPermissions(org.orgId, actorId, options.permissions ?? ["banking.reconcile", "gl.post", side === "ar" ? "ar.pay" : "ap.pay"]));
   await withBypassContext(async () => {
     await db.execute(sql`
       insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2)

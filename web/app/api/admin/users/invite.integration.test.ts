@@ -290,8 +290,7 @@ test("an invite cannot claim an address that already signs in to another organiz
   const f = await seed();
   try {
     const taken = "member.elsewhere@scratch.test";
-    await withBypassContext(() => db.execute(sql`insert into users (org_id, email, name, password_hash, is_active)
-      values (${owner.orgId}, ${taken}, 'Existing member', 'scrypt:activated', true)`));
+    await withBypassContext(() => createScratchUser(owner.orgId, "Existing member", "existing_member").then(id => db.execute(sql`update users set email=${taken},password_hash='scrypt:activated' where org_id=${owner.orgId} and id=${id}`)));
     const refused = await invite({ action: "invite", email: taken, roleId: f.roleId });
     assert.equal(refused.status, 409);
     assert.match(((await refused.json()) as { error: string }).error, /already signs in to another organization.*Platform → Access/);

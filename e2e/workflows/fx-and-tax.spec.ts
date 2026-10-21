@@ -363,7 +363,7 @@ async function settleFxOpenItems(page: Page, seed: FxSeed, date: string): Promis
 }
 
 test.describe('fx and tax lifecycle', () => {
-  test.describe.configure({ mode: 'serial', timeout: 240_000 });
+  test.describe.configure({ mode: 'serial', timeout: 240_000, retries: 0 });
 
   let storageState: Awaited<ReturnType<BrowserContext['storageState']>>;
 

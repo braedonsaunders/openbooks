@@ -59,6 +59,7 @@ const {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
+  grantScratchPermissions,
   seedApprovalFlow,
 } = await import("@openbooks/engine/testing/fixtures");
 test.after(() => hooks.deregister());
@@ -334,6 +335,7 @@ test("reverse-event keeps approved multi-book change events on Accounting events
     }
     const clearing = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${fixture.orgId} limit 1`)).rows[0]!.id;
     await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${fixture.orgId},${actors.submitterId},'assets.manage','grant')`);
+    await grantScratchPermissions(fixture.orgId, actors.approver1Id, ['assets.manage']);
     await seedApprovalFlow(fixture.orgId, {
       subjectKind: "financial_change",
       assignees: [{ type: "user", userId: actors.approver1Id }],

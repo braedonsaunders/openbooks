@@ -942,10 +942,9 @@ export function shapeSummarizeRows(
   const summaryFormulaValues = formulaTotalValues(measures, summaryComponents, formulaTotalable, labels)
   summaryFormulaValues.forEach((result, index) => {
     if (measures[index]?.fn !== 'formula' || measures[index]?.hidden) return
-    // A computed refusal still speaks: a guard that fires (nothing priced, no
-    // capacity) publishes its named label even while unsafe totals stay
-    // omitted. Only a would-be VALUE over omitted money is suppressed.
-    if (result.undefinedLabel == null && isMoneyDerivedFormulaOmitted(entity, measures, index, singles, suppressMoney)) return
+    // A missing financial basis suppresses every money-derived summary, including
+    // guarded formulas. Otherwise named guards still explain undefined results.
+    if ((suppressMoney || result.undefinedLabel == null) && isMoneyDerivedFormulaOmitted(entity, measures, index, singles, suppressMoney)) return
     const measure = measures[index]!
     summary.push({
       label: labels.summaryTotal?.(measureHeading(measure)) ?? `Total ${measureHeading(measure).toLowerCase()}`,

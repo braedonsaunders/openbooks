@@ -151,8 +151,10 @@ function paidOrder(externalId: string): ChannelOrder {
   };
 }
 
-async function postPaidOrder(org: ScratchOrg, actor: string, channelId: string, externalId: string): Promise<string> {
-  const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder(externalId)));
+async function postPaidOrder(org: ScratchOrg, actor: string, channelId: string, externalId: string, orderedAt?: string): Promise<string> {
+  const order = paidOrder(externalId);
+  if (orderedAt) order.orderedAt = orderedAt;
+  const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
   const outcome = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
   assert.equal(outcome.status, "posted");
   return stored.id;
@@ -337,11 +339,21 @@ test("imported daily ad spend allocates to CM3 and shows in the summary", { skip
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const channelId = await setup(org, actor);
-    const orderId = await postPaidOrder(org, actor, channelId, "2007");
+    const clock = (await db.execute<{ today: string; instant: string }>(sql`select current_date::text as today, now()::text as instant`)).rows[0]!;
+    await db.execute(sql`
+      insert into accounting_periods (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      select ${org.orgId}, extract(year from ${clock.today}::date)::int,
+        extract(month from ${clock.today}::date)::int, to_char(${clock.today}::date, 'YYYY-MM'),
+        date_trunc('month', ${clock.today}::date)::date,
+        (date_trunc('month', ${clock.today}::date) + interval '1 month - 1 day')::date, false, p.fiscal_calendar_id
+      from accounting_periods p where p.id=${org.periodId}
+        and not exists (select 1 from accounting_periods q where q.org_id=${org.orgId}
+          and ${clock.today}::date between q.starts_on and q.ends_on)`);
+    const orderId = await postPaidOrder(org, actor, channelId, "2007", clock.instant);
     // A day's export from the ad platform lands against the order's day.
     const { spendId } = await withBypass(() => recordChannelAdSpend(org.orgId, actor, {
       channelId,
-      spendDate: "2026-07-15",
+      spendDate: clock.today,
       amountMinor: 68000n,
       currency: "CAD",
       source: "platform-export",
@@ -351,7 +363,7 @@ test("imported daily ad spend allocates to CM3 and shows in the summary", { skip
     const economics = await withBypass(() => getOrderEconomics(org.orgId, orderId));
     assert.equal(sumBy(economics.facts, "ad_spend"), -68000n);
     assert.equal(economics.cm3, economics.cm2 - 68000n);
-    // The fixture order predates the trailing month, so the summary reads the full window.
+    // The order and imported spend fall inside the native trailing window.
     const summary = await withBypass(() => getChannelMarginSummary(org.orgId, 90));
     assert.equal(summary.length, 1);
     assert.equal(summary[0]!.orders, 1);
@@ -360,7 +372,7 @@ test("imported daily ad spend allocates to CM3 and shows in the summary", { skip
     // Re-importing the same source replaces its figure instead of doubling it.
     await withBypass(() => recordChannelAdSpend(org.orgId, actor, {
       channelId,
-      spendDate: "2026-07-15",
+      spendDate: clock.today,
       amountMinor: 34000n,
       currency: "CAD",
       source: "platform-export",

@@ -72,6 +72,9 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 )
 const { randomUUID } = await import('node:crypto')
 const { ensureCrmDefaults } = await import('@openbooks/engine/crm/crm')
+const { installEngineSeams } = await import('@openbooks/engine/composition/install')
+const { writeSalesCommand } = await import('@openbooks/engine/crm/sales')
+installEngineSeams()
 const { GET } = await import('./route.ts')
 const { NextRequest } = await import('next/server')
 
@@ -100,8 +103,11 @@ async function fixture() {
       values (${org.orgId}, ${employee}, true, '2020-01-01')`)
     await db.execute(sql`
       insert into crm_sales_quotas (org_id, employee_id, sales_team_id, name, period_start, period_end, currency, amount, lifecycle, approved_by, approved_at, created_by, updated_by)
-      values (${org.orgId}, ${employee}, null, 'Q3 quota', '2026-07-01', '2026-07-31', 'CAD', '50000', 'approved', ${actor}, now(), ${actor}, ${actor})`)
+      values (${org.orgId}, ${employee}, null, 'Q3 quota', '2026-07-01', '2026-07-31', 'CAD', '50000', 'draft', null, null, ${actor}, ${actor})`)
   })
+  const quota = (await db.execute<{id:string;revision:number}>(sql`select id,revision from crm_sales_quotas where org_id=${org.orgId} and name='Q3 quota'`)).rows[0]!
+  await withOrgContext(org.orgId,()=>writeSalesCommand({orgId:org.orgId,actorId:actor,allowedSubsidiaryIds:null},
+    {action:'quota-transition',id:quota.id,expectedRevision:quota.revision,lifecycle:'pending_approval',reason:'Approve the quarterly sales target'}))
   state.orgId = org.orgId
   state.actorId = actor
   await withOrgContext(org.orgId, () => ensureCrmDefaults(org.orgId, actor))

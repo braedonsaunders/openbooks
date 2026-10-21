@@ -2198,6 +2198,10 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
           }
           await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
         }
+        // Retained holiday rights pin Cabinet versions until their allocations and claims are removed.
+        for (const table of ["pay_run_holiday_allocations", "payroll_holiday_occurrences", "payroll_holiday_obligations"]) {
+          if (tables.includes(table)) await tx.execute(sql`delete from ${qualified(table)} where org_id=${org.orgId}`);
+        }
         await deleteQualifiedCabinetFixtureSources(tx, org.orgId, new Set(tables));
         for (const table of RETAINED_CABINET_FILE_SOURCES) {
           if (tables.includes(table)) await tx.execute(sql`delete from ${qualified(table)} where org_id=${org.orgId}`);

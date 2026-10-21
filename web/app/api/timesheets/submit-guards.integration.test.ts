@@ -49,9 +49,11 @@ const SEED = `
     createScratchOrg,
     dropScratchOrg,
     seedFlowActors,
+    seedApprovalFlow,
   } from "./engine/src/testing/fixtures.ts";
   import { assertWeekSubmittable } from "./web/app/api/timesheets/_lib.ts";
 
+  const { routeSubjectSubmission } = await import("./engine/src/flows/submission-policy.ts");
   installTrustedTestDatabaseBypass();
 
   async function seedSubmittedWeek() {
@@ -78,36 +80,16 @@ const SEED = `
   }
 
   async function seedOpenGate(fixture) {
-    const flowId = randomUUID();
-    const runId = randomUUID();
-    await db.execute(sql\`
-      insert into flows (id, org_id, name, subject_kind, enabled, graph)
-      values (\${flowId}, \${fixture.org.orgId}, 'Timesheet approvals',
-              'timesheet_week', true, '{}'::jsonb)
-    \`);
-    await db.execute(sql\`
-      insert into flow_runs
-        (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
-      values (\${runId}, \${fixture.org.orgId}, \${flowId},
-              'timesheet_week', \${fixture.headerId}, 'on_submit', 'waiting')
-    \`);
-    await db.execute(sql\`
-      insert into flow_gates
-        (org_id, flow_id, run_id, node_id, subject_kind, subject_id,
-         title, assignee_user_id, group_key, quorum, status)
-      values (\${fixture.org.orgId}, \${flowId}, \${runId}, 'gate-1',
-              'timesheet_week', \${fixture.headerId}, 'Manager approval',
-              \${fixture.actorId}, 'gate-1', 'any', 'pending')
-    \`);
+    await seedApprovalFlow(fixture.org.orgId, {subjectKind:"timesheet_week", mode:"any", preventSelfApproval:false,
+      assignees:[{type:"user",userId:fixture.actorId}]});
+    await withOrgTransaction(fixture.org.orgId,()=>routeSubjectSubmission({orgId:fixture.org.orgId,
+      actorId:fixture.actorId,subjectKind:"timesheet_week",subjectId:fixture.headerId}));
   }
 
   async function cleanup(fixture) {
-    await db.execute(sql\`delete from flow_gates where org_id = \${fixture.org.orgId}\`);
-    await db.execute(sql\`delete from flow_runs where org_id = \${fixture.org.orgId}\`);
-    await db.execute(sql\`delete from flows where org_id = \${fixture.org.orgId}\`);
-    await db.execute(sql\`delete from time_entries where org_id = \${fixture.org.orgId}\`);
     await dropScratchOrg(fixture.org.orgId);
   }
+
 `;
 
 test(

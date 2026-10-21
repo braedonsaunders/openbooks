@@ -241,7 +241,8 @@ test(
         expectedUpdatedAt: await revisionToken(orgA.orgId, documentId),
         custom: { ref_party: orgA.customerId },
       });
-      assert.equal((await withOrgContext(orgA.orgId, () => PATCH(savedHeader.req, savedHeader.ctx))).status, 200, "own-org header reference must stay green");
+      const headerResponse = await withOrgContext(orgA.orgId, () => PATCH(savedHeader.req, savedHeader.ctx));
+      assert.equal(headerResponse.status, 200, await headerResponse.clone().text());
       const lineAttempt = patchRequest(documentId, {
         expectedUpdatedAt: await revisionToken(orgA.orgId, documentId),
         lines: [{ accountId: orgA.accounts.cogs, amount: "100", custom: { line_ref: orgB.customerId } }],

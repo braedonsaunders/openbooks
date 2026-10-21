@@ -102,7 +102,7 @@ for (const channel of ['interactive', 'import'] as const) {
    try {
     const actorId=(await seedFlowActors(org.orgId)).adminId;
     auth.gate={user:{orgId:org.orgId,id:actorId}};
-    const body={code:'DEDUCTION-MEMBERSHIP',name:'Reviewed deduction',kind:'deduction',country:'US',value:'10',
+    const body={code:'DEDUCTION-MEMBERSHIP',name:'Reviewed deduction',kind:'deduction',country:'CA',value:'10',
       ...(declaredMembership===undefined?{}:{includeInDisposableEarnings:declaredMembership}),reason:'Approved protected-base classification'};
     if(channel==='interactive') {
      const response=await POST(new Request('http://audit.local/api/admin/setup/pay-components',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':randomUUID()},body:JSON.stringify(body)}),{params:Promise.resolve({entity:'pay-components'})});

@@ -13,6 +13,12 @@ Object.assign(globalThis, { __expenseNativeState: state, __expenseSqlText: (quer
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
+    if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return virtual(`
+      export async function currentUser() { const s=globalThis.__expenseNativeState; return {
+        id:s.actorId, orgId:s.orgId, email:'expense@scratch.test', name:'Expense clerk', roles:[],
+        envKind:'production', productionOrgId:s.orgId, homeUserId:s.actorId, homeOrgId:s.orgId, isSuperAdmin:false
+      }; }
+    `)
     if (specifier === 'next-intl/server') return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
     // The route factory resolves the gate by @/ alias at request time; serve
     // the same intended session for its literal as for the relative import.
@@ -38,7 +44,7 @@ registerHooks({
 })
 const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } = await import('@openbooks/engine/testing/fixtures')
 const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
 const { submitAndReleaseIfUngated } = await import('@openbooks/engine/flows/submit')
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
@@ -51,6 +57,7 @@ async function fixture(work: (org: Awaited<ReturnType<typeof createScratchOrg>>,
     state.orgId = org.orgId
     state.actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Expense clerk', 'accountant'))
     state.allowed = null
+    await withBypassContext(() => grantScratchPermissions(org.orgId, state.actorId, ['expenses.read','expenses.create','ap.post']))
     const id = randomUUID()
     await withBypassContext(async () => {
       await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, memo)

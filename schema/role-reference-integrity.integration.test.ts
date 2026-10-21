@@ -33,7 +33,7 @@ for (const kind of cases) {
           values = [randomUUID()]; break;
         case "delete_referenced_role": statement = "delete from app_roles where id = $1"; values = [roleA]; break;
       }
-      await assert.rejects(client.query(statement, values), (error: unknown) => (error as { code?: string }).code === "23503");
+      await assert.rejects(client.query(statement, values), (error: unknown) => (error as { code?: string }).code === (kind === "missing_assignment_org" || kind === "missing_role_org" ? "55000" : "23503"));
       await client.query("rollback");
       const assignments = await db.execute<{ role_id: string }>(sql`select role_id from role_assignments where org_id = ${a.orgId} and user_id = ${userA}`);
       assert.deepEqual(assignments.rows.map((row) => row.role_id), [roleA]);

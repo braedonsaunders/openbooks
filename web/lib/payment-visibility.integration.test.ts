@@ -4,6 +4,8 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import React from 'react'
+import pg from 'pg'
+import { waitForLockWaiter } from '@openbooks/engine/testing/lock-wait'
 import type { SessionUser } from './auth'
 import { stubModules } from '../testing/stub-modules.ts'
 
@@ -680,15 +682,7 @@ test(
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
     const { org, actor } = await fixture()
-    let release = () => {}
-    let acquired = () => {}
-    const ready = new Promise<void>((resolve) => {
-      acquired = resolve
-    })
-    const unlocked = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    let blocker: Promise<unknown> | undefined
+    const holder = new pg.Client({connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL})
     let save: Promise<unknown> | undefined
     try {
       const payment = await withOrgContext(org.orgId, () =>
@@ -701,19 +695,10 @@ test(
           subsidiaryId: org.subsidiaryId,
         }),
       )
-      blocker = withOrgContext(org.orgId, () =>
-        db.transaction(async (tx) => {
-          await tx.execute(
-            sql`select id from documents where id=${payment.id} and org_id=${org.orgId} for update`,
-          )
-          acquired()
-          await unlocked
-          await tx.execute(
-            sql`update documents set custom=custom || '{"concurrentEdit":"retained"}'::jsonb,updated_at=clock_timestamp() where id=${payment.id} and org_id=${org.orgId}`,
-          )
-        }),
-      )
-      await ready
+      await holder.connect()
+      await holder.query('begin')
+      await holder.query("select set_config('app.org_id',$1,true)", [org.orgId])
+      await holder.query('select id from documents where id=$1 and org_id=$2 for update', [payment.id,org.orgId])
       save = withOrgContext(org.orgId, () =>
         updateDraftPayment(
           payment.id,
@@ -723,24 +708,10 @@ test(
           { allowedSubsidiaryIds: null },
         ),
       )
-      let waiting = false
-      for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
-        waiting = await withBypassContext(
-          async () =>
-            (
-              await db.execute<{ waiting: boolean }>(
-                sql`select exists(select 1 from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query ilike '%documents%' and query ilike '%update%') as waiting`,
-              )
-            ).rows[0]!.waiting,
-        )
-        if (!waiting) await new Promise((resolve) => setTimeout(resolve, 20))
-      }
-      assert.ok(
-        waiting,
-        'the saver must be parked on the real database row lock',
-      )
-      release()
-      await blocker
+      void save.catch(() => {})
+      await waitForLockWaiter(holder, {label:'the payment editor'})
+      await holder.query(`update documents set custom=custom || '{"concurrentEdit":"retained"}'::jsonb,updated_at=clock_timestamp() where id=$1 and org_id=$2`, [payment.id,org.orgId])
+      await holder.query('commit')
       await save
       const row = await withOrgContext(
         org.orgId,
@@ -758,8 +729,9 @@ test(
         'a partial save must merge from the row locked after the concurrent commit',
       )
     } finally {
-      release()
-      await Promise.allSettled([blocker, save])
+      await holder.query('rollback').catch(() => {})
+      await Promise.allSettled([save])
+      await holder.end()
       state.user = null
       await withBypassContext(() => dropScratchOrg(org.orgId))
     }

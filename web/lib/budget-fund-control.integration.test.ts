@@ -20,6 +20,7 @@ const { NonprofitPostingError } = (await import('@openbooks/engine/nonprofit/err
 const { installEngineSeams } = (await import('@openbooks/engine/composition/install')) as typeof import('@openbooks/engine/composition/install')
 const { clearBalancingLegProviders, registerBalancingLegProvider } = (await import('@openbooks/engine/testing/journal/balancing-hooks')) as typeof import('@openbooks/engine/testing/journal/balancing-hooks')
 const { postEntry } = (await import('@openbooks/engine/testing/journal/post-entry')) as typeof import('@openbooks/engine/testing/journal/post-entry')
+const { approveBudgetScenarioFixture } = await import("@openbooks/engine/testing/budgets")
 const { saveBudgetCells } = (await import(root + 'web/lib/budget-mutations.ts')) as typeof import('./budget-mutations')
 
 test('a budget saved through the worksheet writer is the cell fund control enforces', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -56,12 +57,7 @@ test('a budget saved through the worksheet writer is the cell fund control enfor
     await withBypassContext(() => db.execute(sql`
       insert into budget_lines (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, created_by, updated_by)
       values (${org.orgId}, ${scenarioId}, ${org.accounts.adjustment}, ${org.periodId}, ${org.subsidiaryId}, '10.0000', ${actorId}, ${actorId})`))
-    await withBypassContext(() => db.execute(sql`
-      update budget_scenarios set status = 'pending_approval', revision = revision + 1, submitted_at = now(), submitted_by = ${actorId}
-       where id = ${scenarioId} and org_id = ${org.orgId}`))
-    await withBypassContext(() => db.execute(sql`
-      update budget_scenarios set status = 'approved', revision = revision + 1, approved_at = now(), approved_by = ${actorId}
-       where id = ${scenarioId} and org_id = ${org.orgId}`))
+    await withOrgContext(org.orgId, () => approveBudgetScenarioFixture(org.orgId, scenarioId))
     installEngineSeams()
     registerBalancingLegProvider('budgetary-control', budgetaryControlProvider)
     const post = (account: string, amount: string) => withOrgContext(org.orgId, () => db.transaction((tx) => postEntry(tx, {

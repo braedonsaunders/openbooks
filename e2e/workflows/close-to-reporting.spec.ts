@@ -1,4 +1,5 @@
 import { test } from "@playwright/test";
+import { createHash } from "node:crypto";
 import { authedContext, dismissSetupWizard } from "../auth";
 import { acceptConfirm } from "./support/accept-confirm";
 import {
@@ -38,8 +39,8 @@ import {
  * - IDs the API never lists (primary book, period) are resolved the way an
  *   operator would: the /close period row's book select, and a posted
  *   document's `posting_period_id`.
- * - The suite needs two actors (independent close approval + independent
- *   reopen decision are product invariants). The browser job seeds
+ * - The tenant configures independent close and reopen gates, so this
+ *   suite uses two actors. The browser job seeds
  *   `approver@openbooks.test` before specs run; both sessions log in through
  *   the real /api/login with no bypass.
  * - Advanced close is enabled in-seed via the product features API because
@@ -113,7 +114,7 @@ test.describe.serial("close to reporting", () => {
       //    controls, and the Projects parent gate the profitability report requires.
       ok(
         await api(req, origin, "PUT", "/api/admin/setup/features", {
-          features: { multiSubsidiary: true, advancedClose: true, projects: true, fixedAssets: true, flows: true },
+          features: { multiSubsidiary: true, advancedClose: true, projects: true, fixedAssets: true, flows: true, multiCurrency: true },
         }),
         "features",
       );
@@ -242,10 +243,46 @@ test.describe.serial("close to reporting", () => {
           lines: lines.map((l) => ({ ...l, ...(l.project ? { projectId: SEED.projectId } : {}) })),
         });
       const C = (n: string) => n;
-      await postJournal(SEED.rootSubId, `${P.from.slice(0, 8)}05`, "Owner funding", [
+      const fundingDocumentId = await postJournal(SEED.rootSubId, `${P.from.slice(0, 8)}05`, "Owner funding", [
         { account: C("1000"), amount: AMT.funding, description: "Cash in" },
         { account: C("3000"), amount: `-${AMT.funding}`, description: "Share capital" },
       ]);
+      // Retain the actual owner contribution before the consolidated statement
+      // uses it as historical capital, including its exact identity rate.
+      const funding = ok(await api(req, origin, "GET", `/api/journals/${fundingDocumentId}`), "funding journal");
+      const fundingEntryId = field(funding.doc as Record<string, unknown>, "posted_entry_id", "funding journal");
+      const entry = ok(await api(req, origin, "GET", `/api/reports/entry/${fundingEntryId}?journal=1`), "funding source");
+      const capital = (entry.lines as Record<string, unknown>[]).find(line => line.account_id === SEED.accounts["3000"]);
+      expect(capital, "capital source is the posted funding line").toBeTruthy();
+      const sourceLineId = field(capital!, "source_line_id", "capital source");
+      const sourceBytes = Buffer.from(JSON.stringify({ documentId: fundingDocumentId, entryId: fundingEntryId,
+        sourceLineId, effectiveOn: `${P.from.slice(0, 8)}05`, amount: `-${AMT.funding}`, currency: "USD", rate: "1" }));
+      const folder = ok(await api(req, origin, "POST", "/api/file-cabinet/folders", {
+        name: "Owner contribution evidence", isPrivate: true,
+      }), "funding evidence folder", 201);
+      const upload = await req.post(`${origin}/api/file-cabinet/files`, {
+        headers: { origin }, multipart: {
+          folderId: field(folder, "id", "evidence folder"),
+          file: { name: "owner-contribution.json", mimeType: "application/json", buffer: sourceBytes },
+        },
+      });
+      expect(upload.status(), await upload.text()).toBe(201);
+      const file = (await upload.json()).file as Record<string, unknown>;
+      expect(file.contentHash).toBe(createHash("sha256").update(sourceBytes).digest("hex"));
+      const assessment = ok(await api(req, origin, "POST", "/api/journals/historical-translation", {
+        instruction: { sourceLineId, measurementCurrency: "USD", presentationCurrency: "USD", kind: "contribution",
+          layers: [{ amount: `-${AMT.funding}`, rate: "1", historicalDate: `${P.from.slice(0, 8)}05`,
+            provenance: "Original owner contribution funding schedule", originalLayerId: null,
+            source: { fileId: field(file, "id", "evidence file"), versionId: field(file, "currentVersionId", "evidence file"),
+              contentHash: field(file, "contentHash", "evidence file") } }] },
+        reason: "Retain original owner capital for the consolidated financial statements",
+        idempotencyKey: `owner-capital:${sourceLineId}`,
+      }), "capital assessment", 201);
+      const changeId = field(assessment, "changeId", "capital assessment");
+      ok(await api(req, origin, "POST", `/api/accounting/changes/${changeId}/submit`, {}), "submit capital assessment");
+      const applied = ok(await api(req, origin, "POST", `/api/journals/historical-translation/${changeId}/apply`, {}), "apply capital assessment");
+      expect(field(applied, "basisId", "capital assessment")).toBeTruthy();
+
       await postJournal(SEED.subBId, `${P.from.slice(0, 8)}20`, "Office supplies", [
         { account: C("6300"), amount: AMT.supplies, description: "Supplies" },
         { account: C("1000"), amount: `-${AMT.supplies}`, description: "Cash out" },

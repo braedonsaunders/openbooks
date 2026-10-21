@@ -27,9 +27,13 @@ registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { withBypassContext, db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
+const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedApprovalFlow } = await import(
   "@openbooks/engine/testing/fixtures"
 );
+const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+const { submitBudgetScenario } = await import("@openbooks/engine/flows/budget-submission");
+const { submitAndReleaseIfUngated } = await import("@openbooks/engine/flows/submit");
+installEngineSeams();
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
@@ -57,34 +61,35 @@ function authzFor(orgId: string, userId: string): Authz {
   };
 }
 
-/** A posted invoice awaiting a gateless document approval (no flow run). */
-async function postedPendingDoc(org: ScratchOrg, submittedBy: string): Promise<{ docId: string; number: string }> {
+/** An invoice awaiting the tenant's configured review. */
+async function postedPendingDoc(org: ScratchOrg, submittedBy: string, approver: string): Promise<{ docId: string; number: string }> {
   const doc = randomUUID();
-  const entry = randomUUID();
   const number = `WIDGET-${doc.slice(0, 8)}`;
-  await withBypassContext(() => (db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,due_date,currency,fx_rate,subtotal,tax_total,total,open_balance,submitted_by)
-    values(${doc},${org.orgId},'customer_invoice','pending_approval',${number},${org.subsidiaryId},${org.customerId},${org.date},'2027-12-31','CAD','1','1000',0,'1000','1000',${submittedBy})`)));
-  await withBypassContext(() => (db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,source_document_id)
-    values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},${entry},${org.date},${org.periodId},'draft',${doc})`)));
-  await withBypassContext(() => (db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id,due_date,is_open_item)
-    values(${randomUUID()},${org.orgId},${entry},1,${org.accounts.ar},${org.subsidiaryId},'1000','CAD','1000','1',${org.customerId},'2027-12-31',true),
-    (${randomUUID()},${org.orgId},${entry},2,${org.accounts.revenue},${org.subsidiaryId},'-1000','CAD','-1000','1',null,'2027-12-31',false)`)));
-  await withBypassContext(() => (db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`)));
-  await withBypassContext(() => (db.execute(sql`update documents set posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${doc}`)));
-  return { docId: doc, number };
+  await withBypassContext(async () => {
+    await seedApprovalFlow(org.orgId, {subjectKind:'customer_invoice', mode:'any', preventSelfApproval:true, assignees:[{type:'user',userId:approver}]});
+    await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,due_date,currency,fx_rate,subtotal,tax_total,total,created_by)
+      values(${doc},${org.orgId},'customer_invoice','draft',${number},${org.subsidiaryId},${org.customerId},${org.date},'2027-12-31','CAD','1','1000',0,'1000',${submittedBy})`);
+    await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount)
+      values(${org.orgId},${doc},1,${org.accounts.revenue},'1','1000','1000','0')`);
+  });
+  await withOrgContext(org.orgId,()=>submitAndReleaseIfUngated('customer_invoice',doc,submittedBy));
+  return {docId:doc,number};
 }
 
-/** A budget submitted through the direct maker/checker path (no flow run). */
-async function postedPendingBudget(org: ScratchOrg, submittedBy: string): Promise<{ budgetId: string; name: string }> {
+/** A budget submitted through its configured native Flow. */
+async function postedPendingBudget(org: ScratchOrg, submittedBy: string, approver: string): Promise<{ budgetId: string; name: string }> {
   const budget = randomUUID();
   const name = `WIDGET-BUDGET-${budget.slice(0, 8)}`;
   await withBypassContext(() => (db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name,kind,status,created_by,updated_by)
     values(${budget},${org.orgId},${org.bookId},2026,${name},'budget','draft',${submittedBy},${submittedBy})`)));
   await withBypassContext(() => (db.execute(sql`insert into budget_lines(org_id,scenario_id,account_id,period_id,amount,created_by,updated_by)
     values(${org.orgId},${budget},${org.accounts.revenue},${org.periodId},'-50000.0000',${submittedBy},${submittedBy})`)));
-  await withBypassContext(() => (db.execute(sql`update budget_scenarios set status='pending_approval',revision=revision+1,
-    submitted_at=now(),submitted_by=${submittedBy},updated_at=now(),updated_by=${submittedBy}
-    where id=${budget} and org_id=${org.orgId}`)));
+  await withBypassContext(async()=>{
+    await grantScratchPermissions(org.orgId, submittedBy, ['budgets.manage']);
+    await grantScratchPermissions(org.orgId, approver, ['budgets.approve']);
+    await seedApprovalFlow(org.orgId,{subjectKind:'budget_scenario',mode:'any',preventSelfApproval:true,assignees:[{type:'user',userId:approver}]});
+  });
+  await withOrgContext(org.orgId,()=>submitBudgetScenario(org.orgId,submittedBy,budget,1));
   return { budgetId: budget, name };
 }
 
@@ -115,7 +120,7 @@ test("dashboard approval widgets list pending budgets with their checker target"
     await withBypass(() =>
       db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,budgets}', 'true') where id = ${org.orgId}`),
     );
-    const pending = await withBypass(() => postedPendingBudget(org, submitter as unknown as string));
+    const pending = await withBypass(() => postedPendingBudget(org, submitter, approver));
     const metrics = await withOrgContext(org.orgId, () =>
       loadDashboardMetrics(budgetAuthzFor(org.orgId, approver as unknown as string), APPROVAL_WIDGETS),
     );
@@ -124,22 +129,22 @@ test("dashboard approval widgets list pending budgets with their checker target"
     assert.ok(row, "pending list maps the budget row");
     assert.equal(row!.targetKind, "budget_scenario");
     assert.equal(row!.targetId, pending.budgetId);
-    assert.equal(row!.amount, "-50000.0000");
+    assert.equal(row!.href, `/budgets?budget=${pending.budgetId}`);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
 
-test("dashboard approval widgets list the unified worklist, not gates-only", { skip: !DB }, async () => {
+test("dashboard approval widgets link the configured document review", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const submitter = await withBypass(() => createScratchUser(org.orgId, "Widget Submitter", "accountant"));
     const approver = await withBypass(() => createScratchUser(org.orgId, "Widget Approver", "approver"));
-    const pending = await withBypass(() => postedPendingDoc(org, submitter as unknown as string));
+    const pending = await withBypass(() => postedPendingDoc(org, submitter, approver));
     const metrics = await withOrgContext(org.orgId, () =>
       loadDashboardMetrics(authzFor(org.orgId, approver as unknown as string), APPROVAL_WIDGETS),
     );
-    assert.equal(metrics.pendingApprovals, 1, "tile counts the gateless document");
+    assert.equal(metrics.pendingApprovals, 1, "tile counts the configured invoice gate");
     assert.equal(metrics.pendingApprovalList.length, 1, "pending list reads the union, not gates-only");
     assert.equal(metrics.myApprovalList.length, 1, "my inbox reads the union, not gates-only");
     assert.ok(

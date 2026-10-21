@@ -106,7 +106,7 @@ test('close-package run renders under the sender close.run grant', async () => {
     const runId = await mintCloseRun(org.orgId, definitionId, sender, closeRunId, packageId)
 
     const res = await GET(renderRequest(org.orgId, definitionId, runId))
-    assert.equal(res.status, 200, 'an authorized close-package render must succeed')
+    assert.equal(res.status, 200, await res.clone().text())
     assert.match(res.headers.get('content-type') ?? '', /application\/pdf/)
     const bytes = Buffer.from(await res.arrayBuffer())
     assert.ok(bytes.length > 100, 'the render must return real PDF bytes')
@@ -159,7 +159,7 @@ test('a scheduled run lacking requiredPermissions renders and records them once'
                 },
               })}::jsonb, ${sender})`)
     const res = await GET(renderRequest(org.orgId, definitionId, runId))
-    assert.equal(res.status, 200, 'a scheduled render predating recording must succeed')
+    assert.equal(res.status, 200, await res.clone().text())
     const snapshot = (
       await db.execute(sql`
         select authorization_snapshot as snapshot from report_runs where id = ${runId}`)

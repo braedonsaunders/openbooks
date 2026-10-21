@@ -30,10 +30,8 @@ import { withIdempotencyKey } from "./idempotency";
  * exactly. The goods-receipt path refuses a stocked line with no warehouse
  * whenever the warehouse choice is ambiguous, so the suite names its own
  * warehouse explicitly on the PO line. Reconciliation sign-off is
- * date-monotonic on the suite's settlement account, so local re-runs
- * against a warm DB must re-bootstrap first; the core flow still floors
- * its through date the day after any prior sign-off, so a retried attempt
- * clears the fence instead of colliding with the earlier session.
+ * date-monotonic on the suite's settlement account. Each execution uses a
+ * pristine database; the serial financial saga is never retried in place.
  *
  * Flow (core test): vendor with approved bank account (second-user approval)
  * → purchase order → goods receipt → vendor bill (3-way match: bills only
@@ -105,13 +103,6 @@ function fromUnits(units: bigint): string {
 }
 function grouped(intPart: string): string {
   return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-/** ISO calendar date plus whole days (UTC): floors a reconciliation through-date past a prior sign-off. */
-function addDays(iso: string, days: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const t = new Date(Date.UTC(y!, m! - 1, d!));
-  t.setUTCDate(t.getUTCDate() + days);
-  return t.toISOString().slice(0, 10);
 }
 /** UI money cell in USD: 250000n cents -> '$2,500.00', negatives parenthesized. */
 function fmtUSD(cents: bigint): string {
@@ -268,7 +259,7 @@ function parseNacha(text: string, expectedCents: bigint, expectedCount: number) 
 }
 
 test.describe("procure-to-pay workflows", () => {
-  test.describe.configure({ mode: "serial", timeout: 300_000 });
+  test.describe.configure({ mode: "serial", timeout: 300_000, retries: 0 });
 
   const shared: { profileId: string; terms210: string; rootSub: string; stockLocationId: string } = { profileId: "", terms210: "", rootSub: "", stockLocationId: "" };
   const acct: Record<string, string> = {};
@@ -776,22 +767,10 @@ test.describe("procure-to-pay workflows", () => {
       const profileRows = req(profiles, "GET payment-operations/profiles").rows as Array<{ id: string; auto_remittance?: boolean }>;
       expect(profileRows.find((p) => p.id === shared.profileId)?.auto_remittance, "profile queues automatic remittance").toBe(true);
 
-      // Bank reconciliation in the UI: statement in, match the outflow to the
-      // payment journal, sign off with confirmation. The through date is
-      // floored the day after any prior sign-off on the suite's settlement
-      // account: the date-monotonic fence (requireCutoffAfterSignedHistory)
-      // is right, so a retried file or a warm-DB re-run that already signed
-      // off must start a new session past it rather than collide with it.
-      // On a pristine tenant there is no history and this is exactly CUTOFF.
-      const priorRecs = await api(page, "GET", `/api/banking/reconciliations?accountId=${acct["1099"]}`);
-      const signedThrough = ((req(priorRecs, "GET reconciliations").reconciliations ?? []) as Array<{ status?: unknown; through_date?: unknown }>)
-        .filter((r) => r.status === "signed_off" && typeof r.through_date === "string")
-        .map((r) => r.through_date as string)
-        .sort();
-      const lastSigned = signedThrough[signedThrough.length - 1];
-      const reconThrough = lastSigned && lastSigned >= CUTOFF ? addDays(lastSigned, 1) : CUTOFF;
+      // This financial saga owns a pristine database and runs without retries;
+      // statement history keeps its actual dates and remains immutable.
       const rec = await api(page, "POST", "/api/banking/reconciliations", {
-        accountId: acct["1099"], throughDate: reconThrough, statementBalance: "-2500.00",
+        accountId: acct["1099"], throughDate: CUTOFF, statementBalance: "-2500.00",
       });
       const recId = str(req(rec, "POST reconciliations").id, "reconciliation id");
       const imp = await api(page, "POST", "/api/banking/import", {
@@ -1052,8 +1031,8 @@ test.describe("procure-to-pay workflows", () => {
       expect(blocked.status, "blocked run HTTP status").toBe(422);
       expect(JSON.stringify(blocked.body), "compliance blocks the run").toContain("subcontractor compliance blocks payment");
 
-      // The admin records the certificate; the approver — never the recorder —
-      // verifies it. Self-verification is refused by the product control.
+      // No certificate Flow is configured for this tenant, so the authorized
+      // recorder's native verification releases without another approver.
       const recorded = await api(page, "POST", "/api/compliance/records", {
         partyId: vendorId,
         requirementId,
@@ -1063,29 +1042,15 @@ test.describe("procure-to-pay workflows", () => {
         expiresOn: CERT_EXPIRES,
       });
       const recordId = str(req(recorded, "POST compliance/records").id, "record id");
-      // The certificate fence (ce7abe514) requires the caller to echo the
-      // revision it read (400 without it). This record was just created, so
-      // its revision is the schema initial value (0282 DEFAULT 1), and this
-      // serial flow performs no write between the POST and this PATCH — the
-      // self-verification below is the first write the row ever sees.
-      const selfVerify = await api(page, "PATCH", `/api/compliance/records/${recordId}`, { action: "verify", revision: 1 });
-      expect(selfVerify.status, "self-verification refused").toBe(422);
-      expect(JSON.stringify(selfVerify.body), "self-verification names the control").toContain("someone other than the person who recorded it");
-      const approverCtx = await approverContext(browser, baseURL);
-      try {
-        const approverPg = await approverCtx.newPage();
-        // A fresh page starts at about:blank, where a relative fetch URL
-        // cannot resolve — land on the app first (the admin page this test
-        // seeds through is already there, which is why only this call failed).
-        await approverPg.goto("/dashboard");
-        await approverPg.waitForLoadState("load");
-        await dismissSetupWizard(approverPg);
-        // The refused self-verification above writes nothing, so the
-        // certificate is still at its initial revision for the approver.
-        req(await api(approverPg, "PATCH", `/api/compliance/records/${recordId}`, { action: "verify", revision: 1 }), "PATCH verify as approver");
-      } finally {
-        await approverCtx.close();
-      }
+      const verified = req(await api(page, "PATCH", `/api/compliance/records/${recordId}`, {
+        action: "verify", revision: 1,
+      }), "verify certificate through the tenant policy");
+      expect(verified.status).toBe("active");
+      expect(verified.revision).toBe(2);
+      const stale = await api(page, "PATCH", `/api/compliance/records/${recordId}`, {
+        action: "verify", revision: 1,
+      });
+      expect(stale.status, "the released certificate retains its revision fence").toBe(409);
 
       // Released: the same selection now pays in full through the file.
       const { fileText } = await postRunToPaid(page, [billId]);

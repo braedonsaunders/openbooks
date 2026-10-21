@@ -8,7 +8,7 @@ import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { decideGate, ReleaseError } from "../flows/gates.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { db, withBypassContext } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedApprovalFlow, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, grantScratchPermissions, seedApprovalFlow, seedFlowActors } from "../testing/fixtures.ts";
 import { ResourcingRefusal } from "./errors.ts";
 import { createRetainer, draftHoursDrawdown } from "./retainers.ts";
 import { cancelResourceRequest, createResourceRequest, submitResourceRequest } from "./requests.ts";
@@ -27,6 +27,7 @@ async function withFixture(run: (f: Fixture) => Promise<void>, initializeFeature
   try {
     const actors = await withBypassContext(async () => {
       const people = await seedFlowActors(org.orgId), projectId = randomUUID(), employeePartyId = randomUUID();
+      await grantScratchPermissions(org.orgId, people.approver1Id, ["resourcing.manage"]);
       if (initializeFeatures) await write(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(KEYS)}::jsonb, true) where id = ${org.orgId} returning id`);
       for (const query of [
         sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${employeePartyId}, ${org.orgId}, 'person', 'Consultant', ${org.subsidiaryId}, true, '{}'::jsonb) returning id`,

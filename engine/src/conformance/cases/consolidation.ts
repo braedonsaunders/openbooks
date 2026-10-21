@@ -351,6 +351,9 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || '{"multiCurrency":true}'::jsonb, true)
+        where id=${ledger.orgId}`);
       const associateId = await addSubsidiary(
         ctx,
         "Associate Co",

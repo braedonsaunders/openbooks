@@ -13,6 +13,7 @@ import { Settings, ArrowLeft, Plus, Gauge, History, ScanLine } from 'lucide-reac
 import { KpiStrip } from '../kpi-strip'
 import { ForecastSectionHeading, ForecastFilters } from '../../app/(app)/crm/forecasts/sections'
 import { ListToolbar } from '../list-toolbar'
+import { resolveListToolbarProps } from './list-toolbar-props'
 import { Badge, Button } from '@openbooks/ui'
 import Link from 'next/link'
 import { num, str, type WidgetRenderer } from './widget-props'
@@ -62,15 +63,7 @@ export const CONTROLS_WIDGETS = {
    * EntityListView renders. A list page that wants a filter reaches for this
    * rather than dropping a lone `filter-chips` above a bare table.
    */
-  'list-toolbar': (props) => (
-    <ListToolbar
-      basePath={str(props, 'basePath') ?? ''}
-      currentParams={(props.currentParams as ComponentProps<typeof ListToolbar>['currentParams']) ?? {}}
-      search={(props.search as ComponentProps<typeof ListToolbar>['search']) ?? null}
-      filters={(props.filters as ComponentProps<typeof ListToolbar>['filters']) ?? []}
-      date={(props.date as ComponentProps<typeof ListToolbar>['date']) ?? null}
-    />
-  ),
+  'list-toolbar': (props, scope) => <ListToolbar {...resolveListToolbarProps(props, scope)} />,
   'filter-chips': (props) => (
     <FilterChips
       basePath={str(props, 'basePath')}

@@ -1,3 +1,4 @@
+import { resolveWidgetProps } from './widget-props'
 import { Fragment, type ComponentProps, type ReactNode } from 'react'
 import { PageHeader, cn } from '@openbooks/ui'
 import type {
@@ -40,7 +41,7 @@ import { PageContainer } from '../page-layout'
 import { ForecastSection } from '../../app/(app)/crm/forecasts/sections'
 import { AnalyticsHeader } from '../../app/(app)/analytics/_ui/AnalyticsHeader'
 import { CellView } from './cells'
-import { WidgetSlot, WidgetBlockView, resolveWidgetProps } from './widget-slot'
+import { WidgetSlot, WidgetBlockView } from './widget-slot'
 import { toneClass } from './tone'
 import { nestedScope } from './list-scope'
 import Link from 'next/link'

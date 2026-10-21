@@ -4,13 +4,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-/**
- * One compliance.waive holder used to both request and approve an exception:
- * POST stamped approved_by = requester, so every request was born approved.
- * POST now files a pending request that covers nothing; a different person
- * approves it through PATCH waivers/[id], and the evaluator only honours
- * approved exceptions.
- */
+/** Bounded compliance exceptions release only through the tenant's retained Flow policy. */
 const stateKey = Symbol.for("openbooks.compliance-waiver-approval-test");
 interface RouteState {
   authz: {
@@ -66,10 +60,13 @@ const hooks = registerHooks({
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 const { PATCH } = (await import("./[id]/route.ts")) as typeof import("./[id]/route.ts");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
+const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedApprovalFlow } = await import(
   "@openbooks/engine/testing/fixtures"
 );
 const { vendorComplianceStatus } = await import("@openbooks/engine/compliance/compliance");
+const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+const { decideGate } = await import("@openbooks/engine/testing/flows/gates");
+installEngineSeams();
 test.after(() => hooks.deregister());
 
 
@@ -81,10 +78,17 @@ function authorize(orgId: string, actorId: string): void {
   };
 }
 
-async function fixture() {
+async function fixture(gated = true) {
   const org = await withBypassContext(() => createScratchOrg());
   const requesterId = await withBypassContext(() => createScratchUser(org.orgId, "Requester", "compliance_manager"));
   const approverId = await withBypassContext(() => createScratchUser(org.orgId, "Approver", "compliance_manager"));
+  await withBypassContext(async () => {
+    await grantScratchPermissions(org.orgId, requesterId, ["compliance.waive"]);
+    await grantScratchPermissions(org.orgId, approverId, ["compliance.waive"]);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,subcontractorCompliance}','true'::jsonb) where id=${org.orgId}`);
+    if (gated) await seedApprovalFlow(org.orgId, { subjectKind: "compliance_waiver", mode: "any", preventSelfApproval: true,
+      assignees: [{ type: "user", userId: approverId }] });
+  });
   authorize(org.orgId, requesterId);
   const partyId = randomUUID();
   const classId = randomUUID();
@@ -151,42 +155,43 @@ test("a requested exception is pending and covers nothing", async () => {
   }
 });
 
-test("the requester cannot approve their own exception", async () => {
-  const { org, requesterId, partyId, requirementId } = await fixture();
-  try {
-    const created = (await (await post({ partyId, requirementId, ...VALID })).json()) as { id: string };
-    authorize(org.orgId, requesterId);
-    const response = await approve(created.id);
-    const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
-    assert.match(json?.error ?? "", /other than the person who requested/i);
-    const status = await withOrgContext(org.orgId, () =>
-      vendorComplianceStatus({ orgId: org.orgId, partyId, asOf: "2026-07-01" }),
-    );
-    assert.equal(status.overall, "missing");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+async function pendingGate(orgId: string, id: string) {
+  const gate = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
+    select id from flow_gates where org_id=${orgId} and subject_kind='compliance_waiver' and subject_id=${id} and status='pending'`))).rows[0];
+  assert.ok(gate, 'the configured tenant gate must own the exception');
+  return gate.id;
+}
 
-test("a different approver grants the exception", async () => {
-  const { org, approverId, partyId, requirementId } = await fixture();
+for (const selfDecision of [true, false]) {
+  test(`the tenant's exception Flow ${selfDecision ? 'refuses an unassigned requester' : 'releases an assigned reviewer decision'}`, async () => {
+    const { org, requesterId, approverId, partyId, requirementId } = await fixture();
+    try {
+      const response = await post({ partyId, requirementId, ...VALID });
+      assert.equal(response.status, 200, await response.clone().text());
+      const created = await response.json() as { id: string; status: string };
+      assert.equal(created.status, 'pending_approval');
+      const gateId = await pendingGate(org.orgId, created.id);
+      const decide = () => withOrgContext(org.orgId, () => decideGate({ gateId, userId: selfDecision ? requesterId : approverId, decision: 'approved' }));
+      if (selfDecision) await assert.rejects(decide());
+      else await decide();
+      const status = await withOrgContext(org.orgId, () => vendorComplianceStatus({ orgId: org.orgId, partyId, asOf: '2026-07-01' }));
+      assert.equal(status.overall, selfDecision ? 'missing' : 'waived');
+      assert.equal(status.blocksPayment, selfDecision);
+      if (!selfDecision) assert.equal((await approve(created.id)).status, 404);
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
+
+test('a tenant with no exception gate releases the authorized request and retains its decision evidence', async () => {
+  const { org, requesterId, partyId, requirementId } = await fixture(false);
   try {
-    const created = (await (await post({ partyId, requirementId, ...VALID })).json()) as { id: string };
-    authorize(org.orgId, approverId);
-    const response = await approve(created.id);
-    const json = (await response.json().catch(() => null)) as { status?: string } | null;
-    assert.equal(response.status, 200, JSON.stringify(json));
-    assert.equal(json?.status, "approved");
-    const status = await withOrgContext(org.orgId, () =>
-      vendorComplianceStatus({ orgId: org.orgId, partyId, asOf: "2026-07-01" }),
-    );
-    assert.equal(status.overall, "waived");
-    assert.equal(status.blocksPayment, false);
-    // Approving twice is a second grant, not an idempotent replay.
-    const again = await approve(created.id);
-    assert.equal(again.status, 404);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
+    const response = await post({ partyId, requirementId, ...VALID });
+    assert.equal(response.status, 200, await response.clone().text());
+    const created = await response.json() as { id: string; status: string };
+    assert.equal(created.status, 'approved');
+    const row = (await withOrgContext(org.orgId, () => db.execute<{approved_by: string}>(sql`
+      select approved_by from compliance_waivers where org_id=${org.orgId} and id=${created.id}`))).rows[0];
+    assert.equal(row?.approved_by, requesterId);
+    assert.equal((await withOrgContext(org.orgId, () => vendorComplianceStatus({orgId: org.orgId, partyId, asOf:'2026-07-01'}))).blocksPayment, false);
+  } finally { await dropScratchOrg(org.orgId); }
 });

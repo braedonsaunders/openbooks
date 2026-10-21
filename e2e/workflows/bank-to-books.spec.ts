@@ -661,8 +661,9 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
         expect(res.status(), await res.text()).toBe(200);
         // Keep the real pair ids the UI just matched: the double-match
         // refusal below replays them verbatim.
-        const sent = res.request().postDataJSON() as { statementLineId: string; journalLineIds: string[] };
-        S.depositLineId = sent.statementLineId;
+        const sent = res.request().postDataJSON() as { statementLineIds: string[]; journalLineIds: string[] };
+        expect(sent.statementLineIds).toHaveLength(1);
+        S.depositLineId = sent.statementLineIds[0]!;
         S.depositJournalLineIds = sent.journalLineIds;
         expect(S.depositLineId, 'deposit line id captured').toBeTruthy();
         expect(S.depositJournalLineIds.length, 'deposit journal ids captured').toBe(1);
@@ -684,7 +685,7 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       // — the statement line is already claimed.
       expect(S.depositLineId, 'deposit line id from the UI match').toBeTruthy();
       const refused = await api(page, 'POST', `/api/banking/reconciliations/${S.recId}/matches`, {
-        statementLineId: S.depositLineId,
+        statementLineIds: [S.depositLineId],
         journalLineIds: S.depositJournalLineIds,
       });
       expect(refused.status, 'double match refused').not.toBe(200);

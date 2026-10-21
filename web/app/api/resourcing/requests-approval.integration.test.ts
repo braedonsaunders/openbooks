@@ -20,7 +20,7 @@ registerHooks({
 
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrgReporting, seedApprovalFlow, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, dropScratchOrgReporting, seedApprovalFlow, grantScratchPermissions, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 const { installEngineSeams } = await import('@openbooks/engine/composition/install')
 const { POST: createRequest } = await import('./requests/route.ts')
 const { PATCH: updateRequest } = await import('./requests/[id]/route.ts')
@@ -64,6 +64,7 @@ test('resource requests submit and resolve through subsidiary-scoped Flows', ena
       assert.equal(offDraft.rowCount, 1)
       return { ...actors, secondSubsidiary, projectA, projectB, employeeId, offDraftId }
     })
+    await withBypassContext(() => grantScratchPermissions(org.orgId, setup.approver1Id, ['resourcing.manage']))
     await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: 'resourcing_request', assignees: [{ type: 'user', userId: setup.approver1Id }], mode: 'any' }))
     installEngineSeams()
     const setSessionUser = (userId: string, role: string) => {

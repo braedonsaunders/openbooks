@@ -9,7 +9,7 @@ import { cancelPaymentRun, PAYMENT_RUN_INTERNAL_CANCEL_REASONS, PAYMENT_RUN_SYST
 import { isPaymentRunSourceClaimConflict } from "./run-creation.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -29,6 +29,7 @@ test("direct-debit source contention is a domain failure with durable evidence",
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Collection Operator", "accountant");
+    await grantScratchPermissions(org.orgId, actorId, ["parties.manage"]);
     const formatId = randomUUID();
     const profileId = randomUUID();
     const partyBankAccountId = randomUUID();

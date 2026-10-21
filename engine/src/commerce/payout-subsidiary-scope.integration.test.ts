@@ -209,7 +209,7 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
   // entity-owned the same way, so the second entity holds its own units.
   await db.execute(sql`insert into party_subsidiaries (org_id, party_id, subsidiary_id)
     select ${org.orgId}, p.id, ${subB} from parties p
-     where p.org_id = ${org.orgId} and p.kind = 'customer' and lower(p.email) = 'ada@example.com'`);
+     where p.org_id = ${org.orgId} and lower(p.email) = 'ada@example.com' and exists (select 1 from customer_roles customer where customer.org_id=p.org_id and customer.party_id=p.id)`);
   await withBypass(() => receiveInventory(org.orgId, actor, {
     itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
     subsidiaryId: subB, offsetAccountId: org.accounts.clearing, date: org.date,

@@ -187,7 +187,7 @@ test("deposit commands enforce live payment permission, legal-entity scope and t
   await db.execute(sql`update app_roles set permissions='["documents.manage"]'::jsonb where org_id=${org.orgId} and id=${f.role}`);
   await assert.rejects(() => f.prepare(), /missing permission: ap.pay/);
   await db.execute(sql`delete from role_assignments where org_id=${org.orgId} and user_id=${f.actor} and role_id<>${f.role}`);
-  await db.execute(sql`update app_roles set permissions='["ap.pay","documents.manage"]'::jsonb,subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb where org_id=${org.orgId} and id=${f.role}`);
+  await db.execute(sql`update app_roles set permissions='["ap.pay","ap.create","documents.manage"]'::jsonb,subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb where org_id=${org.orgId} and id=${f.role}`);
   await assert.rejects(() => f.prepare(), /withholding enrollment not found/);
   await db.execute(sql`delete from role_assignments where org_id=${org.orgId} and user_id=${f.actor} and role_id<>${f.role}`);
   await db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and id=${f.role}`);

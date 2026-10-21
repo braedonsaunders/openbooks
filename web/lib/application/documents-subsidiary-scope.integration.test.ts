@@ -98,7 +98,7 @@ test("a restricted actor cannot re-home a correction into an out-of-scope subsid
       // In-scope re-home (and an omitted id) still proceeds through the same path.
       const inScope = await correctPostedDocument(context(new Set([org.subsidiaryId])), {
         documentId: sourceId,
-        correction: { amendmentReason: "correct the source evidence", expectedUpdatedAt: revision, subsidiaryId: org.subsidiaryId },
+        correction: { amendmentReason: "correct the source evidence", expectedUpdatedAt: revision, subsidiaryId: org.subsidiaryId, memo: "Corrected source evidence" },
         idempotencyKey: `inscope-${randomUUID()}`,
       });
       assert.equal(inScope.replayed, false);

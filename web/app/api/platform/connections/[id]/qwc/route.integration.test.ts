@@ -16,6 +16,7 @@ const AUTHZ = `
   }
 `
 const TRANSLATIONS = `
+  export async function getLocale() { return "en" }
   export async function getTranslations() {
     return (key) => key;
   }

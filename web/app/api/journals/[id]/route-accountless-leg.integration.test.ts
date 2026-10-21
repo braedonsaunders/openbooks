@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 const stateKey = Symbol.for("openbooks.journal-accountless-test");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { orgId: string; id: string; roles: { key: string }[] };
     permissions: Set<string>;
     allowedSubsidiaryIds: string[] | null;
   } | null;
@@ -116,7 +116,7 @@ test(
     try {
       const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
       routeState.authz = {
-        user: { orgId: org.orgId, id: adminId },
+        user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
@@ -156,7 +156,7 @@ test(
     try {
       const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
       routeState.authz = {
-        user: { orgId: org.orgId, id: adminId },
+        user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
