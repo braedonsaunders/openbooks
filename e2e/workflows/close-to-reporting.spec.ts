@@ -1033,7 +1033,12 @@ test.describe.serial("close to reporting", () => {
       await expect(publicationNote).toHaveCount(1);
       await expect(publicationNote).toBeVisible();
       await expect(publishPackage).toBeDisabled();
-      await publicationNote.fill(`Restated after the August freight accrual for ${P.name}`);
+      for (const region of await page.locator("[data-page-motion]").all()) {
+        await expect(region).toHaveCSS("opacity", "1");
+      }
+      const restatementNote = `Restated after the August freight accrual for ${P.name}`;
+      await publicationNote.fill(restatementNote);
+      await expect(publicationNote).toHaveValue(restatementNote);
       await expect(publishPackage).toBeEnabled();
       const republished = page.waitForResponse(
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
