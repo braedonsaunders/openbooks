@@ -132,6 +132,10 @@ test('loss-contract detection follows the project owner and the closing book', {
         await approve(change)
         await applyProvisionAssessment(org.orgId, change, actors.submitterId)
       }
+      await assert.rejects(assess(taxBook), /Assign this project to the selected legal entity/)
+      assert.equal((await db.execute(sql`select id from provision_obligations where org_id=${org.orgId}`)).rows.length, 0)
+      assert.equal((await db.execute(sql`update projects set subsidiary_id=${org.subsidiaryId}
+        where org_id=${org.orgId} and id=${projectId} returning id`)).rows.length, 1)
       await assess(taxBook)
       assert.deepEqual((await unassessedLossContracts(db, org.orgId, lossScope)).map((row) => row.code), ['ROOT-LOSS'],
         'another book\'s assessment does not satisfy the primary close')
@@ -144,7 +148,9 @@ test('loss-contract detection follows the project owner and the closing book', {
       await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         values (${randomUUID()}, ${org.orgId}, 'Second root', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`))
       assert.deepEqual(await unassessedLossContracts(db, org.orgId, lossScope), [])
-      assert.deepEqual((await unownedContractProjects(db, org.orgId)).map((row) => row.code), ['ROOT-LOSS'])
+      await db.execute(sql`insert into projects(org_id,code,name,contract_value)
+        values (${org.orgId},'OWNERLESS','Contract awaiting legal entity assignment','1000000')`)
+      assert.deepEqual((await unownedContractProjects(db, org.orgId)).map((row) => row.code), ['OWNERLESS'])
     })
   } finally { await dropScratchOrg(org.orgId) }
 })

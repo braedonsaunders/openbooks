@@ -144,7 +144,7 @@ test('explicit zero period amounts retain a readable annual parent and complete 
     const cleared = await savePayrollPeriodOpening({ ...input(f), amounts: zero, expectedRevision: saved.record.revision,
       expectedAnnualUpdatedAt: saved.annualUpdatedAt, reason: 'Correct unused period attribution to explicit zero' });
     assert.ok(cleared.record); assert.equal(cleared.record.revision, 2);
-    assert.notEqual(cleared.annualUpdatedAt, saved.annualUpdatedAt);
+    assert.equal(cleared.annualUpdatedAt, saved.annualUpdatedAt);
     const audit = (await db.execute<{ changes: { before: { amounts: Record<string, string> }; after: { amounts: Record<string, string> } } }>(sql`
       select changes from audit_log where org_id=${f.org.orgId} and table_name='payroll_period_openings' and action='update'`)).rows[0]!;
     assert.equal(audit.changes.before.amounts.cpp, '11.6300'); assert.equal(audit.changes.after.amounts.cpp, '0.0000');

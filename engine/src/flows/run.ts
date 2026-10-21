@@ -359,7 +359,7 @@ export async function runRecordFlows(
           : {}),
         event_source: event.source ?? "api",
         submissionPolicy: {
-          graph,
+          graph: flow.graph,
           flowId: flow.id,
           rows: subject.rows ?? {},
         },
@@ -696,7 +696,6 @@ async function retryFlowRunLocked(
             event_source: source,
             submissionPolicy: {
               ...retainedPolicy,
-              graph,
               flowId: flow.id,
             },
             submissionRouting: routingProof,

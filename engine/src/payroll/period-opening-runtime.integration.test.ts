@@ -56,10 +56,14 @@ test('admitted period payments consume one period CPP exemption while EI remains
   const f = await seedAdoption();
   try {
     const source = await opening(f);
+    const annualSource = (await db.execute(sql`select to_jsonb(b) as source from payroll_opening_balances b
+      where org_id=${f.orgId} and employee_party_id=${f.employeeId} and tax_year=2026`)).rows;
     const { input } = await calculatedRun(f);
     assert.deepEqual(await contributions(f, input.documentId), { cpp: '6.2700', ei: '3.9100', pensionable: '240.0000' });
     const saved = await savePayrollPeriodOpening(source);
-    assert.ok(saved.record); assert.notEqual(saved.annualUpdatedAt, source.expectedAnnualUpdatedAt);
+    assert.ok(saved.record); assert.equal(saved.annualUpdatedAt, source.expectedAnnualUpdatedAt);
+    assert.deepEqual((await db.execute(sql`select to_jsonb(b) as source from payroll_opening_balances b
+      where org_id=${f.orgId} and employee_party_id=${f.employeeId} and tax_year=2026`)).rows, annualSource);
     assert.deepEqual((await payRunStaleness(f.orgId, input.documentId)).reasons, ['openingBalances']);
     await assert.rejects(commitPayRun(input), /openingBalances/);
     assert.deepEqual((await calculatePayRun(input)).errors, []);

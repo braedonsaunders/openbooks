@@ -608,6 +608,9 @@ export async function payRunCalculationSource(
     select b.id::text as "openingBalanceId",
       encode(public.digest(jsonb_build_object(
         'opening',to_jsonb(b),
+        'periodOpenings',(select coalesce(jsonb_agg(to_jsonb(period_opening) order by period_opening.id),'[]'::jsonb)
+          from payroll_period_openings period_opening where period_opening.org_id=b.org_id
+            and period_opening.annual_opening_balance_id=b.id),
         'employerAuthority',to_jsonb(a),
         'levyAuthority',to_jsonb(h),
         'allocations',(select coalesce(jsonb_agg(jsonb_build_object(

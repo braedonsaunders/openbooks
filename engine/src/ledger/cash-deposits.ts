@@ -438,7 +438,7 @@ async function assertDropTransferTerms(orgId: string, documentId: string, drop: 
   if (!document || document.subsidiary_id !== drop.subsidiaryId || document.currency !== drop.currency
     || document.document_date !== drop.date || canonicalJson(source(document.custom)) !== canonicalJson(source(drop.custom))
     || lines.length !== 2 || lines[0]?.account_id !== drop.bankAccountId || lines[1]?.account_id !== drop.sourceAccountId
-    || toUnits(lines[0]!.amount) !== drop.amountMinor || toUnits(lines[1]!.amount) !== -drop.amountMinor
+    || toUnits(lines[0]!.amount) !== drop.amountMinor || toUnits(lines[1]!.amount) !== 0n
     || lines.some(line => line.subsidiary_id !== null && line.subsidiary_id !== drop.subsidiaryId))
     throw depositError("The transfer no longer matches the counted till drop.", 409,
       "Review this transfer's Flow actions, then record the counted drop again from Cash Sales.");

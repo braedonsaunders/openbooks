@@ -97,11 +97,11 @@ export async function routeSubjectSubmission(input: {
     select id,graph from flows where org_id=${input.orgId}
       and subject_kind=${input.subjectKind} and enabled order by id
   `)
-  ).rows.map(flow => {
-    const graph = parseFlowGraph(flow.id, flow.graph);
-    if (!graph) throw new FlowDispatchError(`Flow ${flow.id} has an invalid graph. Open Flows to correct it before submitting this record.`);
-    return { id: flow.id, graph };
-  });
+  ).rows;
+  for (const flow of flows) {
+    if (!parseFlowGraph(flow.id, flow.graph))
+      throw new FlowDispatchError(`Flow ${flow.id} has an invalid graph. Open Flows to correct it before submitting this record.`);
+  }
   const dispatch = await runRecordFlows(
     input.event ?? { kind: "on_submit", source: input.source ?? "ui" },
     input.subjectKind,

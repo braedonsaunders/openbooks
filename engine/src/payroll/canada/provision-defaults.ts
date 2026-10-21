@@ -110,10 +110,9 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
       values (${orgId}, 'pay_components', ${row.component_id}, 'update', ${actorId},
-        jsonb_build_object('operation', 'canada_levy_exclusion_defaults',
-          'treatmentId', ${treatmentId}, 'before', jsonb_build_object('program_exclusions', ${pgTextArrayLiteral(before)}::text[]),
-          'after', jsonb_build_object('program_exclusions', ${pgTextArrayLiteral(after)}::text[]),
-          'reason', 'Canadian non-taxable earnings default to excluded from applicable employer levies.'))
+        ${JSON.stringify({ operation: 'canada_levy_exclusion_defaults', treatmentId,
+          before: { program_exclusions: before }, after: { program_exclusions: after },
+          reason: 'Canadian non-taxable earnings default to excluded from applicable employer levies.' })}::jsonb)
     `);
   }
   // Any existing history for the account wins, including an approval with a

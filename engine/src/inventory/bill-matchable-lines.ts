@@ -394,6 +394,8 @@ export async function matchablePurchaseOrderLines(
   runner: SqlExecutor,
   orgId: string,
   scope: MatchableBillLineScope,
+  /** Receipt guards also fence unreceived commitments; bill pickers offer received cover only. */
+  options: { includeUnreceived?: boolean } = {},
 ): Promise<MatchablePurchaseOrderLine[]> {
   // Both sides resolve through the posting default: a blank entity on
   // either side is the hierarchy root, so blank matches an explicit root
@@ -443,7 +445,10 @@ export async function matchablePurchaseOrderLines(
       billedQuantity: row.billed_quantity,
       cancelledQuantity: row.cancelled_quantity,
     });
-    if (toQuantityUnits(cover.billableQuantity) <= 0n) continue;
+    const remaining = billableRemainderUnits({ orderedQuantity: row.ordered_quantity,
+      billedQuantity: row.billed_quantity, cancelledQuantity: row.cancelled_quantity,
+      fulfilledQuantity: row.fulfilled_quantity, requiresReceipt: false });
+    if (toQuantityUnits(cover.billableQuantity) <= 0n && (!options.includeUnreceived || remaining <= 0n)) continue;
     result.push({
       purchaseOrderId: row.purchase_order_id,
       purchaseOrderNumber: row.purchase_order_number,

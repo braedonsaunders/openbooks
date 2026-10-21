@@ -364,11 +364,11 @@ test("pay-run policyExists follows the same admission", { skip: !DB }, async () 
   });
 });
 
-test("retry refuses when the flow was scoped away, preserving the failed run", { skip: !DB }, async () => {
+test("retry refuses when the record leaves its frozen Flow scope, preserving the failed run", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
     await grantScratchPermissions(org.orgId, actors.adminId, ["flows.manage"]);
     const second = await seedSecondSubsidiary(org.orgId, org.subsidiaryId);
-    const flowId = await seedScopedApprovalFlow(org.orgId, {
+    await seedScopedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
       subsidiaryIds: [second],
       // A role with no members: the in-scope submit fails its run, leaving
@@ -385,11 +385,9 @@ test("retry refuses when the flow was scoped away, preserving the failed run", {
       select id from flow_runs where subject_id = ${doc} and status = 'failed' limit 1`)).rows[0];
     assert.ok(failedRun);
 
-    // The tenant re-scopes the flow to the original entity only.
-    await db.execute(sql`
-      update flows
-         set graph = jsonb_set(graph, '{subjectScope,subsidiaryIds}', ${JSON.stringify([org.subsidiaryId])}::jsonb)
-       where id = ${flowId} and org_id = ${org.orgId}`);
+    // Rehoming the editable record cannot bypass the scope frozen on its failed run.
+    await db.execute(sql`update documents set subsidiary_id=${org.subsidiaryId}
+      where id=${doc} and org_id=${org.orgId}`);
 
     await assert.rejects(
       retryFlowRun(failedRun.id, { orgId: org.orgId, userId: actors.adminId }),

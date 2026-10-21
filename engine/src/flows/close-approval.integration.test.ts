@@ -33,7 +33,7 @@ async function withCloseRun(
   try {
     const actors = await seedFlowActors(fixture.orgId);
     for (const actorId of [actors.submitterId, actors.approver1Id, actors.approver2Id, actors.adminId, actors.outsiderId])
-      await grantScratchPermissions(fixture.orgId, actorId, ["close.run"]);
+      await grantScratchPermissions(fixture.orgId, actorId, ["close.run", "close.approve"]);
     await db.execute(sql`
       update orgs
          set settings = jsonb_set(

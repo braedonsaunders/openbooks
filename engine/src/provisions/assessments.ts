@@ -117,6 +117,13 @@ async function lockIdentity(tx: SqlExecutor, orgId: string, actorId: string, ide
   if (!prior && (!identity.name.trim() || identity.name.length > 200))
     throw new ProvisionError('Name the provision obligation using 1–200 characters')
   if (!prior) {
+    if (identity.projectId) {
+      const project = (await tx.execute<{ subsidiary_id: string | null }>(sql`select subsidiary_id from projects
+        where org_id=${orgId} and id=${identity.projectId} and is_active for share`)).rows[0];
+      if (!project) throw new ScopeNotFoundError();
+      if (project.subsidiary_id !== identity.subsidiaryId)
+        throw new ProvisionError('Assign this project to the selected legal entity before creating its loss provision');
+    }
     const entity = (await tx.execute<{ currency: string }>(sql`select base_currency as currency from subsidiaries
       where org_id=${orgId} and id=${identity.subsidiaryId} and is_active and not is_elimination for share`)).rows[0]
     if (!entity || entity.currency !== identity.currency)

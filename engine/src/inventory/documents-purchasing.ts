@@ -415,7 +415,7 @@ async function assertManualBillLinesMatched(
       unit: line.unit,
       partyId: bill.party_id,
       subsidiaryId: bill.subsidiary_id,
-    });
+    }, { includeUnreceived: true });
     if (matchable.length > 0) {
       first = line;
       orders = matchable;
@@ -431,7 +431,9 @@ async function assertManualBillLinesMatched(
   const ordersLabel = numbers.length > 1 ? `purchase orders ${numbers.join(", ")}` : `purchase order ${numbers[0]}`;
   throw new BillLinesUnmatchedError(
     `vendor-bill line ${first.lineNumber} (${itemLabel}) is stock still open on ${ordersLabel} line ${primary!.purchaseOrderLineNumber}${more}: match the bill to its purchase-order line so it clears received-not-billed instead of receiving the stock again — billing unmatched stock now and receiving it later counts it twice`,
-    `Match this bill to ${ordersLabel} (Match to purchase order), then post again`,
+    toQuantityUnits(primary!.billableQuantity) > 0n
+      ? `Match this bill to ${ordersLabel} (Match to purchase order), then post again`
+      : `Receive the goods on ${ordersLabel}, then use Match to purchase order on this bill and post again`,
     { lineNumber: first.lineNumber, itemCode: primary!.itemCode, purchaseOrderNumbers: numbers },
   );
 }

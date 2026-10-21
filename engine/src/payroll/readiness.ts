@@ -1830,6 +1830,11 @@ export async function payRunStaleness(
                                  where oc.org_id = b.org_id and oc.opening_balance_id = b.id
                                    and oc.updated_at > r.calculated_at)))
             or exists (
+             select 1 from payroll_period_openings period_opening
+              where period_opening.org_id=r.org_id and period_opening.tax_year=r.tax_year
+                and period_opening.updated_at>r.calculated_at
+                and ${employeeOnRun(sql`period_opening.employee_party_id::text`)})
+            or exists (
              select 1 from payroll_opening_employer_authorities authority
               where authority.org_id=r.org_id and authority.tax_year=r.tax_year
                 and authority.created_at>r.calculated_at

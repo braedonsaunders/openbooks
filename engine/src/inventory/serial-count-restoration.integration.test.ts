@@ -148,11 +148,11 @@ test(
         where org_id=${org.orgId} and id=${missing.line.id}`)),error => /immutable/.test(
           guardRefusalMessage(error,{includeRaisedCheckViolations:true}) ?? String(error)));
       const found = await reviewCount("1");
-      const receiveFound = (overrides = {}) => run(() => receiveInventory(org.orgId, actor, {
+      const receiveFound = (overrides = {}) => run(() => withOrgTransaction(org.orgId, () => receiveInventory(org.orgId, actor, {
         itemId: org.items.fifo,stockLocationId: org.stockLocationId2,subsidiaryId: org.subsidiaryId,
         quantity: "1",unitCost: "3",offsetAccountId: org.accounts.clearing,date: org.date,
         lotId: lot,serialId: serial,admission: "count",stockCountLineId: found.line.id,...overrides,
-      }));
+      })));
       // A genuine receipt and reviewed line still cannot commit without the posted count and audit.
       await assert.rejects(receiveFound(), error => /posted count.*journal.*review/i.test(
         guardRefusalMessage(error, { includeRaisedCheckViolations: true }) ?? String(error)));
