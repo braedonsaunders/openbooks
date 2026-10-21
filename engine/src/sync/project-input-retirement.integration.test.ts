@@ -18,6 +18,7 @@ test("source deletion requires positive evidence, preserves history and fences f
     projectFinancialInputs:async()=>({projects:[],timeEntryBillingStates:[]}),
     projectInputDeletions:async()=>confirmed ? {projects:[{sourceRef:"project-1",deletedAt:"10/20/2026 2:00 PM"}],timeEntries:[{sourceRef:"time-1",deletedAt:"10/20/2026 2:00 PM"},{sourceRef:"time-2",deletedAt:"10/20/2026 2:00 PM"}]} : {projects:[],timeEntries:[]},
   };
+  const options={orgId:org.orgId,connectionId,runId,apply:true};
   try {
     await withOrg(org.orgId,async()=>{
       await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
@@ -30,7 +31,6 @@ test("source deletion requires positive evidence, preserves history and fences f
         await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,status,billing_status,costing_basis,is_billable,custom)
           values(${id},${org.orgId},${employeeId},${org.date},2,${projectId},'approved',${billing},'actual',true,${JSON.stringify({migrationTest:ref})}::jsonb)`);
       }
-      const options={orgId:org.orgId,connectionId,runId,apply:true};
       const refused=await syncProjectFinancialInputs(source,options);
       assert.equal(refused.targetOnlyProjects,2);
       assert.equal(refused.targetOnlyTimeEntries,2,"an omitted source record is not deletion authority");
@@ -53,16 +53,30 @@ test("source deletion requires positive evidence, preserves history and fences f
       }
       const wage=await loadWageTimeEntries(db,{orgId:org.orgId,employeePartyIds:[employeeId],periodStart:org.date,periodEnd:org.date,documentId:randomUUID()});
       assert.equal(wage.length,0,"source-retired time cannot enter another pay run");
-      await assert.rejects(db.execute(sql`update time_entries set payroll_batch_ref=${randomUUID()} where org_id=${org.orgId} and id=${billedId}`),/deleted in its authoritative source/);
-      await assert.rejects(db.execute(sql`update time_entries set hours=3 where org_id=${org.orgId} and id=${unbilledId}`),/deleted in its authoritative source/);
+    });
+    const deletedSourceRefusal = (error: unknown) => {
+      const cause=(error as {cause?:{code?:string;message?:string}}).cause;
+      assert.equal(cause?.code,"23514");
+      assert.match(cause?.message??"",/deleted in its authoritative source/);
+      return true;
+    };
+    await assert.rejects(withOrg(org.orgId,async()=>{
+      await db.execute(sql`update time_entries set payroll_batch_ref=${randomUUID()} where org_id=${org.orgId} and id=${billedId}`);
+    }),deletedSourceRefusal);
+    await assert.rejects(withOrg(org.orgId,async()=>{
+      await db.execute(sql`update time_entries set hours=3 where org_id=${org.orgId} and id=${unbilledId}`);
+    }),deletedSourceRefusal);
+    await withOrg(org.orgId,async()=>{
       const before=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and request_id=${runId}`)).rows[0]!.n;
       assert.equal(before,3);
       await syncProjectFinancialInputs(source,options);
       const after=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and request_id=${runId}`)).rows[0]!.n;
       assert.equal(after,before,"replay preserves one retirement and audit per record");
-      await assert.rejects(retireSourceProjectInputs({...options,actorId:null,source:source.name,refKey:source.refKey,
+    });
+    await assert.rejects(withOrg(org.orgId,()=>retireSourceProjectInputs({...options,actorId:null,source:source.name,refKey:source.refKey,
         projects:[{id:unknownProjectId,sourceRef:"project-unknown",deletedAt:"2026-10-20"},
-          {id:randomUUID(),sourceRef:"project-1",deletedAt:"2026-10-20"}],timeEntries:[]}),/changed before retirement/);
+          {id:randomUUID(),sourceRef:"project-1",deletedAt:"2026-10-20"}],timeEntries:[]})),/changed before retirement/);
+    await withOrg(org.orgId,async()=>{
       const rolledBack=(await db.execute<{is_active:boolean;custom:Record<string,unknown>}>(sql`select is_active,custom from projects where org_id=${org.orgId} and id=${unknownProjectId}`)).rows[0]!;
       assert.equal(rolledBack.is_active,true);
       assert.equal(rolledBack.custom.sourceRetirement,undefined,"a failed batch cannot leave a partial retirement");
