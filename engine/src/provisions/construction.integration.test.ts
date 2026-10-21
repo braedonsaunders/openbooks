@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext, withTransactionSavepoint } from '../platform/db.ts'
+import { db, withBypassContext, withOrgContext, withOrgTransaction } from '../platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow, grantScratchPermissions } from '../testing/fixtures.ts'
 import { submitFinancialChange } from '../flows/financial-changes-adapter.ts'
 import { decideGate } from '../flows/gates.ts'
@@ -146,7 +146,7 @@ test('loss-contract detection follows the project owner and the closing book', {
       assert.deepEqual(await unownedContractProjects(db, org.orgId), [])
 
       // The native hierarchy refuses ambiguous ownership and preserves the assessed project.
-      await assert.rejects(withTransactionSavepoint(db, () => db.execute(sql`insert into subsidiaries
+      await assert.rejects(withOrgTransaction(org.orgId, () => db.execute(sql`insert into subsidiaries
         (id,org_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
         values (${randomUUID()},${org.orgId},'Second root','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`)),
         error => {
