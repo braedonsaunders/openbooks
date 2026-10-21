@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrg } from '@openbooks/engine/platform/db'
 import { postDocument } from '@openbooks/engine/ledger/posting-document'
 import { receiveInventory } from '@openbooks/engine/inventory/movements'
-import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow, type ScratchOrg } from '@openbooks/engine/testing/fixtures'
+import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow, grantScratchPermissions, type ScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { PortalRefusal } from '@openbooks/engine/testing/portal/errors'
 import { consumePortalLink, requestPortalLink, revokePortalSession } from '@openbooks/engine/testing/portal/tokens'
 import { readPortalSettings, savePortalSettings } from '@openbooks/engine/testing/portal/settings'
@@ -98,6 +98,7 @@ test('a portal return request creates an RMA through the standard pipeline', { s
     assert.equal(ungated.rows[0]!.status, 'approved')
     await withBypassContext(async () => {
       const actors = await seedFlowActors(org.orgId)
+      await grantScratchPermissions(org.orgId, actors.approver1Id, ['orders.fulfill'])
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,flows}','true'::jsonb) where id=${org.orgId}`)
       await seedApprovalFlow(org.orgId, { subjectKind: 'rma', assignees: [{ type: 'user', userId: actors.approver1Id }], mode: 'any' })
     })
