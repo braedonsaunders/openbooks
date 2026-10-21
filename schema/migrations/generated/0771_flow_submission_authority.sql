@@ -377,7 +377,10 @@ ALTER TABLE equity_action_requests ADD CONSTRAINT equity_action_requests_decisio
    AND ((released_without_approval AND decided_by IS NULL AND decided_at IS NULL)
      OR (NOT released_without_approval AND decided_by IS NOT NULL AND decided_at IS NOT NULL)))
  OR (status='rejected' AND decided_by IS NOT NULL AND decided_at IS NOT NULL
-   AND length(btrim(decision_comment)) BETWEEN 1 AND 2000 AND applied_at IS NULL AND NOT released_without_approval));
+   AND length(btrim(decision_comment)) BETWEEN 1 AND 2000 AND applied_at IS NULL AND NOT released_without_approval)
+ OR (status='withdrawn' AND decided_by IS NOT NULL AND decided_by=requested_by AND decided_at IS NOT NULL
+   AND decision_comment IS NOT NULL AND length(btrim(decision_comment)) BETWEEN 5 AND 2000
+   AND applied_at IS NULL AND result IS NULL AND NOT released_without_approval));
 CREATE FUNCTION public.equity_action_flow_decision_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path=public,pg_catalog AS $$
 BEGIN
