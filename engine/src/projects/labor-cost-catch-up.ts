@@ -1,3 +1,4 @@
+import { sourceTimeAvailableSql } from "./source-time-availability.ts";
 import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
@@ -339,7 +340,7 @@ async function collectUnpostedRows(
       left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
       join orgs o on o.id = te.org_id
      where te.org_id = ${orgId}
-       and te.status = 'approved' and te.project_id is not null
+       and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`)} and te.project_id is not null
        and te.cost_journal_entry_id is null
        and te.cost_rate is not null
        and te.worked_on <= ${through}::date

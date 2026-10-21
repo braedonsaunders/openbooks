@@ -1,4 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
+import { sourceTimeAvailableSql } from "./source-time-availability.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 
 /**
@@ -138,6 +139,7 @@ export function eligibleWipSourcesSql(
         from time_entries te
         left join items item on item.org_id = te.org_id and item.id = te.item_id
        where te.org_id = ${orgId} and te.status = 'approved' and te.is_billable
+         and ${sourceTimeAvailableSql(sql`te.custom`, asOf === null ? undefined : sql`${asOf}`)}
          and ${timeUnbilled}
       union all
       select 'document_line'::text, line.id, coalesce(line.project_id, document.project_id),

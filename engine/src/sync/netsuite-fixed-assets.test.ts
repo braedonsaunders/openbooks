@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   mergeNetSuiteFamTaxAttributes,
   netSuiteFamDate,
+  netSuiteFamHistoryHasFinancialFacts,
   netSuiteFamHistorySourceId,
   netSuiteFamPeriodForDate,
   netSuiteFamState,
@@ -10,6 +11,13 @@ import {
   reconcileNetSuiteFamAcquisitions,
   type NetSuiteFamExistingAcquisition,
 } from "./netsuite-fixed-assets.ts";
+
+test("unassigned journal-link metadata is preserved separately from financial asset history", () => {
+  assert.equal(netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistjournal: "348279", custrecord_deprhistamount: null }),false);
+  assert.equal(netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistamount: "0.0000" }),true);
+  assert.equal(netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistamount: "1.00" }),true);
+  assert.equal(netSuiteFamHistoryHasFinancialFacts({ custrecord_deprhistbookvalue: "12.00" }),true);
+});
 
 
 test("NetSuite FAM dates remain date-only", () => {

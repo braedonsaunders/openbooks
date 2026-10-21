@@ -829,6 +829,22 @@ export class NetSuiteSource implements MigrationSource {
     });
   }
 
+  async projectInputDeletions(refs: { projects: string[]; timeEntries: string[] }) {
+    const result: { projects: { sourceRef: string; deletedAt: string }[]; timeEntries: { sourceRef: string; deletedAt: string }[] } = { projects: [], timeEntries: [] };
+    for (const [key, label] of [["projects", "Job"], ["timeEntries", "Time"]] as const) {
+      for (let offset = 0; offset < refs[key].length; offset += 500) {
+        const batch = refs[key].slice(offset, offset + 500);
+        const rows = await this.bridge.deletedRecords(new Date("1970-01-01T00:00:00Z"), undefined, batch);
+        for (const row of rows) {
+          if (row.recordType === label && batch.includes(row.internalId) && row.deletedAt) {
+            result[key].push({ sourceRef: row.internalId, deletedAt: row.deletedAt });
+          }
+        }
+      }
+    }
+    return result;
+  }
+
   async projectFinancialInputs(): Promise<SourceProjectFinancialInputs> {
     const [entries, projects] = await Promise.all([
       this.timeEntries(null),

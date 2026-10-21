@@ -19,9 +19,55 @@ const creds: NetSuiteCreds = {
   tokenSecret: "secret",
 };
 
-const compatibleHealth = (version = "1.6.0") => ({
+const compatibleHealth = (version = "1.7.0") => ({
   ok: true, schemaVersion: 1, bridgeVersion: version, accountId: "TEST", environment: "SANDBOX",
   role: { id: "3", name: "Administrator" }, serverTime: "2026-10-10 12:00:00", features: {}, remainingUsage: 5000,
+});
+
+test("native CRM pages preserve complete note bodies and advance by source identity", async () => {
+  const requests: Record<string, unknown>[] = [];
+  const bridge = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
+    requests.push(params);
+    if (params.action === "health") return compatibleHealth() as T;
+    assert.equal(params.action,"crmActivities");
+    return { schemaVersion: 1, recordType: "note", hasMore: params.afterId === "0",
+      rows: [{ id: params.afterId === "0" ? "12" : "19", fields: { note: "x".repeat(9000) } }] } as T;
+  });
+  const rows = await bridge.crmActivities("note");
+  assert.deepEqual(rows.map(row => row.id),["12","19"]);
+  assert.equal(String(rows[0]!.fields.note).length,9000);
+  assert.deepEqual(requests.filter(row => row.action === "crmActivities").map(row => row.afterId),["0","12"]);
+});
+
+test("native CRM refuses unavailable sources and stalled pages instead of reporting zero activities", async () => {
+  for (const failure of ["unavailable","stalled"] as const) {
+    const bridge = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
+      if (params.action === "health") return compatibleHealth() as T;
+      if (failure === "unavailable") throw new Error("Source activity permission denied");
+      return { schemaVersion: 1, recordType: "task", rows: [], hasMore: true } as T;
+    });
+    await assert.rejects(bridge.crmActivities("task"), failure === "unavailable" ? /permission denied/ : /did not advance/);
+  }
+});
+
+test("native CRM record extraction whitelists fields and preserves native dates", () => {
+  let restlet: { post: (params: Record<string,unknown>) => unknown } | undefined;
+  const observed: string[] = [];
+  runInNewContext(readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js"), {
+    Date,
+    define: (_dependencies: string[], factory: (...modules: unknown[]) => typeof restlet) => {
+      restlet = factory({}, {}, {}, { load: () => ({ getValue: ({fieldId}: {fieldId:string}) => {
+        observed.push(fieldId);
+        return fieldId === "notedate" ? new Date("2026-10-21T12:00:00Z") : "A complete source value";
+      } }) }, {}, { Sort: {ASC:"ASC"}, createColumn: (value:unknown) => value,
+        create: () => ({ run: () => ({ getRange: () => [{id:"51"}] }) }) }, {});
+    },
+  });
+  const page = JSON.parse(JSON.stringify(restlet!.post({action:"crmActivities",recordType:"note",afterId:"0"}))) as { rows: {fields: {notedate:string}}[] };
+  assert.equal(page.rows[0]!.fields.notedate,"2026-10-21T12:00:00.000Z");
+  assert.ok(observed.includes("note"));
+  assert.ok(!observed.includes("_eml_nkey_"));
+  assert.equal((restlet!.post({action:"crmActivities",recordType:"employee"}) as {ok:boolean}).ok,false);
 });
 
 function readSuiteScript(path: string): string {
@@ -538,7 +584,7 @@ test("an outdated installed bridge refuses before any export starts, naming its 
   });
   await assert.rejects(
     () => client.bulkQuery([{ id: "a", sql: "SELECT 1 AS id FROM DUAL" }]),
-    /version 1\.3\.0; this release requires 1\.6\.0 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
+    /version 1\.3\.0; this release requires 1\.7\.0 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
   );
   assert.deepEqual(actions, ["health"]);
 });

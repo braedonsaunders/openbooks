@@ -455,6 +455,11 @@ export interface MigrationSource {
    * reconstructed from migrated invoice-line links alone.
    */
   projectFinancialInputs?(): Promise<SourceProjectFinancialInputs>;
+  /** Positive source deletion evidence; absence from a list is never deletion authority. */
+  projectInputDeletions?(refs: { projects: string[]; timeEntries: string[] }): Promise<{
+    projects: { sourceRef: string; deletedAt: string }[];
+    timeEntries: { sourceRef: string; deletedAt: string }[];
+  }>;
 
   /** Live per-document unpaid balances (AR/AP aging verification). */
   openItems?(): Promise<SourceOpenItem[]>;

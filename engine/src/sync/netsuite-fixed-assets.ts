@@ -14,6 +14,13 @@ import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 
 type Row = Record<string, unknown>;
 
+/** Journal-link metadata without amounts is retained without inventing an asset event. */
+export function netSuiteFamHistoryHasFinancialFacts(row: Row): boolean {
+  return ["custrecord_deprhistamount", "custrecord_deprhistbookvalue", "custrecord_deprhistpriornbv",
+    "custrecord_deprhistquantity", "custrecord_deprhistory_scheduled_amount", "custrecord_deprhistory_scheduled_nbv"]
+    .some(key => row[key] != null && String(row[key]).trim() !== "");
+}
+
 export interface NetSuiteFixedAssetSyncOptions {
   orgId: string;
   connectionId: string;
@@ -42,6 +49,7 @@ export interface NetSuiteFixedAssetSyncResult {
   created: { categories: number; assets: number };
   updated: { categories: number; assets: number };
   orphanHistoryRows: number;
+  preservedUnassignedHistoryRows: number;
   fixedAssetLedger: {
     sourceTransactions: number;
     existingTransactions: number;
@@ -359,6 +367,7 @@ export async function syncNetSuiteFixedAssets(
   const asOf = await extractionDate(snapshot, options.orgId);
   const historyByAsset = new Map<string, Row[]>();
   const orphanHistory: Row[] = [];
+  const sourceAssetIds = new Set(snapshot.assets.map(row => String(row.id)));
   const sourceHistoryIds = new Set<string>();
   for (const row of snapshot.depreciationHistory) {
     // Source history identity is the admission key for native asset history;
@@ -371,7 +380,7 @@ export async function syncNetSuiteFixedAssets(
       sourceHistoryIds.add(sourceHistoryId);
     }
     const assetRef = text(row.custrecord_deprhistasset);
-    if (!assetRef) orphanHistory.push(row);
+    if (!assetRef || !sourceAssetIds.has(assetRef)) orphanHistory.push(row);
     else historyByAsset.set(assetRef, [...(historyByAsset.get(assetRef) ?? []), row]);
   }
   const valueByAsset = new Map(
@@ -1083,7 +1092,8 @@ export async function syncNetSuiteFixedAssets(
       },
       created: { categories: createdCategories, assets: createdAssets },
       updated: { categories: updatedCategories, assets: updatedAssets },
-      orphanHistoryRows: orphanHistory.length,
+      orphanHistoryRows: orphanHistory.filter(netSuiteFamHistoryHasFinancialFacts).length,
+      preservedUnassignedHistoryRows: orphanHistory.length,
       fixedAssetLedger: {
         sourceTransactions: sourceTransactionIds.length,
         existingTransactions: sourceTransactionIds.length - missingTransactionIds.length,

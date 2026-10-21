@@ -1,3 +1,4 @@
+import { sourceTimeAvailableSql } from "./source-time-availability.ts";
 import { sql, type SQL } from "drizzle-orm";
 import { db, orgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { pgTextArrayLiteral } from "../platform/pg-array.ts";
@@ -167,7 +168,7 @@ export async function loadEarnedValue(
       left join project_tasks pt
         on pt.id = te.project_task_id and pt.org_id = te.org_id and pt.project_id = te.project_id
      where te.org_id = ${orgId} and te.project_id = any(${ids})
-       and te.status = 'approved' and te.worked_on <= ${asOf}::date
+       and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`, sql`${asOf}`)} and te.worked_on <= ${asOf}::date
      group by te.project_id, pt.id
   `)).rows;
   if (labor.some((row) => row.missing_rates > 0)) {

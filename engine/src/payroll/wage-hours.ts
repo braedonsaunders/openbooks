@@ -1,3 +1,4 @@
+import { sourceTimeAvailableSql } from "../projects/source-time-availability.ts";
 import { sql } from "drizzle-orm";
 import { sum } from "../money/money.ts";
 import { db } from "../platform/db.ts";
@@ -83,6 +84,7 @@ export async function loadWageTimeEntries(
      where te.org_id = ${input.orgId}
        and te.employee_party_id = any(${`{${[...new Set(input.employeePartyIds)].join(",")}}`}::uuid[])
        and te.status = 'approved'
+       and (${sourceTimeAvailableSql(sql`te.custom`)} or te.payroll_batch_ref = ${input.documentId})
        and te.worked_on between ${periodStart} and ${periodEnd}
        and (te.payroll_batch_ref is null or te.payroll_batch_ref = ${input.documentId})
        and coalesce(tt.exclude_from_wages, false) = false

@@ -5,6 +5,7 @@ import type {
   MigrationSource,
 } from "./source.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { retireSourceProjectInputs } from "./project-input-retirement.ts";
 import {
   ProjectHeaderControlError,
   assertProjectHeaderChangeAllowed,
@@ -24,6 +25,7 @@ export interface ProjectFinancialInputSyncResult {
   missingTargetProjects: number;
   targetOnlyProjects: number;
   applied: boolean;
+  preservedSourceDeletions?: { projects: number; timeEntries: number };
 }
 type TargetBillingState = {
   id: string;
@@ -466,6 +468,24 @@ export async function syncProjectFinancialInputs(
     ];
   });
 
+  const deletionEvidence = (targetOnly.length || targetOnlyProjects.length) && source.projectInputDeletions
+    ? await source.projectInputDeletions({ projects: targetOnlyProjects.map(row => row.source_ref), timeEntries: targetOnly.map(row => row.source_ref) })
+    : { projects: [], timeEntries: [] };
+  const deletedProjects = new Map(deletionEvidence.projects.map(row => [row.sourceRef, row.deletedAt]));
+  const deletedTime = new Map(deletionEvidence.timeEntries.map(row => [row.sourceRef, row.deletedAt]));
+  const preservedSourceDeletions = await retireSourceProjectInputs({
+    orgId: options.orgId, connectionId: options.connectionId, runId: options.runId,
+    actorId: options.actorId && isUuid(options.actorId) ? options.actorId : null,
+    source: source.name, refKey: source.refKey, apply: options.apply,
+    projects: targetOnlyProjects.flatMap(row => {
+      const deletedAt = deletedProjects.get(row.source_ref);
+      return deletedAt ? [{ id: row.id, sourceRef: row.source_ref, deletedAt }] : [];
+    }),
+    timeEntries: targetOnly.flatMap(row => {
+      const deletedAt = deletedTime.get(row.source_ref);
+      return deletedAt ? [{ id: row.id, sourceRef: row.source_ref, deletedAt }] : [];
+    }),
+  });
   const result: ProjectFinancialInputSyncResult = {
     sourceTimeEntries: sourceStates.length,
     targetTimeEntries: targetResult.rows.length,
@@ -473,7 +493,7 @@ export async function syncProjectFinancialInputs(
       sourceStates.length - missingTarget.length - changed.length,
     changedTimeEntries: changed.length,
     missingTargetTimeEntries: missingTarget.length,
-    targetOnlyTimeEntries: targetOnly.length,
+    targetOnlyTimeEntries: targetOnly.length - preservedSourceDeletions.timeEntries,
     sourceProjects: snapshot.projects.length,
     targetProjects: targetProjectsResult.rows.length,
     exactProjects:
@@ -482,8 +502,9 @@ export async function syncProjectFinancialInputs(
       changedProjects.length,
     changedProjects: changedProjects.length,
     missingTargetProjects: missingTargetProjects.length,
-    targetOnlyProjects: targetOnlyProjects.length,
-    applied: false,
+    targetOnlyProjects: targetOnlyProjects.length - preservedSourceDeletions.projects,
+    preservedSourceDeletions,
+    applied: options.apply && (preservedSourceDeletions.projects > 0 || preservedSourceDeletions.timeEntries > 0),
   };
   if (missingTarget.length) {
     throw new Error(

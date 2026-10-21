@@ -1,3 +1,4 @@
+import { sourceTimeAvailableSql } from "./source-time-availability.ts";
 import { sql } from "drizzle-orm";
 import { db, orgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { businessTodayInTx, isIsoCalendarDate } from "../platform/business-date.ts";
@@ -582,7 +583,7 @@ export async function projectBudgetComparison(
                coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0)::text as cost
           from time_entries te
          where te.org_id = ${orgId} and te.project_id = ${projectId}
-           and te.status = 'approved' and te.worked_on <= ${asOf}::date
+           and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`, sql`${asOf}`)} and te.worked_on <= ${asOf}::date
          group by te.project_task_id`)
     ).rows;
     const other = (

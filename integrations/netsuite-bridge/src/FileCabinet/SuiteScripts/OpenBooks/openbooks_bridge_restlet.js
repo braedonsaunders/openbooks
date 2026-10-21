@@ -5,7 +5,7 @@
  */
 define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
   (file, format, query, record, runtime, search, task) => {
-    const BRIDGE_VERSION = '1.6.0';
+    const BRIDGE_VERSION = '1.7.0';
     const SCHEMA_VERSION = 1;
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
     const EXPORT_SCRIPT_ID = 'customscript_openbooks_export_mr';
@@ -121,6 +121,33 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       return { schemaVersion: SCHEMA_VERSION, recordType, internalId, fields, sublists };
     };
 
+    const crmActivities = (input) => {
+      const fieldsByType = {
+        task: ['title', 'message', 'company', 'status', 'startdate', 'duedate', 'completeddate'],
+        phonecall: ['title', 'message', 'company', 'status', 'startdate', 'enddate', 'completeddate'],
+        calendarevent: ['title', 'message', 'company', 'status', 'startdate', 'enddate'],
+        note: ['title', 'note', 'entity', 'transaction', 'activity', 'notetype', 'notedate', 'lastmodifieddate'],
+      };
+      const recordType = text(input.recordType);
+      assert(Object.prototype.hasOwnProperty.call(fieldsByType, recordType), 'unsupported CRM activity record type');
+      const afterId = text(input.afterId || '0');
+      assert(/^\d+$/.test(afterId), 'afterId must be a numeric source identity');
+      const rows = search.create({
+        type: recordType,
+        filters: [['internalidnumber', 'greaterthan', afterId]],
+        columns: [search.createColumn({ name: 'internalid', sort: search.Sort.ASC })],
+      }).run().getRange({ start: 0, end: 50 }).map((result) => {
+        const id = text(result.id);
+        const loaded = record.load({ type: recordType, id, isDynamic: false });
+        const fields = {};
+        fieldsByType[recordType].forEach((fieldId) => {
+          fields[fieldId] = normalize(loaded.getValue({ fieldId }));
+        });
+        return { id, fields };
+      });
+      return { schemaVersion: SCHEMA_VERSION, recordType, rows, hasMore: rows.length === 50 };
+    };
+
     const deletedRecords = (input) => {
       const since = text(input.since);
       assert(/^\d{4}-\d{2}-\d{2}/.test(since), 'since must be an ISO date or timestamp');
@@ -130,6 +157,17 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       const localDate = format.format({ value: sinceDate, type: format.Type.DATE });
       const filters = [['deleteddate', 'onorafter', localDate]];
       if (input.recordType) filters.push('AND', ['recordtype', 'is', text(input.recordType)]);
+      if (input.recordIds) {
+        assert(Array.isArray(input.recordIds) && input.recordIds.length > 0 && input.recordIds.length <= 500, 'recordIds must contain 1 to 500 source identities');
+        const identities = [];
+        input.recordIds.forEach((value) => {
+          const id = text(value);
+          assert(/^\d+$/.test(id), 'recordIds must be numeric source identities');
+          if (identities.length) identities.push('OR');
+          identities.push(['recordid', 'equalto', id]);
+        });
+        filters.push('AND', identities);
+      }
       const deleted = search.create({
         type: 'deletedrecord',
         filters,
@@ -435,6 +473,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
         if (action === 'health') return health();
         if (action === 'query') return suiteql(input);
         if (action === 'record') return recordSnapshot(input);
+        if (action === 'crmActivities') return crmActivities(input);
         if (action === 'paymentTerms') return paymentTerms();
         if (action === 'deleted') return deletedRecords(input);
         if (action === 'attachmentInventory') return attachmentInventory(input);

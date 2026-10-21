@@ -1,3 +1,4 @@
+import { sourceTimeAvailableSql } from "../projects/source-time-availability.ts";
 import { EMPLOYER_LEVY_PROGRAMS, isEmployerLevyAdjustmentEvidenceCandidate, parseEmployerLevyAdjustmentEvidence } from "./run-levy-adjustment-evidence.ts";
 import { applicableAssignedComponents } from "./assignment-run-applicability.ts";
 import type { PayRunType } from "./run-contracts.ts";
@@ -215,6 +216,7 @@ export async function appendDerivedEarningLines(
           left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
          where te.org_id = ${orgId} and te.employee_party_id = ${employeePartyId}
            and te.status = 'approved'
+           and (${sourceTimeAvailableSql(sql`te.custom`)} or te.payroll_batch_ref = ${documentId})
            and te.worked_on between ${run.period_start} and ${run.period_end}
            and (te.payroll_batch_ref is null or te.payroll_batch_ref = ${documentId})
            -- Time this run does not pay stays unclaimed for the period's other

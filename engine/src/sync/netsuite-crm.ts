@@ -1,17 +1,17 @@
 import { NETSUITE_MAPPING_GROUPS, connectionSourceOptions } from "./connection-settings.ts";
 import { isUuid } from '../platform/uuid.ts'
-import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '../platform/db.ts'
 import { unsealJson } from '../platform/secrets.ts'
 import { guardedFetch } from '../connectors/ssrf-guard.ts'
-import { netsuiteRecord, netsuiteRecords, suiteql, type NetSuiteCreds } from '../connectors/netsuite.ts'
+import { netsuiteRestlet, suiteql, type NetSuiteCreds } from '../connectors/netsuite.ts'
 import { ensureCrmDefaults } from '../crm/crm.ts'
 import { weightAmount } from '../crm/crm-math.ts'
 import { canonicalDecimal } from '../money/exact-decimal.ts'
 import { normalizeMoney } from '../money/money.ts'
 import { netSuiteOperationalMappingWriter, type OperationalMappingWriter } from './operational-entity-mappings.ts'
 import { orgFeatureEnabled } from '../organization/org-feature-lock.ts'
+import { NetSuiteBridgeClient, DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID, DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID, type NetSuiteBridgeConfig } from '../connectors/netsuite-bridge.ts'
 
 export interface CrmImportReport {
   accountStatuses: number
@@ -25,96 +25,17 @@ export interface CrmImportReport {
 }
 
 type NsRef = { id?: string | number; refName?: string }
-type NsRecord = Record<string, unknown> & { id?: string | number }
-
-export interface NetSuiteRecentActivityNoteRow {
-  id: string
-  entity?: string
-  type?: string
-  typecode?: string
-  createddate?: string
-  lastmodifieddate?: string
-  details?: string
-  subdetails?: string
-}
-
-export interface NormalizedNetSuiteRecentActivityNote {
-  sourceId: string
-  kind: 'call' | 'event' | 'note'
-  subject: string
-  body: string | null
-  occurredAt: string | null
-  accountSourceId: string | null
-  metadata: Record<string, unknown>
-}
 
 const sourceText = (value: unknown): string | null => {
-  const valueText = value == null ? '' : String(value).trim()
-  return valueText || null
+  const text = value == null ? '' : String(value).trim()
+  return text || null
 }
 
-/** Persist a NetSuite CRM opportunity amount through exact decimal then ledger money. Fail closed. */
+/** Persist a NetSuite CRM amount without crossing the floating-point boundary. */
 function persistSyncLineMoney(value: unknown, label: string): string {
   const exact = canonicalDecimal(value, 4)
   if (exact === null) throw new Error(`${label} must be an exact decimal`)
-  try {
-    return normalizeMoney(exact)
-  } catch {
-    throw new Error(`${label} must be an exact decimal`)
-  }
-}
-
-function sourceTimestamp(dateValue: unknown, timeValue?: unknown): string | null {
-  const day = date(dateValue)
-  if (!day) return null
-  const timeText = sourceText(timeValue)
-  if (!timeText) return day
-  const match = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i.exec(timeText)
-  if (!match) return day
-  let hour = Number(match[1])
-  const suffix = match[4]?.toLowerCase()
-  if (suffix === 'pm' && hour < 12) hour += 12
-  if (suffix === 'am' && hour === 12) hour = 0
-  if (hour > 23 || Number(match[2]) > 59 || Number(match[3] ?? 0) > 59) return day
-  return `${day}T${String(hour).padStart(2, '0')}:${match[2]}:${match[3] ?? '00'}Z`
-}
-
-function recentActivityKind(row: NetSuiteRecentActivityNoteRow): NormalizedNetSuiteRecentActivityNote['kind'] | 'email' {
-  const sourceType = sourceText(row.typecode) ?? sourceText(row.type) ?? 'Note'
-  const searchable = `${sourceType} ${row.details ?? ''} ${row.subdetails ?? ''}`.toLowerCase()
-  if (sourceType === 'Note : 9' || /\b(meet|meeting|visit|site tour|plant tour|delivered|delivery|parking lot)\b/.test(searchable)) return 'event'
-  if (/\b(call|called|phone|voicemail|voice mail|vm)\b/.test(searchable)) return 'call'
-  if (/\b(email|emailed|e-mail)\b/.test(searchable)) return 'email'
-  return 'note'
-}
-
-export function isNetSuiteRecentActivityEmail(row: NetSuiteRecentActivityNoteRow): boolean {
-  return recentActivityKind(row) === 'email'
-}
-
-/** RecentActivity is the only analytics surface that exposes source note text and note type. */
-export function normalizeNetSuiteRecentActivityNote(row: NetSuiteRecentActivityNoteRow): NormalizedNetSuiteRecentActivityNote | null {
-  const sourceId = sourceText(row.id)
-  const body = sourceText(row.subdetails)
-  const rawSubject = sourceText(row.details)
-  if (!sourceId || (!body && !rawSubject) || isNetSuiteRecentActivityEmail(row)) return null
-  const sourceType = sourceText(row.typecode) ?? sourceText(row.type) ?? 'Note'
-  const kind = recentActivityKind(row) as NormalizedNetSuiteRecentActivityNote['kind']
-  const generatedSubject = rawSubject && /^Note\s*-\s*\d{4}-\d{2}-\d{2}/i.test(rawSubject) ? null : rawSubject
-  return {
-    sourceId,
-    kind,
-    subject: generatedSubject ?? body?.slice(0, 120) ?? 'Note',
-    body,
-    occurredAt: sourceTimestamp(row.createddate),
-    accountSourceId: sourceText(row.entity),
-    metadata: {
-      id: sourceId,
-      recordType: 'recentActivityNote',
-      sourceType,
-      lastModifiedAt: sourceText(row.lastmodifieddate),
-    },
-  }
+  return normalizeMoney(exact)
 }
 
 /** Resolve a source currency reference only to an ISO currency configured by the application. */
@@ -136,7 +57,7 @@ export function resolveNetSuiteCrmOpportunityProbability(sourceValue: unknown, f
   return Number.isFinite(probabilityValue) ? Math.max(0, Math.min(100, Math.round(probabilityValue))) : fallback
 }
 
-async function credentials(orgId: string, connectionId?: string): Promise<NetSuiteCreds & { probabilityField?: string; connectionId: string }> {
+async function credentials(orgId: string, connectionId?: string): Promise<NetSuiteCreds & { probabilityField?: string; connectionId: string; bridge: NetSuiteBridgeConfig }> {
   const row = (await db.execute<{ id: string; config: Record<string, unknown>; secrets: string }>(sql`
     select id, config, secrets from connections where org_id=${orgId} and source='netsuite'
       ${connectionId ? sql`and id=${connectionId}` : sql``}
@@ -150,7 +71,7 @@ async function credentials(orgId: string, connectionId?: string): Promise<NetSui
     throw new Error('The tenant NetSuite connection is missing credentials')
   }
   const mappings = connectionSourceOptions(connection.config, NETSUITE_MAPPING_GROUPS)
-  return { connectionId: connection.id, account: String(connection.config.account), host: String(connection.config.host), consumerKey: secret.consumerKey, consumerSecret: secret.consumerSecret, tokenKey: secret.tokenKey, tokenSecret: secret.tokenSecret,
+  return { bridge: { scriptId: typeof connection.config.bridgeScriptId === "string" ? connection.config.bridgeScriptId : undefined, deploymentId: typeof connection.config.bridgeDeploymentId === "string" ? connection.config.bridgeDeploymentId : undefined }, connectionId: connection.id, account: String(connection.config.account), host: String(connection.config.host), consumerKey: secret.consumerKey, consumerSecret: secret.consumerSecret, tokenKey: secret.tokenKey, tokenSecret: secret.tokenSecret,
     probabilityField: typeof mappings.crmProbabilityField === "string" ? mappings.crmProbabilityField : undefined }
 }
 
@@ -171,136 +92,48 @@ function refId(value: unknown): string | null {
   return value == null || value === '' ? null : String(value)
 }
 
-async function activityPartyBySourceId(orgId: string): Promise<Map<string, string>> {
-  const parties = (await db.execute<{ id: string; source_id: string }>(sql`
-    select id,custom->>'nsId' source_id
-      from parties
-     where org_id=${orgId} and custom->>'nsId' is not null`))
-  return new Map(parties.rows.map((row) => [row.source_id, row.id]))
-}
-
-function batches<T>(rows: T[], size = 500): T[][] {
-  const result: T[][] = []
-  for (let index = 0; index < rows.length; index += size) result.push(rows.slice(index, index + size))
-  return result
-}
-
-async function importRecentActivityNotes(orgId: string, actorId: string | null, creds: NetSuiteCreds, report: CrmImportReport, transport: typeof fetch, mappings: OperationalMappingWriter) {
-  const rows = await suiteql<NetSuiteRecentActivityNoteRow>(`
-    select ra.id,ra.entity,ra.type,ra.typecode,ra.createddate,ra.lastmodifieddate,ra.details,ra.subdetails
-      from recentactivity ra
-     where ra.type like 'Note :%'`, creds, 1000, transport)
-  const partyBySourceId = await activityPartyBySourceId(orgId)
-  const existingRows = (await db.execute<{ id: string; source_id: string }>(sql`
-    select id,custom->'netsuite'->>'id' source_id
-      from crm_activities
-     where org_id=${orgId} and custom->'netsuite'->>'recordType'='recentActivityNote'`))
-  const existingBySourceId = new Map(existingRows.rows.map((row) => [row.source_id, row.id]))
-  const activities: Array<{
-    id: string; kind: NormalizedNetSuiteRecentActivityNote['kind']; subject: string; body: string | null;
-    occurredAt: string | null; custom: Record<string, unknown>
-  }> = []
-  const links: Array<{ activityId: string; subjectKind: 'account'; subjectId: string }> = []
-  let salesVisits = 0
-  let skippedEmails = 0
-  for (const row of rows) {
-    if (isNetSuiteRecentActivityEmail(row)) {
-      skippedEmails++
-      continue
-    }
-    const activity = normalizeNetSuiteRecentActivityNote(row)
-    if (!activity) continue
-    const activityId = existingBySourceId.get(activity.sourceId) ?? randomUUID()
-    existingBySourceId.set(activity.sourceId, activityId)
-    activities.push({ id: activityId, kind: activity.kind, subject: activity.subject, body: activity.body, occurredAt: activity.occurredAt, custom: { netsuite: activity.metadata } })
-    const partyId = activity.accountSourceId ? partyBySourceId.get(activity.accountSourceId) : null
-    if (partyId) links.push({ activityId, subjectKind: 'account', subjectId: partyId })
-    if (activity.metadata.sourceType === 'Note : 9') salesVisits++
-  }
-  const saveActivities = async (batch: typeof activities) => {
-    const saved = await db.execute<{ id: string }>(sql`
-      insert into crm_activities(id,org_id,kind,status,subject,body,starts_at,completed_at,custom,created_by,updated_by)
-      select x.id,${orgId},x.kind,'completed',x.subject,x.body,x."occurredAt",x."occurredAt",x.custom,${actorId},${actorId}
-        from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
-          as x(id uuid,kind text,subject text,body text,"occurredAt" timestamptz,custom jsonb)
-      on conflict(id) do update set
-        kind=excluded.kind,status='completed',subject=excluded.subject,body=excluded.body,
-        starts_at=excluded.starts_at,completed_at=excluded.completed_at,
-        custom=crm_activities.custom||excluded.custom,updated_at=now(),updated_by=${actorId}
-      where crm_activities.org_id=${orgId} returning id`)
-    if (saved.rows.length !== batch.length) throw new Error('One or more imported CRM activities were not saved')
-    return saved.rows
-  }
-  if (mappings.enabled('crmActivities')) {
-    for (const activity of activities) await mappings.write('crmActivities', `recentActivityNote:${(activity.custom.netsuite as Record<string, unknown>).id}`, { subject: activity.subject, body: activity.body }, sql`id=${activity.id}`, async mapped => {
-      const saved = await saveActivities([{ ...activity, subject: String(mapped.subject), body: mapped.body == null ? null : String(mapped.body) }])
-      return saved[0]!.id
-    })
-  } else {
-    for (const batch of batches(activities)) await saveActivities(batch)
-  }
-  for (const batch of batches(links, 1000)) {
-    await db.execute(sql`
-      insert into crm_activity_links(org_id,activity_id,subject_kind,subject_id,created_by,updated_by)
-      select ${orgId},x."activityId",x."subjectKind",x."subjectId",${actorId},${actorId}
-        from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
-          as x("activityId" uuid,"subjectKind" text,"subjectId" uuid)
-      -- Re-importing the same activity retains its existing account association.
-      on conflict(activity_id,subject_kind,subject_id) do nothing`)
-  }
-  await db.execute(sql`
-    update crm_account_profiles cp
-       set last_activity_at=greatest(coalesce(cp.last_activity_at,'-infinity'::timestamptz),recent.latest),
-           updated_at=now(),updated_by=${actorId}
-      from (
-        select l.subject_id party_id,max(a.starts_at) latest
-          from crm_activity_links l join crm_activities a on a.id=l.activity_id and a.org_id=l.org_id
-         where l.org_id=${orgId} and l.subject_kind='account'
-           and a.custom->'netsuite'->>'recordType'='recentActivityNote' and a.starts_at is not null
-         group by l.subject_id
-      ) recent
-     where cp.org_id=${orgId} and cp.party_id=recent.party_id`)
-  report.activities.recentActivityNote = activities.length
-  report.activities.recentActivityNoteSource = rows.length
-  report.activities.skippedEmail = skippedEmails
-  report.activities.salesVisit = salesVisits
-}
-
-async function importNativeActivities(orgId: string, actorId: string | null, creds: NetSuiteCreds, report: CrmImportReport, transport: typeof fetch, mappings: OperationalMappingWriter) {
-  const kinds = [{ type: 'task', kind: 'task', reportKey: 'task' }, { type: 'phoneCall', kind: 'call', reportKey: 'phoneCall' }, { type: 'calendarEvent', kind: 'event', reportKey: 'calendarEvent' }, { type: 'note', kind: 'note', reportKey: 'nativeNote' }] as const
+async function importNativeActivities(orgId: string, actorId: string | null, creds: NetSuiteCreds & { bridge: NetSuiteBridgeConfig }, report: CrmImportReport, transport: typeof fetch, mappings: OperationalMappingWriter) {
+  const bridge = new NetSuiteBridgeClient(creds, creds.bridge, params => netsuiteRestlet(
+    creds.bridge.scriptId ?? DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID,
+    creds.bridge.deploymentId ?? DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID,
+    params, creds, 'POST', transport,
+  ))
+  const kinds = [{ type: 'task', kind: 'task' }, { type: 'phonecall', kind: 'call' }, { type: 'calendarevent', kind: 'event' }, { type: 'note', kind: 'note' }] as const
   for (const source of kinds) {
-    try {
-      const collection = await netsuiteRecords<NsRecord>(source.type, creds, 1000, transport)
-      let imported = 0
-      for (const summary of collection) {
-        if (summary.id == null) continue
-        const record = await netsuiteRecord<NsRecord>(source.type, summary.id, creds, transport)
-        const subject = String(record.title ?? record.subject ?? record.memo ?? '').trim()
-        const body = String(record.message ?? record.note ?? record.comments ?? '').trim() || null
-        if (!subject && !body) continue
-        const nsId = String(summary.id)
-        const accountNsId = refId(record.company ?? record.entity ?? record.customer)
-        const party = accountNsId ? (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${accountNsId} limit 1`)).rows[0] : null
-        const statusText = String((record.status as NsRef)?.refName ?? record.status ?? '').toLowerCase()
-        const status = statusText.includes('complete') ? 'completed' : statusText.includes('cancel') ? 'cancelled' : 'planned'
-        const existing = (await db.execute<{ id: string }>(sql`select id from crm_activities where org_id=${orgId} and custom->'netsuite'->>'id'=${nsId} and custom->'netsuite'->>'recordType'=${source.type}`))
-        const activityId = await mappings.write('crmActivities', `${source.type}:${nsId}`, { subject: subject || body!.slice(0,120), body }, sql`custom->'netsuite'->>'id'=${nsId} and custom->'netsuite'->>'recordType'=${source.type}`, async mapped => {
-          const result = existing.rows[0]
-            ? await db.execute(sql`update crm_activities set kind=${source.kind},status=${status},subject=${String(mapped.subject)},body=${mapped.body ?? null},starts_at=${date(record.startDate ?? record.start)},ends_at=${date(record.endDate ?? record.end)},due_at=${date(record.dueDate)},completed_at=${status === 'completed' ? date(record.completedDate ?? record.endDate) : null},updated_at=now(),updated_by=${actorId} where id=${existing.rows[0].id} and org_id=${orgId} returning id`)
-            : await db.execute(sql`insert into crm_activities(org_id,kind,status,subject,body,starts_at,ends_at,due_at,completed_at,custom,created_by,updated_by) values(${orgId},${source.kind},${status},${String(mapped.subject)},${mapped.body ?? null},${date(record.startDate ?? record.start)},${date(record.endDate ?? record.end)},${date(record.dueDate)},${status === 'completed' ? date(record.completedDate ?? record.endDate) : null},${JSON.stringify({ netsuite: { id: nsId, recordType: source.type } })}::jsonb,${actorId},${actorId}) returning id`)
-          const id = (result as unknown as { rows: { id: string }[] }).rows[0]?.id
-          if (!id) throw new Error('The imported CRM activity was not saved')
-          return id
-        })
-        // Re-importing the same activity retains its existing account association.
-        if (party) await db.execute(sql`insert into crm_activity_links(org_id,activity_id,subject_kind,subject_id,created_by,updated_by) values(${orgId},${activityId},'account',${party.id},${actorId},${actorId}) on conflict(activity_id,subject_kind,subject_id) do nothing`)
-        imported++
+    const collection = await bridge.crmActivities(source.type)
+    let imported = 0
+    for (const { id: nsId, fields: record } of collection) {
+      const subject = sourceText(record.title)
+      const body = sourceText(record.message ?? record.note)
+      if (!subject && !body) throw new Error(`Source ${source.type} ${nsId} has neither a title nor content`)
+      const accountNsId = refId(record.company ?? record.entity)
+      const party = accountNsId ? (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${accountNsId} limit 1`)).rows[0] : null
+      if (accountNsId && !party) {
+        report.missingParties++
+        report.warnings.push(`Source ${source.type} ${nsId} requires missing party ${accountNsId}`)
+        continue
       }
-      report.activities[source.reportKey] = imported
-    } catch (error) {
-      report.activities[source.reportKey] = 0
-      report.warnings.push(`${source.type}: ${error instanceof Error ? error.message : String(error)}`)
+      const statusText = String(record.status ?? '').toLowerCase()
+      const status = source.type === 'note' || /^(complete|completed)$/.test(statusText) ? 'completed' : /^(cancelled|canceled)$/.test(statusText) ? 'cancelled' : 'planned'
+      const identity = sql`custom->'netsuite'->>'recordType'=${source.type}`
+      const existing = (await db.execute<{ id: string }>(sql`select id from crm_activities where org_id=${orgId} and custom->'netsuite'->>'id'=${nsId} and ${identity}`)).rows
+      if (existing.length > 1) throw new Error(`Source ${source.type} ${nsId} has duplicate CRM activity identities`)
+      const metadata = { id: nsId, recordType: source.type, noteType: record.notetype ?? null, transaction: record.transaction ?? null, activity: record.activity ?? null, lastModifiedAt: record.lastmodifieddate ?? null }
+      const startsAt = date(record.startdate ?? record.notedate)
+      const completedAt = status === 'completed' ? date(record.completeddate ?? record.notedate ?? record.enddate) : null
+      const activityId = await mappings.write('crmActivities', `${source.type}:${nsId}`, { subject: subject ?? body!.slice(0,120), body }, sql`custom->'netsuite'->>'id'=${nsId} and ${identity}`, async mapped => {
+        const result = existing[0]
+          ? await db.execute(sql`update crm_activities set kind=${source.kind},status=${status},subject=${String(mapped.subject)},body=${mapped.body ?? null},starts_at=${startsAt},ends_at=${date(record.enddate)},due_at=${date(record.duedate)},completed_at=${completedAt},custom=jsonb_set(coalesce(custom,'{}'::jsonb),'{netsuite}',${JSON.stringify(metadata)}::jsonb),updated_at=now(),updated_by=${actorId} where id=${existing[0].id} and org_id=${orgId} returning id`)
+          : await db.execute(sql`insert into crm_activities(org_id,kind,status,subject,body,starts_at,ends_at,due_at,completed_at,custom,created_by,updated_by) values(${orgId},${source.kind},${status},${String(mapped.subject)},${mapped.body ?? null},${startsAt},${date(record.enddate)},${date(record.duedate)},${completedAt},${JSON.stringify({ netsuite: metadata })}::jsonb,${actorId},${actorId}) returning id`)
+        const id = (result as unknown as { rows: { id: string }[] }).rows[0]?.id
+        if (!id) throw new Error('The imported CRM activity was not saved')
+        return id
+      })
+      if (party) await db.execute(sql`insert into crm_activity_links(org_id,activity_id,subject_kind,subject_id,created_by,updated_by) values(${orgId},${activityId},'account',${party.id},${actorId},${actorId}) on conflict(activity_id,subject_kind,subject_id) do nothing`)
+      imported++
     }
+    report.activities[source.type] = imported
+    if (source.type === 'note') report.sourceNoteLinks = collection.length
   }
 }
 
@@ -417,10 +250,6 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string, tr
       return saved.rows[0].id
     })
     report.opportunities++
-  }
-  await importRecentActivityNotes(orgId, actorId, creds, report, transport, mappings)
-  if (report.activities.recentActivityNoteSource !== report.sourceNoteLinks) {
-    report.warnings.push(`Source note coverage: the note-link table contains ${report.sourceNoteLinks} rows, while RecentActivity exposes ${report.activities.recentActivityNoteSource ?? 0} typed notes with activity content. Link-only rows without activity content were not fabricated as CRM activities.`)
   }
   await importNativeActivities(orgId, actorId, creds, report, transport, mappings)
   return report

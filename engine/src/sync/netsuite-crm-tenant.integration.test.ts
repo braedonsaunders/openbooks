@@ -58,8 +58,12 @@ test(
         }
         return Response.json({ items, hasMore: false });
       }
-      if (target.includes("/record/v1/")) {
-        return Response.json({ items: [], hasMore: false });
+      if (target.includes('/app/site/hosting/restlet.nl')) {
+        const params = JSON.parse(String(init?.body)) as { action: string; recordType: string }
+        if (params.action === 'health') return Response.json({ ok: true, schemaVersion: 1, bridgeVersion: '1.7.0', accountId: '123456' })
+        assert.equal(params.action, 'crmActivities')
+        return Response.json({ schemaVersion: 1, recordType: params.recordType, hasMore: false,
+          rows: params.recordType === 'note' ? [{ id: '1845', fields: { title: 'Plant visit', note: 'Meeting at the plant. Went on a site tour and left rate sheets.', entity: 'NS-CUST-1', notedate: '2024-05-03T16:30:00.000Z' } }] : [] })
       }
       throw new Error(`unstubbed NetSuite URL ${target}`);
     };
@@ -93,11 +97,11 @@ test(
       const first = await importNetSuiteCrm(orgA.orgId, undefined, transport);
       assert.equal(first.accounts, 1);
       assert.equal(first.opportunities, 1);
-      assert.equal(first.activities.recentActivityNote, 1);
+      assert.equal(first.activities.note, 1);
       const again = await importNetSuiteCrm(orgA.orgId, undefined, transport);
       assert.equal(again.accounts, 1);
       assert.equal(again.opportunities, 1);
-      assert.equal(again.activities.recentActivityNote, 1);
+      assert.equal(again.activities.note, 1);
       customerStage = "prospect";
       await Promise.all([
         importNetSuiteCrm(orgA.orgId, undefined, transport),
@@ -149,11 +153,11 @@ test(
 
       const activities = await db.execute<{ orgId: string; id: string; subject: string }>(sql`
         select org_id as "orgId", id, subject from crm_activities
-         where custom -> 'netsuite' ->> 'recordType' = 'recentActivityNote'`);
+         where custom -> 'netsuite' ->> 'recordType' = 'note'`);
       assert.equal(activities.rows.length, 2);
       const byOrg = new Map(activities.rows.map((row) => [row.orgId, row]));
       assert.notEqual(byOrg.get(orgA.orgId)!.id, byOrg.get(orgB.orgId)!.id);
-      assert.match(byOrg.get(orgA.orgId)!.subject, /site tour/);
+      assert.equal(byOrg.get(orgA.orgId)!.subject, "Plant visit");
 
       const links = await db.execute<{ orgId: string; n: number }>(sql`
         select org_id as "orgId", count(*)::int as n from crm_activity_links

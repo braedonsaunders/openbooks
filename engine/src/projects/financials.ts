@@ -1,3 +1,4 @@
+import { sourceTimeAvailableSql } from './source-time-availability.ts'
 import { sql, type SQL } from 'drizzle-orm'
 import { db, orgContext, withOrgTransaction } from '../platform/db.ts'
 import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type CostSource, type OverheadSource } from '@openbooks/schema'
@@ -132,7 +133,7 @@ async function rateEngineOverhead(
       join overhead_rates o on ${overheadRateAppliesToTimeEntry('o', 'te')}
       left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
       join orgs o_ on o_.id = te.org_id
-     where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+     where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`)}
        ${basis === 'billed_hours'
          ? sql`and te.is_billable`
          : basis === 'actual_hours'
@@ -347,7 +348,7 @@ async function resolveProjectFinancialsInSnapshot(
        left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
        join orgs o on o.id = te.org_id
        where te.org_id = ${orgId} and te.project_id = ${projectId}
-         and te.status = 'approved' and te.is_billable
+         and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`)} and te.is_billable
        group by 1, 2`))
   // Billable cost is likewise all eligible work, with its unbilled subset
   // retained separately for invoicing/backlog presentation.
@@ -419,7 +420,7 @@ async function resolveProjectFinancialsInSnapshot(
              coalesce(sum(te.hours) filter (where te.cost_rate is null), 0) as unrated_hours from time_entries te
              left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
              join orgs o on o.id = te.org_id
-             where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+             where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`)}
            group by 1`)
         : profile.laborCost.source === 'estimated_time_rate'
           ? db.execute(sql`select coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as func,
@@ -429,7 +430,7 @@ async function resolveProjectFinancialsInSnapshot(
                left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
                join orgs o on o.id = te.org_id
                where te.org_id = ${orgId} and te.project_id = ${projectId}
-                 and te.status = 'approved' and te.costing_basis = 'estimated'
+                 and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`)} and te.costing_basis = 'estimated'
              group by 1`)
         : profile.laborCost.source === 'account_group'
           // The resolver above guarantees a non-empty account set (or a
@@ -461,7 +462,7 @@ async function resolveProjectFinancialsInSnapshot(
          left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
          join orgs o on o.id = te.org_id
          where te.org_id = ${orgId} and te.project_id = ${projectId}
-           and te.status = 'approved' and te.cost_journal_entry_id is null
+           and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`)} and te.cost_journal_entry_id is null
          group by 1`)
     : db.execute(sql`select 0 as unposted_labor`))
   // overhead (posted_gl_account_group only) — posted GL to overhead accounts.
@@ -479,7 +480,7 @@ async function resolveProjectFinancialsInSnapshot(
   const hoursRes = await (db.execute(sql`select coalesce(sum(te.hours), 0) as total,
              coalesce(sum(te.hours) filter (where te.is_billable), 0) as billed
         from time_entries te
-       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`))
+       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`)}`))
   // cost by account (for the breakdown subtab) — same cost predicate.
   const byAccountRes = await (db.execute<{
       account_id: string; number: string | null; name: string; type: string; amount: string;
@@ -1009,7 +1010,7 @@ export async function resolveProjectActualCosts(
         left join subsidiaries crs on crs.id = te.cost_rate_subsidiary_id and crs.org_id = te.org_id
         join orgs o on o.id = te.org_id
        where te.org_id = ${orgId} and te.project_id = any(${`{${ids.join(',')}}`}::uuid[])
-         and te.status = 'approved' and te.cost_journal_entry_id is null
+         and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`)} and te.cost_journal_entry_id is null
        group by 1, 2`),
   ])
   const adjustmentByProject = new Map(adjustments.rows.map((r) => [r.project_id, amount(r.amount)]))

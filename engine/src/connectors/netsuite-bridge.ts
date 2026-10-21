@@ -9,7 +9,7 @@ export const NETSUITE_BRIDGE_SCHEMA_VERSION = 1;
  * change detection. Keep in step with BRIDGE_VERSION in
  * integrations/netsuite-bridge.
  */
-export const NETSUITE_BRIDGE_MIN_VERSION = "1.6.0";
+export const NETSUITE_BRIDGE_MIN_VERSION = "1.7.0";
 export const DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID = "customscript_openbooks_bridge_rl";
 export const DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID = "customdeploy_openbooks_bridge_rl";
 
@@ -36,6 +36,12 @@ export interface NetSuiteDeletedRecord {
   recordType: string;
   name: string;
   externalId: string;
+}
+
+export type NetSuiteCrmRecordType = "task" | "phonecall" | "calendarevent" | "note";
+export interface NetSuiteCrmActivity {
+  id: string;
+  fields: Record<string, unknown>;
 }
 
 export interface NetSuitePaymentTerm {
@@ -228,7 +234,30 @@ export class NetSuiteBridgeClient {
     }
   }
 
-  async deletedRecords(since: Date, recordType?: string): Promise<NetSuiteDeletedRecord[]> {
+  async crmActivities(recordType: NetSuiteCrmRecordType): Promise<NetSuiteCrmActivity[]> {
+    await this.requireCompatible();
+    const rows: NetSuiteCrmActivity[] = [];
+    let afterId = "0";
+    for (;;) {
+      const page = assertBridgeResponse(await this.request<{
+        schemaVersion: number; recordType: string; rows: NetSuiteCrmActivity[]; hasMore: boolean;
+      } | BridgeError>({ action: "crmActivities", recordType, afterId }));
+      if (page.recordType !== recordType || !Array.isArray(page.rows) || typeof page.hasMore !== "boolean") {
+        throw new Error("NetSuite bridge returned an invalid CRM activity page");
+      }
+      for (const row of page.rows) {
+        if (!/^\d+$/.test(row.id) || BigInt(row.id) <= BigInt(afterId) || !row.fields || typeof row.fields !== "object") {
+          throw new Error("NetSuite bridge CRM activity identities must advance without duplicates");
+        }
+        afterId = row.id;
+        rows.push(row);
+      }
+      if (!page.hasMore) return rows;
+      if (!page.rows.length) throw new Error("NetSuite bridge CRM activity page did not advance");
+    }
+  }
+
+  async deletedRecords(since: Date, recordType?: string, recordIds?: string[]): Promise<NetSuiteDeletedRecord[]> {
     const response = assertBridgeResponse(await this.request<{
       schemaVersion: number;
       rows: NetSuiteDeletedRecord[];
@@ -236,6 +265,7 @@ export class NetSuiteBridgeClient {
       action: "deleted",
       since: since.toISOString(),
       ...(recordType ? { recordType } : {}),
+      ...(recordIds ? { recordIds } : {}),
     }));
     return response.rows;
   }

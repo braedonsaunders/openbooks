@@ -1,3 +1,4 @@
+import { sourceTimeAvailableSql } from "../projects/source-time-availability.ts";
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '../platform/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, signedDocumentAmount, sum, toUnits } from '../money/money.ts'
@@ -462,7 +463,7 @@ export async function generateInvoiceFromBillingRequest(
              where r.org_id = te.org_id and r.party_id = te.employee_party_id and r.is_active
           ) er on true
          where te.org_id = ${orgId} and te.project_id = ${req.project_id}
-           and te.status = 'approved' and te.is_billable
+           and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`)} and te.is_billable
            and te.billing_status = 'unbilled'
            ${isFinal && ticketIds.length === 0 && !hasTimeSelection ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
          order by te.worked_on, te.id

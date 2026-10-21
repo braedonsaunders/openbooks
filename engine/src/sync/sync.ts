@@ -205,6 +205,8 @@ export function syncVerificationFailures(result: SyncResult): string[] {
   }
   const orphanAssetHistory = result.operationalRecords?.fixedAssets?.orphanHistoryRows ?? 0;
   if (orphanAssetHistory > 0) failures.push(`${orphanAssetHistory} fixed-asset history rows have no source asset`);
+  const assetMismatches = result.operationalRecords?.fixedAssets?.mismatches ?? [];
+  if (assetMismatches.length) failures.push(`fixed-asset replication differs: ${assetMismatches.join("; ")}`);
   const crm = result.operationalRecords?.crm;
   if (crm && (crm.missingParties > 0 || crm.warnings.length > 0)) {
     failures.push(`CRM replication is incomplete: ${crm.missingParties} missing parties; ${crm.warnings.slice(0, 5).join("; ")}`);
@@ -664,9 +666,10 @@ async function lastFullAttachmentSweepAt(orgId: string, connectionId: string): P
   const row = (await db.execute<{ at: string | Date | null }>(sql`
     select max(finished_at) as at
       from sync_runs
-     where org_id = ${orgId} and connection_id = ${connectionId} and status = 'ok'
-       and ((kind in ('incremental', 'full_migration') and stats->'attachments'->>'scope' = 'all')
-         or (kind = 'attachments' and stats->>'scope' = 'all'))
+     where org_id = ${orgId} and connection_id = ${connectionId}
+       and ((status in ('ok','failed') and kind in ('incremental', 'full_migration')
+             and stats->'attachments'->>'scope' = 'all' and stats->'attachments'->>'failures' = '0')
+         or (status='ok' and kind = 'attachments' and stats->>'scope' = 'all'))
   `)).rows[0];
   return row?.at ? new Date(row.at) : null;
 }

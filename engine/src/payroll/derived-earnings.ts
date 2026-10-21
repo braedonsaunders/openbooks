@@ -1,3 +1,4 @@
+import { sourceTimeAvailableSql } from "../projects/source-time-availability.ts";
 import { payrollEmploymentOverlapsPeriod } from "./employment-roster.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -1037,6 +1038,7 @@ async function loadEntries(
            department_id, is_billable, started_at, created_at
       from time_entries
      where org_id = ${orgId} and status = 'approved'
+       and (${sourceTimeAvailableSql(sql`custom`)} or payroll_batch_ref is not null)
        and employee_party_id = any(${`{${employeePartyIds.join(",")}}`}::uuid[])
        and worked_on between ${from} and ${to}
      -- Same precedence the comparator applies: the recorded clock time, then
@@ -1269,6 +1271,7 @@ export async function previewDerivedRule(
            order by lcr.effective_from desc limit 1
         ) lcr on true
        where te.org_id = ${orgId} and te.status = 'approved'
+         and (${sourceTimeAvailableSql(sql`te.custom`)} or te.payroll_batch_ref is not null)
          and te.worked_on between ${periodStart} and ${periodEnd}
          and coalesce(tt.exclude_from_wages, false) = false
        group by te.employee_party_id
