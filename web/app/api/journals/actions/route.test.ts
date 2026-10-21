@@ -1,3 +1,4 @@
+import { approveBudgetScenarioFixture } from "@openbooks/engine/testing/budgets";
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
@@ -261,14 +262,9 @@ test('grant and encumbrance boundaries share one provisioned org', { skip: !DB }
         values (${org.orgId}, ${scenario}, ${org.periodId}, ${org.accounts.cogs}, ${org.subsidiaryId}, null, null, null, null, ${JSON.stringify({ fund: fundId })}::jsonb, '100.00', ${adminId}, ${adminId}),
           (${org.orgId}, ${scenario}, ${org.periodId}, ${org.accounts.cogs}, ${org.subsidiaryId}, ${dept}, ${proj}, null, null, ${JSON.stringify({ fund: fundId })}::jsonb, '100.00', ${adminId}, ${adminId}),
           (${org.orgId}, ${scenario}, ${org.periodId}, ${org.accounts.cogs}, ${org.subsidiaryId}, null, null, ${org.locationId}, ${classId}, ${JSON.stringify({ fund: fundId })}::jsonb, '100.00', ${adminId}, ${adminId})`)
-      const submitted = await db.execute(sql`update budget_scenarios
-        set status = 'pending_approval', revision = revision + 1, submitted_by = ${adminId}, submitted_at = now(), updated_by = ${adminId}
-        where id = ${scenario} and org_id = ${org.orgId} and status = 'draft' returning id`)
-      assert.equal(submitted.rows.length, 1, 'populated advisory budget enters approval')
-      const approved = await db.execute(sql`update budget_scenarios
-        set status = 'approved', revision = revision + 1, approved_by = ${userId}, approved_at = now(), updated_by = ${userId}
-        where id = ${scenario} and org_id = ${org.orgId} and status = 'pending_approval' returning id`)
-      assert.equal(approved.rows.length, 1, 'submitted advisory budget is approved by a distinct actor')
+      await approveBudgetScenarioFixture(org.orgId, scenario)
+      assert.equal((await db.execute<{ status: string }>(sql`select status from budget_scenarios
+        where org_id=${org.orgId} and id=${scenario}`)).rows[0]!.status, 'approved')
       const group = (await db.execute<{ id: string }>(sql`
         insert into account_groups (org_id, dimension, key, name, match, is_catch_all, is_active, created_by, updated_by)
         values (${org.orgId}, 'grant_allowable_costs', 'allowable', 'Allowable Costs', '{}'::jsonb, false, true, ${adminId}, ${adminId})

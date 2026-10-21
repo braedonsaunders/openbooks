@@ -61,6 +61,12 @@ test('Insight cards and dashboards remain editable after publishing', async ({
       name: string,
     ) {
       const nameInput = page.getByPlaceholder(placeholder, { exact: true }).filter({ visible: true })
+      await expect(nameInput).toBeVisible()
+      // The server-rendered input precedes hydration of the editor. Wait for
+      // its native entrance to settle before dispatching a synthetic edit.
+      for (const region of await page.locator('[data-page-motion]').all()) {
+        await expect(region).toHaveCSS('opacity', '1')
+      }
       const saved = page.waitForResponse(
         (response) =>
           response.url().endsWith(path) &&

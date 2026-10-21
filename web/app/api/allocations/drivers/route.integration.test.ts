@@ -280,7 +280,9 @@ test("driver preview returns exact shares; empty drivers report why", async () =
 test("report_definition preview runs under the actor via the engine runner", async () => {
   const org = await createScratchOrg();
   try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const actorId = (await seedFlowActors(org.orgId)).outsiderId;
+    const { grantScratchPermissions } = await import("@openbooks/engine/testing/fixtures");
+    await grantScratchPermissions(org.orgId, actorId, [...READ, ...MANAGE]);
     await enableAllocations(org.orgId);
     authenticate(org.orgId, actorId, [...READ, ...MANAGE]);
 

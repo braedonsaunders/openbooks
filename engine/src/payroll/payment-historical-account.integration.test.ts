@@ -1,3 +1,4 @@
+import { returnDocumentToDraft, submitAndReleaseIfUngated } from "../flows/submit.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -35,7 +36,7 @@ for (const policy of ["changed", "cleared"] as const) {
         return id;
       };
       const bankAccountId = account("asset_bank");
-      await db.execute(sql`update documents set status='approved' where org_id=${fx.orgId} and id=${input.documentId}`);
+
       await postDocument(input.documentId, {
         control: { ar: account("asset_receivable"), ap: account("liability_payable"), bank: bankAccountId },
       });
@@ -95,8 +96,10 @@ for (const evidence of ["absent", "ambiguous"] as const) {
         return id;
       };
       const bankAccountId = account("asset_bank");
-      // Model a legacy/manual projection before posting. No posted evidence
-      // is edited and all ordinary posting/kernel controls remain enabled.
+      // Review the unposted projection through its native draft transition;
+      // posted evidence and ordinary posting/kernel controls remain immutable.
+      await returnDocumentToDraft({ ...input, actorId: fx.actorId,
+        reason: "Review payroll liability evidence before posting" });
       if (evidence === "absent") {
         await db.execute(sql`update document_lines set party_id=null
           where org_id=${fx.orgId} and document_id=${input.documentId} and party_id=${fx.employeeId}`);
@@ -107,10 +110,10 @@ for (const evidence of ["absent", "ambiguous"] as const) {
           (org_id,document_id,line_number,account_id,description,amount,party_id,created_by,updated_by)
           select org_id,document_id,
             (select max(line_number)+1 from document_lines where org_id=${fx.orgId} and document_id=${input.documentId}),
-            ${account("liability_payable")},'Legacy additional employee liability',amount,party_id,created_by,updated_by
+            ${account("liability_payable")},'Additional employee liability',amount,party_id,created_by,updated_by
           from document_lines where org_id=${fx.orgId} and document_id=${input.documentId} and party_id=${fx.employeeId}`);
       }
-      await db.execute(sql`update documents set status='approved' where org_id=${fx.orgId} and id=${input.documentId}`);
+      await submitAndReleaseIfUngated({ ...input, actorId: fx.actorId });
       await postDocument(input.documentId, {
         control: { ar: account("asset_receivable"), ap: account("liability_payable"), bank: bankAccountId },
       });

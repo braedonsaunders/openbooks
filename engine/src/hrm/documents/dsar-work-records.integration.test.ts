@@ -1,3 +1,4 @@
+import { installEngineSeams } from "../../composition/install.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
@@ -16,6 +17,7 @@ const spec = {
 } as const;
 
 async function setup() {
+  installEngineSeams();
   return setupHarness(spec, async f => {
     const actor = { orgId: f.org.orgId, actorId: f.authorId };
     const board = randomUUID();

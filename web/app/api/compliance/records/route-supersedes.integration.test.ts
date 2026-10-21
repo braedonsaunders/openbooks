@@ -1,3 +1,5 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -37,7 +39,7 @@ const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 const { PATCH } = await import("./[id]/route.ts");
-const { createScratchUser } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchUser, grantScratchPermissions } = await import("@openbooks/engine/testing/fixtures");
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
@@ -177,6 +179,7 @@ test("verifying the renewal supersedes the prior certificate", async () => {
     })).json()) as { id: string };
     // Attestation is someone else's duty: the uploader cannot verify.
     state.actorId = await withBypassContext(() => createScratchUser(org.orgId, "Verifier", "compliance_manager"));
+    await withBypassContext(() => grantScratchPermissions(org.orgId, state.actorId, ["compliance.verify", "compliance.read"]));
     const response = await withOrgContext(state.orgId, () =>
       PATCH(
         new Request(`http://records.test/api/compliance/records/${created.id}`, {

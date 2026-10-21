@@ -100,8 +100,9 @@ test('updateSov accepts an income-account-only change on an application-used lin
     assert.match((await repriced.json() as { error: string }).error, /immutable|change order/i)
 
     session.user = { id: approver, orgId: org.orgId, name: 'Billing approver', email: 'approver@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: approver }
-    const approved = await post(construction.POST, org.orgId, { action: 'approvePayApp', payApplicationId: appId })
-    assert.equal(approved.status, 200, JSON.stringify(await approved.clone().json()))
+    assert.equal((await db.execute<{ status: string }>(sql`select status from pay_applications
+      where org_id=${org.orgId} and id=${appId}`)).rows[0]!.status, 'approved',
+      'the native submission releases when no tenant Flow gates are configured')
     await db.execute(sql`update sov_lines set income_account_id=${balanceSheetAccount} where org_id=${org.orgId} and id=${line}`)
     const invoiceRefused = await post(construction.POST, org.orgId, { action: 'billPayApp', payApplicationId: appId })
     assert.equal(invoiceRefused.status, 422, JSON.stringify(await invoiceRefused.clone().json()))

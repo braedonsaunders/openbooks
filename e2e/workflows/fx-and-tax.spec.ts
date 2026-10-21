@@ -980,7 +980,7 @@ async function windowTax(page: Page, seed: TaxSeed, from: string, to: string, co
       // open. Supply a current closing spot rate before measuring that exposure
       // through the wizard, then complete the manual financial review.
       // The close monitors the bank: a reconcilable account with activity and
-      // no signed-off reconciliation through period end blocks attestation.
+      // no signed-off reconciliation through period end blocks close approval.
       // Import the March receipt as a statement, match it, and sign off
       // through the filing month — the product's real bank path, as the
       // close-to-reporting suite does.
@@ -1021,7 +1021,7 @@ async function windowTax(page: Page, seed: TaxSeed, from: string, to: string, co
         expect(result.problemDetails).toEqual([]);
       }
       // Revalidate so the computed tasks (bank, FX) re-read the fresh
-      // reconciliation and revaluation before attestation — the same route
+      // reconciliation and revaluation before close approval — the same route
       // the readiness stage's Revalidate button calls.
       const refreshed = await apiOk(page, 'POST', `/api/close/runs/${runId}`, { action: 'refresh' });
       expect((refreshed as Json).ok).toBe(true);
@@ -1054,28 +1054,18 @@ async function windowTax(page: Page, seed: TaxSeed, from: string, to: string, co
       expect(openRefusal.status).toBe(409);
       expect(JSON.stringify(openRefusal.body)).toContain('period-not-closed');
 
-      // Owner attestation (with the mandated 10+ character statement) and
-      // the period lock live on the Lock stage, both through the UI. The lock
-      // uses the shared confirmation dialog before the period lock is sent.
+      // Tenant Flows govern close approval. With no configured gates the
+      // native request releases immediately, then the operator locks the period.
       await page.goto(`/close?run=${runId}&stage=lock`);
       await dismissSetupWizard(page);
-      // Scoped to main: Next.js holds the RSC flight payload for the last
-      // refresh in a hidden div outside main, and its parsed copy of this
-      // same textarea transiently double-matches a page-level id selector
-      // (proven in a trace: two #close-owner-attestation nodes, one under
-      // main, one in div#S:0[hidden], settling to one). The operator box is
-      // the one in main; asserting exactly one there keeps the gate honest —
-      // a product double-render in main still fails loudly.
-      const attestation = page.locator('main #close-owner-attestation');
-      await expect(attestation).toHaveCount(1);
-      await attestation.fill('W4 e2e: June figures reviewed, FX revalued, ready to lock.');
       {
-        const attested = page.waitForResponse(
+        const requested = page.waitForResponse(
           (r) => r.url().endsWith(`/api/close/runs/${runId}`) && r.request().method() === 'POST',
         );
-        await page.getByRole('button', { name: 'Attest and approve close', exact: true }).click();
-        const res = await attested;
+        await page.getByRole('button', { name: 'Request approval', exact: true }).click();
+        const res = await requested;
         expect(res.status(), await res.text()).toBe(200);
+        await expect(page.getByText('Approved', { exact: true }).first()).toBeVisible();
       }
       {
         const locked = page.waitForResponse(

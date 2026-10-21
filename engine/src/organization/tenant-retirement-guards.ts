@@ -26,10 +26,10 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     name: "flow_submission_receipt_guard",
-    source: "0786_channel_sync_flow_principal.sql",
-    sha256: "16e9679b1b8b780cfcd936657cc51ad53290eb0b76a51c0f122bd1360f3a1d47",
+    source: "0789_portal_return_flow_principal.sql",
+    sha256: "21883dd58d659b5486efa7b68a97869b45cf93df0a9eb416a2a53d80e207376a",
     newSha256:
-      "16e9679b1b8b780cfcd936657cc51ad53290eb0b76a51c0f122bd1360f3a1d47",
+      "21883dd58d659b5486efa7b68a97869b45cf93df0a9eb416a2a53d80e207376a",
     patch: false,
   },
   {

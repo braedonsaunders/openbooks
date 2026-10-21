@@ -68,13 +68,9 @@ async function fixture(): Promise<Fx> {
     values
       (${profileId}, ${org.orgId}, 'Collection profile', ${org.accounts.bank},
        ${org.subsidiaryId}, ${formatId}, 'CAD', 'CA', ${actorId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`
-    insert into party_bank_accounts
-      (id, org_id, party_id, bank_name, country, currency, routing,
-       account_last_four, approved_at, approved_by, created_by, updated_by)
-    values
-      (${partyBankAccountId}, ${org.orgId}, ${org.customerId}, 'Customer bank',
-       'CA', 'CAD', '{}'::jsonb, '1234', ${org.date}, ${actorId}, ${actorId}, ${actorId})`));
+  const { seedApprovedBankAccountFixture } = await import('@openbooks/engine/testing/bank-accounts');
+  await seedApprovedBankAccountFixture({ id: partyBankAccountId, orgId: org.orgId, actorId, partyId: org.customerId,
+    bankName: 'Customer bank', country: 'CA', currency: 'CAD', routing: {}, lastFour: '1234' });
   await withBypassContext(() => db.execute(sql`
     insert into payment_mandates
       (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference,

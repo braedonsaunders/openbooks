@@ -64,7 +64,7 @@ async function runSentinel(orgId: string, native = false) {
     allowedSubsidiaryIds: null,
   } as unknown as Authz
   return withOrgContext(orgId, () => native
-    ? withAnalyticsRead({ authz, slug: 'sentinel', projection: 'tab', tab: 'detection', locale: 'en', revision: 'evidence-test', observedAt: Date.now() }, () => sentinelData(orgId, P, authz))
+    ? withAnalyticsRead({ authz, slug: 'sentinel', projection: 'tab', tab: 'detection', locale: 'en', revision: randomUUID(), observedAt: Date.now() }, () => sentinelData(orgId, P, authz))
     : sentinelData(orgId, P, authz))
 }
 

@@ -106,7 +106,7 @@ test("pick lists hold bins by name, release through Flows, and stay in their org
     await assert.rejects(pick(second.orderId, second.lineId, "4"), { code: "exceeds_open_quantity" });
     await withOrg(org.orgId, () => db.transaction((tx) =>
       voidPickList(tx, org.orgId, userId, { pickListId: blocked.id, reason: "bin short", allowedSubsidiaryIds: null })));
-    await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: "pick_list", assignees: [{ type: "submitter" }], mode: "any" }));
+    await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: "pick_list", assignees: [{ type: "submitter" }], mode: "any", preventSelfApproval: false }));
     const gated = await pick(second.orderId, second.lineId, "4");
     assert.equal((await release(org.orgId, gated.id)).status, "pending_approval");
     assert.equal(await statusOf(org.orgId, gated.id), "pending_approval");

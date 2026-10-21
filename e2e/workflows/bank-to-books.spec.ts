@@ -376,6 +376,12 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       S.customerName = `${t} Customer`;
       S.bankName = `${t} Operating`;
 
+      // Root subsidiary: what a fresh journal draft defaults to.
+      const probeId = str((await apiOk(page, 'POST', '/api/journals/draft', {})).id, 'probe draft');
+      const probeDoc = docOf(await apiOk(page, 'GET', `/api/journals/${probeId}`));
+      S.rootSubId = str(probeDoc.subsidiary_id, 'root subsidiary');
+      await apiOk(page, 'DELETE', `/api/journals/${probeId}`, { expectedUpdatedAt: str(probeDoc.updated_at, 'probe revision') });
+
       const inc = await api(page, 'POST', '/api/accounts',
         { name: `${t} Service Revenue`, type: 'income', number: `4495${rc}` },
         { 'Idempotency-Key': crypto.randomUUID() });
@@ -387,16 +393,10 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       expect(fee.status, JSON.stringify(fee.body).slice(0, 200)).toBe(201);
       S.feeId = str((fee.body.account as Json).id, 'feeId');
       const bank = await api(page, 'POST', '/api/accounts',
-        { name: S.bankName, type: 'asset_bank', number: `1595${rc}`, reconcilable: true, currencyRestriction: 'USD' },
+        { name: S.bankName, type: 'asset_bank', number: `1595${rc}`, reconcilable: true, currencyRestriction: 'USD', subsidiaryId: S.rootSubId },
         { 'Idempotency-Key': crypto.randomUUID() });
       expect(bank.status, JSON.stringify(bank.body).slice(0, 200)).toBe(201);
       S.bankId = str((bank.body.account as Json).id, 'bankId');
-
-      // Root subsidiary: what a fresh journal draft defaults to.
-      const probeId = str((await apiOk(page, 'POST', '/api/journals/draft', {})).id, 'probe draft');
-      const probeDoc = docOf(await apiOk(page, 'GET', `/api/journals/${probeId}`));
-      S.rootSubId = str(probeDoc.subsidiary_id, 'root subsidiary');
-      await apiOk(page, 'DELETE', `/api/journals/${probeId}`, { expectedUpdatedAt: str(probeDoc.updated_at, 'probe revision') });
 
       const pd = await apiOk(page, 'POST', '/api/parties', { displayName: S.customerName, isActive: false, roles: { customer: { enabled: true } } });
       S.customerId = str((pd.party as Json).id, 'party id');
@@ -589,6 +589,9 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
         await page.getByRole('button', { name: 'Run rules', exact: true }).click();
         const res = await ran;
         expect(res.status(), await res.text()).toBe(200);
+        const result = (await res.json()) as Json;
+        expect(result.refused).toEqual([]);
+        expect(result.categorized).toBe(1);
       }
       // Auto-match pairs the two receipt lines by exact amount + date: the
       // same-day pair is high confidence, the 4-day clearing gap medium.
@@ -611,7 +614,7 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       // queue holds exactly the medium-confidence pair.
       await expect(page.getByText('Counter deposit').first()).toBeVisible();
       await expect(diffStat(page)).toContainText(fmtUSD(toCents(DEPOSIT)));
-      await expect(page.locator('tr').filter({ has: page.locator('input[type="radio"]') })).toHaveCount(1);
+      await expect(page.getByRole('checkbox', { name: /^Select bank line of / })).toHaveCount(1);
       await expect(page.getByRole('link', { name: /Review/ }).first()).toContainText('1');
     } finally {
       await context.close();
@@ -647,7 +650,7 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       // by the deposit number — one pair at a time, in the UI.
       await page.goto(`/banking/match?account=${S.bankId}`);
       await dismissSetupWizard(page);
-      await page.locator('tr', { hasText: 'Counter deposit' }).first().locator('input[type="radio"]').check();
+      await page.locator('tr', { hasText: 'Counter deposit' }).first().getByRole('checkbox', { name: /^Select bank line of / }).check();
       await page.locator('tr', { hasText: S.depositNumber }).first().locator('input[type="checkbox"]').check();
       {
         const matched = page.waitForResponse(
@@ -666,7 +669,7 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       }
       await expect(diffStat(page)).toContainText('$0.00');
       // The match queue is drained: no statement row left to select.
-      await expect(page.locator('tr').filter({ has: page.locator('input[type="radio"]') })).toHaveCount(0);
+      await expect(page.getByRole('checkbox', { name: /^Select bank line of / })).toHaveCount(0);
       await expect(page.getByText('Every statement line up to the cutoff is matched.').first()).toBeVisible();
     } finally {
       await context.close();
@@ -719,11 +722,11 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       await page.goto(`/banking/match?account=${S.bankId}`);
       await expect(page.locator('tr', { hasText: 'Customer receipt partial' }).first()).toBeVisible();
       await expect(diffStat(page)).toContainText(fmtUSD(toCents(PAY2)));
-      const glRow = page.locator('tr').filter({ has: page.locator('input[type="checkbox"]') }).filter({ hasText: '200.00' }).first();
+      const glRow = page.locator('tr').filter({ has: page.getByRole('checkbox', { name: /^Select ledger line / }) }).filter({ hasText: '200.00' }).first();
       await expect(glRow).toBeVisible();
 
       // Re-match the same pair by hand; the difference returns to zero.
-      await page.locator('tr', { hasText: 'Customer receipt partial' }).first().locator('input[type="radio"]').check();
+      await page.locator('tr', { hasText: 'Customer receipt partial' }).first().getByRole('checkbox', { name: /^Select bank line of / }).check();
       await glRow.locator('input[type="checkbox"]').check();
       {
         const matched = page.waitForResponse(
@@ -744,6 +747,7 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
     try {
       await page.goto(`/banking/match?account=${S.bankId}`);
       await dismissSetupWizard(page);
+      await page.getByRole('link', { name: 'Open reconciliation workspace', exact: true }).click();
       {
         const signed = page.waitForResponse(
           (r) => r.url().endsWith(`/api/banking/reconciliations/${S.recId}/sign-off`) && r.request().method() === 'POST',
@@ -759,6 +763,8 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       // Durable: the session is closed — the workspace offers a fresh start,
       // not the signed-off session — and the API says signed_off.
       await page.reload();
+      await expect(page.getByText(/This reconciliation is signed off/).first()).toBeVisible();
+      await page.goto(`/banking/match?account=${S.bankId}`);
       await expect(page.getByText('No open reconciliation').first()).toBeVisible();
       const rec = await apiOk(page, 'GET', `/api/banking/reconciliations/${S.recId}`);
       expect((rec.reconciliation as Json).status).toBe('signed_off');

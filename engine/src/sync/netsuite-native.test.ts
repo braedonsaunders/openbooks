@@ -598,13 +598,13 @@ test("NetSuite non-zero source tax codes fail closed when they were not loaded",
 test("NetSuite account mappings accept explicit custom IDs without connector constants", () => {
   assert.deepEqual(
     parseNetSuiteMappings(
-      JSON.stringify({
+      {
         projectForemanField: "custentity_foreman",
         lineBillableField: "custcol_billable_override",
         timeTypeRecord: "customrecord_time_type",
         timeEntryFieldTicketNumberField: "custcol_field_ticket",
         projectStatuses: { "Substantially Complete": "substantially_complete" },
-      }),
+      },
     ),
     {
       crmProbabilityField: undefined,
@@ -625,15 +625,15 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
     },
   );
   assert.throws(
-    () => parseNetSuiteMappings('{"itemCategoryField":"x; DROP"}'),
+    () => parseNetSuiteMappings({"itemCategoryField":"x; DROP"}),
     /invalid script ID/,
   );
   assert.throws(
-    () => parseNetSuiteMappings('{"lineBillableField":"x; DROP"}'),
+    () => parseNetSuiteMappings({"lineBillableField":"x; DROP"}),
     /invalid script ID/,
   );
   assert.throws(
-    () => parseNetSuiteMappings('{"projectStatuses":{"Won":"won"}}'),
+    () => parseNetSuiteMappings({"projectStatuses":{"Won":"won"}}),
     /invalid target/,
   );
 });
@@ -642,13 +642,13 @@ test("NetSuite job billing types read stock unless the account maps them", () =>
   // NetSuite's stock enum: time-and-materials plus two fixed-bid members. An
   // account that overloads a fixed-bid member for budget/do-not-exceed work
   // says so on its own connection — the shared connector must not assume it.
-  assert.equal(parseNetSuiteMappings("{}").projectBillingTypes, undefined);
+  assert.equal(parseNetSuiteMappings({}).projectBillingTypes, undefined);
   assert.deepEqual(
-    parseNetSuiteMappings('{"projectBillingTypes":{"fbm":"not_to_exceed"}}').projectBillingTypes,
+    parseNetSuiteMappings({"projectBillingTypes":{"fbm":"not_to_exceed"}}).projectBillingTypes,
     { FBM: "not_to_exceed" },
   );
   assert.throws(
-    () => parseNetSuiteMappings('{"projectBillingTypes":{"FBM":"budget_dne"}}'),
+    () => parseNetSuiteMappings({"projectBillingTypes":{"FBM":"budget_dne"}}),
     /invalid target/,
   );
 });
@@ -881,34 +881,34 @@ test("NetSuite penny-degenerate tax without a configured fallback fails closed",
 
 test("NetSuite account mappings accept sales/purchase tax code fallbacks", () => {
   assert.deepEqual(
-    parseNetSuiteMappings('{"taxCodeFallbacks":{"sales":"13","purchase":"5"}}')
+    parseNetSuiteMappings({"taxCodeFallbacks":{"sales":"13","purchase":"5"}})
       .taxCodeFallbacks,
     { sales: "13", purchase: "5" },
   );
   assert.deepEqual(
-    parseNetSuiteMappings('{"taxCodeFallbacks":{"sales":" 2529 "}}')
+    parseNetSuiteMappings({"taxCodeFallbacks":{"sales":" 2529 "}})
       .taxCodeFallbacks,
     { sales: "2529" },
   );
-  assert.equal(parseNetSuiteMappings("{}").taxCodeFallbacks, undefined);
+  assert.equal(parseNetSuiteMappings({}).taxCodeFallbacks, undefined);
   assert.throws(
-    () => parseNetSuiteMappings('{"taxCodeFallbacks":{"emea":"13"}}'),
+    () => parseNetSuiteMappings({"taxCodeFallbacks":{"emea":"13"}}),
     /sales and\/or purchase/,
   );
   assert.throws(
-    () => parseNetSuiteMappings('{"taxCodeFallbacks":{}}'),
+    () => parseNetSuiteMappings({"taxCodeFallbacks":{}}),
     /sales and\/or purchase/,
   );
   assert.throws(
-    () => parseNetSuiteMappings('{"taxCodeFallbacks":"13"}'),
+    () => parseNetSuiteMappings({"taxCodeFallbacks":"13"}),
     /must be an object/,
   );
   assert.throws(
-    () => parseNetSuiteMappings('{"taxCodeFallbacks":{"sales":""}}'),
+    () => parseNetSuiteMappings({"taxCodeFallbacks":{"sales":""}}),
     /must be a source tax-code id or rate/,
   );
   assert.throws(
-    () => parseNetSuiteMappings('{"taxCodeFallbacks":{"sales":13}}'),
+    () => parseNetSuiteMappings({"taxCodeFallbacks":{"sales":13}}),
     /must be a source tax-code id or rate/,
   );
 });

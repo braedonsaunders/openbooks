@@ -59,7 +59,7 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
       const inserted = await tx.execute<{ id: string }>(sql`
         insert into pay_component_statutory_treatments
           (org_id, pay_component_id, effective_from, effective_to, program_exclusions, vacationable, created_by, updated_by)
-        values (${orgId}, ${row.component_id}, ${today}::date, ${row.effective_to}::date, ${after}, ${row.vacationable}, ${actorId}, ${actorId})
+        values (${orgId}, ${row.component_id}, ${today}::date, ${row.effective_to}::date, ${sql.param(after)}::text[], ${row.vacationable}, ${actorId}, ${actorId})
         returning id::text as id
       `);
       if (inserted.rows.length !== 1) throw new PayrollPackError("The dated Canadian statutory treatment was not created; retry the setup action.");
@@ -67,9 +67,9 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
     } else {
       const updated = await tx.execute(sql`
         update pay_component_statutory_treatments
-           set program_exclusions = ${after}, updated_at = now(), updated_by = ${actorId}
+           set program_exclusions = ${sql.param(after)}::text[], updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${row.treatment_id}::uuid
-           and effective_from = ${today}::date and program_exclusions = ${before}
+           and effective_from = ${today}::date and program_exclusions = ${sql.param(before)}::text[]
          returning id
       `);
       if (updated.rows.length !== 1) throw new PayrollPackError("The statutory treatment changed while Canadian defaults were being provisioned; reload Payroll Setup and retry.");
@@ -110,8 +110,8 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
       insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
       values (${orgId}, 'pay_components', ${row.component_id}, 'update', ${actorId},
         jsonb_build_object('operation', 'canada_levy_exclusion_defaults',
-          'treatmentId', ${treatmentId}, 'before', jsonb_build_object('program_exclusions', ${before}::text[]),
-          'after', jsonb_build_object('program_exclusions', ${after}::text[]),
+          'treatmentId', ${treatmentId}, 'before', jsonb_build_object('program_exclusions', ${sql.param(before)}::text[]),
+          'after', jsonb_build_object('program_exclusions', ${sql.param(after)}::text[]),
           'reason', 'Canadian non-taxable earnings default to excluded from applicable employer levies.'))
     `);
   }

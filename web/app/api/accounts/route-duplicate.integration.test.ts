@@ -65,7 +65,7 @@ test("a duplicate account number names the holding account", async () => {
     assert.equal(first.status, 201, JSON.stringify(await first.clone().json()));
     const created = (await first.json()) as { account: { id: string } };
 
-    const second = await POST(postRequest(randomUUID(), { name: "Cash Over and Short", type: "expense", number: "6820" }));
+    const second = await POST(postRequest(randomUUID(), { name: "Cash Variance", type: "expense", number: "6820" }));
     assert.equal(second.status, 422);
     assert.deepEqual(await second.json(), {
       error: "number_in_use",

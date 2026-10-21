@@ -175,6 +175,13 @@ for (const action of ['reorder', 'remove first', 'missing identity', 'tax only']
         state.orgId = org.orgId
         state.actorId = await createScratchUser(org.orgId, 'Source reviewer', 'reviewer')
         const f = await billedTimeInvoice(org, state.actorId, 1, true)
+        const taxCodeId = action === 'tax only' ? randomUUID() : null
+        if (taxCodeId) {
+          await db.execute(sql`insert into tax_codes (id,org_id,code,name,collected_account_id,paid_account_id)
+            values(${taxCodeId},${org.orgId},'BILLING-TAX','Billing tax',${org.accounts.taxOutput},${org.accounts.taxInput})`)
+          await db.execute(sql`insert into tax_rates (org_id,tax_code_id,rate_percent,effective_from)
+            values(${org.orgId},${taxCodeId},'5',${org.date})`)
+        }
         const lines = (await db.execute<{
           id: string; accountId: string; description: string; quantity: string; unitPrice: string; amount: string; timeEntryId: string | null
         }>(sql`select id,account_id as "accountId",description,quantity::text,unit_price::text as "unitPrice",amount::text,
@@ -198,7 +205,7 @@ for (const action of ['reorder', 'remove first', 'missing identity', 'tax only']
             ...(action === 'missing identity' ? {} : { lineId: line.id }),
             accountId: line.accountId, description: line.description, quantity: line.quantity,
             unitPrice: line.unitPrice, amount: line.amount,
-            ...(action === 'tax only' ? { taxAmount: '0', taxOverridden: true } : {}),
+            ...(action === 'tax only' ? { taxCodeId, taxAmount: '0', taxOverridden: true } : {}),
           })),
         })
         if (action === 'missing identity') {

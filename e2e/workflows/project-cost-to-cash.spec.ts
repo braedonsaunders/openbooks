@@ -840,8 +840,11 @@ test.describe('project cost-to-cash (construction billing, retainage, WIP)', () 
       {
         const rows = await reportRows(page);
         const ar = findRow(rows, `${t} Civic Authority`);
-        // 16,000 still due on the invoice + 4,000 held = 20,000 position.
-        expect(ar[ar.length - 1]).toBe(fmtUSD(toCents(M.bal1) + toCents(M.app1Ret)));
+        // The open item is the remaining collectible amount; held retainage
+        // stays in the separate control-entry reconciliation until release.
+        expect(ar[ar.length - 1]).toBe(fmtUSD(toCents(M.bal1)));
+        const totalRow = findTotalsRow(rows);
+        expect(parseUSD(totalRow[totalRow.length - 1]!)).toBe(app1AgingTotal - toCents(M.receipt1));
       }
 
       // -- 7. Application 2 bills the balance; billed work cannot bill twice.

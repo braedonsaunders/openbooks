@@ -819,6 +819,7 @@ test.describe("procure-to-pay workflows", () => {
         const res = await matched;
         expect(res.status(), await res.text()).toBe(200);
       }
+      await page.getByRole("link", { name: "Open reconciliation workspace", exact: true }).click();
       {
         const signed = page.waitForResponse(
           (r) => r.url().endsWith(`/api/banking/reconciliations/${recId}/sign-off`) && r.request().method() === "POST",

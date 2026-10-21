@@ -64,7 +64,7 @@ test('an unrelated refusal still throws out of the /me documents loader', { skip
     // No grant at all: the reads refuse HrmAuthorizationError before ever
     // reaching the link check — that refusal is a different condition and
     // must throw rather than render as the no-link state.
-    const userId = await withBypass(() => createScratchUser(org.orgId, 'Ungranted', 'viewer'))
+    const userId = await withBypass(() => createScratchUser(org.orgId, 'Ungranted', 'documents_ungranted'))
     await assert.rejects(
       withBypass(() =>
         loadMeDocumentsHome({ orgId: org.orgId, userId, session: session(org.orgId, userId) }, {}),

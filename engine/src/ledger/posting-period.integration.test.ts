@@ -42,7 +42,7 @@ test(
            extra_dims)
         values (
           ${documentId}, ${org.orgId}, 'vendor_bill', 'BILL-ADJ',
-          ${org.vendorId}, ${org.subsidiaryId}, '2026-06-30', '2026-06-30',
+          ${org.vendorId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
           ${adjustmentPeriodId}, 'CAD', 1, 'draft', '100', '0', '100', false,
           '{}'::jsonb, '{}'::jsonb
         )
@@ -79,7 +79,7 @@ test(
       `));
 
       assert.equal(entry.rows[0]!.period_id, adjustmentPeriodId);
-      assert.equal(entry.rows[0]!.posting_date, "2026-06-30");
+      assert.equal(entry.rows[0]!.posting_date, org.date);
     } finally {
       await dropScratchOrg(org.orgId);
     }

@@ -13,6 +13,7 @@ import { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } from "../flows/payment-runs-adapter
 import {
   createScratchOrg,
   createScratchUser,
+  grantScratchPermissions,
   dropScratchOrg,
   seedApprovalFlow,
   type ScratchOrg,
@@ -43,6 +44,12 @@ interface ScheduleFixture {
   dueAt: Date;
 }
 
+async function createPaymentUser(orgId: string, name: string, role: string): Promise<string> {
+  const userId = await createScratchUser(orgId, name, role);
+  await grantScratchPermissions(orgId, userId, ["ap.approve"]);
+  return userId;
+}
+
 async function seedScheduleFixture(
   org: ScratchOrg,
   options: {
@@ -54,7 +61,8 @@ async function seedScheduleFixture(
   } = {},
 ): Promise<ScheduleFixture> {
   return withBypass(async () => {
-    const operatorId = await createScratchUser(org.orgId, "Payment operator", "payment_operator");
+    const operatorId = await createPaymentUser(org.orgId, "Payment operator", "payment_operator");
+    await createPaymentUser(org.orgId, "Payment checker", "payment_approver");
     const formatId = randomUUID();
     const profileId = randomUUID();
     const scheduleId = randomUUID();
@@ -294,7 +302,7 @@ async function decideRunApproval(orgId: string, runId: string, userId: string): 
   const gate = (await withBypass(() => db.execute<{ id: string }>(sql`
     select id from flow_gates
      where org_id = ${orgId} and subject_id = ${runId} and status = 'pending'
-     order by created_at limit 1`))).rows[0];
+     order by (assignee_user_id = ${userId}) desc, created_at limit 1`))).rows[0];
   assert.ok(gate, "the run has an open approval gate");
   await decideGate({ gateId: gate.id, decision: "approved", userId });
 }
@@ -309,7 +317,7 @@ test(
       // old scheduler fabricated the org UUID as a fake user actor here.
       const fixture = await seedScheduleFixture(org, { createdBy: null });
       const approverId = await withBypass(() =>
-        createScratchUser(org.orgId, "Payment approver", "payment_approver"));
+        createPaymentUser(org.orgId, "Payment approver", "payment_approver"));
 
       const outcomes = await runDuePaymentSchedules();
       assert.equal(outcomes.length, 1);
@@ -376,7 +384,7 @@ test(
     const org = await withBypass(() => createScratchOrg());
     try {
       const historicalAuthor = await withBypass(() =>
-        createScratchUser(org.orgId, "Historical schedule author", "payment_author"));
+        createPaymentUser(org.orgId, "Historical schedule author", "payment_author"));
       const fixture = await seedScheduleFixture(org, { createdBy: historicalAuthor });
 
       const outcomes = await runDuePaymentSchedules();

@@ -427,6 +427,9 @@ test.describe.serial("close to reporting", () => {
       // Cards are scoped as the deepest block holding both the task title
       // and its action buttons (titles are unique per run).
       await page.goto(`/close?run=${SEED.runId}&stage=execute`);
+      for (const region of await page.locator("[data-page-motion]").all()) {
+        await expect(region).toHaveCSS("opacity", "1");
+      }
       for (const title of ["Complete receivables cutoff", "Complete payables cutoff"]) {
         const card = page
           .locator("div")
@@ -927,6 +930,9 @@ test.describe.serial("close to reporting", () => {
       );
       expect(redriven.openExceptions).toBe(1);
       await page.goto(`/close?run=${SEED.runId}&stage=execute`);
+      for (const region of await page.locator("[data-page-motion]").all()) {
+        await expect(region).toHaveCSS("opacity", "1");
+      }
       for (const title of ["Complete receivables cutoff", "Complete payables cutoff"]) {
         const card = page
           .locator("div")
