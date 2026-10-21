@@ -72,8 +72,13 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
       await extensionAdmin.query("create extension pgcrypto with schema public");
     } finally { await extensionAdmin.end(); }
 
-    await t.test("fresh installation runs migrations, seeds, and governed queries with separate constrained logins", async () => {
-      const result = await bootstrap({ PLATFORM_ADMIN_EMAIL: "hosted@example.test" });
+    await t.test("maintenance migrations refuse a constrained login before schema creation", async () => {
+      await assert.rejects(bootstrap(), (error: unknown) => /pending migrations require the database host's PostgreSQL maintenance administrator/.test((error as { stderr: string }).stderr));
+      assert.equal((await ownerPool.query("select to_regclass('public.orgs') as relation")).rows[0].relation, null);
+      assert.equal((await ownerPool.query("select to_regclass('public._applied_migrations') as relation")).rows[0].relation, null);
+    });
+    await t.test("host-admin installation preserves constrained business and runtime ownership", async () => {
+      const result = await bootstrap({ PLATFORM_ADMIN_EMAIL: "hosted@example.test", OPENBOOKS_MIGRATION_DB_URL: provisionerUrl.toString() });
       assert.match(result.stdout, /pre-created roles verified/);
       assert.match(result.stdout, /\[bootstrap\] done/);
       await ownerPool.query("select set_config('app.bypass_rls','on',false)");

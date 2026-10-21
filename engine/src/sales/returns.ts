@@ -1,3 +1,4 @@
+import { isSystemAutomationActor } from "../organization/actor-permissions.ts";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { canonicalDecimal, compareDecimal, isPositiveDecimal } from "../money/exact-decimal.ts";
@@ -182,6 +183,7 @@ export async function authorizeReturn(
   documentId: string,
   sourceSelections: Array<{ lineNumber: number; sourceIssueMovementId: string; lotId?: string | null; serialId?: string | null }>,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
+  options: { source?: 'portal' } = {},
 ): Promise<ReturnAuthorization> {
   await assertReturnAuthorizationsFeature(runner, orgId);
   const header = await lockRma(runner, orgId, documentId, allowedSubsidiaryIds);
@@ -287,7 +289,9 @@ export async function authorizeReturn(
       authorized: line.quantity,
     })) },
   });
-  const submission = await submitAndReleaseIfUngated("rma", documentId, actorId);
+  const submission = await submitAndReleaseIfUngated("rma", documentId,
+    options.source === 'portal' && isSystemAutomationActor(actorId) ? null : actorId,
+    options);
   if (submission.flowError) {
     throw refusal(submission.flowError, "approval_routing_failed", 422, "Correct the return authorization approval flow, then authorize again");
   }

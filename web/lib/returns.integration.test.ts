@@ -8,7 +8,7 @@ import { receiveInventory } from '@openbooks/engine/inventory/movements'
 import { getOnHand } from '@openbooks/engine/testing/inventory/position'
 import { createScratchOrg, dropScratchOrg, seedFlowActors, seedPostingAccount, type ScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { ReturnRefusal } from '@openbooks/engine/sales/returns'
-import { PORTAL_ACTOR_ID } from '@openbooks/engine/portal'
+import { PORTAL_ACTOR_ID, requestPortalLink, consumePortalLink, resolvePortalSession } from '@openbooks/engine/portal'
 import { convertOrder, fulfillSalesOrder } from './order-cycle.ts'
 import { createReturnAuthorization, inspectReturnAuthorization, previewReturnRestockingFee, receiveReturnAuthorization } from './returns.ts'
 
@@ -429,9 +429,19 @@ test('portal store-credit returns preserve the requested program and exact bonus
       subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
     }))
     const [issueId] = await withOrg(org.orgId, () => postSale(org))
+    const portalEmail = `returns-${org.orgId}@example.test`
+    await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,customerPortal}','true'::jsonb) where id=${org.orgId}`)
+      await db.execute(sql`update parties set email=${portalEmail} where org_id=${org.orgId} and id=${org.customerId}`)
+    })
+    const link = await requestPortalLink(portalEmail)
+    assert.equal(link.links.length, 1)
+    const consumed = await consumePortalLink(link.links[0]!.token)
+    const session = await resolvePortalSession(consumed.sessionToken)
+    assert.ok(session)
     const body = {
       partyId: org.customerId, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: 'CAD',
-      custom: { portalRequest: { resolution: 'store_credit', storeCreditBonusPercent: '10' } },
+      custom: { portalRequest: { partyId: org.customerId, linkId: session.linkId, resolution: 'store_credit', storeCreditBonusPercent: '10' } },
       lines: [{ accountId: org.accounts.revenue, itemId: org.items.fifo, description: 'Returned item',
         quantity: '1', unit: 'ea', unitPrice: '0', amount: '0', taxCodeId: null, taxGroupId: null,
         taxOverridden: false, taxAmount: '0', stockLocationId: org.stockLocationId }],

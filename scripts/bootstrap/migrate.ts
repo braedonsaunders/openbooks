@@ -4,7 +4,7 @@ import { applyRowLevelSecurity } from "./database-roles"
 import { ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME, executeOrderQuantityProgressMigration } from "./governed-views"
 import { generatedMigrationFiles, assertMigrationFilenameTransitionTargets, convergeMigrationFilenames, APPROVED_MIGRATION_TRANSITIONS } from "./migration-transitions"
 import { readFileSync, readdirSync } from "node:fs"
-import type pg from "pg"
+import pg from "pg"
 import { join } from "node:path"
 import { sealLegacyPaymentLinkTokens } from "@openbooks/engine/payments/payment-link-seal"
 import { requireDataKey } from "@openbooks/engine/platform/secrets"
@@ -18,7 +18,7 @@ import { ensureRetirementAuthorityOwnership } from "./retirement-ownership.ts"
 import { migrationExecutionCompatibility } from "../migration-execution-compatibility.ts"
 import { preflightNeedsPendingPrerequisite, preflightNeedsRecordedGuardTransition, RECORDED_INSTRUCTION_GUARD_SIGNATURE } from "../migration-preflight-transitions.ts"
 import { baselineTransitionCandidate, verifyBaselineTransitionCatalog } from "../migration-baseline-transitions.ts"
-import { migrationBusinessOwnerRole } from "../migration-owner-authority.ts"
+import { migrationBusinessOwnerRole, migrationRequiresMaintenanceAuthority } from "../migration-owner-authority.ts"
 
 /**
  * A fresh installation hands business objects to the dedicated schema owner
@@ -31,7 +31,15 @@ async function provisionedSchemaOwnerRole(client: pg.PoolClient): Promise<string
       n.nspowner::regrole::text as owner, current_user::text as current,
       coalesce((select rolsuper from pg_roles where rolname=session_user), false) as privileged
     from pg_namespace n where n.nspname='public'`)).rows[0];
-  if (!row || !row.privileged || row.owner !== "openbooks_schema_owner" || row.current === row.owner) return undefined;
+  if (!row?.privileged) return undefined;
+  if (env.OPENBOOKS_PRECREATED_ROLES === "1") {
+    const provisioned = (await client.query<{ owner: string; safe: boolean }>(`select r.rolname as owner,
+      not (r.rolsuper or r.rolbypassrls or r.rolcreatedb or r.rolcreaterole or r.rolreplication) as safe
+      from pg_database d join pg_roles r on r.oid=d.datdba where d.datname=current_database()`)).rows[0];
+    if (!provisioned?.safe) throw new Error("Host-managed installation requires a restricted database owner distinct from its maintenance administrator");
+    return provisioned.owner;
+  }
+  if (row.owner !== "openbooks_schema_owner" || row.current === row.owner) return undefined;
   return row.owner;
 }
 
@@ -611,6 +619,12 @@ export async function migrate(historicalMigrations = false): Promise<void> {
   // A legacy database must prove adoption before role refresh, preflights or
   // schema writes can reinterpret its installation history.
   const freshInstall = await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
+  const recordedBeforeApply = ledgerPreexisted ? await readAppliedMigrationFilenames() : new Set<string>();
+  const maintenance = plan.filenames.filter(filename => !recordedBeforeApply.has(filename) && migrationRequiresMaintenanceAuthority(filename));
+  if (maintenance.length && !(await pool.query<{ privileged: boolean }>(
+    "select rolsuper as privileged from pg_roles where rolname=session_user")).rows[0]?.privileged) {
+    throw new Error(`[bootstrap] pending migrations require the database host's PostgreSQL maintenance administrator (${maintenance.join(", ")}); run this native bootstrap with that administrator as OPENBOOKS_MIGRATION_DB_URL, retaining the restricted runtime and database-owner roles. No migration was applied.`);
+  }
   await db.execute(sql`
     create table if not exists public._applied_migrations (
       filename text primary key,
@@ -618,6 +632,13 @@ export async function migrate(historicalMigrations = false): Promise<void> {
       applied_at timestamptz not null default now()
     )
   `);
+  if (freshInstall && env.OPENBOOKS_PRECREATED_ROLES === "1") {
+    const client = await connectMigrationClient();
+    try {
+      const owner = await provisionedSchemaOwnerRole(client);
+      if (owner) await client.query(`alter table public._applied_migrations owner to ${pg.escapeIdentifier(owner)}`);
+    } finally { await releaseMigrationClient(client); }
+  }
   await convergeMigrationFilenames();
 
   const applied = await readAppliedMigrationFilenames();

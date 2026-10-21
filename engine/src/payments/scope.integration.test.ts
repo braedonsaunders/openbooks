@@ -598,6 +598,8 @@ test(
       values(${format},${org.orgId},'SCOPE','Scope','wire','credit','CA','USD',${actor},${actor})`);
       await db.execute(sql`insert into payment_bank_profiles(id,org_id,name,bank_account_id,subsidiary_id,payment_format_id,currency,country,created_by,updated_by)
       values(${profile},${org.orgId},'Scope',${org.accounts.bank},${org.subsidiaryId},${format},'USD','CA',${actor},${actor})`);
+      await db.execute(sql`insert into fx_rates(org_id,from_currency,to_currency,as_of,rate_type,rate)
+        values(${org.orgId},'USD','CAD',${org.date},'spot','0.1000000000')`);
       const run = await createPaymentRun({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         createdBy: actor,

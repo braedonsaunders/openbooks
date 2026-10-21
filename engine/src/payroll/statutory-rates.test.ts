@@ -334,6 +334,7 @@ test("nothing configured is reported by name, never accrued as zero in silence",
 interface UsFixture {
   orgId: string;
   actorId: string;
+  subsidiaryId: string;
   ein1: string;
   ein2: string;
 }
@@ -361,7 +362,7 @@ async function seedTwoAccountEmployer(): Promise<UsFixture> {
       subsidiaryId:org.subsidiaryId,effectiveFrom:"2026-01-01",effectiveTo:null,
       sourceReference:"Original Michigan employer registration"});
   }
-  return { orgId: org.orgId, actorId, ein1, ein2 };
+  return { orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId, ein1, ein2 };
 }
 
 test(
@@ -813,13 +814,13 @@ test(
       const scheduleId = randomUUID();
       await db.execute(sql`
         insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                   pay_date_offset_days, is_active, created_by, updated_by)
-        values (${scheduleId}, ${fixture.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+                                   pay_date_offset_days, subsidiary_id, is_active, created_by, updated_by)
+        values (${scheduleId}, ${fixture.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, ${fixture.subsidiaryId}, true,
                 ${fixture.actorId}, ${fixture.actorId})`);
       const employeeId = randomUUID();
       await db.execute(sql`
-        insert into parties (id, org_id, kind, display_name, is_active, custom)
-        values (${employeeId}, ${fixture.orgId}, 'person', 'Dana Fitter', true, '{}'::jsonb)`);
+        insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${employeeId}, ${fixture.orgId}, 'person', 'Dana Fitter', ${fixture.subsidiaryId}, true, '{}'::jsonb)`);
       await db.execute(sql`
         insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
         values (${fixture.orgId}, ${employeeId}, '2024-01-01', true, ${fixture.actorId}, ${fixture.actorId})`);
@@ -836,10 +837,10 @@ test(
                 ${fixture.ein1}, true, ${fixture.actorId}, ${fixture.actorId})`);
       const documentId = randomUUID();
       await db.execute(sql`
-        insert into documents (org_id, id, kind, document_number, document_date, currency, status,
+        insert into documents (org_id, id, kind, document_number, document_date, subsidiary_id, currency, status,
                                created_by, updated_by)
         values (${fixture.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
-                '2026-07-21', 'USD', 'draft', ${fixture.actorId}, ${fixture.actorId})`);
+                '2026-07-21', ${fixture.subsidiaryId}, 'USD', 'draft', ${fixture.actorId}, ${fixture.actorId})`);
       await db.execute(sql`
         insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
                               pay_date, tax_year, run_status, created_by, updated_by)

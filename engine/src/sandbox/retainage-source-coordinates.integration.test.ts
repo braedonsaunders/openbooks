@@ -86,7 +86,7 @@ test("sandbox copy stores cloned retainage source bills with exact historical fi
     await db.execute(sql`insert into vendor_roles(org_id,party_id) values(${org.orgId},${org.vendorId})`);
     const transact = <T,>(work: () => Promise<T>) => withOrgTransaction(org.orgId, work);
     const { id: subcontractId } = await transact(() => createSubcontract({orgId:org.orgId,userId:actorId,projectId,
-      vendorId:org.vendorId,number:'SC-COPY',title:'Recorded subcontract',currency:'CAD',originalCommitment:'100000000000001.25'}));
+      vendorId:org.vendorId,number:'SC-COPY',title:'Recorded subcontract',originalCommitment:'100000000000001.25'}));
     const { id: sovLineId } = await transact(() => addSubcontractSovLine({orgId:org.orgId,userId:actorId,subcontractId,
       description:'Work',scheduledValue:'100000000000001.25',expenseAccountId:org.accounts.cogs}));
     await transact(() => submitSubcontract(org.orgId,actorId,subcontractId));

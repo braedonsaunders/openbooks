@@ -107,16 +107,16 @@ export async function verifyReadRoleAssumption(pool: pg.Pool, label: string): Pr
   }
 }
 
-async function verifyLogin(pool: pg.Pool, label: string): Promise<string> {
+async function verifyLogin(pool: pg.Pool, label: string, roleName?: string): Promise<string> {
   const result = await pool.query<{ name: string; unsafe: string[] }>(`
-    select current_user as name, array(
+    select coalesce($1::text,current_user) as name, array(
       select r.rolname from pg_roles r
-       where pg_has_role(current_user, r.oid, 'MEMBER')
+       where pg_has_role(coalesce($1::text,current_user), r.oid, 'MEMBER')
          and (r.rolsuper or r.rolbypassrls or r.rolcreatedb or r.rolcreaterole or r.rolreplication
            or r.rolname in ('pg_read_server_files', 'pg_write_server_files', 'pg_execute_server_program',
                             'pg_read_all_data', 'pg_write_all_data'))
     )::text[] as unsafe
-  `);
+  `, [roleName ?? null]);
   const row = result.rows[0];
   if (!row || row.unsafe.length) throw refusal(`${label} has unsafe role privileges: ${row?.unsafe.join(", ") || "posture unavailable"}`);
   return row.name;
@@ -147,7 +147,10 @@ export async function verifyRuntimeOwnership(migration: pg.Pool, runtimeRole: st
 }
 
 export async function verifyPrecreatedRoles(migration: pg.Pool, config: RuntimeDatabaseConfig): Promise<void> {
-  const owner = await verifyLogin(migration, "migration login");
+  const authority = (await migration.query<{ privileged: boolean; owner: string }>(`select r.rolsuper as privileged,
+    d.datdba::regrole::text as owner from pg_roles r cross join pg_database d
+    where r.rolname=session_user and d.datname=current_database()`)).rows[0];
+  const owner = await verifyLogin(migration, "migration owner", authority?.privileged ? authority.owner : undefined);
   const runtimeRole = await migration.query<{ login: boolean }>("select rolcanlogin as login from pg_roles where rolname = $1", [config.roleName]);
   if (!runtimeRole.rows[0]?.login) throw refusal(`runtime role ${config.roleName} must exist with LOGIN`);
   const read = await migration.query<{ safe: boolean }>(`
@@ -161,10 +164,10 @@ export async function verifyPrecreatedRoles(migration: pg.Pool, config: RuntimeD
   );
   if (sharedAccess.rows[0]?.allowed) throw refusal("revoke database CONNECT/CREATE from PUBLIC and openbooks_read; the shared read role must not provide cross-installation database access");
   const privileges = await migration.query<{ owner_ok: boolean; inherits_runtime: boolean }>(`
-    select has_database_privilege(current_user, current_database(), 'CREATE')
-      and has_schema_privilege(current_user, 'public', 'CREATE') as owner_ok,
-      pg_has_role(current_user, $1, 'USAGE') as inherits_runtime
-  `, [config.roleName]);
+    select has_database_privilege($2, current_database(), 'CREATE')
+      and has_schema_privilege($2, 'public', 'CREATE') as owner_ok,
+      pg_has_role($2, $1, 'USAGE') as inherits_runtime
+  `, [config.roleName, owner]);
   if (!privileges.rows[0]?.owner_ok) throw refusal(`migration role ${owner} requires CREATE on its database and public schema`);
   // The SECURITY DEFINER query-context helper is owned by the migrator and
   // must read the runtime-owned temporary context table. This inheritance is
@@ -174,16 +177,17 @@ export async function verifyPrecreatedRoles(migration: pg.Pool, config: RuntimeD
     select n.nspname || '.' || c.relname as object from pg_class c
       join pg_namespace n on n.oid = c.relnamespace
      where n.nspname in ('public', 'openbooks_query') and c.relkind in ('r', 'p', 'v', 'm', 'S')
-       and not pg_has_role(current_user, c.relowner, 'USAGE')
+       and not pg_has_role($1, c.relowner, 'USAGE')
        and not exists (select 1 from pg_depend d where d.classid = 'pg_class'::regclass
                        and d.objid = c.oid and d.deptype = 'e')
     union all
     select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname in ('public', 'openbooks_query') and not pg_has_role(current_user, p.proowner, 'USAGE')
+     where n.nspname in ('public', 'openbooks_query') and not pg_has_role($1, p.proowner, 'USAGE')
+       and not (n.nspname='public' and p.proname='app_bypass_rls_active')
        and not exists (select 1 from pg_depend d where d.classid = 'pg_proc'::regclass
                        and d.objid = p.oid and d.deptype = 'e')
     limit 5
-  `);
+  `, [owner]);
   if (unowned.rows.length) throw refusal(`migration role ${owner} does not own application objects: ${unowned.rows.map((r) => r.object).join(", ")}`);
   const extensions = await migration.query<{ name: string }>(`
     select name from unnest(array['btree_gist', 'pgcrypto']) name
@@ -192,6 +196,9 @@ export async function verifyPrecreatedRoles(migration: pg.Pool, config: RuntimeD
   `);
   if (extensions.rows.length) throw refusal(`required extensions must be installed in public: ${extensions.rows.map((r) => r.name).join(", ")}`);
   await verifyRuntimeOwnership(migration, config.roleName);
+  const readMembership = (await migration.query<{ allowed: boolean }>(
+    "select pg_has_role($1,'openbooks_read','SET') as allowed", [owner])).rows[0];
+  if (!readMembership?.allowed) throw refusal(`migration role ${owner} cannot SET ROLE openbooks_read; membership must permit SET ROLE`);
   await verifyReadRoleAssumption(migration, `migration role ${owner}`);
   const runtime = new pg.Pool({ connectionString: config.connectionString, max: 1, connectionTimeoutMillis: 10_000 });
   try {

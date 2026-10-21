@@ -2955,6 +2955,8 @@ export interface DocumentCreateInput {
   /** Server-owned return request metadata that is not an editable custom field. */
   nativeCustom?: {
     portalRequest?: {
+      partyId?: string
+      linkId?: string
       resolution: 'refund' | 'exchange' | 'store_credit'
       storeCreditBonusPercent: string
     }

@@ -330,6 +330,12 @@ test("the definitions export route streams paged CSV/XLSX and keeps PDF buffered
     const back = await readSheet(Buffer.from(await xlsx.arrayBuffer()));
     assert.equal(back.headers[0], "Recall");
     assert.ok(back.rows.length >= 1200);
+    const narrow = await run(() => GET(new Request(`http://test.local/api/reports/definitions/${defId}/export?format=pdf`), params));
+    assert.equal(narrow.status, 422);
+    assert.equal((await narrow.json()).code, 'pdf_layout_too_narrow');
+    await withOrgContext(fx.org.orgId, () => db.execute(sql`update report_definitions
+      set layout='{"paperSize":"tabloid","orientation":"landscape","density":"compact","marginMm":5}'::jsonb
+      where org_id=${fx.org.orgId} and id=${defId}`));
     const pdf = await run(() => GET(new Request(`http://test.local/api/reports/definitions/${defId}/export?format=pdf`), params));
     assert.equal(pdf.status, 200,pdf.status===200?undefined:await pdf.clone().text());
     assert.match(pdf.headers.get("content-type") ?? "", /application\/pdf/);

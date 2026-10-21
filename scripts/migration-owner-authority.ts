@@ -13,3 +13,8 @@ export function migrationBusinessOwnerRole(filename: string, digest: string,
   if (digest !== required) throw new Error("Maintenance authority publisher differs from its published identity");
   return undefined;
 }
+
+/** These published steps administer PostgreSQL catalogs or isolated maintenance authority. */
+export function migrationRequiresMaintenanceAuthority(filename: string): boolean {
+  return MAINTENANCE_PUBLISHERS.has(filename);
+}

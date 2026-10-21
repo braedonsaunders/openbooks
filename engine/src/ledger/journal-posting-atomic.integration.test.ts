@@ -31,6 +31,7 @@ test("script journal submission keeps its provenance while ordinary submissions 
     await withOrgContext(org.orgId, async () => {
       const actors = await seedFlowActors(org.orgId);
       await grantScratchPermissions(org.orgId, actors.adminId, ["gl.post"]);
+      await grantScratchPermissions(org.orgId, actors.approver1Id, ["gl.post"]);
       await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,flows}', 'true'::jsonb) where id = ${org.orgId}`);
       const seeded = await seedApprovalFlow(org.orgId, {
         subjectKind: "journal", assignees: [{ type: "user", userId: actors.approver1Id }], mode: "any",

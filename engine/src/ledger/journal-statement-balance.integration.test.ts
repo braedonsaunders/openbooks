@@ -66,6 +66,7 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
         await assert.rejects(withTransactionSavepoint(db, async () => {
           await db.execute(sql`set constraints all deferred`);
           await work();
+          await db.execute(sql`set constraints all immediate`);
         }), (error: unknown) => errorChainMatches(error,message));
         assert.deepEqual(await evidence(),before,"failed statements must preserve all prior journal and aggregate rows");
       };

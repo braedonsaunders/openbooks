@@ -9,12 +9,27 @@ seeds the organization and administrator. A refusal exits nonzero; do not start
 web or workers unless bootstrap succeeds.
 
 This supports PostgreSQL 16+ with a database per OpenBooks installation on a
-shared cluster. The migration login needs ownership/DDL rights inside that
-database, but the migration and runtime logins need none of `SUPERUSER`,
-`BYPASSRLS`, `CREATEROLE`, `CREATEDB`, replication, or privileged file/server
-roles — only the dedicated cross-tenant login holds `BYPASSRLS`. A host that
-supplies only one login must provision two further logins (runtime and
-cross-tenant) before using this mode.
+shared cluster. The host supplies a restricted database owner, runtime login,
+and dedicated cross-tenant login. The runtime and business owner receive no
+`SUPERUSER`, `BYPASSRLS`, `CREATEROLE`, `CREATEDB`, replication or privileged
+file/server roles. Only the dedicated cross-tenant login holds `BYPASSRLS`.
+
+Published migrations that harden PostgreSQL catalog privileges or establish
+isolated maintenance authority require the host's PostgreSQL maintenance
+administrator. For those installations or upgrades, the host runs the native
+bootstrap with that administrator in `OPENBOOKS_MIGRATION_DB_URL` and the
+pre-created restricted runtime in `OPENBOOKS_RUNTIME_DB_URL`. The database must
+remain owned by its restricted business owner. Bootstrap applies ordinary
+business migrations as that owner and the catalog/private-authority steps as
+the administrator. It retains published digests and grants no administrative
+privileges to the business owner or runtime. Remove the maintenance credential
+from the one-shot installer after completion; it never belongs in web or worker
+environments. A constrained login refuses a pending maintenance step before
+applying any migration and names the host-admin bootstrap remedy.
+
+Upgrades containing only ordinary business migrations can use the restricted
+database owner. Both paths use the same native migration runner and ledger;
+never apply migration SQL or manufacture ledger entries separately.
 
 ## Provider provisioning
 

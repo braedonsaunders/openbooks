@@ -406,6 +406,7 @@ export type FlowEventSource =
   | 'schedule'
   | 'close_automation'
   | 'posted_correction'
+  | 'portal'
 
 export type TriggerEvent = (
   | { kind: 'on_create' }

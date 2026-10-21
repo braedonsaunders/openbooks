@@ -117,7 +117,8 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
     await withBypassContext(async () => {
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, { name: 'Weekly', frequency: 'weekly', periodsPerYear: 52, anchorPeriodEnd: '2026-07-18', payDateOffsetDays: 3 })
       await seedPayrollProfile(org.orgId, partyId, employmentId, scheduleId, actorId,
-        { country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1 },
+        { country: 'CA', province: 'ON', payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
+          wcbExempt: true, wcbExemptReason: 'Recurring component assignment fixture excludes workers-compensation calculation' },
         { percentFloor: '4', method: 'accrue' })
     })
     await withBypassContext(() => db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,

@@ -68,6 +68,7 @@ export const BUILT_IN_ROLE_NAMES = [
 export const EVENT_SOURCE_OPTIONS = [
   { value: "ui", label: "User interface" },
   { value: "api", label: "API" },
+  { value: "portal", label: "Customer portal" },
   { value: "mcp", label: "MCP" },
   { value: "assistant", label: "Assistant" },
   { value: "sync", label: "Data synchronization" },

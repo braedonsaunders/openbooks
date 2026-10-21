@@ -1,4 +1,5 @@
 import 'server-only'
+import { isUuid } from '@openbooks/engine/platform/uuid'
 
 import { randomUUID } from 'node:crypto'
 import { createHash } from 'node:crypto'
@@ -140,7 +141,8 @@ export async function createReturnAuthorization(input: {
     const portalRequest = input.actorId === PORTAL_ACTOR_ID
       ? portalReturnRequest(body.custom)
       : null
-    if (input.actorId === PORTAL_ACTOR_ID && !portalRequest) {
+    if (input.actorId === PORTAL_ACTOR_ID && (!portalRequest || !isUuid(portalRequest.partyId) || !isUuid(portalRequest.linkId)
+      || portalRequest.partyId !== input.onBehalfOfPartyId)) {
       throw new ReturnRefusal('The portal return request details are missing', 'invalid_input', 422, 'Ask the customer to submit the return again')
     }
     const draft = await createDocument({
@@ -155,10 +157,11 @@ export async function createReturnAuthorization(input: {
       ...(portalRequest ? { nativeCustom: { portalRequest } } : {}),
     })
     if (draft.status === 'created') {
-      await runRecordFlows({ kind: 'on_create', source: 'ui' }, 'rma', draft.id, { orgId: input.orgId, userId: input.actorId })
+      await runRecordFlows({ kind: 'on_create', source: portalRequest ? 'portal' : 'ui' }, 'rma', draft.id, { orgId: input.orgId, userId: portalRequest ? null : input.actorId })
       if (draft.deferredUpdate) await runRecordFlows(draft.deferredUpdate, 'rma', draft.id, { orgId: input.orgId, userId: input.actorId })
     }
-    return authorizeReturn(db, input.orgId, input.actorId, draft.id, input.sourceSelections, input.allowedSubsidiaryIds)
+    return authorizeReturn(db, input.orgId, input.actorId, draft.id, input.sourceSelections, input.allowedSubsidiaryIds,
+      portalRequest ? { source: 'portal' } : {})
   })
   return result
 }
@@ -616,6 +619,8 @@ function lineIsZero(value: string): boolean {
 }
 
 type PortalReturnRequest = {
+  partyId?: string
+  linkId?: string
   resolution: 'refund' | 'exchange' | 'store_credit'
   storeCreditBonusPercent: string
 }
@@ -636,7 +641,10 @@ function portalReturnRequest(value: unknown): PortalReturnRequest | null {
     || (resolution !== 'store_credit' && !lineIsZero(bonus))) {
     throw new ReturnRefusal('The portal return store credit bonus is invalid', 'invalid_input', 422, 'Correct Customer Portal return settings, then submit the return again')
   }
-  return { resolution, storeCreditBonusPercent: bonus }
+  return { resolution, storeCreditBonusPercent: bonus,
+    ...(typeof request.partyId === 'string' ? { partyId: request.partyId } : {}),
+    ...(typeof request.linkId === 'string' ? { linkId: request.linkId } : {}),
+  }
 }
 
 async function storeCreditProgramForCurrency(orgId: string, currency: string): Promise<string> {
