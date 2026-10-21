@@ -96,6 +96,8 @@ test('loss-contract detection follows the project owner and the closing book', {
     await grantScratchPermissions(org.orgId, actors.approver1Id, ["gl.manage"])
     const expense = randomUUID(), liability = randomUUID(), projectId = randomUUID(), taxBook = randomUUID()
     await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{reportingFramework}','"ifrs"'),
+        '{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiBookAccounting":true}'::jsonb) where id=${org.orgId}`)
       await db.execute(sql`insert into accounts(id,org_id,number,name,type) values
         (${expense},${org.orgId},'PROV-EXP','Provision expense','expense'),
         (${liability},${org.orgId},'PROV-LIAB','Provision liability','liability_current_other')`)

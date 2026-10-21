@@ -159,7 +159,7 @@ test("a frozen solo close gate releases with a ledger fingerprint and signoff", 
         and subject_id=${runId} and status='pending'`)).rows;
     assert.ok(gate);
     await assert.rejects(finalizeCloseFlowApproval({ orgId: fixture.orgId, runId,
-      actorId: actors.submitterId, outcome: "approved", approvalRunId: gate.run_id }), /completed gate decision/);
+      actorId: actors.submitterId, outcome: "approved", approvalRunId: gate.run_id }), /Complete the configured close Flow gates/);
     await db.execute(sql`update flows set graph=jsonb_set(graph,'{nodes,1,data,gate,preventSelfApproval}','true'::jsonb)
       where org_id=${fixture.orgId} and id=${flowId}`);
     await decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId });
