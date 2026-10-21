@@ -1,3 +1,5 @@
+import { submitSubcontract } from "./subcontracts.ts";
+import { createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -46,10 +48,17 @@ async function seedTwoCurrencyProject() {
              (${org.orgId}, ${entry}, 2, ${org.accounts.ap}, ${sub}, null, ${"-" + amt}, ${cur}, ${"-" + amt}, '1')`);
     await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`);
   }
-  // A direct USD 100 subcontract commitment (no linked PO): an open
-  // balance that translates at the closing spot.
-  await db.execute(sql`insert into subcontracts (id, org_id, project_id, vendor_id, number, title, currency, original_commitment, status)
-    values (${randomUUID()}, ${org.orgId}, ${projectId}, ${org.vendorId}, 'SC-FX', 'FX sub', 'USD', '100', 'active')`);
+  // A native USD commitment without a linked PO translates at the closing spot.
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
+  const contractActor = await createWorkOperator(org.orgId, "Contract author", ["ap.create"]);
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":true}'::jsonb) where id=${org.orgId}`);
+  const subcontractId = randomUUID();
+  await db.execute(sql`insert into subcontracts (id, org_id, project_id, vendor_id, number, title, currency, original_commitment, status, created_by)
+    values (${subcontractId}, ${org.orgId}, ${projectId}, ${org.vendorId}, 'SC-FX', 'FX sub', 'USD', '100', 'draft', ${contractActor})`);
+  await db.execute(sql`insert into subcontract_sov_lines(org_id,subcontract_id,description,scheduled_value,expense_account_id,sort_order)
+    values(${org.orgId},${subcontractId},'Contract work','100',${org.accounts.cogs},1)`);
+  await submitSubcontract(org.orgId, contractActor, subcontractId);
   // A posted USD invoice, an approved USD purchase order and a posted USD
   // vendor bill, all carrying project-tagged lines.
   const docs = [

@@ -1,3 +1,10 @@
+import { before as initializeNativeComposition } from "node:test";
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+import { createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -14,7 +21,6 @@ import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import {
   createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -137,10 +143,10 @@ async function closeAudit(orgId: string, documentId: string): Promise<{ outcome:
 test("a fulfilled and settled order closes its governing draft with audit", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const { channelId } = await setup(org, actor);
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("3001")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     // The governed sale leaves its draft behind while the 3PL still holds
     // the units: cash posted, draft open.
     const draft = await governingDraft(org.orgId, "3001");
@@ -167,10 +173,10 @@ test("a fulfilled and settled order closes its governing draft with audit", { sk
 test("a cancelled order closes its governing draft while the money waits for its refund", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const { channelId } = await setup(org, actor);
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("3002")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     const draft = await governingDraft(org.orgId, "3002");
     assert.ok(draft);
     assert.equal(draft.status, "draft");

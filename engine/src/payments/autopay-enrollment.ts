@@ -3,7 +3,23 @@ import { db, withOrg } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { type AcceptanceProvider } from "./acceptance.ts";
 import { AutopayError, parseExpiryNoticeDays, resolveAutopayPolicy, requireAutopayFeature, auditAutopay } from "./autopay-policy.ts";
-import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
+import { ScopeNotFoundError, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+
+/** Automated collection retains its enrollment author and rechecks current receipt authority. */
+export async function lockAutopayEnrollmentAuthority(orgId: string, enrollmentId: string, subsidiaryId: string | null) {
+  const enrollment = (await db.execute<{ created_by: string | null }>(sql`
+    select created_by from autopay_enrollments where org_id=${orgId} and id=${enrollmentId} for share`)).rows[0];
+  if (!enrollment?.created_by) throw new AutopayError("Autopay has no enrollment author. Cancel that enrollment and enroll the customer with an authorized Receipts operator before retrying collection.");
+  let allowedSubsidiaryIds: ReadonlySet<string> | null;
+  try {
+    allowedSubsidiaryIds = await lockActorCommandAuthority(db, orgId, enrollment.created_by, subsidiaryId, "ar.pay");
+  } catch (cause) {
+    if (!(cause instanceof ScopeNotFoundError)) throw cause;
+    throw new AutopayError("The enrollment author is inactive or lacks Receipts permission for this legal entity. Restore that user's permission and entity access before retrying the collection.", { cause });
+  }
+  return { actorId: enrollment.created_by, allowedSubsidiaryIds };
+}
 
 /** Autopay enrollment lifecycle (enroll, pause, resume, cancel) and the expiring-card outreach scan. */
 

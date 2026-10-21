@@ -25,9 +25,12 @@ function runIntegrationSource(source: string): void {
 }
 
 const SEED = `
+  import assert from "node:assert/strict";
   import { randomUUID } from "node:crypto";
   import { sql } from "drizzle-orm";
-  import { db } from "./engine/src/platform/db.ts";
+  import { db, withOrgTransaction } from "./engine/src/platform/db.ts";
+  import { installEngineSeams } from "./engine/src/composition/install.ts";
+  import { routeSubjectSubmission } from "./engine/src/flows/submission-policy.ts";
   import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
   import {
     createScratchOrg,
@@ -38,6 +41,7 @@ const SEED = `
   import { approveSubmittedTimeEntries } from "./web/lib/time-approval.ts";
 
   installTrustedTestDatabaseBypass();
+  installEngineSeams();
 
   async function seedSubmittedWeek() {
     const org = await createScratchOrg();
@@ -78,11 +82,11 @@ const SEED = `
     \`);
     await db.execute(sql\`
       insert into timesheet_weeks
-        (id, org_id, employee_party_id, week_start, status,
+        (id, org_id, employee_party_id, week_start, status,submitted_by,submitted_at,
          created_by, updated_by)
       values
         (\${headerId}, \${org.orgId}, \${employeeId}, '2026-07-12',
-         'submitted', \${actorId}, \${actorId})
+         'submitted', \${actorId}, now(), \${actorId}, \${actorId})
     \`);
     await db.execute(sql\`
       insert into time_entries
@@ -95,7 +99,10 @@ const SEED = `
          \${org.subsidiaryId}, 'actual', false, '{}'::jsonb,
          \${actorId}, \${actorId})
     \`);
-    return { org, actorId, employeeId, headerId, timeEntryId };
+    const routing = await withOrgTransaction(org.orgId,()=>routeSubjectSubmission({orgId:org.orgId,actorId,
+      subjectKind:"timesheet_week",subjectId:headerId,source:"api"}));
+    assert.equal(routing.policy.kind,"ungated");
+    return { org, actorId, employeeId, headerId, timeEntryId, submissionId:routing.submissionId };
   }
 
   async function cleanup(fixture) {
@@ -119,6 +126,7 @@ test(
           actorId: fixture.actorId,
           employeePartyId: fixture.employeeId,
           weekStart: "2026-07-12",
+          submissionId: fixture.submissionId,
           allowedSubsidiaryIds: null,
         });
         const audit = await db.execute(sql\`
@@ -180,6 +188,7 @@ test(
             actorId: fixture.actorId,
             employeePartyId: fixture.employeeId,
             weekStart: "2026-07-12",
+            submissionId: fixture.submissionId,
             allowedSubsidiaryIds: null,
           }),
           {
@@ -211,9 +220,11 @@ test(
       import { sql } from "drizzle-orm";
       import { db, withOrg } from "./engine/src/platform/db.ts";
       import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
-      import { createScratchOrg, createScratchUser, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
+      import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedApprovalFlow } from "./engine/src/testing/fixtures.ts";
       import { createBatch, setBatchLines, submitBatch } from "./engine/src/hrm/field-time/crew.ts";
-      import { releaseCrewTimeBatchApproval } from "./web/lib/crew-batch-approval-release.ts";
+      import { decideGate } from "./engine/src/flows/gates.ts";
+      import { installEngineSeams } from "./engine/src/composition/install.ts";
+      installEngineSeams();
 
       installTrustedTestDatabaseBypass();
 
@@ -265,16 +276,23 @@ test(
         // the test approver holds an all-entity (unrestricted) grant.
         const actor = await createScratchUser(org.orgId, "Gate approver", "gate_approver");
         await db.execute(sql\`update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb where org_id = \${org.orgId} and key = 'gate_approver'\`);
+        await grantScratchPermissions(org.orgId, actor, ["time.crew.enter", "time.manage", "time.approve"]);
+        await seedApprovalFlow(org.orgId, { subjectKind: "crew_time_batch", assignees: [{type:"user", userId:actor}], mode:"all", preventSelfApproval:false });
+        const decide = async (id, decision, comment) => {
+          const gate=(await db.execute(sql\`select id from flow_gates where org_id=\${org.orgId} and subject_kind='crew_time_batch' and subject_id=\${id} and status='pending'\`)).rows[0];
+          assert.ok(gate);
+          await decideGate({gateId:gate.id,userId:actor,decision,comment});
+        };
         const approvedId = await seedSubmittedBatch(org.orgId, org.subsidiaryId, actor);
         await withOrg(org.orgId, async () => {
-          await releaseCrewTimeBatchApproval(org.orgId, actor, approvedId, "approved", null);
+          await decide(approvedId, "approved", null);
         });
         // One release approves the batch: Flows already resolved every gate.
         assert.equal(await batchStatus(approvedId), "approved");
 
         const rejectedId = await seedSubmittedBatch(org.orgId, org.subsidiaryId, actor);
         await withOrg(org.orgId, async () => {
-          await releaseCrewTimeBatchApproval(org.orgId, actor, rejectedId, "rejected", "Split the overtime line");
+          await decide(rejectedId, "rejected", "Split the overtime line");
         });
         assert.equal(await batchStatus(rejectedId), "rejected");
         const reason = (await db.execute(sql\`select reason from crew_time_batch_events where batch_id = \${rejectedId} and kind = 'rejected' order by recorded_at desc limit 1\`)).rows[0]?.reason;

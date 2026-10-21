@@ -6,9 +6,9 @@ import { RESOURCING_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/resourcin
 import { decideGate, ReleaseError } from "../flows/gates.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { db, withBypassContext } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedApprovalFlow, seedFlowActors } from "../testing/fixtures.ts";
+import { createScratchOrg, grantScratchPermissions, dropScratchOrgReporting, seedApprovalFlow, seedFlowActors } from "../testing/fixtures.ts";
 import { ResourcingRefusal } from "./errors.ts";
-import { createResourceRequest, submitResourceRequest, cancelResourceRequest } from "./requests.ts";
+import { createResourceRequest, submitResourceRequest } from "./requests.ts";
 import { upsertAssignment } from "./assignments.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
@@ -19,10 +19,13 @@ async function write(query: SQL) {
   assert.equal(result.rowCount, 1);
 }
 async function withFixture(run: (f: Fixture) => Promise<void>): Promise<void> {
+  installEngineSeams();
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const data = await withBypassContext(async () => {
       const actors = await seedFlowActors(org.orgId), projectId = randomUUID(), employeePartyId = randomUUID();
+      await grantScratchPermissions(org.orgId, actors.submitterId, ["resourcing.manage"]);
+      await grantScratchPermissions(org.orgId, actors.approver1Id, ["resourcing.manage"]);
       await write(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"flows":true,"resourcing":true,"resourceRequests":true}'::jsonb) where id = ${org.orgId} returning id`);
       for (const query of [
         sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${employeePartyId}, ${org.orgId}, 'person', 'Consultant', ${org.subsidiaryId}, true, '{}'::jsonb) returning id`,
@@ -45,19 +48,15 @@ async function gateForRequest(f: Fixture, runId: string): Promise<string> {
 }
 async function decide(f: Fixture, gateId: string, decision: "approved" | "rejected", comment?: string) { installEngineSeams(); return decideGate({ gateId, decision, userId: f.approverId, allowedSubsidiaryIds: null, comment }); }
 
-test("submit without an authored flow refuses with the existing Flows remedy", enabled, async () => withFixture(async (f) => {
+test("a tenant with no approval gates releases a resource request and retains its weekly assignment", enabled, async () => withFixture(async (f) => {
   const draft = await createResourceRequest(requestInput(f));
-  await assert.rejects(submitResourceRequest({ ...ctx(f), requestId: draft.id }), (error: unknown) => {
-    assert.ok(error instanceof ResourcingRefusal);
-    assert.equal(error.code, "resource_request_no_flow");
-    assert.equal(error.remedy, "configure a flow for resource requests (Admin → Flows)");
-    return true;
-  });
+  const released = await submitResourceRequest({ ...ctx(f), requestId: draft.id });
+  assert.equal(released.status, "approved");
   const row = (await withBypassContext(() => db.execute<{ status: string; flow_instance_id: string | null }>(sql`select status, flow_instance_id from res_requests where org_id = ${f.orgId} and id = ${draft.id}`))).rows[0];
-  assert.deepEqual(row, { status: "draft", flow_instance_id: null });
-  const cancelled = await cancelResourceRequest({ ...ctx(f), requestId: draft.id, reason: "No longer needed" });
-  assert.equal(cancelled.status, "cancelled");
-  assert.equal(cancelled.decisionComment, "No longer needed");
+  assert.deepEqual(row, { status: "approved", flow_instance_id: null });
+  const assignments = (await withBypassContext(() => db.execute<{ request_id: string; week_start: string }>(sql`
+    select request_id, week_start::text from res_assignments where org_id=${f.orgId} and request_id=${draft.id}`))).rows;
+  assert.deepEqual(assignments, [{ request_id: draft.id, week_start: "2026-10-04" }]);
 }));
 
 test("resource requests validate every week and reject ranges beyond availability limits", enabled, async () => withFixture(async (f) => {

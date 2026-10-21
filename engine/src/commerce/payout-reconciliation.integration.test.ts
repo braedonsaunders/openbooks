@@ -1,3 +1,10 @@
+import { before as initializeNativeComposition } from "node:test";
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+import { createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
@@ -13,7 +20,7 @@ import { setPostingPolicy } from "./posting-policies.ts";
 import type { ChannelOrder } from "./contracts.ts";
 import { matchPayoutLines } from "./payout-reconciliation.ts";
 import { approvePayoutSuggestion, suggestPayoutLineFix } from "./exception-assistance.ts";
-import { db, withBypass } from "../platform/db.ts";
+import { db, withOrgContext, withBypass } from "../platform/db.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import {
   importSettlementBatch,
@@ -23,7 +30,6 @@ import {
 } from "../payments/psp-settlement.ts";
 import {
   createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -143,10 +149,10 @@ function paidOrder(externalId: string, overrides: Partial<ChannelOrder> = {}): C
 test("shopify payout lines link to channel orders, queue the rest with remedies", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const channelId = await setup(org, actor);
     const posted = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("3001")));
-    const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, posted.id));
+    const outcome = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, posted.id));
     assert.equal(outcome.status, "posted");
     assert.ok(outcome.documentId);
     await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("3002")));
@@ -213,10 +219,10 @@ test("shopify payout lines link to channel orders, queue the rest with remedies"
 test("manual link refuses unposted documents; adjustment reclass refoots the batch", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const channelId = await setup(org, actor);
     const posted = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("3101")));
-    const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, posted.id));
+    const outcome = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, posted.id));
     assert.ok(outcome.documentId);
     const draftId = (await db.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, status, document_number, document_date, currency, subtotal, tax_total, total)
@@ -270,10 +276,10 @@ test("manual link refuses unposted documents; adjustment reclass refoots the bat
 test("ambiguous payout line proposes each document with evidence; approval links and audits", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const channelId = await setup(org, actor);
     const ingested = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("3201")));
-    const first = await withBypass(() => postChannelOrder(org.orgId, actor, ingested.id));
+    const first = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, ingested.id));
     assert.equal(first.status, "posted");
     assert.ok(first.documentId);
     // A second posted receipt for a different amount: the payout reference
@@ -298,7 +304,7 @@ test("ambiguous payout line proposes each document with evidence; approval links
       tenders: [{ gateway: "shopify_payments", amountMinor: 3350n, giftCardExternalId: null, authorizationRef: "auth-2" }],
     });
     const smallerIngested = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, smaller));
-    const smallerPosted = await withBypass(() => postChannelOrder(org.orgId, actor, smallerIngested.id));
+    const smallerPosted = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, smallerIngested.id));
     assert.equal(smallerPosted.status, "posted");
     assert.ok(smallerPosted.documentId);
     const otherId = smallerPosted.documentId!;

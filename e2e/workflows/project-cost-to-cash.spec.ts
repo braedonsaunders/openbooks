@@ -6,8 +6,7 @@ import { withIdempotencyKey } from "./idempotency";
 /**
  * Project cost-to-cash end-to-end (construction / AIA progress billing).
  *
- * The flagship path for the product's largest real tenant, previously without
- * any automated coverage: a Schedule-of-Values project takes cost three ways
+ * A Schedule-of-Values project takes cost three ways
  * (job-tagged vendor bill, approved labour time that posts to WIP, an
  * equipment project charge) plus an overhead net-zero pair; a first progress
  * application bills with 10% retainage held; the invoice posts; a partial
@@ -27,14 +26,13 @@ import { withIdempotencyKey } from "./idempotency";
  * projects/fieldTickets/equipment/timeTracking features. All money moves in
  * the attempt month (current UTC month + retry index) so month-filtered
  * reports isolate this suite — and each of its attempts — exactly.
- * Pay-application approval requires a second actor (the submitter cannot
- * approve); the browser job seeds approver@openbooks.test, and both log in
- * through the real /api/login.
+ * The first application has no configured approval gates. The tenant then
+ * authors a Flow for the second application and its independent reviewer
+ * signs in through the real /api/login.
  *
  * Product truths this suite pins (assert the invariant, not the accident):
  * - documents.total on a progress invoice equals the posted net due
- *   (gross work minus the retainage line). A real defect this year overstated
- *   70 progress-invoice headers by the holdback.
+ *   (gross work minus the retainage line).
  * - Customer-side retainage held is a BALANCE-SHEET contract asset
  *   (Retainage Receivable), not revenue; releasing it moves DR AR / CR
  *   Retainage Receivable and recognises no revenue. (The liability side of
@@ -444,7 +442,7 @@ test.describe('project cost-to-cash (construction billing, retainage, WIP)', () 
           closeCadence: 'monthly',
         },
       });
-      await apiOk(page, 'PUT', '/api/admin/setup/features', { features: { preBilling: true } });
+      await apiOk(page, 'PUT', '/api/admin/setup/features', { features: { preBilling: true, flows: true } });
 
       // Root subsidiary: a fresh journal draft defaults to it (probe deleted).
       const probeDraftId = str((await apiOk(page, 'POST', '/api/journals/draft', {})).id, 'probe draft');
@@ -752,15 +750,9 @@ test.describe('project cost-to-cash (construction billing, retainage, WIP)', () 
           { sovLineId: sov2, thisPeriodCompleted: M.app1L2, materialsStored: '0' },
         ],
       });
-      // Segregation of duties: the submitter cannot approve their own draw.
-      {
-        const selfApprove = await api(page, 'POST', '/api/construction', {
-          action: 'approvePayApp', payApplicationId: app1Id,
-        });
-        expect(selfApprove.status, 'self-approval refused').toBe(422);
-        expect(JSON.stringify(selfApprove.body)).toContain('submitter cannot approve');
-      }
-      await apiOk(apage, 'POST', '/api/construction', { action: 'approvePayApp', payApplicationId: app1Id });
+      const submittedFirst = await apiOk(page, 'GET', `/api/construction?projectId=${projectId}`);
+      expect((submittedFirst.payApplications as { id: string; status: string }[]).find(app => app.id === app1Id)?.status,
+        'no configured approval gates release the native submission').toBe('approved');
       const billed1 = await apiOk(page, 'POST', '/api/construction', { action: 'billPayApp', payApplicationId: app1Id });
       const inv1Id = str(billed1.invoiceId, 'invoice 1 id');
       expect(toUnits(str(billed1.currentDue, 'app1 due')), 'app1 current due').toBe(toUnits(M.app1Due));
@@ -774,7 +766,7 @@ test.describe('project cost-to-cash (construction billing, retainage, WIP)', () 
       {
         const drawer = page.locator('[role="dialog"]').first();
         await expect(drawer.getByText(fmtUSD(toCents(M.app1Due))).first()).toBeVisible();
-        await expect(drawer.getByText('Open').first()).toBeVisible();
+        await expect(drawer.getByText('Open', { exact: true })).toBeVisible();
         await expect(drawer.getByText('Less retainage held').first()).toBeVisible();
       }
       await page.goto("/ar/invoices");
@@ -856,6 +848,25 @@ test.describe('project cost-to-cash (construction billing, retainage, WIP)', () 
       }
 
       // -- 7. Application 2 bills the balance; billed work cannot bill twice.
+      const createdFlow = await apiOk(page, 'POST', '/api/admin/flows', {
+        name: `${t} Customer application review`, subjectKind: 'customer_pay_application',
+      });
+      const flowId = str(createdFlow.id, 'approval flow');
+      const flowDetail = (await apiOk(page, 'GET', `/api/admin/flows/${flowId}`)).flow as Json;
+      await apiOk(page, 'PATCH', `/api/admin/flows/${flowId}`, {
+        expectedUpdatedAt: str(flowDetail.updated_at, 'flow revision'), enabled: true,
+        graph: {
+          schemaVersion: 1,
+          nodes: [
+            { id: 'trigger', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
+            { id: 'review', position: { x: 220, y: 0 }, data: { kind: 'gate', gate: {
+              title: 'Application review', mode: 'all', preventSelfApproval: true,
+              assignees: [{ type: 'role', role: 'approver' }],
+            } } },
+          ],
+          edges: [{ id: 'review-edge', source: 'trigger', target: 'review', sourceHandle: 'next' }],
+        },
+      });
       const app2 = await apiOk(page, 'POST', '/api/construction', {
         action: 'createPayApp', projectId, periodEnd: D('15'), retainagePercent: '10',
       });
@@ -881,7 +892,25 @@ test.describe('project cost-to-cash (construction billing, retainage, WIP)', () 
           { sovLineId: sov2, thisPeriodCompleted: M.app2L2, materialsStored: '0' },
         ],
       });
-      await apiOk(apage, 'POST', '/api/construction', { action: 'approvePayApp', payApplicationId: app2Id });
+      const waiting = await apiOk(page, 'GET', `/api/construction?projectId=${projectId}`);
+      expect((waiting.payApplications as { id: string; status: string }[]).find(app => app.id === app2Id)?.status).toBe('submitted');
+      const pending = await apiOk(apage, 'GET', '/api/flows/gates');
+      const gate = (pending.gates as { id: string; subjectId: string; href: string }[]).find(item => item.subjectId === app2Id);
+      expect(gate, 'the tenant-authored Flow creates the governing gate').toBeTruthy();
+      const selfDecision = await api(page, 'POST', '/api/flows/gates/decide', { gateId: gate!.id, decision: 'approved' });
+      expect(selfDecision.status, 'the configured reviewer assignment governs self-approval').not.toBe(200);
+      const beforeDecision = await api(page, 'POST', '/api/construction', { action: 'billPayApp', payApplicationId: app2Id });
+      expect(beforeDecision.status, 'unapproved applications cannot be billed').toBe(422);
+      await apage.goto(str(gate!.href, 'native approval request link'));
+      await dismissSetupWizard(apage);
+      const review = apage.getByRole('dialog').first();
+      await expect(review.getByRole('heading', { name: 'Approval request', exact: true })).toBeVisible();
+      const decision = apage.waitForResponse(response => response.url().endsWith('/api/flows/gates/decide') && response.request().method() === 'POST');
+      await review.getByRole('button', { name: 'Approve', exact: true }).click();
+      const decided = await decision;
+      expect(decided.status(), await decided.text()).toBe(200);
+      const approved = await apiOk(page, 'GET', `/api/construction?projectId=${projectId}`);
+      expect((approved.payApplications as { id: string; status: string }[]).find(app => app.id === app2Id)?.status).toBe('approved');
       const billed2 = await apiOk(page, 'POST', '/api/construction', { action: 'billPayApp', payApplicationId: app2Id });
       const inv2Id = str(billed2.invoiceId, 'invoice 2 id');
       const inv2Number = str(billed2.documentNumber, 'invoice 2 number');

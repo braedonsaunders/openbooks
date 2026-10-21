@@ -1,3 +1,4 @@
+import { decideGate } from "../flows/gates.ts";
 import assert from "node:assert/strict";
 import { utcDateFromParts } from "../platform/civil-date.ts";
 import { createHash, createHmac, randomUUID } from "node:crypto";
@@ -6,7 +7,7 @@ import { db } from "../platform/db.ts";
 import { sealJson, sealSecret } from "../platform/secrets.ts";
 import { handleProviderWebhook } from "./acceptance.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, createScratchUser, grantScratchPermissions } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, grantScratchPermissions, seedApprovalFlow } from "../testing/fixtures.ts";
 
 function signedStripeBody(secret: string, event: unknown): { body: string; headers: Record<string, string> } {
   const body = JSON.stringify(event);
@@ -56,13 +57,15 @@ export async function settleHarness(org: Awaited<ReturnType<typeof createScratch
   invoiceTotal?: string;
   invoiceFxRate?: string;
   currency?: string;
-  policy?: "automatic" | "review";
+  reviewFlow?: boolean;
   disputeAccounts?: boolean;
 } = {}): Promise<Harness> {
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
   const total = opts.invoiceTotal ?? "100";
   const currency = opts.currency ?? "CAD";
   const userId = await createScratchUser(org.orgId, "Refund Tester", "admin");
-  await grantScratchPermissions(org.orgId, userId, ["banking.reconcile"]);
+  await grantScratchPermissions(org.orgId, userId, ["banking.reconcile", "ar.pay"]);
   await db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"onlinePayments":true,"banking":true,"flows":true}'::jsonb) where id = ${org.orgId}`);
   await ensureOpenPeriod(org.orgId, org.periodId);
@@ -89,9 +92,7 @@ export async function settleHarness(org: Awaited<ReturnType<typeof createScratch
        default_bank_account_id, secrets, created_by, updated_by)
     values (${org.orgId}, 'stripe', 'Stripe', true, true,
             ${org.accounts.bank}, ${sealJson({ apiKey: "sk_test_auto", webhookSecret: secret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
-  if (opts.policy === "review") {
-    await db.execute(sql`update psp_provider_configs set refund_policy = 'review' where org_id = ${org.orgId} and provider = 'stripe'`);
-  }
+  if (opts.reviewFlow) await seedProviderReviewFlow(org.orgId, userId);
   if (opts.disputeAccounts) {
     const disputedFunds = await makeAccount(org.orgId, "1150", "Disputed Funds Clearing", "asset_current_other");
     const loss = await makeAccount(org.orgId, "7020", "Chargeback Losses", "expense");
@@ -154,3 +155,21 @@ export async function disputeRows(orgId: string): Promise<{ id: string; kind: st
     select id, kind, status, documents_posted from payment_disputes where org_id = ${orgId} order by created_at`)).rows;
 }
 
+
+
+/** The tenant explicitly permits this fixture operator to review its own submitted return. */
+export async function seedProviderReviewFlow(orgId: string, actorId: string) {
+  return seedApprovalFlow(orgId, { subjectKind: "payment_dispute_review",
+    assignees: [{type:"user",userId:actorId}], mode:"all", preventSelfApproval:false });
+}
+
+/** Drive the same gate decision as the native review drawer and read its financial result. */
+export async function decideProviderReview(orgId:string,id:string,actorId:string,decision:"approved"|"rejected",comment?:string) {
+  const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${orgId}
+    and subject_kind='payment_dispute_review' and subject_id=${id} and status='pending'`)).rows;
+  assert.equal(gates.length,1,"the declared return review policy must create one native gate");
+  await decideGate({gateId:gates[0]!.id,userId:actorId,decision,comment});
+  const row=(await db.execute<{status:string}>(sql`select status from payment_disputes where org_id=${orgId} and id=${id}`)).rows[0];
+  assert.ok(row,"native return decisions must remain visible");
+  return row;
+}

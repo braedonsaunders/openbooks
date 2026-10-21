@@ -1,3 +1,10 @@
+import { before as initializeNativeComposition } from "node:test";
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+import { createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -21,7 +28,6 @@ import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import {
   createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -112,7 +118,7 @@ function sumBy(rows: Array<{ component: string; amountMinor: bigint }>, componen
 test("a summary batch attributes per-order COGS by quantity, exact to the minor unit", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const channelId = await setup(org, actor, "daily_summary");
     // Two layers so the split has dust: 2 units at 2.00 plus 1 at 2.01.
     // Three units issue for 601; weights 1:2 give quotas 200.33/400.67, so
@@ -127,7 +133,7 @@ test("a summary batch attributes per-order COGS by quantity, exact to the minor 
     }));
     const a = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, summaryOrder("4001", "1", 2500n, 216n)));
     const b = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, summaryOrder("4002", "2", 5000n, 431n)));
-    const batch = await withBypass(() => postDueDailySummariesForOrg(org.orgId, actor));
+    const batch = await withOrgContext(org.orgId, () => postDueDailySummariesForOrg(org.orgId, actor));
     assert.equal(batch.posted, 2);
     // The batch marks every summarized order for restatement.
     const pending = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
@@ -158,14 +164,14 @@ test("a summary batch attributes per-order COGS by quantity, exact to the minor 
 test("foreign-currency label and ad spend convert at the business-date spot into the sums", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const channelId = await setup(org, actor, "per_order");
     await withBypass(() => receiveInventory(org.orgId, actor, {
       itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "10", unitCost: "2",
       subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
     }));
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, summaryOrder("4003", "1", 2500n, 216n)));
-    const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const outcome = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(outcome.status, "posted");
     // The carrier bills in USD and the ad platform reports in USD; the
     // order's day carries a USD→CAD spot of 1.3605.

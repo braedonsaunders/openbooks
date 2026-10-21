@@ -340,7 +340,7 @@ export async function rebuildPayRunGlProjection(input: {
       throw new PayrollError(`pay run ${number} is ${run.run_status} — only a committed run's GL projection can be rebuilt`);
     }
     if (run.doc_status !== "draft") {
-      throw new PayrollError(`pay run ${number} is ${run.doc_status} — its GL projection is frozen once the run is released or posted`);
+      throw new PayrollError(`pay run ${number} is ${run.doc_status} — its GL projection is frozen. Return an approved, unposted run to draft before rebuilding, then submit it through its tenant Flow again. Correct posted or paid runs through governed reversals.`);
     }
     if (run.revision !== input.expectedRevision) {
       throw new PayrollError(`pay run ${number} changed after you opened it — reload and review the latest revision`);

@@ -448,6 +448,7 @@ test.describe("procure-to-pay workflows", () => {
       const profile = await api(page, "POST", "/api/admin/payment-operations/profiles", {
         name: `P2P ACH ${TAG}`,
         bankAccountId: acct["1099"],
+        country: "US",
         paymentFormatId: nacha!.id,
         autoRemittance: true,
         settings: { discountAccountId: acct["5000"] },

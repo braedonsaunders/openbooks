@@ -20,8 +20,9 @@ type ApprovalRouter = (
 type DecisionReader = (input: ApprovalDecision) => Promise<ApprovalDecisionEvidence | null>;
 type ApprovalCanceller = (input: ApprovalCancellation) => Promise<void>;
 type CommandRouter = (input: NativeApprovalCommand) => Promise<boolean>;
+type SubjectFence = (orgId:string,subjectId:string) => Promise<void>;
 type RoutingRuntime = typeof globalThis & {
-  __openbooksApprovalRouting?: {router?:ApprovalRouter;decisionReader?:DecisionReader;canceller?:ApprovalCanceller;commandRouter?:CommandRouter};
+  __openbooksApprovalRouting?: {router?:ApprovalRouter;decisionReader?:DecisionReader;canceller?:ApprovalCanceller;commandRouter?:CommandRouter;subjectFences?:Map<string,SubjectFence>};
 };
 const runtime=globalThis as RoutingRuntime;
 const routing=(runtime.__openbooksApprovalRouting??={});
@@ -102,6 +103,11 @@ export async function requestNativeCommandApproval(
   return routing.commandRouter(input);
 }
 
+/** Composition supplies aggregate fences that must precede a subject's own lock. */
+export function registerApprovalSubjectFence(kind:string,fence:SubjectFence):void {
+  (routing.subjectFences??=new Map()).set(kind,fence);
+}
+
 /** Acquire before subject rows, Flow runs, or gates; all policies share one transaction fence. */
 export async function lockApprovalSubject(
   orgId: string,
@@ -112,6 +118,7 @@ export async function lockApprovalSubject(
     throw new Error(
       "Approval subject locking requires the native transaction.",
     );
+  await routing.subjectFences?.get(subjectKind)?.(orgId,subjectId);
   const identity = JSON.stringify([
     "openbooks:flow-subject-decision",
     orgId,

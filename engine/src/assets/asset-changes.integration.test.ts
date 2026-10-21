@@ -1,3 +1,4 @@
+import { grantScratchPermissions as grantDecisionDuties } from "@openbooks/engine/testing/fixtures";
 import { runTaxPool } from "../tax-returns/pool-run.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -71,6 +72,7 @@ async function fixture(work: (f: Fixture) => Promise<void>, postJuly = true) {
       assert.equal(result.posted, 1);
       assert.deepEqual(result.problems, []);
     }
+    await grantDecisionDuties(org.orgId, actors.approver1Id, ["assets.manage"]);
     await seedApprovalFlow(org.orgId, {
       subjectKind: "financial_change",
       assignees: [{ type: "user", userId: actors.approver1Id }],

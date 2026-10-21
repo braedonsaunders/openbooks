@@ -17,7 +17,7 @@ registerHooks({
         (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function getAuthz() {
         const s = globalThis.__documentAccountlessLineState;
-        return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
+        return { user: { roles: [], orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
       }
       export function can() { return true }
       export function guardSubsidiaryScope() { return null }

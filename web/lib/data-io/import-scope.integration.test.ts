@@ -19,7 +19,7 @@ import { seedAdoption } from "@openbooks/engine/testing/payroll/filing-test-fixt
 const stateKey = Symbol.for("openbooks.data-import-scope-test");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { roles: { key: string }[]; orgId: string; id: string };
     permissions: Set<string>;
     allowedSubsidiaryIds: Set<string> | null;
   } | null;
@@ -31,7 +31,7 @@ const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.data-import-scope-test')]
   export async function guardPermission() {
     if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
+    return { permissions: new Set(), ...state.authz }
   }
   export function can(authz, perm) { return authz.permissions.has(perm) }
 `;
@@ -93,7 +93,7 @@ test(
         );
       });
       const gate = (allowed: Set<string> | null) => ({
-        user: { orgId: fx.orgId, id: fx.actorId },
+        user: { roles: [], orgId: fx.orgId, id: fx.actorId },
         permissions: new Set(["data.import", "payroll.manage", "admin.setup.manage", "parties.manage"]),
         allowedSubsidiaryIds: allowed,
       });

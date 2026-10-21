@@ -1,3 +1,11 @@
+import { before as initializeNativeComposition } from "node:test";
+
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'

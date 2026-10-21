@@ -314,7 +314,7 @@ async function uiSubmitAndPost(page: Page, drawerUrl: string, expectedBadge: 'Op
   expect(res.status(), await res.text()).toBe(200);
   // A posted invoice carrying a balance resolves to the open status;
   // balance-less docs (credit memos) show the posted status.
-  await expect(drawer2.getByText(expectedBadge)).toBeVisible({ timeout: 15000 });
+  await expect(drawer2.getByText(expectedBadge, { exact: true })).toBeVisible({ timeout: 15000 });
 }
 
 /** Seed a receipt draft with header + suggested applications; returns id + number. */

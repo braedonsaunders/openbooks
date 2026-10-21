@@ -24,6 +24,7 @@ import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 import {
   createScratchOrg,
   createScratchUser,
+  grantScratchPermissions,
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -545,6 +546,9 @@ async function removePaymentFileFixture(orgId: string, fileId: string): Promise<
  * register renders fine with zero payments).
  */
 async function seedGeneratableRun(org: ScratchOrg, actorId: string): Promise<string> {
+  await grantScratchPermissions(org.orgId, actorId, ["ap.pay"]);
+  await db.execute(sql`update orgs set env_kind='production',settings=jsonb_set(settings,'{features,banking}','true'::jsonb)
+    where id=${org.orgId}`);
   const formatId = randomUUID();
   const profileId = randomUUID();
   await db.execute(sql`

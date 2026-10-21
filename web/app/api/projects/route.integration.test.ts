@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 const stateKey = Symbol.for("openbooks.projects-create-integration");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { roles: { key: string }[]; orgId: string; id: string };
     allowedSubsidiaryIds: null;
   } | null;
 }
@@ -24,7 +24,7 @@ const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.projects-create-integration')]
   export async function guardPermission(_permission) {
     if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
+    return { permissions: new Set(), ...state.authz }
   }
   export function guardSubsidiaryScope() { return undefined }
   export function subsidiariesInScope() { return true }
@@ -110,7 +110,7 @@ test(
     try {
       const { adminId } = await seedFlowActors(org.orgId);
       await enableProjects(org.orgId);
-      routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
 
       const key = randomUUID();
       const created = await POST(postRequest(key, { name: "Harbourview Tower" }));
@@ -166,19 +166,19 @@ test(
       // Feature off in `other`: the entry guard refuses before any write.
       // Turned off explicitly — the registry default is ON.
       await setProjectsFeature(other.orgId, false);
-      routeState.authz = { user: { orgId: other.orgId, id: otherAdmin }, allowedSubsidiaryIds: null };
+      routeState.authz = { user: { roles: [], orgId: other.orgId, id: otherAdmin }, allowedSubsidiaryIds: null };
       const refused = await POST(postRequest(randomUUID(), { name: "Harbourview Tower" }));
       assert.equal(refused.status, 404);
 
       // A key minted in `org` cannot be claimed from `other`: enable the
       // feature there so the refusal comes from the tenant check, not the
       // feature gate.
-      routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
       const key = randomUUID();
       assert.equal((await POST(postRequest(key, { name: "Harbourview Tower" }))).status, 201);
 
       await enableProjects(other.orgId);
-      routeState.authz = { user: { orgId: other.orgId, id: otherAdmin }, allowedSubsidiaryIds: null };
+      routeState.authz = { user: { roles: [], orgId: other.orgId, id: otherAdmin }, allowedSubsidiaryIds: null };
       const claimed = await POST(postRequest(key, { name: "Harbourview Tower" }));
       assert.equal(claimed.status, 404);
       const leaked = (

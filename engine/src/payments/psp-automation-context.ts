@@ -1,13 +1,14 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { PAYMENT_RUN_SYSTEM_ACTOR_ID } from "./run-cancellation.ts";
 
 /** Provider refund and dispute automation context: the policy and error vocabulary, the provider event shapes, and the org-scoped loader every automation step reads through. */
 
-/** The nil-UUID system actor every payment automation posts under — the same
- *  convention as PAYMENT_RUN_SYSTEM_ACTOR_ID,aliased so refund/dispute audit
- *  rows name their own actor without minting a second identity. */
+/** Signed provider deliveries retain system provenance in reversal and event
+ * audit records. Native command submission uses the receipt author's current authority. */
 export const PSP_AUTOMATION_SYSTEM_ACTOR_ID = PAYMENT_RUN_SYSTEM_ACTOR_ID;
 
 export interface RefundSourceEvidence {
@@ -196,4 +197,29 @@ export async function loadAutomationContext(
     },
     bankAccountId: link.bank_account_id,
   };
+}
+
+/** A provider return retains the original receipt's acting identity. Its
+ * current duty and legal-entity scope are checked before submission or replay. */
+export async function lockReturnReceiptAuthority(orgId: string, plan: { sourceReceiptId: string; subsidiaryId: string; partyId: string; currency: string }) {
+  const source = (await db.execute<{ created_by: string | null }>(sql`
+    select created_by from documents where org_id=${orgId} and id=${plan.sourceReceiptId}
+      and kind='customer_payment' and subsidiary_id=${plan.subsidiaryId}
+      and party_id=${plan.partyId} and currency=${plan.currency} and status in('posted','voided') for share`)).rows[0];
+  if (!source?.created_by) throw new PspAutomationError(
+    "The original receipt has no acting user. Review its payment history before submitting this provider return.",
+  );
+  let allowedSubsidiaryIds: ReadonlySet<string> | null;
+  try {
+    allowedSubsidiaryIds = await lockActorCommandAuthority(
+      db, orgId, source.created_by, plan.subsidiaryId, "ar.pay",
+    );
+  } catch (cause) {
+    if (!(cause instanceof ScopeNotFoundError)) throw cause;
+    throw new PspAutomationError(
+      "The original receipt's acting user is inactive or lacks receipt authority for this legal entity. Ask a tenant administrator to restore that user's Receipts permission and legal-entity access before retrying the provider return.",
+      { cause },
+    );
+  }
+  return { actorId: source.created_by, allowedSubsidiaryIds };
 }

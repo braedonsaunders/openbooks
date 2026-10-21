@@ -13,7 +13,7 @@ import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.account-warnings-test')
 interface HarnessState {
-  authz: { user: { orgId: string; id: string } } | null
+  authz: { user: { roles: { key: string }[]; orgId: string; id: string } } | null
 }
 const harnessState: HarnessState = { authz: null }
 ;(globalThis as Record<symbol, unknown>)[stateKey] = harnessState
@@ -67,7 +67,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 async function org(): Promise<{ orgId: string; actorId: string }> {
   const o = await withBypassContext(() => (createScratchOrg()))
   const { adminId } = await withBypassContext(() => (seedFlowActors(o.orgId)))
-  harnessState.authz = { user: { orgId: o.orgId, id: adminId } }
+  harnessState.authz = { user: { roles: [], orgId: o.orgId, id: adminId } }
   return { orgId: o.orgId, actorId: adminId }
 }
 

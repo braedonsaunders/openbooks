@@ -11,7 +11,7 @@ import { sql } from "drizzle-orm";
 const stateKey = Symbol.for("openbooks.projects-site-integration");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { roles: { key: string }[]; orgId: string; id: string };
     allowedSubsidiaryIds: null;
   } | null;
 }
@@ -22,7 +22,7 @@ const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.projects-site-integration')]
   export async function guardPermission(_permission) {
     if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
+    return { permissions: new Set(), ...state.authz }
   }
   export function guardSubsidiaryScope() { return undefined }
   export function subsidiariesInScope() { return true }
@@ -62,7 +62,7 @@ async function fixture() {
              coalesce(settings, '{}'::jsonb), '{features,projects}',
              to_jsonb(true::boolean), true)
      where id = ${org.orgId}`));
-  routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+  routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
   return org;
 }
 

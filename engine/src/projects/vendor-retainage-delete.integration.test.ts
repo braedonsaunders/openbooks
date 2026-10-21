@@ -1,3 +1,9 @@
+import { before as initializeNativeComposition } from "node:test";
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
+});
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -13,7 +19,7 @@ import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
-  approveVendorPayApplication,
+  submitSubcontract,
   createVendorPayApplication,
   generateVendorPayApplicationBill,
   releaseVendorRetainage,
@@ -46,12 +52,12 @@ async function fixture(run: (f: {
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status)
       values(${project},${org.orgId},${org.subsidiaryId},'VRET','Vendor retainage job',${org.customerId},${type},'active')`);
     await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active) values(${vendor},${org.orgId},'vendor','Vendor retainage vendor',true)`);
-    await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-VRET','Vendor retainage scope','CAD','5000','active')`);
+    await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-VRET','Vendor retainage scope','CAD','2000','draft')`);
     await db.execute(sql`insert into subcontract_sov_lines(id,org_id,subcontract_id,description,scheduled_value,expense_account_id,sort_order) values(${sov},${org.orgId},${subcontract},'Work','2000',${org.accounts.cogs},1)`);
+    await submitSubcontract(org.orgId, actor, subcontract);
     const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: org.date }));
     await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "1000", materialsStoredCurrent: "0" }] }));
     await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app.id));
-    await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app.id));
     const generated = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));
     await beforePost?.({ org, actor, billId: generated.vendorBillDocumentId });
     assert.equal((await submitAndReleaseIfUngated("vendor_bill", generated.vendorBillDocumentId, actor)).autoApproved, true);
@@ -84,15 +90,18 @@ test("draft vendor retainage release bill deletes with complete evidence and per
   );
 }));
 
-test("ordinary vendor application bills still regenerate after draft deletion", enabled, async () => fixture(async ({ org, actor, approver, subcontract }) => {
+test("ordinary vendor application bills still regenerate after draft deletion", enabled, async () => fixture(async ({ org, actor, subcontract }) => {
   const sov = (await db.execute<{ id: string }>(sql`select id from subcontract_sov_lines where org_id=${org.orgId} and subcontract_id=${subcontract}`)).rows[0]!.id;
   const laterPeriod = new Date(`${org.date}T00:00:00Z`);
   laterPeriod.setUTCDate(laterPeriod.getUTCDate() + 1);
   const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: laterPeriod.toISOString().slice(0, 10) }));
   await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "500", materialsStoredCurrent: "0" }] }));
   await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app.id));
-  await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app.id));
   const first = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));
+  await assert.rejects(withOrgTransaction(org.orgId, () => db.execute(sql`
+    update vendor_pay_applications set status='approved',vendor_bill_document_id=null,net_due=net_due+1,updated_by=${actor}
+      where org_id=${org.orgId} and id=${app.id}`)),
+    error => error instanceof Error && error.cause instanceof Error && /cannot change approved payment application terms/.test(error.cause.message));
   await withOrgTransaction(org.orgId, () => deleteDocument(first.vendorBillDocumentId, actor, org.orgId, { reason: "Correct application bill", allowedSubsidiaryIds: null }));
   const reopened = (await db.execute<{ status: string; vendor_bill_document_id: string | null }>(sql`select status, vendor_bill_document_id from vendor_pay_applications where org_id=${org.orgId} and id=${app.id}`)).rows[0]!;
   assert.deepEqual(reopened, { status: "approved", vendor_bill_document_id: null });
@@ -232,3 +241,18 @@ test("generated subcontract bills keep line identities while auditing direct-cos
     });
   });
 });
+
+
+test("a posted vendor bill cannot release its approved application before the native reversal", enabled, async () => fixture(async ({ org, actor, subcontract }) => {
+  const application = (await db.execute<{id:string;status:string;vendor_bill_document_id:string}>(sql`
+    select id,status,vendor_bill_document_id from vendor_pay_applications
+      where org_id=${org.orgId} and subcontract_id=${subcontract} and status='billed'`)).rows[0]!;
+  assert.ok(application.vendor_bill_document_id);
+  await assert.rejects(withOrgTransaction(org.orgId, () => db.execute(sql`
+    update vendor_pay_applications set status='approved',vendor_bill_document_id=null,updated_by=${actor}
+      where org_id=${org.orgId} and id=${application.id}`)),
+    error => error instanceof Error && error.cause instanceof Error && /native invoice or bill reversal/.test(error.cause.message));
+  const after = (await db.execute(sql`select id,status,vendor_bill_document_id from vendor_pay_applications
+    where org_id=${org.orgId} and id=${application.id}`)).rows[0];
+  assert.deepEqual(after, application);
+}));

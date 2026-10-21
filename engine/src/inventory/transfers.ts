@@ -3,7 +3,7 @@ import { lockSubcontractCustodyAuthority } from "./subcontract-custody.ts";
 import { sumOriginalCosts } from "./original-cost.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { cmp, isZero, neg, sum } from "../money/money.ts";
 import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext, uuidArray } from "../organization/subsidiaries.ts";
@@ -44,8 +44,8 @@ export async function transferInventory(
   entryId: string | null;
   value: string;
 }> {
-  return db.transaction((tx) =>
-    transferInventoryTx(tx, orgId, actorId, input),
+  return withOrgTransaction(orgId, () =>
+    transferInventoryTx(db, orgId, actorId, input),
   );
 }
 

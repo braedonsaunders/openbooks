@@ -6,7 +6,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
 import { commitPayRun } from "@openbooks/engine/payroll/run-commit";
-import { dropScratchOrgReporting } from "@openbooks/engine/testing/fixtures";
+import { dropScratchOrgReporting, grantScratchPermissions } from "@openbooks/engine/testing/fixtures";
 import {
   seedAdoption,
   calculatedRun,
@@ -49,10 +49,7 @@ async function establishFilingSession(
 ): Promise<void> {
   await withBypassContext(async () => {
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId}`);
-    for (const permission of grants) {
-      await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-        values(${fx.orgId},${fx.actorId},${permission},'grant')`);
-    }
+    await grantScratchPermissions(fx.orgId, fx.actorId, grants);
     const restriction = subsidiaryIds === null ? { mode: "all" } : { mode: "list", subsidiaryIds };
     await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
       where org_id=${fx.orgId} and key='admin'`);
@@ -343,6 +340,8 @@ const consolidatedRows = [
               await withBypassContext(() => db.execute(
                 sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`,
               ));
+              const { input } = await withBypassContext(() => calculatedRun(fx));
+              await withOrgContext(fx.orgId, () => commitPayRun(input));
               await withBypassContext(() => db.execute(
                 sql`insert into payroll_opening_balances(org_id,employee_party_id,tax_year,taxable_ytd,created_by,updated_by) values(${fx.orgId},${fx.employeeId},2026,100,${fx.actorId},${fx.actorId})`,
               ));
@@ -355,10 +354,8 @@ const consolidatedRows = [
               assert.equal(
                 await withOrgContext(fx.orgId, () => guardPayrollFilingRowIds(gate, "CA", "t4", [rowId], 2026)),
                 null,
-                "opening-only population retains its employee boundary",
+                "opening carry-in retains its employee boundary alongside posted payroll",
               );
-              const { input } = await withBypassContext(() => calculatedRun(fx));
-              await withOrgContext(fx.orgId, () => commitPayRun(input));
               const hidden = randomUUID();
               await withBypassContext(() => db.execute(
                 sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Opening balance employee transfer','CAD','CA')`,
@@ -576,7 +573,7 @@ const payrollFilingScopeCases = [
               ));
               const account = (
                 await withBypassContext(() => db.execute<{ id: string }>(
-                  sql`insert into payroll_filing_accounts(org_id,country,program_type,account_number,name,subsidiary_id) values(${fx.orgId},'US','us_ein','12-3456789','Visible EIN',${fx.subsidiaryId}) returning id`,
+                  sql`insert into payroll_filing_accounts(org_id,country,program_type,account_number,name,subsidiary_id) values(${fx.orgId},'US','us_ein','12-3456789','Hidden source EIN',${hidden}) returning id`,
                 ))
               ).rows[0]!.id;
               await withBypassContext(() => db.execute(
@@ -606,7 +603,7 @@ const payrollFilingScopeCases = [
               assert.equal(
                 denied?.status,
                 404,
-                "a visible EIN cannot authorize hidden payroll sources",
+                "a scoped operator cannot authorize a hidden EIN and its payroll sources",
               );
               await withBypassContext(() => db.execute(
                 sql`update payroll_filing_accounts set subsidiary_id=${hidden} where org_id=${fx.orgId} and id=${account}`,

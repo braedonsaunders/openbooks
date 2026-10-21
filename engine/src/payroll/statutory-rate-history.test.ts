@@ -1,3 +1,4 @@
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { seedCanadianPostingAccounts } from "../testing/payroll-posting-fixture.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -209,6 +210,7 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
     province: "ON", payBasis: "hourly", currency: "CAD", rate: "30", rateBasis: "hour",
     rateEffectiveFrom: "2020-01-01", federalClaimCode: 1, provincialClaimCode: 1,
     vacationPercent: "4", vacationMethod: "accrue", hiredOn: "2020-01-06",
+    wcbExempt: true, wcbExemptReason: "The retained source classifies this test worker as an exempt owner",
     timeEntries: ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]
       .map((workedOn) => ({ workedOn })),
   });
@@ -220,6 +222,9 @@ async function seedCommittedRun(): Promise<CommittedFixture> {
     sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
 
+  await upsertPayrollEmployerFact({ orgId:org.orgId, actorId, subsidiaryId:org.subsidiaryId, country:"CA",
+    factKey:"eht_exemption_share_on", effectiveFrom:"2026-01-01", value:"1000",
+    changeReason:"Declare the test employer's complete share of the Ontario exemption" });
   const payDate = "2026-07-21";
   const run = await createPayRun({
     orgId: org.orgId, actorId, payScheduleId: scheduleId,

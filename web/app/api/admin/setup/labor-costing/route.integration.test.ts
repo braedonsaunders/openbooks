@@ -71,41 +71,20 @@ const mockAuthz = `
 `;
 let authzRealUrl = '';
 
-// The rate paths delegate to the real db module (real pool, real RLS, real
-// transaction) through this wrapper, which adds fault injection and statement
-// observation. Failures are thrown BEFORE delegating, so the surrounding
-// withOrgTransaction sees a genuine mid-transaction database error.
-const mockDbWrapper = (realUrl: string) => `
-  export * from ${JSON.stringify(realUrl)}
-  const state = globalThis[Symbol.for('openbooks.labor-costing-route-test')]
-  const real = await import(${JSON.stringify(realUrl)})
-  function sqlText(query) {
-    try {
-      if (query && Array.isArray(query.queryChunks)) {
-        return query.queryChunks
-          .map((chunk) => (chunk && Array.isArray(chunk.value) ? chunk.value.join('') : ''))
-          .join(' ')
-      }
-    } catch {}
-    return String(query ?? '')
-  }
-  async function execute(...args) {
-    const text = sqlText(args[0])
-    if (state.onExecute) state.onExecute(text)
-    if (state.fault && state.fault(text)) {
-      throw new Error('injected database failure after: ' + text.replaceAll(/\\s+/g, ' ').slice(0, 90))
-    }
-    return real.db.execute(...args)
-  }
-  export const db = new Proxy(real.db, {
-    get(target, prop, receiver) {
-      if (prop === 'execute') return execute
-      return Reflect.get(target, prop, receiver)
-    },
-  })
-  export const withOrgTransaction = real.withOrgTransaction
-  export const orgContext = real.orgContext
-`;
+// Inject storage faults at the driver boundary while retaining the native
+// executor identity, RLS scope and transaction used by command authorization.
+const pg = (await import("pg")).default;
+const nativeQuery = pg.Client.prototype.query;
+pg.Client.prototype.query = function (this: import("pg").Client, ...args: unknown[]) {
+  const request = args[0];
+  const text = typeof request === "string" ? request :
+    typeof request === "object" && request !== null && "text" in request ? String(request.text) : "";
+  routeState.onExecute?.(text);
+  if (routeState.fault?.(text)) throw new Error("injected database storage failure");
+  return Reflect.apply(nativeQuery, this, args);
+} as typeof nativeQuery;
+const { after } = await import("node:test");
+after(() => { pg.Client.prototype.query = nativeQuery; });
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -122,31 +101,11 @@ registerHooks({
     if (specifier === "@/lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
-    // The route's own db import is wrapped, and so is the canonical
-    // wage writer's (save-rate lives in
-    // engine/src/projects/labor-cost-rates.ts): the fault seam follows
-    // the writer, so mid-transaction failures still surface inside the
-    // same unit. Every other engine module keeps the real module.
-    if (
-      (specifier === "@openbooks/engine/platform/db" ||
-        // The writer imports the platform db relatively (engine
-        // convention); both spellings resolve to the same module.
-        specifier === "../platform/db.ts") &&
-      (context.parentURL?.includes("setup/labor-costing/route.ts") ||
-        context.parentURL?.includes("projects/labor-cost-rates.ts"))
-    ) {
-      return { url: "mock:dbwrap", shortCircuit: true };
-    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
     if (url === "mock:authz") {
       return { format: "module", source: `export { guardUnrestrictedScope } from ${JSON.stringify(authzRealUrl)};\n${mockAuthz}`, shortCircuit: true };
-    }
-    if (url === "mock:dbwrap") {
-      // Delegate to the SAME real-module instance the fixtures use.
-      const realUrl = import.meta.resolve("@openbooks/engine/platform/db");
-      return { format: "module", source: mockDbWrapper(realUrl), shortCircuit: true };
     }
     return nextLoad(url, context);
   },
@@ -632,7 +591,9 @@ test("a valid save with an invalid control account persists NOTHING — not even
         [key]: accountId,
       }));
       assert.equal(res.status, 422);
-      assert.deepEqual(await res.json(), { error: `${key}: account not found, inactive, or is a summary account` });
+      const refusal = await res.json() as {error:string;code:string};
+      assert.equal(refusal.code, "invalid_control_account");
+      assert.match(refusal.error, key === "laborClearing" ? /Labor clearing.*does not exist in this organization/ : /Labor WIP.*summary/);
     }
     await assertNothingPersisted(f.orgId);
   } finally {
@@ -975,7 +936,7 @@ test("an inactive control account is refused like a summary one", async () => {
       laborWip: dormantId,
     }));
     assert.equal(res.status, 422);
-    assert.deepEqual(await res.json(), { error: "laborWip: account not found, inactive, or is a summary account" });
+    assert.deepEqual(await res.json(), { error: "Labor WIP control account is inactive — choose an active account", code: "invalid_control_account" });
     await assertNothingPersisted(f.orgId);
   } finally {
     routeState.authz = null;

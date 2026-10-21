@@ -20,7 +20,7 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db,withOrgContext } from '../../platform/db.ts'
 import { postEntry } from '../../journal/post-entry.ts'
-import { seedFlowActors,seedApprovalFlow } from '../../testing/fixtures.ts'
+import { seedFlowActors,seedApprovalFlow, grantScratchPermissions as grantDecisionDuties } from '../../testing/fixtures.ts'
 import { submitFinancialChange } from '../../flows/financial-changes-adapter.ts'
 import { decideGate } from '../../flows/gates.ts'
 import { proposeProvisionAssessment,applyProvisionAssessment } from '../../provisions/assessments.ts'
@@ -259,7 +259,8 @@ export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [
         await db.execute(sql`insert into projects(id,org_id,code,name,subsidiary_id,contract_value) values (${projectId},${ledger.orgId},'CONF-LOSS','Fixed-price construction',${ledger.subsidiaryId},1000000)`)
         await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values
           (${ledger.orgId},${actors.submitterId},'gl.manage','grant'),(${ledger.orgId},${actors.submitterId},'gl.post','grant'),(${ledger.orgId},${actors.submitterId},'projects.read','grant')`)
-        await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
+        await grantDecisionDuties(ledger.orgId, actors.approver1Id, ["gl.manage"]);
+    await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
         return actors
       })
       return withOrgContext(ledger.orgId,async()=> {

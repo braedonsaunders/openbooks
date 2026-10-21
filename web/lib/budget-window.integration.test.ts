@@ -479,6 +479,7 @@ const budgetCalendarCases = [
         const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
         const { toUnits } = await import('@openbooks/engine/money/money')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+        const { approveBudgetScenarioFixture } = await import('@openbooks/engine/testing/budgets')
         const { budgetVsActualView } = await import('./budget-report')
 
         const D = '2026-07-14'
@@ -521,10 +522,10 @@ const budgetCalendarCases = [
             await db.execute(sql`insert into budget_lines (id, org_id, scenario_id, account_id, period_id, subsidiary_id, amount)
               values (${randomUUID()}, ${org.orgId}, ${scenario}, ${org.accounts.cogs}, ${org.periodId}, ${org.subsidiaryId}, '1000'),
                      (${randomUUID()}, ${org.orgId}, ${scenario}, ${org.accounts.cogs}, ${org.periodId}, ${usSub}, '1000')`)
-            await db.execute(sql`update budget_scenarios set status = 'pending_approval', revision = revision + 1 where id = ${scenario}`)
-            await db.execute(sql`update budget_scenarios set status = 'approved', revision = revision + 1 where id = ${scenario}`)
             ;(org as unknown as { w2scenario: string }).w2scenario = scenario
           })
+          await withBypass(async () => { await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`) })
+          await approveBudgetScenarioFixture(org.orgId, (org as unknown as {w2scenario:string}).w2scenario)
           return org
         }
 
@@ -581,11 +582,11 @@ const budgetCalendarCases = [
                 values (${scenario}, ${org.orgId}, ${org.bookId}, 2026, 'W2 nested', 'draft')`)
               await db.execute(sql`insert into budget_lines (id, org_id, scenario_id, account_id, period_id, subsidiary_id, amount)
                 values (${randomUUID()}, ${org.orgId}, ${scenario}, ${org.accounts.cogs}, ${org.periodId}, ${org.subsidiaryId}, '1000')`)
-              await db.execute(sql`update budget_scenarios set status = 'pending_approval', revision = revision + 1 where id = ${scenario}`)
-              await db.execute(sql`update budget_scenarios set status = 'approved', revision = revision + 1 where id = ${scenario}`)
               ;(org as unknown as { w2nested: string }).w2nested = scenario
             })
             const scenario = (org as unknown as { w2nested: string }).w2nested
+            await withBypass(async () => { await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`) })
+            await approveBudgetScenarioFixture(org.orgId, scenario)
             await withOrgContext(org.orgId, async () => {
               const view = await budgetVsActualView(scenario, org.orgId, labels, {}, undefined, JULY)
               assert.ok(view, 'scenario resolves')

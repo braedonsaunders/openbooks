@@ -35,16 +35,13 @@ test('units, database shards and simulation run independently without omitted te
   const unit = topLevelJob('unit')
   const integration = topLevelJob('database')
   const simulation = topLevelJob('simulation')
-  // The INNER timeout must stay strictly below the job timeout. It fires first,
-  // so `tee unit.txt` still produces an artifact and the partition exits 124 — a
-  // diagnosable failure. If the JOB timeout wins instead, the runner is killed
-  // with no output and the only evidence is "the job timed out".
-  // Raised 12m -> 16m (job 16 -> 20) after partition 5 hit the 12m wall on
-  // 30f3f660d while partitions 1-4 finished in 3m44s-6m06s. That spread is
-  // IMBALANCE, not growth. Partitions are now a plain round robin (the committed
-  // timing record was removed), so the budget keeps headroom for the spread.
-  assert.match(unit, /timeout --signal=TERM --kill-after=10s 16m npm run test:unit/)
-  assert.match(unit, /timeout-minutes: 20/)
+  // Bound the test process below the job deadline so failures retain artifacts.
+  // Admission already passed in the dependency job; shards run their selected tests once.
+  assert.match(unit, /timeout --signal=TERM --kill-after=10s 20m node scripts\/test-suite\.mjs unit/)
+  assert.match(unit, /timeout-minutes: 25/)
+  assert.doesNotMatch(unit, /npm run test:unit|npm run check:static/)
+  assert.match(unit, /needs: \[scope, typecheck\]/)
+  assert.match(namedStep('Security-sensitive interface copy'), /npm run check:security-jsx-copy/)
   assert.match(unit, /apt-get install -y qpdf/)
   // Pinned together so the matrix and the denominator cannot drift apart.
   // Raised 4 -> 5 when partition 2 hit the 8m wall on tip-of-main: the passing

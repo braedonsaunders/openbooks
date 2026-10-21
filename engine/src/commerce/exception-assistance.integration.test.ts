@@ -1,3 +1,10 @@
+import { before as initializeNativeComposition } from "node:test";
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+import { createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -20,7 +27,6 @@ import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import {
   createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -46,7 +52,7 @@ interface Fixture {
 
 async function setup(): Promise<Fixture> {
   const org = await withBypass(() => createScratchOrg());
-  const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+  const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
   await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ salesChannels: true, cashSales: true, storedValue: true, promotions: true })}::jsonb, true) where id = ${org.orgId}`);
   const created = await withBypass(() => createChannel(org.orgId, actor, {
     kind: "shopify",
@@ -149,7 +155,7 @@ function ghostOrder(externalId: string, overrides: Partial<ChannelOrder> = {}): 
 
 async function parkGhost(fixture: Fixture, externalId: string, overrides: Partial<ChannelOrder> = {}): Promise<string> {
   const stored = await withBypass(() => ingestChannelOrder(fixture.org.orgId, fixture.actor, fixture.channelId, ghostOrder(externalId, overrides)));
-  const outcome = await withBypass(() => postChannelOrder(fixture.org.orgId, fixture.actor, stored.id));
+  const outcome = await withOrgContext(fixture.org.orgId, () => postChannelOrder(fixture.org.orgId, fixture.actor, stored.id));
   assert.equal(outcome.status, "exception");
   assert.equal(outcome.code, "unmapped_item");
   return stored.id;
@@ -173,7 +179,7 @@ test("unmapped SKU suggests deterministically; approval links the variant and po
     assert.equal(first.modelRanked, false);
     assert.ok(first.explanation.includes("#9001"));
 
-    const approved = await withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, orderId, { rank: 0, applyToSimilar: false, allowedSubsidiaryIds: null }));
+    const approved = await withOrgContext(fixture.org.orgId, () => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, orderId, { rank: 0, applyToSimilar: false, allowedSubsidiaryIds: null }));
     assert.equal(approved.replay.replayed, 1);
     assert.equal(approved.replay.posted, 1);
     const link = await withBypass(() => db.execute<{ native_id: string }>(sql`
@@ -195,7 +201,7 @@ test("approving with apply-to-similar replays every order blocked by the same va
     await parkGhost(fixture, "9102");
     const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, firstId, null));
     assert.equal(suggestion.similarCount, 2);
-    const approved = await withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, firstId, { rank: 0, applyToSimilar: true, allowedSubsidiaryIds: null }));
+    const approved = await withOrgContext(fixture.org.orgId, () => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, firstId, { rank: 0, applyToSimilar: true, allowedSubsidiaryIds: null }));
     assert.equal(approved.replay.replayed, 2);
     assert.equal(approved.replay.posted, 2);
   } finally {
@@ -234,7 +240,7 @@ test("similar replay follows the unmapped line and stays in its source channel",
 
     const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, firstId, null));
     assert.equal(suggestion.similarCount, 2);
-    const approved = await withBypass(() => approveExceptionSuggestion(
+    const approved = await withOrgContext(fixture.org.orgId, () => approveExceptionSuggestion(
       fixture.org.orgId,
       fixture.actor,
       firstId,
@@ -278,7 +284,7 @@ test("unknown gateway suggests the clearing account; approval maps it effective 
       }],
       tenders: [{ gateway: "walley_pay", amountMinor: 3368n, giftCardExternalId: null, authorizationRef: "auth-9" }],
     }));
-    const outcome = await withBypass(() => postChannelOrder(fixture.org.orgId, fixture.actor, stored.id));
+    const outcome = await withOrgContext(fixture.org.orgId, () => postChannelOrder(fixture.org.orgId, fixture.actor, stored.id));
     assert.equal(outcome.status, "exception");
     assert.equal(outcome.code, "unmapped_account");
     const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, stored.id, null));
@@ -290,7 +296,7 @@ test("unknown gateway suggests the clearing account; approval maps it effective 
     assert.equal(top.action.role, "gateway_clearing");
     assert.equal(top.action.key, "walley_pay");
     assert.equal(top.action.accountId, fixture.clearingId);
-    const approved = await withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, stored.id, { rank: 0, applyToSimilar: false, allowedSubsidiaryIds: null }));
+    const approved = await withOrgContext(fixture.org.orgId, () => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, stored.id, { rank: 0, applyToSimilar: false, allowedSubsidiaryIds: null }));
     assert.equal(approved.replay.posted, 1);
   } finally {
     await dropScratchOrg(fixture.org.orgId);
@@ -326,13 +332,13 @@ test("totals that disagree get a manual fix only; approval refuses with the reme
       ...ghostOrder("9401"),
       totalMinor: 9999n,
     }));
-    const outcome = await withBypass(() => postChannelOrder(fixture.org.orgId, fixture.actor, stored.id));
+    const outcome = await withOrgContext(fixture.org.orgId, () => postChannelOrder(fixture.org.orgId, fixture.actor, stored.id));
     assert.equal(outcome.status, "exception");
     assert.equal(outcome.code, "tax_mismatch");
     const suggestion = await withBypass(() => suggestExceptionFix(fixture.org.orgId, stored.id, null));
     assert.equal(suggestion.candidates[0]?.kind, "manual");
     await assert.rejects(
-      withBypass(() => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, stored.id, { rank: 0, applyToSimilar: false, allowedSubsidiaryIds: null })),
+      withOrgContext(fixture.org.orgId, () => approveExceptionSuggestion(fixture.org.orgId, fixture.actor, stored.id, { rank: 0, applyToSimilar: false, allowedSubsidiaryIds: null })),
       (error: unknown) => error instanceof CommerceError && error.code === "exception_assistance_manual_only",
     );
   } finally {

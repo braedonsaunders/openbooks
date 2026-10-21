@@ -1,0 +1,1 @@
+This migration adds read-only approval evidence functions and removes an unused provider policy switch. Existing returns, Flow decisions, audit history and financial postings are retained.

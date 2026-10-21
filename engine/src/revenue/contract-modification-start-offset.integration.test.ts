@@ -1,3 +1,4 @@
+import { grantScratchPermissions as grantDecisionDuties } from "@openbooks/engine/testing/fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -70,6 +71,7 @@ async function fixture(
       actors.submitterId,
       org.bookId,
     );
+    await grantDecisionDuties(org.orgId, actors.approver1Id, ["ar.post"]);
     await seedApprovalFlow(org.orgId, {
       subjectKind: "financial_change",
       assignees: [{ type: "user", userId: actors.approver1Id }],

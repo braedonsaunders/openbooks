@@ -355,7 +355,7 @@ test.describe.serial("close to reporting", () => {
       // would target December of the prior year, so pin it explicitly.
       await page.goto(`/close?fy=${P.name.slice(0, 4)}`);
       await dismissSetupWizard(page);
-      const row = page.locator("tr", { hasText: P.name }).first();
+      const row = page.locator("tr", { hasText: `P${P.from.slice(5, 7)} FY${P.from.slice(0, 4)}` }).first();
       await expect(row).toBeVisible();
       // The book picker is a custom listbox over a native select: read the
       // options (values are book ids) from any unstarted row, untouched —
@@ -845,7 +845,7 @@ test.describe.serial("close to reporting", () => {
       // Request a controlled reopen for GL from the period drawer.
       await page.goto(`/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`);
       await dismissSetupWizard(page);
-      const row = page.locator("tr", { hasText: P.name }).first();
+      const row = page.locator("tr", { hasText: `P${P.from.slice(5, 7)} FY${P.from.slice(0, 4)}` }).first();
       await expect(row).toBeVisible();
       await row.getByRole("link", { name: `Manage ${P.name}` }).click();
       await page.waitForURL(/period=/);

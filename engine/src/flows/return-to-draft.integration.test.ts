@@ -9,6 +9,7 @@ import {
   seedApprovalFlow,
   seedDraftDocument,
   seedFlowActors,
+  grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import { loadDocumentEditCurrent } from "../ledger/document-service.ts";
 import { applyDocumentEdit, createDocument } from "../ledger/document-write.ts";
@@ -32,6 +33,27 @@ import {
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function seedReturnActors(orgId: string) {
+  const actors = await seedFlowActors(orgId);
+  await grantScratchPermissions(orgId, actors.approver1Id, ["ap.post"]);
+  return actors;
+}
+
+test("returning an approved document to draft rechecks native actor authority before any write", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedReturnActors(org.orgId);
+    const documentId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await submitAndReleaseIfUngated("vendor_bill", documentId, actors.submitterId);
+    const auditBefore = (await db.execute(sql`select id from audit_log where org_id=${org.orgId}`)).rows;
+    await assert.rejects(returnDocumentToDraft({ orgId: org.orgId, documentId, actorId: actors.outsiderId,
+      allowedSubsidiaryIds: null, reason: "Review the bill before another submission" }), /not found/);
+    assert.equal((await db.execute<{status:string}>(sql`select status from documents
+      where org_id=${org.orgId} and id=${documentId}`)).rows[0]?.status, "approved");
+    assert.deepEqual((await db.execute(sql`select id from audit_log where org_id=${org.orgId}`)).rows, auditBefore);
+  } finally { await dropScratchOrg(org.orgId); }
+});
 
 async function nativeBill(org: Awaited<ReturnType<typeof createScratchOrg>>, actorId: string): Promise<string> {
   const body = {
@@ -60,16 +82,6 @@ async function latestDocumentAudit(orgId: string, id: string) {
   return rows[0]!;
 }
 
-/** Pooled scratch orgs can carry settings from an earlier lease: pin the switch OFF. */
-async function pinApprovalNotRequired(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(
-         coalesce(settings, '{}'::jsonb), '{approvals}',
-         coalesce(settings->'approvals', '{}'::jsonb) || '{"requireVendorBillApproval": false}'::jsonb,
-         true)
-     where id = ${orgId}`);
-}
 
 async function runStatus(orgId: string, runId: string): Promise<string> {
   const rows = (await db.execute<{ status: string }>(sql`
@@ -89,8 +101,7 @@ test("a return reason is required before any database work", async () => {
 test("an ungated submission retains the approval performed by its native Flow", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actors = await seedFlowActors(org.orgId);
-    await pinApprovalNotRequired(org.orgId);
+    const actors = await seedReturnActors(org.orgId);
     const id = await nativeBill(org, actors.submitterId);
     const graph = { schemaVersion: 1, nodes: [
       { id: "submit", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
@@ -111,8 +122,7 @@ test("an ungated submission retains the approval performed by its native Flow", 
 test("an approved bill returns to draft with a before/after audit, edits, and re-approves", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actors = await seedFlowActors(org.orgId);
-    await pinApprovalNotRequired(org.orgId);
+    const actors = await seedReturnActors(org.orgId);
     // A native draft with a real line, so the post-return edit exercises the
     // same validation a drawer save runs.
     const body = {
@@ -182,7 +192,7 @@ test("an approved bill returns to draft with a before/after audit, edits, and re
 test("a flow-governed bill keeps its completed run as history and resubmits into a new run", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await seedReturnActors(org.orgId);
     await seedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
       assignees: [{ type: "user", userId: actors.approver1Id }],
@@ -222,8 +232,7 @@ test("a flow-governed bill keeps its completed run as history and resubmits into
 test("non-approved documents refuse with a named remedy", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actors = await seedFlowActors(org.orgId);
-    await pinApprovalNotRequired(org.orgId);
+    const actors = await seedReturnActors(org.orgId);
     const billId = await nativeBill(org, actors.submitterId);
 
     await assert.rejects(
@@ -254,8 +263,7 @@ test("non-approved documents refuse with a named remedy", { skip: !DB }, async (
 test("a stale drawer revision refuses before any mutation", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actors = await seedFlowActors(org.orgId);
-    await pinApprovalNotRequired(org.orgId);
+    const actors = await seedReturnActors(org.orgId);
     const billId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
     await submitAndReleaseIfUngated("vendor_bill", billId, actors.submitterId);
 
@@ -272,8 +280,7 @@ test("a stale drawer revision refuses before any mutation", { skip: !DB }, async
 test("a concurrent post and return converge to exactly one outcome", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actors = await seedFlowActors(org.orgId);
-    await pinApprovalNotRequired(org.orgId);
+    const actors = await seedReturnActors(org.orgId);
     const billId = await nativeBill(org, actors.submitterId);
     await submitAndReleaseIfUngated("vendor_bill", billId, actors.submitterId);
 

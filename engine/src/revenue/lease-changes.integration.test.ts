@@ -1,3 +1,5 @@
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { grantScratchPermissions as grantDecisionDuties } from "@openbooks/engine/testing/fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -74,6 +76,7 @@ async function fixture(
       >[2]["accounts"],
     });
     await commenceLease(org.orgId, result.leaseId, actors.submitterId);
+    await grantDecisionDuties(org.orgId, actors.approver1Id, ["assets.manage"]);
     await seedApprovalFlow(org.orgId, {
       subjectKind: "financial_change",
       assignees: [{ type: "user", userId: actors.approver1Id }],
@@ -405,7 +408,7 @@ test(
             actors.submitterId,
             input(accounts),
           ),
-          /lease not found/,
+          ScopeNotFoundError,
         );
       } finally {
         await dropScratchOrg(other.orgId);

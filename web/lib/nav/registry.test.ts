@@ -222,3 +222,8 @@ test('timesheets stay in the menu while field time is off; the clock is a My Wor
   const crew = NAV_MODULES.find((module) => module.key === 'time-crew')!
   assert.deepEqual(crew.requiredPermissionsAny, ['time.read', 'time.crew.enter'], 'crew entry is reachable with its own catalogue grant')
 })
+
+
+test('every native navigation destination has a nonempty display label', () => {
+  for (const module of NAV_MODULES) assert.ok(typeof module.label === 'string' && module.label.trim().length > 0, module.href)
+})

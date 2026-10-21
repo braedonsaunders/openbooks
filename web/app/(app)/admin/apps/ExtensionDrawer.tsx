@@ -23,6 +23,7 @@ export function ExtensionDrawer({
   files,
   isPublished,
   canAuthor,
+  canPublish,
   closeHref = '/admin/apps',
 }: {
   app: {
@@ -44,6 +45,7 @@ export function ExtensionDrawer({
   }[]
   isPublished: boolean
   canAuthor: boolean
+  canPublish: boolean
   closeHref?: string
 }) {
   const router = useRouter()
@@ -238,7 +240,7 @@ export function ExtensionDrawer({
               </CardHeader>
               <CardContent className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                {app.status === 'installed' ? (
+                {app.status === 'installed' && canPublish ? (
                   <Button
                     variant="outline"
                     disabled={busy}

@@ -11,6 +11,7 @@ import {
   type ScratchOrg,
   type FlowActors,
 } from "../testing/fixtures.ts";
+import { createDelegation } from "./delegations.ts";
 import { submitForApproval } from "./submit.ts";
 import { gateDecisionCapability } from "./gates.ts";
 import {
@@ -48,9 +49,15 @@ async function withOwnSubmissionFixture(
     assert.equal(submitted.gated, true, "the maker's own submission must route a gate");
     const gateId = (await db.execute<{ id: string }>(sql`
       select id from flow_gates
-       where subject_id = ${docId} and assignee_user_id = ${maker} and status = 'pending'
+       where org_id=${org.orgId} and subject_id = ${docId} and assignee_user_id = ${actors.approver2Id} and status = 'pending'
        limit 1`)).rows[0]?.id;
-    assert.ok(gateId, "the maker holds a pending gate on their own document");
+    assert.ok(gateId, "the tenant's independent approver holds a pending gate");
+    assert.equal((await db.execute(sql`select id from flow_gates where org_id=${org.orgId}
+      and subject_id=${docId} and assignee_user_id=${maker} and status='pending'`)).rows.length, 0,
+      "the tenant's self-approval restriction excludes the maker at assignment");
+    const now = (await db.execute<{now:string}>(sql`select now()::text as now`)).rows[0]!.now;
+    await createDelegation({ orgId: org.orgId, fromUserId: actors.approver2Id, toUserId: maker,
+      startsAt: new Date(new Date(now).getTime()-3600000), endsAt: new Date(new Date(now).getTime()+3600000) });
     await fn(org, actors, docId, gateId!);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -90,7 +97,7 @@ test("the awaiting set holds exactly the SoD-blocked gates", { skip: !DB }, asyn
     assert.deepEqual(
       await worklistGatesAwaitingAnotherApprover(org.orgId, maker, ["approver"]),
       [gateId],
-      "the maker's own gate awaits another approver",
+      "delegated coverage cannot bypass the maker restriction",
     );
     assert.deepEqual(
       await worklistGatesAwaitingAnotherApprover(org.orgId, other, ["approver"]),
@@ -109,7 +116,7 @@ test("the inbox leg renders awaiting without actions, actionable with Approve", 
       orgId: org.orgId, actorId: maker, asOf,
       scope: { roles: ["approver"] },
     })).filter((item) => item.source.id === gateId);
-    assert.equal(makerItems.length, 1, "the maker's gate still lists (it awaits, it is not hidden)");
+    assert.equal(makerItems.length, 1, "delegated review lists with its independent-approval requirement");
     assert.deepEqual(makerItems[0]!.actions, [], "no decision action is offered to the blocked viewer");
     assert.match(makerItems[0]!.subtitle ?? "", /^Awaiting another approver/, "the item names the outcome in advance");
     void docId;

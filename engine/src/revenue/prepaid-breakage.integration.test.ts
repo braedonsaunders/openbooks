@@ -1,3 +1,4 @@
+import { grantScratchPermissions as grantDecisionDuties } from "@openbooks/engine/testing/fixtures";
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
@@ -22,7 +23,8 @@ test('approved breakage follows customer use and reversals through the native re
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"subscriptionBilling":true,"usageBilling":true}'::jsonb) where id=${ledger.orgId}`)
       await db.execute(sql`update recognition_rules set method='usage' where org_id=${ledger.orgId}`)
       await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${actors.submitterId},'ar.post','grant')`)
-      await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
+      await grantDecisionDuties(ledger.orgId, actors.approver1Id, ["ar.post"]);
+    await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
       return actors
     })
     await withOrgContext(ledger.orgId,async()=> {

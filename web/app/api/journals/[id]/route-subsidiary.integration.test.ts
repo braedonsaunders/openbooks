@@ -16,7 +16,7 @@ import { sql } from "drizzle-orm";
 const stateKey = Symbol.for("openbooks.journal-subsidiary-test");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { roles: { key: string }[]; orgId: string; id: string };
     permissions: Set<string>;
     allowedSubsidiaryIds: ReadonlySet<string> | null;
   } | null;
@@ -28,7 +28,7 @@ const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.journal-subsidiary-test')]
   export async function guardPermission(_permission) {
     if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
+    return { permissions: new Set(), ...state.authz }
   }
   export function guardSubsidiaryScope(authz, subsidiaryId) {
     if (authz.allowedSubsidiaryIds === null) return null
@@ -98,7 +98,7 @@ test(
       // A subsidiary-restricted caller: the null-clear must be refused, not
       // waved past the scope guard (which only checks non-null ids).
       routeState.authz = {
-        user: { orgId: org.orgId, id: adminId },
+        user: { roles: [], orgId: org.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: new Set([org.subsidiaryId]),
       };

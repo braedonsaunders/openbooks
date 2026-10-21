@@ -1,3 +1,4 @@
+import { createInventoryCountFixture } from "../testing/inventory-counts.ts";
 import { confirmCountObservation } from "../testing/inventory-counts.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -15,7 +16,7 @@ import {
   startStockCount,
   submitStockCountForReview,
 } from "./stock-counts.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { receiveTen } from "./integration-seeds.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -28,7 +29,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * lock BEFORE the re-read and holds them to the outer commit.
  */
 
-async function openReviewedCount(org: ScratchOrg, counted: string): Promise<{ countId: string; lineId: string }> {
+async function openReviewedCount(org: ScratchOrg & { actorId: string }, counted: string): Promise<{ countId: string; lineId: string }> {
   const count = await createStockCount(org.orgId, null, {
     locationId: org.locationId,
     subsidiaryId: org.subsidiaryId,
@@ -40,7 +41,7 @@ async function openReviewedCount(org: ScratchOrg, counted: string): Promise<{ co
     select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
   await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: counted });
   await confirmCountObservation(org.orgId,count.id,lineId,counted);
-  await submitStockCountForReview(org.orgId, null, count.id);
+  await submitStockCountForReview(org.orgId, org.actorId, count.id);
   return { countId: count.id, lineId };
 }
 
@@ -50,7 +51,7 @@ async function lockWaiters(): Promise<number> {
 }
 
 test("two counts racing one position serialize: exactly one posts, the other refuses drift with nothing posted", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   const editor = new pg.Client({ connectionString: env.OPENBOOKS_DB_URL });
   await editor.connect();
   let released = false;
@@ -66,8 +67,8 @@ test("two counts racing one position serialize: exactly one posts, the other ref
     await editor.query("begin");
     await editor.query(`select pg_advisory_lock(hashtextextended('${positionKey}', 0))`);
 
-    const postA = withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, first.countId));
-    const postB = withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, second.countId));
+    const postA = withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, first.countId));
+    const postB = withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, second.countId));
     // Silence unhandled rejections; the settlements below await both.
     postA.catch(() => undefined);
     postB.catch(() => undefined);
@@ -133,7 +134,7 @@ test("two counts racing one position serialize: exactly one posts, the other ref
 });
 
 test("a lot-tracked line posts under the position locks; serial counts require the individual identifier", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await db.execute(sql`
       update item_inventory_profiles set tracking = 'lot'
@@ -165,8 +166,8 @@ test("a lot-tracked line posts under the position locks; serial counts require t
       select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
     await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: "9" });
     await confirmCountObservation(org.orgId,count.id,lineId,"9");
-    await submitStockCountForReview(org.orgId, null, count.id);
-    const posted = await withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, count.id));
+    await submitStockCountForReview(org.orgId, org.actorId, count.id);
+    const posted = await withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, count.id));
     assert.equal(posted.status, "posted");
     assert.equal(
       (await getOnHandWith(db, org.orgId, org.items.fifo, org.stockLocationId, { lotId: lot })).quantity,

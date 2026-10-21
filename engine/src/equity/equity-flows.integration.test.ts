@@ -127,11 +127,11 @@ test("an Equity action Flow holds a split until an independent approver approves
   }
 });
 
-test("the requester never decides its own equity action, and a rejection keeps its reason and applies nothing", { skip: !DB }, async () => {
+test("the tenant policy excludes the equity requester, and rejection keeps its reason and applies nothing", { skip: !DB }, async () => {
   const w = await setupEquityWorld();
   try {
     await seedApprovalFlow(w.org.orgId, {
-      subjectKind: EQUITY_ACTION_SUBJECT_KIND, mode: "any", preventSelfApproval: false,
+      subjectKind: EQUITY_ACTION_SUBJECT_KIND, mode: "any", preventSelfApproval: true,
       assignees: [{ type: "user", userId: w.managerId }, { type: "user", userId: w.approverId }],
     });
     const issued = await shares(w);
@@ -143,17 +143,16 @@ test("the requester never decides its own equity action, and a rejection keeps i
     const held = await recordSecurityEvent(buyback);
     assert.equal(held.status, "pending_approval");
     assert.equal(held.eventId, null);
-    // Separation of duties is the subject's policy, not the Flow's: even a
-    // Flow that names the requester never seats them on their own action.
+    // The authored Flow excludes the requester from its independent gate.
     const gates = await openGates(w.org.orgId, held.requestId!);
     assert.deepEqual(gates.map((gate) => gate.assignee_user_id), [w.approverId]);
     const approverGate = gates[0]!;
     await assert.rejects(decideGate({ gateId: approverGate.id, decision: "approved", userId: w.managerId }));
     assert.equal((await request(w.org.orgId, held.requestId!)).status, "pending_approval");
-    // The release handler refuses a self decision on its own as well.
+    // Calling the release handler directly cannot manufacture a gate decision.
     await assert.rejects(
       releaseEquityActionFlowApproval({ subjectId: held.requestId!, outcome: "approved", ctx: { orgId: w.org.orgId, userId: w.managerId } }),
-      refusal("equity_self_approval"),
+      refusal("equity_action_routing_failed"),
     );
     await assert.rejects(
       releaseEquityActionFlowApproval({ subjectId: held.requestId!, outcome: "rejected", comment: " ", ctx: { orgId: w.org.orgId, userId: w.approverId } }),

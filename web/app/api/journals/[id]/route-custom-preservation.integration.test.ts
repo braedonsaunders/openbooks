@@ -14,7 +14,7 @@ import { sql } from "drizzle-orm";
 const stateKey = Symbol.for("openbooks.journal-custom-test");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { roles: { key: string }[]; orgId: string; id: string };
     permissions: Set<string>;
     allowedSubsidiaryIds: string[] | null;
   } | null;
@@ -26,7 +26,7 @@ const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.journal-custom-test')]
   export async function guardPermission(_permission) {
     if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
+    return { permissions: new Set(), ...state.authz }
   }
   export function guardSubsidiaryScope() {
     return null
@@ -95,7 +95,7 @@ test(
       // the route module has replaced the ambient test bypass process-wide.
       const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
       routeState.authz = {
-        user: { orgId: org.orgId, id: adminId },
+        user: { roles: [], orgId: org.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };

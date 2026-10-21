@@ -1,3 +1,5 @@
+import { seedCloseRunApprovalFixture } from "../testing/close.ts";
+import { closeApprovedRun } from "../close/run-completion.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -6,7 +8,7 @@ import { startCloseRun } from "../close/run-start.ts";
 import { db } from "../platform/db.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import { processCloseDeliveryJobData } from "./close-delivery-worker.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -64,12 +66,13 @@ async function seedReportablePackage(orgId: string, senderId: string, delivery =
     select id from accounting_books where org_id = ${orgId} limit 1
   `)).rows[0]!;
   assert.ok(period?.id && book?.id, "scratch org must carry a period and a book");
+  await grantScratchPermissions(orgId, senderId, ["close.run", "close.approve", "reports.read"]);
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"continuousClose":true}'::jsonb) where id=${orgId}`);
   const runId = await startCloseRun({
     orgId, periodId: period.id, bookId: book.id, actorId: senderId, reportingPackageId: packageId,
   });
-  await db.execute(sql`
-    update close_runs set status = 'closed', reporting_package_id = ${packageId}
-     where id = ${runId} and org_id = ${orgId}`);
+  await seedCloseRunApprovalFixture(orgId, runId, senderId);
+  await closeApprovedRun(orgId, runId, senderId);
   return { packageId, definitionId, runId, periodId: period.id, bookId: book.id };
 }
 
@@ -304,12 +307,13 @@ async function seedMisconfiguredPackage(
   const book = (await db.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} limit 1
   `)).rows[0]!;
+  await grantScratchPermissions(orgId, senderId, ["close.run", "close.approve", "reports.read"]);
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"continuousClose":true}'::jsonb) where id=${orgId}`);
   const runId = await startCloseRun({
     orgId, periodId: period.id, bookId: book.id, actorId: senderId, reportingPackageId: packageId,
   });
-  await db.execute(sql`
-    update close_runs set status = 'closed', reporting_package_id = ${packageId}
-     where id = ${runId} and org_id = ${orgId}`);
+  await seedCloseRunApprovalFixture(orgId, runId, senderId);
+  await closeApprovedRun(orgId, runId, senderId);
   return { packageId, runId };
 }
 

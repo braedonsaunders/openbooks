@@ -9,7 +9,7 @@ import {
   runDueSubscriptions,
   SubscriptionError,
 } from "./subscription-billing.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrgReporting, grantScratchPermissions, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -18,6 +18,7 @@ async function seedSubscription(
   actorId: string,
   opts: { status?: string; autoPost?: boolean; startOn?: string; nextBillOn?: string } = {},
 ): Promise<string> {
+  await grantScratchPermissions(org.orgId, actorId, ["ar.create"]);
   await db.execute(sql`
     update orgs
        set settings = settings || '{"features":{"subscriptionBilling":true}}'::jsonb

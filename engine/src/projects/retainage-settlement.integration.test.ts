@@ -1,3 +1,11 @@
+import { before as initializeNativeComposition } from "node:test";
+
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -6,7 +14,6 @@ import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
-  approvePayApplication,
   createPayApplication,
   generatePayApplicationInvoice,
   releaseRetainage,
@@ -16,7 +23,7 @@ import { cmp } from "../money/money.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
-  approveVendorPayApplication,
+  submitSubcontract,
   createVendorPayApplication,
   generateVendorPayApplicationBill,
   releaseVendorRetainage,
@@ -64,7 +71,6 @@ async function customerDraw(
   const app = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, date, "10", null));
   await withOrgTransaction(org.orgId, () =>
     submitPayApplication(org.orgId, actor, app.id, [{ sovLineId: sov, thisPeriodCompleted: work, materialsStored: "0" }], null));
-  await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, app.id, null));
   const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
   await postInvoice(org, actor, approver, "customer_invoice", generated.invoiceId);
   return { invoiceId: generated.invoiceId, retainage: generated.retainage, currentDue: generated.currentDue };
@@ -148,13 +154,13 @@ test("vendor consecutive draws settle cumulative cents with the residual carried
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status)
       values(${project},${org.orgId},${org.subsidiaryId},'SET-V','Vendor settlement job',${org.customerId},${type},'active')`);
     await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active) values(${vendor},${org.orgId},'vendor','Vendor settlement vendor',true)`);
-    await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-SET','Vendor settlement scope','CAD','5000','active')`);
+    await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-SET','Vendor settlement scope','CAD','10000','draft')`);
     await db.execute(sql`insert into subcontract_sov_lines(id,org_id,subcontract_id,description,scheduled_value,expense_account_id,sort_order) values(${sov},${org.orgId},${subcontract},'Work','10000',${org.accounts.cogs},1)`);
+    await submitSubcontract(org.orgId, actor, subcontract);
     const draw = async (work: string, date: string) => {
       const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: date }));
       await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: work, materialsStoredCurrent: "0" }] }));
       const submitted = await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app.id));
-      await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app.id));
       const generated = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));
       await postInvoice(org, actor, approver, "vendor_bill", generated.vendorBillDocumentId);
       return submitted.retainageThisPeriod;

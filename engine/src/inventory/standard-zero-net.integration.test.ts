@@ -42,7 +42,7 @@ async function profileRequest(org: ScratchOrg, varianceAccountId: string | null 
     method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
       costingMethod: "standard", tracking: "none", standardCost: "10", expectedUpdatedAt: revision, baseUnit: "ea",
       assetAccountId: org.accounts.invAsset, cogsAccountId: org.accounts.cogs,
-      adjustmentAccountId: org.accounts.adjustment, varianceAccountId,
+      adjustmentAccountId: org.accounts.adjustment, varianceAccountId, receivedNotBilledAccountId: org.accounts.clearing,
       recostingAuthorization: "Controller authorized normalization of open FIFO layers to standard cost",
     }),
   });

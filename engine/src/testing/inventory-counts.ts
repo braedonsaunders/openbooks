@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchUser } from "./fixtures.ts";
+import { createScratchOrg, createScratchUser } from "./fixtures.ts";
 import { requiresSecondCount } from "../inventory/count-policy.ts";
 import { recordSecondCount } from "../inventory/second-count.ts";
+
+/** Count lifecycle scenarios use one named operator for their native commands. */
+export async function createInventoryCountFixture() {
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
+  const org = await createScratchOrg();
+  const actorId = await createInventoryOperator(org.orgId, "Inventory counter");
+  return { ...org, actorId };
+}
 
 /** A real tenant operator with the inventory permissions exercised by command tests. */
 export async function createInventoryOperator(

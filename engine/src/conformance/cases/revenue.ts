@@ -21,7 +21,7 @@ import {
   separateFinancingComponent,
 } from "../../revenue/recognition.ts";
 import { measureRevenueModificationGroup } from "../../revenue/contract-modification-measurement.ts";
-import { seedFlowActors,seedApprovalFlow } from '../../testing/fixtures.ts';
+import { seedFlowActors,seedApprovalFlow, grantScratchPermissions as grantDecisionDuties } from '../../testing/fixtures.ts';
 import { submitFinancialChange } from '../../flows/financial-changes-adapter.ts';
 import { decideGate } from '../../flows/gates.ts';
 import { proposeExpectedBreakage,applyExpectedBreakage } from '../../revenue/prepaid-breakage.ts';
@@ -983,7 +983,8 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
         const actors=await seedFlowActors(ledger.orgId)
         await db.execute(sql`update recognition_rules set method='usage' where org_id=${ledger.orgId} and id=(select recognition_rule_id from items where org_id=${ledger.orgId} and id=${ledger.items.service})`)
         await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${actors.submitterId},'ar.post','grant')`)
-        await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
+        await grantDecisionDuties(ledger.orgId, actors.approver1Id, ["ar.post"]);
+    await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
         return actors
       })
       return withOrgContext(ledger.orgId,async()=> {
@@ -1368,7 +1369,8 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
         const actors=await seedFlowActors(ledger.orgId)
         await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"orders":true,"inventory":true,"dropShipping":true}'::jsonb) where id=${ledger.orgId}`)
         await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${actors.submitterId},'ar.post','grant')`)
-        await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
+        await grantDecisionDuties(ledger.orgId, actors.approver1Id, ["ar.post"]);
+    await seedApprovalFlow(ledger.orgId,{subjectKind:'financial_change',assignees:[{type:'user',userId:actors.approver1Id}],mode:'any',preventSelfApproval:true})
         return actors
       })
       return withOrgContext(ledger.orgId,async()=>{

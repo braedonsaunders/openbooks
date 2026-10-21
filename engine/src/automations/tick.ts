@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { db, schema, withBypassContext, withOrg } from "../platform/db.ts";
-import { addCalendarDays } from "../platform/business-date.ts";
+import { addCalendarDays, businessTimeZone, formatInZone, formatTimeInZone } from "../platform/business-date.ts";
 import { withTickClaim } from "../scheduling/lock.ts";
 import { schedulerOutboxBackoffMs } from "../delivery/outbox-enqueue.ts";
 import { lastCronOccurrenceBetween } from "../flows/scheduled.ts";
@@ -24,8 +24,7 @@ import { invalidScheduleCronReason, parseAutomationTrigger, type AutomationTrigg
  *   (cron-parser, the same library flows/scheduled.ts uses — semantics
  *   reused, cursor per automation row).
  * - date_relative: the daily scan matches entity date fields against
- *   today ± offset in the ORG's timezone (orgs.settings.defaultTimezone,
- *   UTC when unset). The date math is DST-safe: the scan compares civil
+ *   today ± offset in the organization's authoritative business timezone. The date math is DST-safe: the scan compares civil
  *   dates in the target zone, never 24h arithmetic — proven by the DST
  *   test in a non-UTC zone.
  * - field_change / event / document: entity write services stage durable
@@ -94,47 +93,17 @@ export async function runAutomationTickClaimed(now: Date = new Date()): Promise<
 /** Org civil date (YYYY-MM-DD) in the org's timezone. DST-safe: the zone's
  *  calendar day, not now() minus N×24h. */
 export function orgCivilDate(now: Date, timezone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
-  return parts;
+  return formatInZone(now, timezone);
 }
 
-/** Org-local wall-clock time in HH:MM form for daily automation triggers. */
+/** Organization-local wall-clock time in HH:MM form for daily automation triggers. */
 export function orgCivilTime(now: Date, timezone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(now);
-  const hour = parts.find((part) => part.type === "hour")?.value;
-  const minute = parts.find((part) => part.type === "minute")?.value;
-  if (!hour || !minute) throw new Error("could not resolve organization local time");
-  return `${hour}:${minute}`;
+  const time = formatTimeInZone(now, timezone);
+  return `${time.slice(0, 2)}:${time.slice(2)}`;
 }
 
 export function dateRelativeTriggerIsDue(now: Date, timezone: string, atTime: string): boolean {
   return orgCivilTime(now, timezone) >= atTime;
-}
-
-async function orgTimezone(orgId: string): Promise<string> {
-  const rows = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-    select settings from orgs where id = ${orgId} limit 1
-  `);
-  const tz = rows.rows[0]?.settings?.["defaultTimezone"];
-  if (typeof tz === "string" && tz) {
-    try {
-      new Intl.DateTimeFormat("en-CA", { timeZone: tz });
-      return tz;
-    } catch {
-      return "UTC";
-    }
-  }
-  return "UTC";
 }
 
 const DATE_RELATIVE_SOURCES: Record<string, { table: string; dateColumn: string; entity: string }> = {
@@ -329,7 +298,7 @@ async function fireDateRelative(
       `date_relative trigger on ${trigger.entity}.${trigger.dateField} is not a scannable date — scannable: ${Object.keys(DATE_RELATIVE_SOURCES).join(", ")}`,
     );
   }
-  const timezone = await orgTimezone(automation.orgId);
+  const timezone = await businessTimeZone(automation.orgId);
   if (!dateRelativeTriggerIsDue(now, timezone, trigger.atTime)) {
     return { fired: 0, failed: 0, errors: [] };
   }
@@ -372,7 +341,7 @@ async function fireDateRelative(
         // and counted on its own — previously the first throw aborted the
         // scan and discarded even the subjects that had already fired.
         if (result.status === "failed") outcome.failed += 1;
-        else outcome.fired += 1;
+        else if (!result.replayed) outcome.fired += 1;
       } catch (e) {
         outcome.failed += 1;
         outcome.errors.push(`${source.entity} ${row.id}: ${e instanceof Error ? e.message : String(e)}`);

@@ -1,3 +1,10 @@
+import { before as initializeNativeComposition } from "node:test";
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+import { createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -20,7 +27,6 @@ import { receiveInventory } from "../inventory/movements.ts";
 import { createProgram, issueStoredValue } from "../stored-value/accounts.ts";
 import {
   createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
   seedApprovalFlow,
   type ScratchOrg,
@@ -201,10 +207,10 @@ async function stockPosition(orgId: string, itemId: string, locationId: string):
 test("full refund posts a balanced cash refund and restocks at original cost", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const { channelId, accounts } = await setup(org, actor, "per_order");
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("1001")));
-    const sale = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const sale = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(sale.status, "posted");
     // The price moves after the sale: cheaper units arrive before the refund.
     // The restock must restore the cost the units LEFT at, not today's cost.
@@ -218,7 +224,7 @@ test("full refund posts a balanced cash refund and restocks at original cost", {
       refund: fullRefund("1001", "r-9001"),
       occurredAt: "2026-07-16T09:00:00Z",
     }));
-    const outcome = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    const outcome = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(outcome.status, "posted");
     assert.ok(outcome.documentId);
     const doc = (await withOrgContext(org.orgId, () => db.execute<{ kind: string; status: string; total: string; tax_total: string }>(sql`
@@ -277,10 +283,10 @@ test("full refund posts a balanced cash refund and restocks at original cost", {
 test("a second full refund refuses as over-refund by name", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const { channelId } = await setup(org, actor, "per_order");
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("1002")));
-    const sale = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const sale = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(sale.status, "posted");
     const first = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "1002", {
       kind: "refund",
@@ -288,14 +294,14 @@ test("a second full refund refuses as over-refund by name", { skip: !DB }, async
       refund: fullRefund("1002", "r-9002"),
       occurredAt: "2026-07-16T09:00:00Z",
     }));
-    assert.equal((await withBypass(() => postChannelRefund(org.orgId, actor, first.eventId))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, first.eventId))).status, "posted");
     const second = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "1002", {
       kind: "refund",
       externalId: "r-9003",
       refund: fullRefund("1002", "r-9003"),
       occurredAt: "2026-07-17T09:00:00Z",
     }));
-    const outcome = await withBypass(() => postChannelRefund(org.orgId, actor, second.eventId));
+    const outcome = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, second.eventId));
     assert.equal(outcome.status, "exception");
     assert.equal(outcome.code, "over_refund");
     const parked = (await withOrgContext(org.orgId, () => db.execute<{ code: string; reason: string; remedy: string }>(sql`
@@ -312,19 +318,19 @@ test("a second full refund refuses as over-refund by name", { skip: !DB }, async
 test("replaying a posted refund is a no-op", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const { channelId } = await setup(org, actor, "per_order");
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("1003")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "1003", {
       kind: "refund",
       externalId: "r-9004",
       refund: fullRefund("1003", "r-9004"),
       occurredAt: "2026-07-16T09:00:00Z",
     }));
-    const first = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    const first = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(first.status, "posted");
-    const second = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    const second = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(second.status, "posted");
     assert.equal(second.documentId, first.documentId);
     const count = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
@@ -339,25 +345,25 @@ test("replaying a posted refund is a no-op", { skip: !DB }, async () => {
 test("replaying an approved channel cash refund preserves its original lines and payout tender", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
-    const approver = await withBypass(() => createScratchUser(org.orgId, "Refund approver", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
+    const approver = await withBypass(() => createWorkOperator(org.orgId, "Refund approver", ["cash_sales.post"]));
     const { channelId } = await setup(org, actor, "per_order");
     const storedOrder = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("2011")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, storedOrder.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, storedOrder.id))).status, "posted");
     await withBypass(() => seedApprovalFlow(org.orgId, {
       subjectKind: "cash_refund", assignees: [{ type: "user", userId: approver }], mode: "any",
     }));
     const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "2011", {
       kind: "refund", externalId: "r-2011", refund: fullRefund("2011", "r-2011"), occurredAt: "2026-07-16T09:00:00Z",
     }));
-    const held = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    const held = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(held.status, "pending");
     assert.ok(held.documentId);
     const gate = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from flow_gates where org_id = ${org.orgId} and subject_id = ${held.documentId} and status = 'pending'`))).rows[0]!;
-    await withBypass(() => decideGate({ gateId: gate.id, decision: "approved", userId: approver }));
+    await withOrgContext(org.orgId, () => decideGate({ gateId: gate.id, decision: "approved", userId: approver }));
 
-    const replayed = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    const replayed = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(replayed.status, "posted");
     assert.equal(replayed.documentId, held.documentId);
     const doc = (await withOrgContext(org.orgId, () => db.execute<{ status: string; lines: number; tenders: number; postedEntryId: string | null }>(sql`
@@ -377,7 +383,7 @@ test("replaying an approved channel cash refund preserves its original lines and
 test("a refund behind an unposted order parks until the sale posts", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const { channelId } = await setup(org, actor, "per_order");
     const broken: ChannelOrder = {
       ...paidOrder("1004"),
@@ -412,7 +418,7 @@ test("a refund behind an unposted order parks until the sale posts", { skip: !DB
       },
       occurredAt: "2026-07-16T09:00:00Z",
     }));
-    const outcome = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    const outcome = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(outcome.status, "exception");
     assert.equal(outcome.code, "refund_unposted_order");
     void stored;
@@ -424,7 +430,7 @@ test("a refund behind an unposted order parks until the sale posts", { skip: !DB
 test("gift card tender pays back onto the same stored-value card", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const { channelId, accounts } = await setup(org, actor, "per_order");
     void accounts;
     const program = await withBypass(() => createProgram({
@@ -460,7 +466,7 @@ test("gift card tender pays back onto the same stored-value card", { skip: !DB }
       ],
     };
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     const before = (await withOrgContext(org.orgId, () => db.execute<{ balance_minor: string }>(sql`
       select balance_minor from stored_value_accounts where id = ${issued.accountId} and org_id = ${org.orgId}`))).rows[0]!;
     const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "1005", {
@@ -482,7 +488,7 @@ test("gift card tender pays back onto the same stored-value card", { skip: !DB }
       },
       occurredAt: "2026-07-16T09:00:00Z",
     }));
-    const outcome = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    const outcome = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(outcome.status, "posted");
     const after = (await withOrgContext(org.orgId, () => db.execute<{ balance_minor: string }>(sql`
       select balance_minor from stored_value_accounts where id = ${issued.accountId} and org_id = ${org.orgId}`))).rows[0]!;
@@ -496,7 +502,7 @@ test("gift card tender pays back onto the same stored-value card", { skip: !DB }
 test("a mixed kit restocks its stocked components and settles the service line in money", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const { channelId } = await setup(org, actor, "per_order");
     // A gift set: one stocked unit plus a commercial-only service line that
     // never touches the shelf (and carries no costing profile).
@@ -535,7 +541,7 @@ test("a mixed kit restocks its stocked components and settles the service line i
       tenders: [{ gateway: "shopify_payments", amountMinor: 2716n, giftCardExternalId: null, authorizationRef: "auth-kit-1" }],
     };
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     // The sale moved the stocked unit and nothing else.
     const sold = await stockPosition(org.orgId, org.items.fifo, org.stockLocationId);
     assert.equal(Number(sold.quantity), 9);
@@ -559,7 +565,7 @@ test("a mixed kit restocks its stocked components and settles the service line i
       },
       occurredAt: "2026-07-16T09:00:00Z",
     }));
-    const outcome = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    const outcome = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(outcome.status, "posted");
     assert.ok(outcome.documentId);
     assert.equal(await journalSum(org.orgId, outcome.documentId!), 0n);
@@ -585,7 +591,7 @@ test("a mixed kit restocks its stocked components and settles the service line i
 test("summary mode folds the day's refund into the batch", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const { channelId } = await setup(org, actor, "daily_summary");
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("1006")));
     const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "1006", {
@@ -595,8 +601,8 @@ test("summary mode folds the day's refund into the batch", { skip: !DB }, async 
       occurredAt: "2026-07-16T09:00:00Z",
     }));
     // The sale has not had its cut-off: the refund waits, never parks.
-    assert.equal((await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId))).status, "pending");
-    const outcome = await withBypass(() => postDueDailySummariesForOrg(org.orgId, actor));
+    assert.equal((await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId))).status, "pending");
+    const outcome = await withOrgContext(org.orgId, () => postDueDailySummariesForOrg(org.orgId, actor));
     // One summarized order plus one batched refund event.
     assert.equal(outcome.posted, 2);
     const refunded = (await withOrgContext(org.orgId, () => db.execute<{ posting_status: string; posting_document_id: string | null }>(sql`
@@ -620,7 +626,7 @@ test("summary mode folds the day's refund into the batch", { skip: !DB }, async 
 test("channel cash postings refuse while Cash sales is off", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
+    const actor = await withBypass(() => createWorkOperator(org.orgId, "Channel operator", ["cash_sales.read", "cash_sales.create", "cash_sales.post", "ar.read", "ar.create", "ar.post", "orders.fulfill"]));
     const { channelId } = await setup(org, actor, "per_order");
     // Sales Channels runs but Cash sales stays off: posting a cash sale or
     // refund would strand a document its own surface refuses, so both refuse
@@ -628,7 +634,7 @@ test("channel cash postings refuse while Cash sales is off", { skip: !DB }, asyn
     await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,cashSales}', 'false'::jsonb, true) where id = ${org.orgId}`);
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("1010")));
     await assert.rejects(
-      withBypass(() => postChannelOrder(org.orgId, actor, stored.id)),
+      withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id)),
       (error: unknown) => error instanceof CommerceError && /Cash sales is turned off/.test(error.message),
       "a paid channel order must not post a cash sale its surface hides",
     );
@@ -639,7 +645,7 @@ test("channel cash postings refuse while Cash sales is off", { skip: !DB }, asyn
       occurredAt: "2026-07-16T09:00:00Z",
     }));
     await assert.rejects(
-      withBypass(() => postChannelRefund(org.orgId, actor, event.eventId)),
+      withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId)),
       (error: unknown) => error instanceof CommerceError && /Cash sales is turned off/.test(error.message),
       "a channel refund must not post a cash refund its surface hides",
     );

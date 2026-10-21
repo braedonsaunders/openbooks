@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 // same files. Only the session gate is stubbed; handlers and storage are real.
 const stateKey = Symbol.for("openbooks.account-custom-refs-test");
 const routeState: {
-  authz: { user: { orgId: string; id: string }; permissions: Set<string>; allowedSubsidiaryIds: Set<string> | null } | null;
+  authz: { user: { roles: { key: string }[]; orgId: string; id: string }; permissions: Set<string>; allowedSubsidiaryIds: Set<string> | null } | null;
 } = { authz: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
@@ -60,7 +60,7 @@ test(
     try {
       const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
       routeState.authz = {
-        user: { orgId: org.orgId, id: adminId },
+        user: { roles: [], orgId: org.orgId, id: adminId },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };

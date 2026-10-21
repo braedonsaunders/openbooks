@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { lockAutopayEnrollmentAuthority } from "./autopay-enrollment.ts";
 import { db, withOrg } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { cmp, fromUnits, toUnits } from "../money/money.ts";
@@ -233,7 +234,7 @@ function attemptReference(attemptId: string): string {
  * (the post committed but the attempt update never did) is adopted instead
  * of minting a second receipt for the same collection.
  */
-export async function postCollectionReceipt(orgId: string, attemptId: string): Promise<string> {
+export async function postCollectionReceipt(orgId: string, attemptId: string): Promise<{ receiptId: string; status: "posted" | "pending_approval" }> {
   const rows = (await db.execute<{
     attempt_id: string;
     invoice_id: string;
@@ -245,10 +246,11 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
     document_number: string;
     open_balance: string;
     receipt_id: string | null;
+    enrollment_id: string;
   }>(sql`
     select a.id as "attempt_id", d.id as "invoice_id", d.party_id,
            d.subsidiary_id, d.currency, a.amount, c.default_bank_account_id as "bank_account_id",
-           d.document_number, d.open_balance, a.receipt_document_id as "receipt_id"
+           d.document_number, d.open_balance, a.receipt_document_id as "receipt_id", a.enrollment_id
       from collection_attempts a
       join documents d on d.id = a.invoice_id and d.org_id = a.org_id
       join customer_payment_methods m on m.id = a.payment_method_id and m.org_id = a.org_id
@@ -261,13 +263,16 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
   if (a.receipt_id) {
     const existing = (await db.execute<{ status: string }>(sql`
       select status from documents where id = ${a.receipt_id} and org_id = ${orgId}
+        and kind='customer_payment' and party_id=${a.party_id} and subsidiary_id=${a.subsidiary_id}
+        and currency=${a.currency} and reference_number=${attemptReference(attemptId)}
     `)).rows[0];
+    if (!existing) throw new AutopayError("The collection receipt does not match its invoice, legal entity, currency and collection reference. Review the native collection before retrying.");
     if (existing?.status === "posted") {
       await db.execute(sql`
         update collection_attempts set status = 'succeeded', updated_at = now()
          where id = ${attemptId} and org_id = ${orgId} and status <> 'succeeded'
       `);
-      return a.receipt_id;
+      return { receiptId: a.receipt_id, status: "posted" };
     }
   } else {
     // Adopt a receipt the interrupted tick posted but never linked.
@@ -283,7 +288,7 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
            set status = 'succeeded', receipt_document_id = ${adopted.id}, updated_at = now()
          where id = ${attemptId} and org_id = ${orgId}
       `);
-      return adopted.id;
+      return { receiptId: adopted.id, status: "posted" };
     }
   }
   if (!a.bank_account_id) {
@@ -307,11 +312,12 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
   }
   const onAccountAmount = fromUnits(toUnits(collected) - toUnits(invoicePortion));
   const allocations = [sameCurrencyAllocation(item!.lineId, invoicePortion)];
-  const payment = await createPaymentDocument({
+  const { actorId, allowedSubsidiaryIds } = await lockAutopayEnrollmentAuthority(orgId, a.enrollment_id, a.subsidiary_id);
+  const payment = a.receipt_id ? { id: a.receipt_id } : await createPaymentDocument({
     orgId,
     kind: "customer_payment",
-    createdBy: null,
-    allowedSubsidiaryIds: null,
+    createdBy: actorId,
+    allowedSubsidiaryIds,
     partyId: a.party_id,
     bankAccountId: a.bank_account_id,
     documentDate: await businessToday(orgId),
@@ -323,7 +329,11 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
     update collection_attempts set receipt_document_id = ${payment.id}, updated_at = now()
      where id = ${attemptId} and org_id = ${orgId}
   `);
-  await updateDraftPayment(
+  const current = (await db.execute<{status:string}>(sql`select status from documents where org_id=${orgId} and id=${payment.id}`)).rows[0];
+  if (!current) throw new AutopayError("The collection's retained receipt is unavailable. Review that collection before retrying.");
+  if (current.status === "pending_approval") return { receiptId: payment.id, status: "pending_approval" };
+  if (current.status !== "draft" && current.status !== "approved") throw new AutopayError("The retained collection receipt cannot be posted. Review its lifecycle before retrying collection.");
+  if (current.status === "draft") await updateDraftPayment(
     payment.id,
     {
       allocations,
@@ -332,24 +342,22 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
       feeIncomeAccountId: null,
       onAccountAmount,
     },
-    null,
+    actorId,
     orgId,
-    // Automated collection on the run's own receipt: no actor entity set
-    // exists, so explicit null names the unrestricted grant outright.
-    { allowedSubsidiaryIds: null },
+    { allowedSubsidiaryIds },
   );
-  const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, null);
-  if (submission.flowError) {
-    throw new AutopayError(`receipt approval could not be routed: ${submission.flowError}`);
-  }
-  if (submission.gated) {
-    await db.execute(sql`
+  if (current.status === "draft") {
+    const submission = await submitAndReleaseIfUngated("customer_payment", payment.id, actorId);
+    if (submission.flowError) throw new AutopayError(`receipt approval could not be routed: ${submission.flowError}`);
+    if (submission.gated) {
+      await db.execute(sql`
       update collection_attempts set status = 'processing', updated_at = now()
        where id = ${attemptId} and org_id = ${orgId}
     `);
-    return payment.id;
+      return { receiptId: payment.id, status: "pending_approval" };
+    }
   }
-  await postPaymentWithApplications(payment.id, allocations, undefined);
+  await postPaymentWithApplications(payment.id, undefined, actorId);
   const closed = (await db.execute<{ id: string }>(sql`
     update collection_attempts
        set status = 'succeeded', updated_at = now()
@@ -357,5 +365,5 @@ export async function postCollectionReceipt(orgId: string, attemptId: string): P
      returning id
   `));
   if (!closed.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to close over it");
-  return payment.id;
+  return { receiptId: payment.id, status: "posted" };
 }

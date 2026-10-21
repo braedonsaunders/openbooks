@@ -356,17 +356,21 @@ test("real pooled leases restore committed baseline rows and stay cross-tenant i
   const first = await createScratchOrg();
   const second = await createScratchOrg();
   const baseline = await withBypassContext(async () => {
-    const account = await db.execute(sql`select name from accounts where id = ${first.accounts.invAsset}`);
+    const account = await db.execute(sql`select name,type from accounts where id = ${first.accounts.invAsset}`);
     const org = await db.execute(sql`select settings from orgs where id = ${first.orgId}`);
     const book = await db.execute(sql`select name from accounting_books where id = ${first.bookId}`);
     const location = await db.execute(sql`select name from locations where id = ${first.locationId}`);
     const stock = await db.execute(sql`select code from stock_locations where id = ${first.stockLocationId}`);
     const secondAccount = await db.execute(sql`select name from accounts where id = ${second.accounts.invAsset}`);
-    return { account: account.rows[0].name, settings: org.rows[0].settings, book: book.rows[0].name, location: location.rows[0].name, stock: stock.rows[0].code, secondAccount: secondAccount.rows[0].name };
+    return { account: account.rows[0].name, accountType: account.rows[0].type, settings: org.rows[0].settings, book: book.rows[0].name, location: location.rows[0].name, stock: stock.rows[0].code, secondAccount: secondAccount.rows[0].name };
   });
   const addedId = randomUUID();
   await withBypassContext(() => db.transaction(async (tx) => {
-    await tx.execute(sql`update accounts set name = 'MUTATED BASELINE' where id = ${first.accounts.invAsset}`);
+    await tx.execute(sql`update accounts set name = 'MUTATED BASELINE',type='expense' where id = ${first.accounts.invAsset}`);
+    const journal = await tx.execute(sql`insert into journal_entries(org_id,book_id,period_id,subsidiary_id,entry_number,posting_date,status)
+      values(${first.orgId},${first.bookId},${first.periodId},${first.subsidiaryId},'FIXTURE-RESET','2026-07-15','draft') returning id`);
+    await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount)
+      values(${first.orgId},${journal.rows[0].id},1,${first.accounts.invAsset},${first.subsidiaryId},'1','CAD','1')`);
     await tx.execute(sql`update accounting_books set name = 'MUTATED BOOK' where id = ${first.bookId}`);
     await tx.execute(sql`update locations set name = 'MUTATED LOCATION' where id = ${first.locationId}`);
     await tx.execute(sql`update orgs set settings = '{"leakProbe":true}'::jsonb where id = ${first.orgId}`);
@@ -379,16 +383,17 @@ test("real pooled leases restore committed baseline rows and stay cross-tenant i
   const recycled = await createScratchOrg();
   assert.equal(recycled.orgId, first.orgId, "release must recycle the same bounded slot");
   const restored = await withBypassContext(async () => {
-    const account = await db.execute(sql`select name from accounts where id = ${recycled.accounts.invAsset}`);
+    const account = await db.execute(sql`select name,type from accounts where id = ${recycled.accounts.invAsset}`);
     const org = await db.execute(sql`select settings from orgs where id = ${recycled.orgId}`);
     const book = await db.execute(sql`select name from accounting_books where id = ${recycled.bookId}`);
     const location = await db.execute(sql`select name from locations where id = ${recycled.locationId}`);
     const stock = await db.execute(sql`select code from stock_locations where id = ${recycled.stockLocationId}`);
     const added = await db.execute(sql`select count(*)::int as count from accounts where id = ${addedId}`);
     const secondAccount = await db.execute(sql`select name from accounts where id = ${second.accounts.invAsset}`);
-    return { account: account.rows[0].name, settings: org.rows[0].settings, book: book.rows[0].name, location: location.rows[0].name, stock: stock.rows[0].code, added: added.rows[0].count, secondAccount: secondAccount.rows[0].name };
+    return { account: account.rows[0].name, accountType: account.rows[0].type, settings: org.rows[0].settings, book: book.rows[0].name, location: location.rows[0].name, stock: stock.rows[0].code, added: added.rows[0].count, secondAccount: secondAccount.rows[0].name };
   });
   assert.equal(restored.account, baseline.account, "baseline account update was restored");
+  assert.equal(restored.accountType, baseline.accountType, "account classification restores only after test journals are removed");
   assert.deepEqual(restored.settings, baseline.settings, "baseline org settings were restored");
   assert.equal(restored.book, baseline.book, "baseline book update was restored");
   assert.equal(restored.location, baseline.location, "baseline location update was restored");

@@ -534,7 +534,7 @@ for (const exhaustPool of [false, true]) {
           return result;
         };
         const beforeRefusal = await snapshot();
-        await assert.rejects(reverse(laterReceipt.movementId), /exact receipt reversal is unavailable for blended provenance/);
+        await assert.rejects(reverse(laterReceipt.movementId), /blended into another cost layer.*negative inventory adjustment/s);
         assert.deepEqual(await snapshot(), beforeRefusal, "refused blended receipt reversal must leave all accounting and audit evidence unchanged");
       };
       await assertBlendedReceiptRefusal();

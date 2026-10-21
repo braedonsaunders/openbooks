@@ -241,7 +241,7 @@ async function uiSubmitAndPost(page: Page, drawerUrl: string, expectedBadge: 'Op
   await page.locator('button', { hasText: /^Post$/ }).click();
   const res = await posted;
   expect(res.status(), await res.text()).toBe(200);
-  await expect(drawer2.getByText(expectedBadge)).toBeVisible({ timeout: 15000 });
+  await expect(drawer2.getByText(expectedBadge, { exact: true })).toBeVisible({ timeout: 15000 });
 }
 
 /** Read a report table as rows of cell texts. */

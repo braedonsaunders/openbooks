@@ -1944,6 +1944,8 @@ export async function probeScratchOrgTouchedTables(
  */
 const DEFERRED_RESTORE_COLUMNS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["accounting_books", new Set(["is_primary"])],
+  ["accounts", new Set(["type"])],
+  ["orgs", new Set(["env_kind"])],
 ]);
 
 async function restoreScratchOrgBaseline(
@@ -1959,7 +1961,10 @@ async function restoreScratchOrgBaseline(
   const restoreErrors = new Map<string, string>();
   for (let pass = 0; pass < 10 && restoreRemaining.length > 0; pass += 1) {
     const failed = await db.transaction(async (tx) => {
-      await setTeardownGucs(tx);
+      await guardTeardownTransaction(tx, org.orgId, "scratch");
+      // Template restoration is part of the same disposable tenant wipe.
+      // Production recipe guards admit this only for an identified sandbox.
+      await tx.execute(sql`update orgs set env_kind='sandbox' where id=${org.orgId}`);
       // Baseline documents and their source entries reference each other, so
       // reinserting the template in any fixed table order deadlocks without
       // replica mode. Both links are DEFERRABLE: defer exactly those two, the
@@ -2007,6 +2012,13 @@ async function restoreScratchOrgBaseline(
         const savepoint = `scratch_fixture_restore_${pass}_${index}`;
         await tx.execute(sql.raw(`savepoint ${savepoint}`));
         try {
+          // Recipe templates can predate the test's approved production revision.
+          // The disposable database owner restores only this identified tenant;
+          // table locks keep the temporary guard change inside this transaction.
+          if (table === "bom_components") {
+            await tx.execute(sql`alter table public.bom_components disable trigger production_bom_revision_guard`);
+            await tx.execute(sql`alter table public.bom_components disable trigger production_bom_revision_complete_guard`);
+          }
           // A test row can carry the same unique key as a deleted baseline
           // row (a reinstalled BOM recipe, a replacement default calendar):
           // the re-insert below would trip the constraint while the test
@@ -2044,6 +2056,8 @@ async function restoreScratchOrgBaseline(
                  set ${sql.raw(assignments)}
                 from ${sql.raw(snapshot)} as baseline
                where target.id = baseline.id and ${ownerColumnFragment} = ${org.orgId}
+                 and row(${sql.raw(mutable.map((column) => `target.${quoteIdentifier(column)}`).join(", "))})
+                   is distinct from row(${sql.raw(mutable.map((column) => `baseline.${quoteIdentifier(column)}`).join(", "))})
             `);
           }
           await tx.execute(sql`
@@ -2051,6 +2065,10 @@ async function restoreScratchOrgBaseline(
             select ${sql.raw(insertColumns)} from ${sql.raw(snapshot)} as baseline
              where not exists (select 1 from ${sql.raw(target)} as target where target.id = baseline.id)
           `);
+          if (table === "bom_components") {
+            await tx.execute(sql`alter table public.bom_components enable trigger production_bom_revision_guard`);
+            await tx.execute(sql`alter table public.bom_components enable trigger production_bom_revision_complete_guard`);
+          }
           await tx.execute(sql.raw(`release savepoint ${savepoint}`));
         } catch (error) {
           await tx.execute(sql.raw(`rollback to savepoint ${savepoint}`));
@@ -2144,7 +2162,8 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
         // env_kind='production' for the next lease. No application or shared DB
         // path can enable pooling without the database marker checked above.
         await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${org.orgId} and name like 'Scratch %'`);
-        await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey deferred`);
+        await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey,
+          time_entries_invoiced_by_line_id_fkey, time_entries_cost_journal_entry_id_fkey, mfg_receipt_rework_source_fk deferred`);
 
         // These guards are intentionally unconditional. Disable only the named
         // test-evidence triggers for this transaction, exactly as full teardown
@@ -2241,7 +2260,8 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
         // the full destructive teardown runs in its prep transaction.
         await tx.execute(sql`delete from auth_password_resets
           where user_id in (select id from users where org_id = ${org.orgId})`);
-        await tx.execute(sql`update time_entries set invoiced_by_line_id = null, cost_journal_entry_id = null where org_id = ${org.orgId}`);
+        await tx.execute(sql`update time_entries set invoiced_by_line_id = null, cost_journal_entry_id = null
+          where org_id = ${org.orgId} and production_consumed_operation_id is null`);
         await tx.execute(sql`update payment_schedules set last_payment_run_id = null where org_id = ${org.orgId}`);
         // Sweep the ordered deletes until a full sweep converges or stops
         // making progress. Every schema FK is deferrable (initially

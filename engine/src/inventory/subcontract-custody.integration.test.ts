@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db,withBypassContext } from "../platform/db.ts";
+import { db,withOrgTransaction,withBypassContext } from "../platform/db.ts";
 import { createScratchOrg,dropScratchOrg } from "../testing/fixtures.ts";
 import { createWorkOperator } from "../testing/manufacturing.ts";
 import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile } from "./profile-policy.ts";
@@ -23,7 +23,7 @@ test("vendor custody preserves valued ownership, excludes sale, and refuses depe
   try {
     const actor=await run(()=>createWorkOperator(org.orgId,"Production custodian",["items.post","manufacturing.manage","admin.setup.manage"]));
     const custody=randomUUID();
-    const configure=()=>run(()=>db.transaction(tx=>validateSubcontractLocationConfiguration(tx,org.orgId,actor,{kind:"subcontract",custodianPartyId:org.vendorId,inventoryOwnership:"owned"})));
+    const configure=()=>withOrgTransaction(org.orgId,()=>validateSubcontractLocationConfiguration(db,org.orgId,actor,{kind:"subcontract",custodianPartyId:org.vendorId,inventoryOwnership:"owned"}));
     await assert.rejects(configure(),/Manufacturing Subcontracting/);
     await run(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true,"manufacturing":true,"manufacturingSubcontract":true}'::jsonb) where id=${org.orgId} returning id`));
     await configure();
@@ -129,9 +129,9 @@ test("moving-average vendor custody retains distinct shipment costs and returns 
   const first=await ship('3'),second=await ship('9');assert.equal(first.value,'6.0000');assert.equal(second.value,'18.0000');
   const source=(id:string)=>run(()=>getOnHandWith(db,org.orgId,item,custody,{subsidiaryId:org.subsidiaryId,sourceReceiptMovementId:id}));
   assert.equal((await source(first.toMovementId)).value,'6.0000');assert.equal((await source(second.toMovementId)).value,'18.0000');
-  const returned=await run(()=>db.transaction(tx=>transferInventoryTx(tx,org.orgId,actor,{itemId:item,fromStockLocationId:custody,toStockLocationId:org.stockLocationId,quantity:'2',subsidiaryId:org.subsidiaryId,date:org.date,sourceReceiptMovementId:second.toMovementId,expectedSourceValue:'18'})));
+  const returned=await withOrgTransaction(org.orgId,()=>transferInventoryTx(db,org.orgId,actor,{itemId:item,fromStockLocationId:custody,toStockLocationId:org.stockLocationId,quantity:'2',subsidiaryId:org.subsidiaryId,date:org.date,sourceReceiptMovementId:second.toMovementId,expectedSourceValue:'18'}));
   assert.equal(returned.value,'18.0000');assert.equal((await source(second.toMovementId)).quantity,'0.0000');assert.equal((await source(first.toMovementId)).value,'6.0000');
-  await assert.rejects(run(()=>db.transaction(tx=>transferInventoryTx(tx,org.orgId,actor,{itemId:item,fromStockLocationId:custody,toStockLocationId:org.stockLocationId,quantity:'2',subsidiaryId:org.subsidiaryId,date:org.date,sourceReceiptMovementId:second.toMovementId,expectedSourceValue:'18'}))));
+  await assert.rejects(withOrgTransaction(org.orgId,()=>transferInventoryTx(db,org.orgId,actor,{itemId:item,fromStockLocationId:custody,toStockLocationId:org.stockLocationId,quantity:'2',subsidiaryId:org.subsidiaryId,date:org.date,sourceReceiptMovementId:second.toMovementId,expectedSourceValue:'18'})));
   assert.equal((await source(first.toMovementId)).quantity,'2.0000');assert.equal((await source(first.toMovementId)).value,'6.0000');
  } finally {await run(()=>dropScratchOrg(org.orgId));}
 });

@@ -11,7 +11,7 @@ import { NonprofitError, NonprofitPostingError } from "./errors.ts";
 import { setFramework } from "./frameworks.ts";
 import { provisionFundAccounting } from "./provision.ts";
 import { createFundRelease, getFundRelease, listFundReleases, submitFundRelease, voidFundRelease } from "./releases.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg, seedApprovalFlow } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 test("fund releases route approval, post and reverse, and refuse unsafe class or balance changes", { skip: !DB }, async () => {
@@ -19,6 +19,8 @@ test("fund releases route approval, post and reverse, and refuse unsafe class or
   try {
     const drafter = await withBypass(() => createScratchUser(org.orgId, "Release Drafter", "accountant"));
     const approver = await withBypass(() => createScratchUser(org.orgId, "Release Approver", "approver"));
+    await grantScratchPermissions(org.orgId, drafter, ["funds.manage"]);
+    await grantScratchPermissions(org.orgId, approver, ["funds.manage"]);
     installEngineSeams();
 
     await assert.rejects(

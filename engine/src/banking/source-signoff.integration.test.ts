@@ -1,3 +1,10 @@
+import { before as initializeNativeComposition } from "node:test";
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+import { createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -14,7 +21,7 @@ import { ensureCloseDefaults } from "../close/defaults.ts";
 import { db } from "../platform/db.ts";
 import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 
 /**
  * Source-evidenced sign-off (0158): the mirror carries the source system's
@@ -79,7 +86,7 @@ async function clearedCount(orgId: string, accountId: string): Promise<number> {
 test("source evidence policy defaults on and seeds through close defaults", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
     assert.equal(await sourceEvidencePolicyActive(org.orgId), true);
     await ensureCloseDefaults(org.orgId, actor);
     const row = (await db.execute<{ code: string; is_active: boolean }>(sql`
@@ -96,7 +103,7 @@ test("source evidence policy defaults on and seeds through close defaults", { sk
 test("applySourceLineEvidence stamps unanimous groups and skips the rest", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     const full = await postBankJournal(org, actor, ["100", "50"], "full");
     const mixed = await postBankJournal(org, actor, ["25", "30"], "mixed");
@@ -144,7 +151,7 @@ test("applySourceLineEvidence stamps unanimous groups and skips the rest", { ski
 test("applySourceLineEvidence refuses a group that omits some of the entry's lines", async () => {
   const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     // Two bank lines on one entry, but evidence for only the first: the
     // group is incomplete, so NEITHER line may be stamped — the stamp targets
@@ -179,7 +186,7 @@ test("applySourceLineEvidence refuses a group that omits some of the entry's lin
 test("signOffFromSourceEvidence signs off fully-cleared accounts without statements", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
     const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     const entry = await postBankJournal(org, actor, ["308", "21"], "aug");
@@ -232,7 +239,7 @@ test("signOffFromSourceEvidence signs off fully-cleared accounts without stateme
 test("partially-cleared accounts stay open with exact counts", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
     const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     const cleared = await postBankJournal(org, actor, ["100"], "cleared");
@@ -262,7 +269,7 @@ test("partially-cleared accounts stay open with exact counts", { skip: !process.
 test("a source-cleared entry reversed later signs off with both legs and a net balance", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     const entry = await postBankJournal(org, actor, ["100"], "reversed");
     const mirror = (await reverseProjectGlEntry(org.orgId, actor, entry, "Deposit returned by the bank", "2026-07-20"))!;
@@ -279,7 +286,7 @@ test("a source-cleared entry reversed later signs off with both legs and a net b
 test("source sign-off advances through later dates and yields to open sessions", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
     const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     const entry = await postBankJournal(org, actor, ["100"], "first");
@@ -315,7 +322,7 @@ test("source sign-off advances through later dates and yields to open sessions",
 test("source sign-off refuses without evidence and when the policy is off", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+    const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
     const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     await postBankJournal(org, actor, ["100"], "unstamped");

@@ -55,6 +55,16 @@ export const ADJUDICATED_HOLIDAY_HOURS_OPERATION = "adjudicated_holiday_hours";
 export const HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION =
   "historical_translation_contribution";
 
+/** Each accounting event uses its native feature at submission as well as application. */
+export function financialChangeFeature(domain: FinancialChangeDomain, operation: string) {
+  if (domain === "consolidation") {
+    if (operation === HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION) return "multiCurrency";
+    // Reversing an existing OCI designation remains available after configuration is disabled.
+    if (operation === "net_investment_oci_reversal") return null;
+  }
+  return FINANCIAL_CHANGE_AUTHORITY[domain].feature;
+}
+
 export class FinancialChangeFeatureError extends Error {
   readonly status = 422;
   readonly name = "FinancialChangeFeatureError";

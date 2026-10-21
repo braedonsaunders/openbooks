@@ -73,6 +73,8 @@ export type AutomationRunResult = {
   runId: string;
   status: string;
   steps: RunStep[];
+  /** An existing durable occurrence was returned without executing its actions. */
+  replayed?: true;
 };
 
 export class AutomationExecuteError extends Error {}
@@ -503,7 +505,7 @@ export async function executeAutomation(input: {
     `);
     if (duplicate.rows[0]) {
       const row = duplicate.rows[0];
-      return { runId: row.id, status: row.status, steps: [] };
+      return { runId: row.id, status: row.status, steps: [], replayed: true };
     }
     const claimed = await db.execute<{ id: string }>(sql`
       insert into automation_runs
@@ -528,7 +530,7 @@ export async function executeAutomation(input: {
       if (!row) {
         throw new AutomationExecuteError("the run claim raced and vanished — retry the run");
       }
-      return { runId: row.id, status: row.status, steps: [] };
+      return { runId: row.id, status: row.status, steps: [], replayed: true };
     }
     const runId: string = claimed.rows[0]!.id;
 

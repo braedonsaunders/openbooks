@@ -175,7 +175,8 @@ export const TENANT_TABLE_POLICIES = {
   "app_runs": "clone:catalog-uuid-rebase",
   "app_storage": "clone:catalog-uuid-rebase",
   "app_versions": "clone:catalog-uuid-rebase",
-  "application_idempotency_keys": "clone:catalog-uuid-rebase",
+  // Operation receipts belong to the executing environment, not its copied business history.
+  "application_idempotency_keys": "skip:no-copy",
   "applications": "clone:catalog-uuid-rebase",
   "approval_delegations": "clone:catalog-uuid-rebase",
   "apps": "clone:catalog-uuid-rebase",

@@ -28,6 +28,7 @@ import {
   saveSchedule,
 } from "./documents/retention.ts";
 import { buildExport, claimQueuedExport, downloadExport, listExports, requestExport } from "./documents/dsar.ts";
+import { createLeaveType, createLeavePolicy, fileLeaveRequest, submitLeaveRequest } from "./leave.ts";
 
 /**
  * HR-19 retention + DSAR DB coverage (integration partition): the
@@ -369,14 +370,19 @@ test("the tick expires stale sends", { skip: !DB }, async () => {
 test("DSAR zip contents against a seeded person", { skip: !DB }, async () => {
   await withHarness(() => setupRetentionHarness(), async (h) => {
     // Leave, time, a pay stub, and an HR document for the subject.
-    const leaveType = randomUUID();
-    await db.execute(sql`
-      insert into hrm_leave_types (id, org_id, code, name) values (${leaveType}, ${h.org.orgId}, 'VAC', 'Vacation')
-    `);
-    await db.execute(sql`
-      insert into hrm_leave_requests (org_id, employment_id, leave_type_id, starts_on, ends_on, hours, status, decided_by, decided_at, decision_reason)
-      values (${h.org.orgId}, ${h.employmentId}, ${leaveType}, '2026-08-04'::date, '2026-08-08'::date, 40.00, 'approved', ${h.hrId}, now(), 'seeded decision')
-    `);
+    const { installEngineSeams } = await import("../composition/install.ts");
+    installEngineSeams();
+    await grantPermissions(h.org.orgId, h.hrId, ["hrm.leave.manage", "hrm.leave.request"]);
+    const leaveType = await createLeaveType({ orgId: h.org.orgId, actorId: h.hrId,
+      code: "VAC", name: "Vacation", paid: true, valueCrossing: "none" });
+    await createLeavePolicy({ orgId: h.org.orgId, actorId: h.hrId, leaveTypeId: leaveType.id,
+      appliesTo: { employer_subsidiary_id: null, department_id: null },
+      accrualRule: { kind: "per_year", hours: "120" }, carryoverRule: { kind: "none" },
+      minimumNoticeDays: 0, effectiveFrom: "2020-01-01" });
+    const leave = await fileLeaveRequest({ orgId: h.org.orgId, actorId: h.hrId,
+      employmentId: h.employmentId, leaveTypeId: leaveType.id, startsOn: "2026-08-04",
+      endsOn: "2026-08-08", hours: "40", onBehalf: true, reason: "Record the employee's confirmed leave" });
+    assert.equal((await submitLeaveRequest({ orgId: h.org.orgId, actorId: h.hrId, requestId: leave.id })).status, "approved");
     await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status)
       values (${h.org.orgId}, ${h.partyId}, '2026-09-15'::date, '8.0000', 'approved')

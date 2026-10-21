@@ -352,11 +352,11 @@ async function applyBankChange(
   }
   const inserted = (await exec.execute<{ id: string }>(sql`
     insert into party_bank_accounts
-      (org_id, party_id, bank_name, country, currency, routing,
+      (org_id, party_id, source_change_request_id, bank_name, country, currency, routing,
        account_number_encrypted, account_last_four,
        approval_status, is_active, approved_at, approved_by,
        submitted_by, submitted_at, created_by, updated_by)
-    values (${orgId}, ${partyId}, ${payload.bankName}, ${payload.country ?? null},
+    values (${orgId}, ${partyId}, ${request.id}, ${payload.bankName}, ${payload.country ?? null},
             ${payload.currency ?? null}, ${JSON.stringify(payload.routing ?? {})}::jsonb,
             ${payload.sealedAccount}, ${payload.accountLastFour},
             'approved', true, ${recordedAtIso.slice(0, 10)}::date, ${actorId},

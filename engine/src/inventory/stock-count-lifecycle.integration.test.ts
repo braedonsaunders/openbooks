@@ -1,3 +1,4 @@
+import { createInventoryCountFixture } from "../testing/inventory-counts.ts";
 import { confirmCountObservation } from "../testing/inventory-counts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -13,7 +14,7 @@ import {
   submitStockCountForReview,
 } from "./stock-counts.ts";
 import { InventoryError } from "./contracts.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { receiveTen } from "./integration-seeds.ts";
 
 /**
@@ -22,7 +23,7 @@ import { receiveTen } from "./integration-seeds.ts";
  * Runs in the integration partition only (filename), against a scratch org.
  */
 
-async function openCountedReview(org: ScratchOrg, counted: string): Promise<{ countId: string; lineId: string }> {
+async function openCountedReview(org: ScratchOrg & { actorId: string }, counted: string): Promise<{ countId: string; lineId: string }> {
   const count = await createStockCount(org.orgId, null, {
     locationId: org.locationId,
     subsidiaryId: org.subsidiaryId,
@@ -34,7 +35,7 @@ async function openCountedReview(org: ScratchOrg, counted: string): Promise<{ co
     select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
   await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: counted });
   await confirmCountObservation(org.orgId,count.id,lineId,counted);
-  await submitStockCountForReview(org.orgId, null, count.id);
+  await submitStockCountForReview(org.orgId, org.actorId, count.id);
   return { countId: count.id, lineId };
 }
 
@@ -53,7 +54,7 @@ async function setInventoryFeature(orgId: string, enabled: boolean): Promise<voi
 }
 
 test("duplicate count lines are refused at creation, naming the subject", async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     const before = (await db.execute<{ n: string }>(sql`
@@ -84,7 +85,7 @@ test("duplicate count lines are refused at creation, naming the subject", async 
 });
 
 test("the same item at two warehouses is two subjects, not a duplicate", async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     // A second stock location under the SAME business location: one count
@@ -109,7 +110,7 @@ test("the same item at two warehouses is two subjects, not a duplicate", async (
 });
 
 test("distinct lots are distinct subjects: the refusal names duplicates, not lot validation", async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await db.execute(sql`update item_inventory_profiles set tracking='lot' where org_id=${org.orgId} and item_id=${org.items.fifo}`);
     const lotA = randomUUID();
@@ -147,7 +148,7 @@ test("distinct lots are distinct subjects: the refusal names duplicates, not lot
 });
 
 test("storage refuses a duplicate subject, including the NULL-lot case (0293)", async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     const count = await createStockCount(org.orgId, null, {
@@ -184,7 +185,7 @@ test("creating a count binds its multi-id lookups as one pg array", async () => 
   // drizzle, so `= any($1)` receives a bare scalar and every creation with
   // lines dies with 22P02. The house uuidArray helper binds one pg-array
   // param instead. Two different items force the multi-element shape.
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     await receiveInventory(org.orgId, null, {
@@ -212,7 +213,7 @@ test("creating a count binds its multi-id lookups as one pg array", async () => 
 });
 
 test("disabled Inventory refuses every count mutation inside its own transaction", async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     await setInventoryFeature(org.orgId, false);
@@ -234,7 +235,7 @@ test("disabled Inventory refuses every count mutation inside its own transaction
         recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: "9" }),
         /inventory feature is disabled/i,
       );
-      await assert.rejects(submitStockCountForReview(org.orgId, null, count.id), /inventory feature is disabled/i);
+      await assert.rejects(submitStockCountForReview(org.orgId, org.actorId, count.id), /inventory feature is disabled/i);
     } finally {
       await setInventoryFeature(org.orgId, true);
     }
@@ -244,7 +245,7 @@ test("disabled Inventory refuses every count mutation inside its own transaction
 });
 
 test("a zero-variance post with Inventory disabled refuses instead of marking posted", async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     // Counted == expected: no line ever reaches adjustInventory's own gate,
@@ -253,7 +254,7 @@ test("a zero-variance post with Inventory disabled refuses instead of marking po
     await setInventoryFeature(org.orgId, false);
     try {
       await assert.rejects(
-        withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId)),
+        withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, countId)),
         /inventory feature is disabled/i,
       );
     } finally {
@@ -266,12 +267,12 @@ test("a zero-variance post with Inventory disabled refuses instead of marking po
 });
 
 test("posting outside a caller-owned transaction refuses instead of half-posting", async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     const { countId } = await openCountedReview(org, "9");
     const movementsBefore = await movementCount(org.orgId);
-    await assert.rejects(postStockCount(org.orgId, null, countId), (e: unknown) => {
+    await assert.rejects(postStockCount(org.orgId, org.actorId, countId), (e: unknown) => {
       assert.ok(e instanceof InventoryError);
       // The refusal must name the remedy, and the remedy must exist:
       // executeIdempotentInventoryAction is the production posting path.
@@ -287,11 +288,11 @@ test("posting outside a caller-owned transaction refuses instead of half-posting
 });
 
 test("posting inside the caller's transaction applies each variance once and flips to posted", async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     const { countId } = await openCountedReview(org, "9");
-    const result = await withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId));
+    const result = await withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, countId));
     assert.equal(result.status, "posted");
     assert.equal(result.lines.length, 1);
     assert.equal(result.lines[0]!.variance, "-1.0000");
@@ -299,7 +300,7 @@ test("posting inside the caller's transaction applies each variance once and fli
     assert.ok(result.lines[0]!.entryId, "a nonzero variance posts a journal entry");
     assert.equal(await countStatus(org.orgId, countId), "posted");
     await assert.rejects(
-      withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId)),
+      withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, countId)),
       /already posted/i,
       "a posted count is immutable — a second post refuses, never double-applies",
     );
@@ -309,7 +310,7 @@ test("posting inside the caller's transaction applies each variance once and fli
 });
 
 test("a failing post rolls every variance back and keeps the count in review", async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     // Two lines: the first posts, then the second line is deleted mid-flight
@@ -325,12 +326,12 @@ test("a failing post rolls every variance back and keeps the count in review", a
       select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
     await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: "9" });
     await confirmCountObservation(org.orgId,count.id,lineId,"9");
-    await submitStockCountForReview(org.orgId, null, count.id);
+    await submitStockCountForReview(org.orgId, org.actorId, count.id);
     const movementsBefore = await movementCount(org.orgId);
     await setInventoryFeature(org.orgId, false);
     try {
       await assert.rejects(
-        withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, count.id)),
+        withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, count.id)),
         /inventory feature is disabled/i,
       );
     } finally {
@@ -345,14 +346,14 @@ test("a failing post rolls every variance back and keeps the count in review", a
 
 
 test("found stock with nothing on hand to average refuses until its unit cost is entered", async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     // Nothing on hand: the count finds 10 units with no average to carry
     // them at. Booking them at zero would make their later sale cost zero.
     const { countId, lineId } = await openCountedReview(org, "10");
     const movementsBefore = await movementCount(org.orgId);
     await assert.rejects(
-      withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId)),
+      withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, countId)),
       (e: unknown) => {
         assert.ok(e instanceof InventoryError);
         assert.match((e as Error).message, /found 10\.0000 of item .+ which has no cost basis/);
@@ -364,7 +365,7 @@ test("found stock with nothing on hand to average refuses until its unit cost is
     assert.equal(await movementCount(org.orgId), movementsBefore);
 
     const result = await withOrgTransaction(org.orgId, () =>
-      postStockCount(org.orgId, null, countId, { foundUnitCosts: { [lineId]: "4.25" } }));
+      postStockCount(org.orgId, org.actorId, countId, { foundUnitCosts: { [lineId]: "4.25" } }));
     const movement = (await db.execute<{ total_value: string }>(sql`
       select total_value::text from inventory_movements where org_id = ${org.orgId} and id = ${result.lines[0]!.movementId}`)).rows[0]!;
     assert.equal(movement.total_value, "42.5000");

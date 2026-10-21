@@ -23,7 +23,7 @@ registerHooks({
       import { permissionSetCovers } from '@openbooks/engine/organization/permissions';
       export async function getAuthz() {
         const s = globalThis.__documentEditBoundaryState;
-        return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['ap.read', 'ap.create', 'ap.post']), allowedSubsidiaryIds: null };
+        return { user: { roles: [], orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['ap.read', 'ap.create', 'ap.post']), allowedSubsidiaryIds: null };
       }
       // Faithful permission checks over the same allow-list: the generic
       // document endpoints resolve the kind's read/edit grants through the

@@ -1,14 +1,15 @@
+import { createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "../platform/db.ts";
+import { db, withOrgContext, withBypass } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { unapplyCreditSettlement } from "./credit-settlement.ts";
 import { InvoiceWriteOffConflictError, writeOffInvoice } from "./invoice-write-off.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -25,7 +26,7 @@ async function withWriteOffOrg(
 ): Promise<void> {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, displayName, "admin"));
+    const userId = await withBypass(() => createWorkOperator(org.orgId, displayName, ["ar.read", "ar.create", "ar.post", "ar.pay"]));
     await work(org, userId);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -127,7 +128,7 @@ function writeOff(
   userId: string,
   input: { invoiceId: string; amount: string; key: string; reason?: string; date?: string },
 ) {
-  return withBypass(() =>
+  return withOrgContext(org.orgId, () =>
     writeOffInvoice(
       org.orgId,
       userId,
@@ -272,7 +273,7 @@ test("an allowance for doubtful accounts takes precedence, and voiding the write
     // the settlement is live, so the application is released first.
     await withBypass(() => unapplyCreditSettlement(org.orgId, userId, result.applicationIds[0]!, null));
     assert.equal(await openItemBalance(org.orgId, invoiceId), "210.0000");
-    const voided = await withBypass(() => requestDocumentVoid({
+    const voided = await withOrgContext(org.orgId, () => requestDocumentVoid({
       documentId: result.creditMemoId, orgId: org.orgId, actorId: userId,
       reason: "Write-off recorded in error", reversalDate: org.date, source: "api",
     }));

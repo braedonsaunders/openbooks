@@ -159,12 +159,10 @@ test('app management authors files, preserves drafts, exports, imports, versions
       await expect(drawer.getByRole('alert')).toHaveCount(0)
     }
     await drawer.getByRole('button',{name:'Overview',exact:true}).click()
-    await drawer.getByRole('button',{name:'Publish to App Library',exact:true}).click()
-    await page.getByRole('button',{name:'Confirm',exact:true}).click()
-    await expect(drawer.getByRole('button',{name:'Unpublish listing',exact:true})).toBeVisible()
-    await drawer.getByRole('button',{name:'Unpublish listing',exact:true}).click()
-    await page.getByRole('button',{name:'Confirm',exact:true}).click()
-    await expect(drawer.getByRole('button',{name:'Publish to App Library',exact:true})).toBeVisible()
+    await expect(drawer.getByRole('button',{name:'Publish to App Library',exact:true})).toHaveCount(0)
+    const publication = await page.request.post('/api/apps/marketplace',{headers,data:{action:'publish',key}})
+    expect(publication.status()).toBe(403)
+    expect((await publication.json()).error).toContain('requires a platform administrator')
     const exported = await page.request.get(`/api/apps/${key}/package?download=1`)
     expect(exported.status()).toBe(200)
     const zip = await exported.body()
@@ -173,7 +171,7 @@ test('app management authors files, preserves drafts, exports, imports, versions
     await expect(page).toHaveURL(/draft=/)
     await expect(page.getByRole('button',{name:'Package',exact:true})).toBeVisible()
     await page.getByRole('button',{name:'Discard draft',exact:true}).click()
-    // F-t10-007: discard always confirms, even on an unedited imported draft.
+    // Imported drafts retain the same explicit discard confirmation as authored drafts.
     await page.getByRole('button',{name:'Confirm',exact:true}).click()
     await expect(page).toHaveURL('/admin/apps')
   } finally {

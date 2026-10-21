@@ -43,7 +43,15 @@ const TICK_SPEC = {
 } as const;
 
 async function setupTickHarness(): Promise<Harness> {
-  return setupHarness(TICK_SPEC);
+  const harness = await setupHarness(TICK_SPEC);
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{timeZone}','"UTC"'::jsonb) where id=${harness.org.orgId}`);
+  return harness;
+}
+
+function dateRelativeTickNow(): Date {
+  const value = new Date();
+  value.setUTCHours(10, 0, 0, 0);
+  return value;
 }
 
 async function seedEmployment(orgId: string, subsidiaryId: string, serviceStart: string): Promise<string> {
@@ -148,7 +156,7 @@ test("a date_relative scan visits every match past row 200", { skip: !DB }, asyn
       actions: [{ kind: "send_notification", to: "initiator", body: "bulk fired" }],
     });
     await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
-    const summary = await runAutomationTick(new Date());
+    const summary = await runAutomationTick(dateRelativeTickNow());
     assert.equal(summary.dateRelativeFailed, 0);
     assert.equal(summary.dateRelativeFired, COUNT);
     const runs = (await db.execute<{ n: number }>(sql`
@@ -216,7 +224,7 @@ test("the tick fires as the publisher when the oldest user holds no permission",
       actions: [{ kind: "send_notification", to: "initiator", body: "publisher fired" }],
     });
     await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
-    const summary = await runAutomationTick(new Date());
+    const summary = await runAutomationTick(dateRelativeTickNow());
     assert.equal(summary.dateRelativeFailed, 0);
     assert.equal(summary.dateRelativeFired, 1);
     const run = (await db.execute<{ status: string; createdBy: string | null }>(sql`
@@ -247,7 +255,7 @@ test("a publisher who lost automations.run fails loudly with the remedy", { skip
     await db.execute(sql`
       delete from user_permission_overrides where org_id = ${h.org.orgId} and user_id = ${h.adminId} and permission = 'automations.run'
     `);
-    const summary = await runAutomationTick(new Date());
+    const summary = await runAutomationTick(dateRelativeTickNow());
     assert.equal(summary.dateRelativeFired, 0);
     assert.equal(summary.dateRelativeFailed, 1);
     assert.ok(
@@ -434,7 +442,7 @@ test("a failed date_relative subject is not counted fired", { skip: !DB }, async
       actions: [FAILING_ACTION],
     });
     await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
-    const summary = await runAutomationTick(new Date());
+    const summary = await runAutomationTick(dateRelativeTickNow());
     assert.equal(summary.dateRelativeFired, 0);
     assert.equal(summary.dateRelativeFailed, 1);
     const failed = (await db.execute<{ n: number }>(sql`
@@ -503,5 +511,23 @@ test("a failed event backs off, is not reclaimed early, and parks dead at the ce
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id} and status = 'failed'
     `)).rows[0]!.n;
     assert.ok(failedRuns >= 1, "every failed firing keeps its durable run row");
+  }, { bypass: true });
+});
+
+
+test("daily automation uses the organization's business timezone and keeps its wall-clock gate", { skip: !DB }, async () => {
+  await withHarness(setupTickHarness, async (h) => {
+    const day = new Date().toISOString().slice(0, 10);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{timeZone}','"America/Toronto"'::jsonb) where id=${h.org.orgId}`);
+    await seedEmployment(h.org.orgId, h.org.subsidiaryId, day);
+    const recipe = await createAutomation({ orgId: h.org.orgId, actorId: h.adminId,
+      name: "Business morning", trigger: { kind: "date_relative", entity: "employment", dateField: "service_start", offsetDays: 0, direction: "before", atTime: "09:00" },
+      rules: {}, conditions: {}, actions: [{ kind: "send_notification", to: "initiator", body: "Business day started" }] });
+    await setAutomationStatus({orgId:h.org.orgId,actorId:h.adminId,automationId:recipe.id,status:"enabled"});
+    assert.equal((await runAutomationTick(new Date(`${day}T12:30:00Z`))).dateRelativeFired, 0,
+      "a UTC morning cannot advance the tenant's local gate");
+    assert.equal((await runAutomationTick(new Date(`${day}T15:00:00Z`))).dateRelativeFired, 1);
+    assert.equal((await runAutomationTick(new Date(`${day}T15:00:00Z`))).dateRelativeFired, 0,
+      "the same local business occurrence is recorded once");
   }, { bypass: true });
 });

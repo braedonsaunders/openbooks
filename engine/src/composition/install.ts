@@ -1,3 +1,5 @@
+import { lockPaymentAttempt } from "../payments/payment-attempt-lock.ts";
+import { approveBatch, rejectBatch } from "../hrm/field-time/crew.ts";
 import { withdrawCloseRunSubmission } from "../close/approvals.ts";
 import { closeCalibrationSession } from "../hrm/performance/calibration.ts";
 import { releaseCloseTaskApproval, withdrawCloseTaskSubmission } from "../close/tasks.ts";
@@ -51,6 +53,7 @@ import {
   registerApprovalDecisionReader,
   registerApprovalCanceller,
   registerApprovalCommandRouter,
+  registerApprovalSubjectFence,
 } from "../platform/approval-routing.ts";
 import { registerFinancialChangeSubmission } from "../platform/financial-changes.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
@@ -158,6 +161,21 @@ import { releaseWorkOrderApproval } from "../manufacturing/flow-release.ts";
  * check:test-mock-surface).
  */
 export function installEngineSeams(): void {
+  registerFlowApprovalReleaseHandler("crew_time_batch", async ({ subjectId, outcome, comment, approvalRunId, ctx }) => {
+    if (!ctx.userId || !approvalRunId) throw new Error("Crew batch decisions require their native Flow gate and acting user.");
+    const allowedSubsidiaryIds = await actorAllowedSubsidiaryIds(db, ctx.orgId, ctx.userId);
+    if (outcome === "approved") {
+      await approveBatch({ orgId: ctx.orgId, actorUserId: ctx.userId, batchId: subjectId,
+        comment, approvalRunId, allowedSubsidiaryIds });
+    } else {
+      await rejectBatch({ orgId: ctx.orgId, actorUserId: ctx.userId, batchId: subjectId,
+        reason: comment?.trim() || "Rejected by approver", approvalRunId, allowedSubsidiaryIds });
+    }
+  });
+  registerApprovalSubjectFence("payment_dispute_review",async(orgId,subjectId)=>{
+    const row=(await db.execute<{attempt_id:string|null}>(sql`select attempt_id from payment_disputes where org_id=${orgId} and id=${subjectId}`)).rows[0];
+    if(row?.attempt_id)await lockPaymentAttempt(orgId,row.attempt_id);
+  });
   registerDocumentApprovalFacts("quote", async (orgId, id) => {
     const terms = await loadQuoteTerms(db, orgId, id);
     const value = valueQuoteTerms(terms);

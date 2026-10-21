@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, withOrgTransaction } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -228,16 +228,15 @@ async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promis
   await db.execute(sql`
     insert into hrm_leave_types (id, org_id, code, name, paid)
     values (${leaveType}, ${orgId}, 'ANOM-VAC', 'Anomaly probe vacation', true)`);
-  // An approved request must carry its whole decision -- who, when and
-  // why -- or hrm_leave_requests_decision refuses the row. The constraint
-  // is right: an approval with no decider is not an approval.
+  // Deliberately unresolved input on a terminated worker exercises the
+  // detector without fabricating a completed leave approval.
   const requestId = randomUUID();
   await db.execute(sql`
     insert into hrm_leave_requests
       (id, org_id, employment_id, leave_type_id, starts_on, ends_on, hours, status,
-       decided_by, decided_at, decision_reason)
-    values (${requestId}, ${orgId}, ${employmentId}, ${leaveType}, '2026-09-10', '2026-09-10', 8, 'approved',
-       ${decidedBy}, now(), 'seeded for the anomaly probe')`);
+       created_by)
+    values (${requestId}, ${orgId}, ${employmentId}, ${leaveType}, '2026-09-10', '2026-09-10', 8, 'draft',
+       ${decidedBy})`);
   await db.execute(sql`
     insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, leave_type_id, kind, absence_date, hours, source_leave_request_id, status)
     values (${orgId}, ${workerPartyId}, ${employmentId}, ${leaveType}, 'payout', '2026-09-10', 8, ${requestId}, 'pending')`);
@@ -749,11 +748,26 @@ test("flag reads and transitions see only the flag employment's employer", { ski
     await db.execute(sql`
       update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [subB] })}::jsonb
        where org_id = ${org.orgId} and key = 'scoped_payroll_b'`);
-    await db.execute(sql`
-      insert into party_bank_accounts (org_id, party_id, routing, account_last_four, is_active, approval_status)
-      select ${org.orgId}, e.worker_party_id, '{"institution":"scope-test"}'::jsonb, '4242', true, 'approved'
-        from worker_employments e
-       where e.org_id = ${org.orgId} and e.id in (${empA}::uuid, ${empB}::uuid)`);
+    const { installEngineSeams } = await import("../../composition/install.ts");
+    const { routeSubjectSubmission } = await import("../../flows/submission-policy.ts");
+    const { businessToday } = await import("../../platform/business-date.ts");
+    installEngineSeams();
+    await grant(org.orgId, adminId, "parties.manage");
+    await withOrgTransaction(org.orgId, async () => {
+      const accounts = (await db.execute<{id:string}>(sql`
+        insert into party_bank_accounts (org_id, party_id, routing, account_last_four, is_active, approval_status, submitted_by, submitted_at, created_by)
+        select ${org.orgId}, e.worker_party_id, '{"institution":"scope-test"}'::jsonb, '4242', false, 'pending', ${adminId}, now(), ${adminId}
+          from worker_employments e
+         where e.org_id=${org.orgId} and e.id in (${empA}::uuid,${empB}::uuid) returning id`)).rows;
+      assert.equal(accounts.length, 2);
+      for (const account of accounts) {
+        const receipt = await routeSubjectSubmission({ orgId:org.orgId, actorId:adminId,
+          subjectKind:"party_bank_account", subjectId:account.id, event:{kind:"on_create",source:"api"} });
+        assert.equal(receipt.policy.kind,"ungated");
+        assert.equal((await db.execute(sql`update party_bank_accounts set approval_status='approved',is_active=true,
+          approved_at=${await businessToday(org.orgId)},approved_by=${adminId} where org_id=${org.orgId} and id=${account.id}`)).rowCount,1);
+      }
+    });
     const flagsBeforeScan = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`)).rows[0]?.count;
     await assert.rejects(runAnomalyScan({

@@ -1,3 +1,11 @@
+import { before as initializeNativeComposition } from "node:test";
+
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -6,7 +14,6 @@ import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
-  approvePayApplication,
   createPayApplication,
   generatePayApplicationInvoice,
   releaseRetainage,
@@ -20,7 +27,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { reverseProjectGlEntry } from "./recognition.ts";
 import { cmp } from "../money/money.ts";
 import {
-  approveVendorPayApplication,
+  submitSubcontract,
   createVendorPayApplication,
   generateVendorPayApplicationBill,
   releaseVendorRetainage,
@@ -93,7 +100,6 @@ async function customerSetup(): Promise<{
     const app = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, date, retainage, null));
     await withOrgTransaction(org.orgId, () =>
       submitPayApplication(org.orgId, actor, app.id, [{ sovLineId: sovId, thisPeriodCompleted: work, materialsStored: "0" }], null));
-    await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, app.id, null));
     const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
     await postCustomerInvoice(org, actor, approver, generated.invoiceId);
     return { invoiceId: generated.invoiceId, retained: generated.retainage };
@@ -123,12 +129,12 @@ async function vendorSetup(): Promise<{
   await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status)
     values(${project},${org.orgId},${org.subsidiaryId},'VLIFE','Vendor lifecycle job',${org.customerId},${type},'active')`);
   await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active) values(${vendor},${org.orgId},'vendor','Vendor lifecycle vendor',true)`);
-  await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-VLIFE','Vendor lifecycle scope','CAD','5000','active')`);
+  await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-VLIFE','Vendor lifecycle scope','CAD','10000','draft')`);
   await db.execute(sql`insert into subcontract_sov_lines(id,org_id,subcontract_id,description,scheduled_value,expense_account_id,sort_order) values(${sov},${org.orgId},${subcontract},'Work','10000',${org.accounts.cogs},1)`);
+  await submitSubcontract(org.orgId, actor, subcontract);
   const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: org.date }));
   await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "1000", materialsStoredCurrent: "0" }] }));
   await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app.id));
-  await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app.id));
   const generated = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));
   await postVendorBill(org, actor, approver, generated.vendorBillDocumentId);
   const release = async (amount: string) =>
@@ -269,7 +275,6 @@ test("customer multi-currency draw void refuses while a release depends on it", 
     const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, project, f.org.date, "10", null));
     await withOrgTransaction(f.org.orgId, () =>
       submitPayApplication(f.org.orgId, f.actor, app.id, [{ sovLineId: sovId, thisPeriodCompleted: "1000", materialsStored: "0" }], null));
-    await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id, null));
     const generated = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id, null));
     assert.equal(generated.retainage, "100.0000");
     await postCustomerInvoice(f.org, f.actor, f.approver, generated.invoiceId);
@@ -323,7 +328,6 @@ test("deleting an earlier draw's draft invoice, or voiding the draw, is refused 
     const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, f.project, f.org.date, "10", null));
     await withOrgTransaction(f.org.orgId, () =>
       submitPayApplication(f.org.orgId, f.actor, app.id, [{ sovLineId: sovId, thisPeriodCompleted: "1000", materialsStored: "0" }], null));
-    await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id, null));
     const invoice = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id, null));
     // An invoiced draw is billed, so the next draw may start against it.
     const later = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, f.project, dayAfter(f.org.date), "10", null));
@@ -356,7 +360,6 @@ test("a billed subcontract draw cannot be un-billed under later draws; unwinding
     const second = await create(dayAfter(f.org.date));
     await withOrgTransaction(f.org.orgId, () => updateVendorPayApplicationLines({ orgId: f.org.orgId, userId: f.actor, payApplicationId: second.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "500", materialsStoredCurrent: "0" }] }));
     await withOrgTransaction(f.org.orgId, () => submitVendorPayApplication(f.org.orgId, f.actor, second.id));
-    await withOrgTransaction(f.org.orgId, () => approveVendorPayApplication(f.org.orgId, f.approver, second.id));
     const bill2 = (await withOrgTransaction(f.org.orgId, () => generateVendorPayApplicationBill(f.org.orgId, f.actor, second.id))).vendorBillDocumentId;
     const third = await create(dayAfter(f.org.date, 2));
     // #2 and #3 carry #1's earned-to-date forward as previous_earned.

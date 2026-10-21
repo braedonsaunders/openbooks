@@ -16,7 +16,7 @@ registerHooks({
       import { permissionSetCovers } from '@openbooks/engine/organization/permissions';
       export async function getAuthz() {
         const s = globalThis.__documentInvoiceProjectState;
-        return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['ar.read', 'ar.create', 'ar.post']), allowedSubsidiaryIds: null };
+        return { user: { roles: [], orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['ar.read', 'ar.create', 'ar.post']), allowedSubsidiaryIds: null };
       }
       export function can(authz, permission) { return permissionSetCovers(authz.permissions, permission) }
       export function guardSubsidiaryScope() { return null }

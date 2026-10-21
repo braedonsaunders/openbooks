@@ -22,12 +22,18 @@ export async function postCollectedReceipt(
   result: AutopayRunResult,
 ): Promise<void> {
   try {
-    const reactivated = await withOrg(orgId, async () => {
-      await postCollectionReceipt(orgId, attempt.id);
-      return reactivateScopeSubscriptions(orgId, candidate, null);
+    const receipt = await withOrg(orgId, async () => {
+      const posted = await postCollectionReceipt(orgId, attempt.id);
+      const reactivated = posted.status === "posted" ? await reactivateScopeSubscriptions(orgId, candidate, null) : 0;
+      return { ...posted, reactivated };
     });
+    if (receipt.status === "pending_approval") {
+      result.notices.push({ invoiceId: candidate.invoiceId, attemptId: attempt.id, status: "receipt_pending",
+        detail: `Complete the tenant Flow gates for receipt ${receipt.receiptId}. The collected payment is retained and will not be charged again.` });
+      return;
+    }
     result.succeeded += 1;
-    result.reactivated += reactivated;
+    result.reactivated += receipt.reactivated;
     result.notices.push({
       invoiceId: candidate.invoiceId,
       attemptId: attempt.id,
@@ -220,7 +226,8 @@ export async function settleCollectionAttemptEvent(
          returning id
       `));
       if (!claimed.rows[0]) return "duplicate";
-      await postCollectionReceipt(orgId, found.id);
+      const receipt = await postCollectionReceipt(orgId, found.id);
+      if (receipt.status === "pending_approval") return "receipt_pending";
       await reactivateScopeSubscriptions(orgId, { partyId: found.party_id, subscriptionId: found.subscription_id }, null);
       return "settled";
     }

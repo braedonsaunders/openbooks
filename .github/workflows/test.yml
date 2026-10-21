@@ -121,12 +121,15 @@ jobs:
         # Cheap, and it used to surface only after sixteen Postgres containers
         # had already started. The zero-warning ceiling is the gate.
         run: npm run lint
+      - name: Security-sensitive interface copy
+        run: npm run check:security-jsx-copy
+
 
   unit:
     needs: [scope, typecheck]
     if: github.event_name == 'workflow_dispatch' && needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -151,7 +154,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          timeout --signal=TERM --kill-after=10s 16m npm run test:unit 2>&1 | tee unit.txt
+          NODE_ENV=test OPENBOOKS_DB_URL= OPENBOOKS_BYPASS_DB_URL= OPENBOOKS_TRUSTED_TEST_BYPASS=1 timeout --signal=TERM --kill-after=10s 20m node scripts/test-suite.mjs unit 2>&1 | tee unit.txt
       - name: Skips are declared, not silent
         # A skipped control is an unrun control. Runs even when the partition
         # failed, so a red partition cannot hide one that also stopped

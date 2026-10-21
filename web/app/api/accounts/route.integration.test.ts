@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 const stateKey = Symbol.for("openbooks.reconcilable-currency-test");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { roles: { key: string }[]; orgId: string; id: string };
     permissions: Set<string>;
     allowedSubsidiaryIds: Set<string> | null;
   } | null;
@@ -93,7 +93,7 @@ test(
     const org = await withBypassContext(() => (createScratchOrg()));
     try {
       const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-      routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
       await enableMultiCurrency(org.orgId);
 
       const refused = await POST(
@@ -130,7 +130,7 @@ test(
     const org = await withBypassContext(() => (createScratchOrg()));
     try {
       const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-      routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
 
       const created = await POST(
         postRequest(randomUUID(), {
@@ -188,7 +188,7 @@ test(
     const org = await withBypassContext(() => (createScratchOrg()));
     try {
       const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-      routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
       await enableMultiCurrency(org.orgId);
 
       const plainId = randomUUID();
@@ -252,7 +252,7 @@ test(
       const sharedId = (await seed('9103', null)).rows[0]!.id as string;
       const scoped = (subsidiaryId: string) => {
         routeState.authz = {
-          user: { orgId: org.orgId, id: adminId },
+          user: { roles: [], orgId: org.orgId, id: adminId },
           permissions: new Set(),
           allowedSubsidiaryIds: new Set([subsidiaryId]),
         };
@@ -305,7 +305,7 @@ test(
       const renamed = await PATCH(patchRequest({ name: 'A renamed' }), { params: Promise.resolve({ id: accountA }) });
       assert.equal(renamed.status, 200);
       // Control: the unrestricted caller still mints the shared chart.
-      routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
       assert.equal((await POST(postRequest(randomUUID(), { name: 'Control shared', type: 'asset_other' }))).status, 201);
     } finally {
       routeState.authz = null;

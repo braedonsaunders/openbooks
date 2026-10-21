@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { lockAutopayEnrollmentAuthority } from "./autopay-enrollment.ts";
 import { db, withOrg, withOrgContext } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -176,6 +177,7 @@ async function claimAttempt(
      for update
   `)).rows[0];
   if (!invoice) return { skip: "invoice is gone; nothing to collect" };
+  await lockAutopayEnrollmentAuthority(orgId, candidate.enrollmentId, invoice.subsidiary_id);
   if (actorId !== null) await lockCollectionRetryAuthority(orgId, actorId, invoice.subsidiary_id, requestedScope);
   const skipReason = await uncollectibleReason(orgId, candidate.invoiceId, invoice.status, invoice.open_balance);
   if (skipReason) return { skip: skipReason };
@@ -305,7 +307,7 @@ export async function resumeInterruptedAttempts(
 ): Promise<void> {
   const open = (await db.execute<{ id: string; invoice_id: string }>(sql`
     select id, invoice_id from collection_attempts
-     where org_id = ${orgId} and status = 'initiated'
+     where org_id = ${orgId} and (status='initiated' or (status='processing' and receipt_document_id is not null))
      order by created_at, id
   `)).rows;
   for (const row of open) {
@@ -369,7 +371,8 @@ async function resumeAttempt(
       left join documents d on d.id = a.invoice_id and d.org_id = a.org_id
       left join autopay_enrollments e on e.id = a.enrollment_id and e.org_id = a.org_id
       left join customer_payment_methods m on m.id = a.payment_method_id and m.org_id = a.org_id
-     where a.id = ${attemptId} and a.org_id = ${orgId} and a.status = 'initiated'
+     where a.id = ${attemptId} and a.org_id = ${orgId}
+       and (a.status='initiated' or (a.status='processing' and a.receipt_document_id is not null))
   `)).rows[0];
   // Settled since it was listed: a provider webhook or another run got there first.
   if (!row) return;

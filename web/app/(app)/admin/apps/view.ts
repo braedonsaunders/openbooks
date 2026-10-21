@@ -253,6 +253,7 @@ export async function loadAdminExtensions(
     drawer: drawer
       ? {
           canAuthor,
+          canPublish: authz.user.isSuperAdmin,
           app: drawer.app as unknown as ExtensionDrawerProps['app'],
           files: drawer.files,
           runs: drawer.runs as unknown as ExtensionDrawerProps['runs'],

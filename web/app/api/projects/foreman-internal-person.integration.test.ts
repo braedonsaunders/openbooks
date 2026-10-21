@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 const stateKey = Symbol.for("openbooks.projects-foreman-integration");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { roles: { key: string }[]; orgId: string; id: string };
     allowedSubsidiaryIds: null;
   } | null;
 }
@@ -24,7 +24,7 @@ const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.projects-foreman-integration')]
   export async function guardPermission(_permission) {
     if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
+    return { permissions: new Set(), ...state.authz }
   }
   export function guardSubsidiaryScope() { return undefined }
   export function subsidiariesInScope() { return true }
@@ -96,7 +96,7 @@ test("projects POST accepts a non-employee internal person as foreman", async ()
   try {
     const { adminId } = await seedFlowActors(org.orgId);
     await enableProjects(org.orgId);
-    routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+    routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
 
     const partner = await seedParty(org.orgId, "person", "Dana Partner", org.subsidiaryId);
     const created = await POST(postRequest(randomUUID(), { name: "Studio Loft", foremanId: partner }));
@@ -115,7 +115,7 @@ test("projects POST accepts an employed employee and refuses customers, vendors,
   try {
     const { adminId } = await seedFlowActors(org.orgId);
     await enableProjects(org.orgId);
-    routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+    routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
 
     const employee = await seedParty(org.orgId, "employee", "Erin Employee", org.subsidiaryId);
     await seedActiveEmployment(org.orgId, employee);
@@ -152,7 +152,7 @@ test("projects POST still refuses another org's person and an inactive person as
   try {
     const { adminId } = await seedFlowActors(org.orgId);
     await enableProjects(org.orgId);
-    routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+    routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
 
     const foreign = await seedParty(other.orgId, "person", "Farah Foreign", null);
     const foreignRefused = await POST(postRequest(randomUUID(), { name: "Foreign Job", foremanId: foreign }));

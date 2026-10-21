@@ -1,3 +1,4 @@
+import { createInventoryCountFixture } from "../testing/inventory-counts.ts";
 import { confirmCountObservation } from "../testing/inventory-counts.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -9,7 +10,7 @@ import {
   recountStockCountLine,
   submitStockCountForReview,
 } from "./stock-counts.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { dropScratchOrg } from "../testing/fixtures.ts";
 import { openCountingLine } from "./integration-seeds.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -43,7 +44,7 @@ async function lineAudit(orgId: string, lineId: string): Promise<AuditEvent[]> {
 }
 
 test("a correction keeps the first counter's observation with actor, time, before, after, and reason", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     const { countId, lineId } = await openCountingLine(org);
     await recordCountedQuantity(org.orgId, null, { countId, lineId, countedQuantity: "10" });
@@ -69,7 +70,7 @@ test("a correction keeps the first counter's observation with actor, time, befor
 });
 
 test("a recount keeps the cleared observation, and the whole trail survives posting", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     const { countId, lineId } = await openCountingLine(org);
     await recordCountedQuantity(org.orgId, null, { countId, lineId, countedQuantity: "7" });
@@ -85,8 +86,8 @@ test("a recount keeps the cleared observation, and the whole trail survives post
     // The recount cleared the observation: re-record, submit, post.
     await recordCountedQuantity(org.orgId, null, { countId, lineId, countedQuantity: "9" });
     await confirmCountObservation(org.orgId,countId,lineId,"9");
-    await submitStockCountForReview(org.orgId, null, countId);
-    const posted = await withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId));
+    await submitStockCountForReview(org.orgId, org.actorId, countId);
+    const posted = await withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, countId));
     assert.equal(posted.status, "posted");
 
     const trail = await lineAudit(org.orgId, lineId);

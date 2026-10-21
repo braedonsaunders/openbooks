@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { seedAdoption, calculatedRun } from "./filing-test-fixtures.ts";
 import { commitPayRun } from "./run-commit.ts";
+import { returnDocumentToDraft, submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { readPayRunGlProjection, rebuildPayRunGlProjection } from "./run-gl-rebuild.ts";
 import { seedHourlyPayrollTime, seedHourlyPayrollOrg, seedHourlyPayrollEmployee } from "../testing/payroll-hourly-fixture.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -25,6 +26,7 @@ async function committedRun() {
   const fx = await seedAdoption();
   const { input } = await calculatedRun(fx);
   await commitPayRun(input);
+  await returnDocumentToDraft({ ...input, actorId: fx.actorId, reason: "Review the committed projection before a new release" });
   return { fx, input };
 }
 
@@ -126,12 +128,12 @@ test("a stale revision or a posted run refuses without touching the projection",
 
     const accounts = (await db.execute<{ id: string; type: string }>(sql`select id, type from accounts where org_id = ${fx.orgId}`)).rows;
     const account = (type: string) => accounts.find((row) => row.type === type)!.id;
-    await db.execute(sql`update documents set status = 'approved' where org_id = ${fx.orgId} and id = ${input.documentId}`);
+    await submitAndReleaseIfUngated("pay_run", input.documentId, fx.actorId);
     await postDocument(input.documentId, { control: { ar: account("asset_receivable"), ap: account("liability_payable"), bank: account("asset_bank") } });
     await assert.rejects(rebuildPayRunGlProjection({
       orgId: fx.orgId, documentId: input.documentId, actorId: fx.actorId,
       reason: "after posting", expectedRevision: await revision(fx.orgId, input.documentId),
-    }), /frozen once the run is released or posted|already reached the books/);
+    }), /GL projection is frozen|already reached the books/);
   } finally {
     await dropScratchOrgReporting(fx.orgId);
   }
@@ -192,6 +194,7 @@ test("an employer-only run with no net pay rebuilds without inventing a net pay 
     } });
     assert.deepEqual((await calculatePayRun(base)).errors, []);
     await commitPayRun(base);
+    await returnDocumentToDraft({ ...base, reason: "Review employer-only coding before a new release" });
     const before = await lines(org.orgId, run.documentId);
     assert.ok(before.every((line) => line.party_id === null), "an employer-only projection carries no net pay leg");
     await rebuildPayRunGlProjection({ orgId: org.orgId, documentId: run.documentId, actorId,
@@ -229,6 +232,8 @@ test("a governed correction moves a committed bank draw from expense to the boun
       values(${fx.orgId},${run.documentId},${partyId},'line',${payout},'200')`);
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
     await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    await returnDocumentToDraft({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+      reason: "Review entitlement liability coding before a new release" });
     const before = await lines(fx.orgId, run.documentId);
     const drawLine = (await db.execute<{ id: string }>(sql`select l.id::text as id from pay_stub_lines l
       join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id

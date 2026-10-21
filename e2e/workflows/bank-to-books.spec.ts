@@ -474,7 +474,7 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       // Start the June close from the period list (Resume on a dirty re-run).
       await page.goto('/close?fy=2026');
       await dismissSetupWizard(page);
-      const row = page.locator('tr', { hasText: '2026-06' }).first();
+      const row = page.locator('tr', { hasText: 'P06 FY2026' }).first();
       await expect(row).toBeVisible();
       const resume = row.getByRole('link', { name: 'Resume' });
       if (await resume.isVisible()) {

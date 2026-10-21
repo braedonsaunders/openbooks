@@ -308,21 +308,22 @@ export const partyBankAccounts = pgTable(
     accountLastFour: text("account_last_four"),
     approvedAt: date("approved_at"),
     approvedBy: uuid("approved_by"),
+    /** Completed employment-change command that materialized these exact details. */
+    sourceChangeRequestId: uuid("source_change_request_id"),
     /**
      * Bank-detail change approval (a flow): new/edited details sit 'pending' —
      * inactive and unusable by payment runs — until the gate approves.
-     * Existing rows default 'approved' (they were in use pre-flows).
      */
     approvalStatus: text("approval_status", { enum: ["pending", "approved", "rejected"] })
       .notNull()
-      .default("approved"),
+      .default("pending"),
     /** Actual maker for the current material revision (not original creator). */
     submittedBy: uuid("submitted_by"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     retiredAt: timestamp("retired_at", { withTimezone: true }),
     retiredBy: uuid("retired_by"),
     retirementReason: text("retirement_reason"),
-    isActive: boolean("is_active").notNull().default(true),
+    isActive: boolean("is_active").notNull().default(false),
     ...auditColumns,
   },
   (t) => [index("bank_accounts_party").on(t.partyId)],

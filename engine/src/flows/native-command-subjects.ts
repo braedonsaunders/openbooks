@@ -237,6 +237,7 @@ export const nativeCommandSubjects = [
   ),
   defineCommandSubject({
     kind: "payment_dispute_review",
+    fingerprint: sql`public.provider_return_approval_fingerprint(s.org_id,s.id)`,
     label: "Provider return review",
     table: "payment_disputes",
     statusColumn: "status",

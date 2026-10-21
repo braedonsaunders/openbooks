@@ -15,7 +15,8 @@ import { AutopayError, classifyDecline, parseFinalAction, parseRetryOffsetsDays,
 import { enrollAutopay } from "./autopay-enrollment.ts";
 import { listPaymentMethods, setMethodFallbackPriority } from "./autopay-methods.ts";
 import { runAutopayCollectionForOrg } from "./autopay.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedApprovalFlow } from "../testing/fixtures.ts";
+import { decideGate } from "../flows/gates.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
@@ -53,8 +54,11 @@ interface AutopayFixture {
 
 /** Scratch org with autopay + onlinePayments on, receipts postable today. */
 async function seedAutopayOrg(): Promise<AutopayFixture> {
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
   const org = await createScratchOrg();
   const userId = await createScratchUser(org.orgId, "Autopay Tester", "admin");
+  await grantScratchPermissions(org.orgId, userId, ["ar.pay"]);
   await db.execute(sql`
     update orgs set settings = settings || '{"features":{"onlinePayments":true,"autopay":true}}'::jsonb
      where id = ${org.orgId}
@@ -213,6 +217,65 @@ test("a due invoice is charged once; success posts the receipt and closes the in
 });
 
 type ChargeAttemptRow = { id: string; status: string; provider_ref: string | null; receipt_document_id: string | null; decline_code: string | null };
+
+test("a collected autopay receipt waits for tenant gates and resumes without another charge or receipt", { skip: !DB }, async () => {
+  const fixture = await seedAutopayOrg();
+  const { org, userId } = fixture;
+  try {
+    await seedPolicy(org.orgId, userId, [1], "none");
+    await seedMethod(fixture);
+    await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
+    const invoiceId = await seedInvoice(fixture, "INV-AUTO-GATED", "100", org.date);
+    const reviewer = await createScratchUser(org.orgId, "Receipt reviewer", "receipt_reviewer");
+    await grantScratchPermissions(org.orgId, reviewer, ["ar.approve"]);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,flows}','true'::jsonb) where id=${org.orgId}`);
+    await seedApprovalFlow(org.orgId, { subjectKind: "customer_payment", assignees: [{type:"user",userId:reviewer}], mode:"all" });
+    const fake = fakeCharge(succeedAll);
+    const first = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge: fake.charge });
+    assert.equal(first.charged, 1);
+    assert.equal(first.succeeded, 0);
+    assert.equal(first.notices.at(-1)?.status, "receipt_pending");
+    const attempt = await attemptFor(org.orgId, invoiceId);
+    assert.equal(attempt.status, "processing");
+    assert.ok(attempt.receipt_document_id);
+    assert.equal(await openBalance(org.orgId, invoiceId), "100.0000");
+    const again = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge: fake.charge });
+    assert.equal(again.succeeded, 0);
+    assert.equal((await attemptFor(org.orgId, invoiceId)).receipt_document_id, attempt.receipt_document_id);
+    const gate = (await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId}
+      and subject_kind='customer_payment' and subject_id=${attempt.receipt_document_id} and status='pending'`)).rows;
+    assert.equal(gate.length, 1);
+    await decideGate({gateId:gate[0]!.id,userId:reviewer,decision:"approved"});
+    const resumed = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge: fake.charge });
+    assert.equal(resumed.succeeded, 1);
+    assert.equal(fake.calls.length, 1);
+    assert.equal((await attemptFor(org.orgId, invoiceId)).status, "succeeded");
+    assert.equal(await openBalance(org.orgId, invoiceId), "0.0000");
+    const receipts = (await db.execute<{count:number}>(sql`select count(*)::int as count from documents
+      where org_id=${org.orgId} and kind='customer_payment'`)).rows[0]!;
+    assert.equal(receipts.count, 1);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("revoked enrollment authority refuses autopay before the provider is charged", { skip: !DB }, async () => {
+  const fixture = await seedAutopayOrg();
+  const { org, userId } = fixture;
+  try {
+    await seedPolicy(org.orgId, userId, [1], "none");
+    await seedMethod(fixture);
+    await enrollAutopay(org.orgId, { partyId: org.customerId, actorId: userId });
+    const invoiceId = await seedInvoice(fixture, "INV-AUTO-REVOKED", "100", org.date);
+    await db.execute(sql`update user_permission_overrides set effect='deny' where org_id=${org.orgId}
+      and user_id=${userId} and permission='ar.pay'`);
+    const fake = fakeCharge(succeedAll);
+    const result = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge: fake.charge });
+    assert.equal(result.charged, 0);
+    assert.equal(fake.calls.length, 0);
+    assert.ok(result.orgErrors.length || result.notices.some(notice => notice.status === "failed"));
+    assert.equal(await openBalance(org.orgId, invoiceId), "100.0000");
+    assert.equal((await db.execute(sql`select id from collection_attempts where org_id=${org.orgId}`)).rows.length, 0);
+  } finally { await dropScratchOrg(org.orgId); }
+});
 
 async function attemptFor(orgId: string, invoiceId: string): Promise<ChargeAttemptRow> {
   return (await db.execute<ChargeAttemptRow>(sql`

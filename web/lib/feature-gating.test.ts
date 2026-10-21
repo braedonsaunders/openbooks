@@ -31,7 +31,7 @@ registerHooks({
         source: `
           const state = globalThis[Symbol.for('openbooks.feature-gating-test')]
           export async function guardPermission() {
-            return { user: { id: state.userId, orgId: state.orgId }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
+            return { user: { roles: [], id: state.userId, orgId: state.orgId }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
           }
           export function guardSubsidiaryScope(authz, subsidiaryId) {
             if (authz.allowedSubsidiaryIds === null) return null
@@ -52,7 +52,7 @@ registerHooks({
           const gate = globalThis[Symbol.for('openbooks.feature-gating-gate')]
           const state = globalThis[Symbol.for('openbooks.feature-gating-test')]
           export async function guardFeaturePermission(permission, featureKey) {
-            const authz = { user: { id: state.userId, orgId: state.orgId }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
+            const authz = { user: { roles: [], id: state.userId, orgId: state.orgId }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
             if (!(await gate.isFeatureEnabled(authz.user.orgId, featureKey))) {
               return gate.NextResponse.json({ error: 'not_found' }, { status: 404 })
             }

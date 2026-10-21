@@ -89,6 +89,8 @@ export function scopeRow<const A extends Record<string, ActorSpec> = DefaultActo
 const DEFAULT_ACTORS: DefaultActors = { admin: { scope: "all" }, scoped: { scope: "A" } };
 
 async function buildWorld(row: MatrixRow): Promise<World & { orgId: string }> {
+  const { installEngineSeams } = await import("../composition/install.ts");
+  installEngineSeams();
   const org = await createScratchOrg();
   const orgId = org.orgId;
   await enableFeatures(orgId, [...new Set(["hrm", ...(row.features ?? [])])]);

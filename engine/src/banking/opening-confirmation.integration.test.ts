@@ -1,3 +1,10 @@
+import { before as initializeNativeComposition } from "node:test";
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+import { createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -16,7 +23,6 @@ import {
 } from "./banking.ts";
 import {
   createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -134,7 +140,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actor = await createScratchUser(org.orgId, "Bank reviewer", "admin");
+      const actor = await createWorkOperator(org.orgId, "Bank reviewer", ["banking.reconcile"]);
       const { ctx, recon, openingLines } = await setupFirstRecon(org, actor);
 
       const position = (await openingPosition(recon.id, ctx))!;
@@ -256,7 +262,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actor = await createScratchUser(org.orgId, "Bank reviewer", "admin");
+      const actor = await createWorkOperator(org.orgId, "Bank reviewer", ["banking.reconcile"]);
       const { ctx, recon } = await setupFirstRecon(org, actor);
 
       await assert.rejects(
@@ -293,7 +299,7 @@ test(
     // no business.
     const org = await createScratchOrg();
     try {
-      const actor = await createScratchUser(org.orgId, "Bank reviewer", "admin");
+      const actor = await createWorkOperator(org.orgId, "Bank reviewer", ["banking.reconcile"]);
       const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
       await db.execute(sql`
         update accounts

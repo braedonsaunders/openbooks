@@ -53,7 +53,7 @@ async function fixture() {
     subsidiaryId: org.subsidiaryId, currency: 'CAD', periodFrom: '2026-07-01', periodTo: '2026-07-31',
     currentRate: '1.3', averageRate: '1.25', historicalRate: '9',
   }] }
-  async function post(amount: string, origin: 'manual' | 'opening' = 'manual', reversesEntryId: string | null = null) {
+  async function post(amount: string, origin: 'manual' | 'book_opening' = 'manual', reversesEntryId: string | null = null) {
     return withOrgTransaction(org.orgId, async () => {
       const posted = await postEntry(db, { ...authority, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
         periodId: org.periodId, entryNumber: `CAPITAL-${randomUUID()}`, postingDate: org.date, currency: 'CAD', origin, reversesEntryId,
@@ -91,6 +91,10 @@ async function fixture() {
 test('statements use each immutable contribution and its correction and retain their basis after current currency changes', { skip: !DB }, async () => {
   const f = await fixture()
   try {
+    await withBypassContext(async () => {
+      assert.equal((await db.execute(sql`insert into account_translation_policies(org_id,account_id,effective_from,general_rate_type,cash_flow_rate_type,reason)
+        values(${f.org.orgId},${f.equity},'2026-01-01','historical','historical','Retain original contribution rates for capital cash movements') returning id`)).rows.length, 1)
+    })
     const first = await f.post('-100'), second = await f.post('-100')
     await assert.rejects(f.matrix(), /historical contribution basis|Historical translation/i)
     await f.apply(f.instruction(first.lineId, '-100', '1.2'))
@@ -111,10 +115,6 @@ test('statements use each immutable contribution and its correction and retain t
     assert.deepEqual(view.lines.find(line => line.label === labels.totalAssets)?.values, ['195.0000'])
     assert.deepEqual(view.lines.find(line => line.label === labels.liabilitiesAndEquity)?.values, ['195.0000'])
     assert.deepEqual(view.lines.find(line => line.label === labels.translationAdjustment)?.values, ['-5.0000'])
-    await withBypassContext(async () => {
-      assert.equal((await db.execute(sql`insert into account_translation_policies(org_id,account_id,effective_from,general_rate_type,cash_flow_rate_type,reason)
-        values(${f.org.orgId},${f.equity},'2026-01-01','historical','historical','Retain original contribution rates for capital cash movements') returning id`)).rows.length, 1)
-    })
     const cash = await withOrgTransaction(f.org.orgId, async () => ({
       direct: await cashFlow('2026-07-02', f.org.date, { subsidiaryIds: [f.org.subsidiaryId] }, f.org.orgId, f.org.bookId, f.subsidiary),
       indirect: await cashFlowIndirect('2026-07-02', f.org.date, { subsidiaryIds: [f.org.subsidiaryId] }, f.org.orgId, f.org.bookId, f.subsidiary),
@@ -139,7 +139,7 @@ test('account columns round only after exact fourteen-place products from ordina
       const source = await f.post('-0.0001')
       await f.apply(f.instruction(source.lineId, '-0.0001', '0.4'))
     }
-    const opening = await f.post('-0.0002', 'opening')
+    const opening = await f.post('-0.0002', 'book_opening')
     const instruction = f.instruction(opening.lineId, '-0.0001', '0.4')
     await f.apply({ ...instruction, kind: 'opening', layers: [instruction.layers[0]!, { ...instruction.layers[0]! }] })
     const matrix = await f.matrix()
@@ -166,12 +166,12 @@ test('same-currency identity requires a native approved documentary certificate'
 test('non-equity manual historical and equity average policies retain their own rate contracts', { skip: !DB }, async () => {
   const f = await fixture()
   try {
-    await f.post('-100')
     await withBypassContext(async () => {
       assert.equal((await db.execute(sql`insert into account_translation_policies(org_id,account_id,effective_from,general_rate_type,cash_flow_rate_type,reason)
         values(${f.org.orgId},${f.org.accounts.bank},'2026-01-01','historical','current','Explicit manual historical policy for this account'),
           (${f.org.orgId},${f.equity},'2026-01-01','average','average','Explicit average policy for this equity account') returning id`)).rows.length, 2)
     })
+    await f.post('-100')
     const matrix = await withOrgTransaction(f.org.orgId, () => statementMatrix({ orgId: f.org.orgId, bookId: f.org.bookId,
       types: ['asset_bank', 'equity'], mode: 'balance', period: { from: '2026-07-01', to: f.org.date }, periodLabel: 'July',
       subsidiary: f.subsidiary }), { readOnly: true, isolationLevel: 'REPEATABLE READ' })

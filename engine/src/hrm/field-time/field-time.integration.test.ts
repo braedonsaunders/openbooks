@@ -1,3 +1,5 @@
+import { createWorkOperator } from "../../testing/manufacturing.ts";
+import { decideGate } from "../../flows/gates.ts";
 /**
  * Field-time integration proofs (DB-owned — gated remotely).
  *
@@ -18,15 +20,17 @@ import { createHash, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg, withOrgTransaction } from "../../platform/db.ts";
-import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedApprovalFlow } from "../../testing/fixtures.ts";
 import { recordClockEvent, replayClockEvents } from "./clock.ts";
 import { identifyByPin, registerKiosk, setWorkerPin } from "./kiosk.ts";
-import { createBatch, setBatchLines, submitBatch, approveBatch, rejectBatch, postBatch } from "./crew.ts";
+import { createBatch, setBatchLines, submitBatch, approveBatch, postBatch } from "./crew.ts";
 import { FieldTimeError } from "./errors.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function enableFieldTime(orgId: string, extra: Record<string, boolean> = {}): Promise<void> {
+  const { installEngineSeams } = await import("../../composition/install.ts");
+  installEngineSeams();
   await db.execute(sql`
     update orgs set settings = coalesce(settings, '{}'::jsonb)
       || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb)
@@ -170,7 +174,7 @@ test("batch post creates entries and balanced equipment charges once", { skip: !
     const projectId = randomUUID();
     const itemId = randomUUID();
     const unitId = randomUUID();
-    const actor = randomUUID();
+    const actor = await createWorkOperator(org.orgId, "Crew operator", ["time.read", "time.manage", "time.crew.enter"]);
     const posted = await withOrg(org.orgId, async () => {
       await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
@@ -187,8 +191,7 @@ test("batch post creates entries and balanced equipment charges once", { skip: !
         canManageAll: true, allowedSubsidiaryIds: null,
       });
       await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
-      // Single approval stands without a declared chain: one approve posts.
-      await approveBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null });
+      // The tenant has no configured gate, so native submission releases the batch.
       return postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null });
     });
     assert.equal(posted.entryIds.length, 1);
@@ -225,7 +228,7 @@ test("submission signs the batch lines that remain after a concurrent edit", { s
     const workerA = randomUUID();
     const workerB = randomUUID();
     const projectId = randomUUID();
-    const actor = randomUUID();
+    const actor = await createWorkOperator(org.orgId, "Crew operator", ["time.read", "time.manage", "time.crew.enter"]);
     const batchId = await withOrg(org.orgId, async () => {
       await db.execute(sql`update orgs set settings = jsonb_set(settings, '{fieldTime,signatureRequired}', 'true'::jsonb, true) where id = ${org.orgId}`);
       await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${workerA}, ${org.orgId}, 'person', 'Crew A'), (${workerB}, ${org.orgId}, 'person', 'Crew B')`);
@@ -284,7 +287,7 @@ test("a foreman double-submit names the existing batch instead of a 500", { skip
     await enableFieldTime(org.orgId);
     const foreman = randomUUID();
     const projectId = randomUUID();
-    const actor = randomUUID();
+    const actor = await createWorkOperator(org.orgId, "Crew operator", ["time.read", "time.manage", "time.crew.enter"]);
     await withOrg(org.orgId, async () => {
       await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman')`);
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
@@ -319,10 +322,18 @@ test("a submitted batch approves once; a rejected batch never posts", { skip: !D
     const foreman = randomUUID();
     const worker = randomUUID();
     const projectId = randomUUID();
-    const actor = randomUUID();
+    const actor = await createWorkOperator(org.orgId, "Crew operator", ["time.read", "time.manage", "time.crew.enter"]);
     await withOrg(org.orgId, async () => {
       await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
+      const reviewer = await createWorkOperator(org.orgId, "Crew reviewer", ["time.approve"]);
+      await seedApprovalFlow(org.orgId, { subjectKind: "crew_time_batch", assignees: [{ type: "user", userId: reviewer }], mode: "all", preventSelfApproval: true });
+      const decide = async (batchId: string, decision: "approved" | "rejected", comment?: string) => {
+        const gate = (await db.execute<{id:string}>(sql`select id from flow_gates
+          where org_id=${org.orgId} and subject_kind='crew_time_batch' and subject_id=${batchId} and status='pending'`)).rows[0];
+        assert.ok(gate, "the configured tenant Flow must retain a native review gate");
+        await decideGate({ gateId: gate.id, userId: reviewer, decision, comment });
+      };
       const submitted = async (workedOn: string): Promise<string> => {
         const batchId = await createBatch({
           orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
@@ -337,13 +348,14 @@ test("a submitted batch approves once; a rejected batch never posts", { skip: !D
         return batchId;
       };
       const approvedId = await submitted("2026-09-14");
-      assert.equal(await approveBatch({ orgId: org.orgId, actorUserId: actor, batchId: approvedId, allowedSubsidiaryIds: null }), "approved");
+      await decide(approvedId, "approved");
+      assert.equal((await db.execute<{status:string}>(sql`select status from crew_time_batches where org_id=${org.orgId} and id=${approvedId}`)).rows[0]?.status, "approved");
       assert.equal(
         await refusesCode(() => approveBatch({ orgId: org.orgId, actorUserId: actor, batchId: approvedId, allowedSubsidiaryIds: null })),
         "batch_not_approvable",
       );
       const rejectedId = await submitted("2026-09-15");
-      await rejectBatch({ orgId: org.orgId, actorUserId: actor, batchId: rejectedId, reason: "Split the overtime line", allowedSubsidiaryIds: null });
+      await decide(rejectedId, "rejected", "Split the overtime line");
       const status = (await db.execute<{ status: string }>(sql`select status from crew_time_batches where id = ${rejectedId}`)).rows[0]?.status;
       assert.equal(status, "rejected");
       const posted = await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId: rejectedId, allowedSubsidiaryIds: null }));
@@ -376,7 +388,7 @@ test("crew post refuses while Projects is off and writes no time", { skip: !DB }
     const foreman = randomUUID();
     const worker = randomUUID();
     const projectId = randomUUID();
-    const actor = randomUUID();
+    const actor = await createWorkOperator(org.orgId, "Crew operator", ["time.read", "time.manage", "time.crew.enter"]);
     await withOrg(org.orgId, async () => {
       await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
@@ -393,7 +405,6 @@ test("crew post refuses while Projects is off and writes no time", { skip: !DB }
         canManageAll: true, allowedSubsidiaryIds: null,
       });
       await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
-      await approveBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null });
       assert.equal(await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null })), "projects_off");
       const entries = (await db.execute<{ n: string }>(sql`select count(*)::text as n from time_entries where org_id = ${org.orgId}`)).rows[0]?.n;
       assert.equal(entries, "0", "the refused post writes no time");

@@ -1019,8 +1019,8 @@ export async function importFieldTickets(input: {
         if (updated.rows.length !== linksToWrite.length) throw new Error(`refusing import: expected to link ${linksToWrite.length} source sales-order lines, updated ${updated.rows.length}`);
         const audit = await db.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
-          select ${orgId}, 'document_lines', source.line_id::text, 'update',
-                 jsonb_build_object('reason', 'source_billable_timesheet_ticket_link', 'sourceSystem', ${sourceSystem},
+          select ${orgId}, 'document_lines', source.line_id, 'update',
+                 jsonb_build_object('reason', 'source_billable_timesheet_ticket_link', 'sourceSystem', ${sourceSystem}::text,
                    'sourceTransactionId', source.source_transaction_id, 'sourceTicketRef', source.ticket_ref,
                    'before', jsonb_build_object('fieldTicketId', null), 'after', jsonb_build_object('fieldTicketId', source.ticket_document_id)),
                  ${actor}, ${requestId}

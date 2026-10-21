@@ -1,9 +1,16 @@
+import { before as initializeNativeComposition } from "node:test";
+initializeNativeComposition(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+import { createWorkOperator } from "../testing/manufacturing.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 import { applySourceReconciliationEvidence } from "./source-evidence.ts";
 import type { MigrationSource, SourceClearedLineState } from "./source.ts";
 import type { NativeDocument } from "./native.ts";
@@ -101,7 +108,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+      const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
       await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
       const entry = await postEntry(org, actor, "308", "full");
       await linkDocument(org, "testId", "DOC-1", entry, [{ lineRef: "L-1", accountId: org.accounts.bank }]);
@@ -134,7 +141,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+      const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
       await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
       const entry = await postEntry(org, actor, "21", "stale");
       await linkDocument(org, "testId", "DOC-2", entry, [{ lineRef: "L-9", accountId: org.accounts.bank }]);
@@ -163,7 +170,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+      const actor = await createWorkOperator(org.orgId, "Evidence reviewer", ["banking.reconcile"]);
       await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
       const first = await postEntry(org, actor, "100", "a");
       const second = await postEntry(org, actor, "25", "b");

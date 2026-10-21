@@ -1159,6 +1159,11 @@ export const NAV_SUBGROUPS: Record<string, { href: string; iconKey?: string }> =
 }
 
 const LOCAL_DESTINATION_LABELS: Record<string, string> = {
+  "/crm/sales/representatives": "Sales representatives",
+  "/crm/sales/teams": "Sales teams",
+  "/crm/sales/quotas": "Sales quotas",
+  "/crm/sales/territories": "Sales territories",
+  "/intercompany/transfers": "Intercompany transfers",
   "/entities/employees": "Employees",
   "/hrm/org-chart": "Org chart",
   "/hrm/processes": "Processes",

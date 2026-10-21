@@ -20,7 +20,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 const stateKey = Symbol.for('openbooks.data-export-scope-test')
 const state: {
   authz: {
-    user: { id: string; orgId: string }
+    user: { roles: { key: string }[]; id: string; orgId: string }
     permissions: Set<string>
     allowedSubsidiaryIds: Set<string> | null
   } | null
@@ -82,7 +82,7 @@ const { createScratchOrg, dropScratchOrg } = await import(
 )
 
 function gate(orgId: string, userId: string, permissions: string[], allowedSubsidiaryIds: Set<string> | null) {
-  state.authz = { user: { id: userId, orgId }, permissions: new Set(permissions), allowedSubsidiaryIds }
+  state.authz = { user: { roles: [], id: userId, orgId }, permissions: new Set(permissions), allowedSubsidiaryIds }
 }
 
 function postRequest(body: unknown): Request {

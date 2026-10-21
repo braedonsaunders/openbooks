@@ -17,7 +17,7 @@ registerHooks({
     if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__controlAccountRoundTripState;
-        return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
+        return { user: { roles: [], orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
       }
       // The picker route guards by permission directly; the test session
       // holds every grant, so the guard admits it with the same session.

@@ -23,7 +23,7 @@ registerHooks({
     if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__fundingBankRoundTripState;
-        return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
+        return { user: { roles: [], orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
       }
       export { can, guardSubsidiaryScope, subsidiariesInScope } from '${root}web/lib/authz.ts'
     `)

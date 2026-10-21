@@ -22,8 +22,8 @@ import {
 } from "./settlement-policy.ts";
 import { disputeRow } from "./psp-automation-disputes.ts";
 import {
-  PSP_AUTOMATION_SYSTEM_ACTOR_ID,
   PspAutomationError,
+  lockReturnReceiptAuthority,
 } from "./psp-automation-context.ts";
 
 export interface ReturnReceiptPlan {
@@ -139,6 +139,7 @@ export async function stageReturnReceipt(
   orgId: string,
   plan: ReturnReceiptPlan,
 ): Promise<{ receiptId: string; ready: boolean }> {
+  const { actorId, allowedSubsidiaryIds } = await lockReturnReceiptAuthority(orgId, plan);
   const row = await disputeRow(orgId, plan.disputeId);
   let stage = stages(row.status_history).find(
     (item) => item.plan.phase === plan.phase && item.plan.role === plan.role,
@@ -154,8 +155,8 @@ export async function stageReturnReceipt(
     const payment = await createPaymentDocument({
       orgId,
       kind: "customer_payment",
-      createdBy: PSP_AUTOMATION_SYSTEM_ACTOR_ID,
-      allowedSubsidiaryIds: null,
+      createdBy: actorId,
+      allowedSubsidiaryIds,
       partyId: plan.partyId,
       bankAccountId: plan.bankAccountId,
       subsidiaryId: plan.subsidiaryId,
@@ -196,7 +197,7 @@ export async function stageReturnReceipt(
         "The return's receipt identity could not be recorded.",
       );
     await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'documents', ${payment.id}, 'update', ${JSON.stringify({ mode: "provider_return_receipt", after: { ...plan, ...shaped } })}::jsonb, ${PSP_AUTOMATION_SYSTEM_ACTOR_ID})`);
+      values (${orgId}, 'documents', ${payment.id}, 'update', ${JSON.stringify({ mode: "provider_return_receipt", after: { ...plan, ...shaped } })}::jsonb, ${actorId})`);
   }
   const receipt = (
     await db.execute<{
@@ -280,7 +281,7 @@ export async function stageReturnReceipt(
     const result = await submitAndReleaseIfUngated(
       "customer_payment",
       stage.documentId,
-      PSP_AUTOMATION_SYSTEM_ACTOR_ID,
+      actorId,
       { source: "api" },
     );
     if (result.flowError)
@@ -324,6 +325,7 @@ export async function postReturnReceipt(
     throw new PspAutomationError(
       "Approve the staged return receipt before resuming its review.",
     );
+  const { actorId } = await lockReturnReceiptAuthority(orgId, stage.plan);
   const unit = financialReceiptEffects.getStore();
   if (!unit)
     throw new PspAutomationError(
@@ -339,14 +341,14 @@ export async function postReturnReceipt(
       if (stage.plan.role === "credit-refund") {
         return postDocument(receiptId, await paymentControlDeps(orgId), {
           deferEffects: true,
-          audit: { actorId: PSP_AUTOMATION_SYSTEM_ACTOR_ID, source: "api" },
+          audit: { actorId, source: "api" },
         });
       }
       return (
         await postPaymentWithApplications(
           receiptId,
           undefined,
-          PSP_AUTOMATION_SYSTEM_ACTOR_ID,
+          actorId,
           "api",
           { deferEffects: true },
         )

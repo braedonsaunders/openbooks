@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
 import { loadCatalog } from "./catalog.ts";
 import { TENANT_TABLE_POLICIES } from "./tenant-table-policies.ts";
@@ -20,6 +20,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // is the same shape (global unique, org-less lookup) and collides the same
 // way on any template with in-flight signing links.
 const NEVER_CLONED = [
+  "application_idempotency_keys",
   "scheduler_outbox",
   "scheduler_outbox_terminal_audit",
   "payment_links",
@@ -43,6 +44,10 @@ test("cloning a template with scheduler and token rows succeeds and copies none 
   let created: { sandboxId: string; sandboxOrgId: string } | null = null;
   let cloneError: unknown = null;
   try {
+    const actorId = await createScratchUser(org.orgId, 'Operation author', 'operation_author');
+    await db.execute(sql`insert into application_idempotency_keys(org_id,actor_id,source,operation,idempotency_key,request_hash,response,completed_at)
+      values(${org.orgId},${actorId},'api','fixture.operation',${`source-operation-${randomUUID()}`},${'1'.repeat(64)},'{"sourceEnvironment":true}'::jsonb,now())`);
+
     await db.execute(sql`
       insert into scheduler_outbox (id, org_id, kind, subject_id, payload, occurrence_key, status)
       values (${randomUUID()}, ${org.orgId}, 'flow_email', ${randomUUID()}, '{}'::jsonb, ${`clone-probe-${randomUUID()}`}, 'pending')
@@ -90,6 +95,8 @@ test("cloning a template with scheduler and token rows succeeds and copies none 
       select count(*)::int as n from scheduler_outbox where org_id = ${org.orgId}
     `)).rows[0]!.n;
     assert.equal(sourceOutbox, 1);
+    const sourceReceipts = (await db.execute<{n:number}>(sql`select count(*)::int as n from application_idempotency_keys where org_id=${org.orgId}`)).rows[0]!.n;
+    assert.equal(sourceReceipts, 1, 'the source environment retains its operation receipt');
   } finally {
     // A failed clone still commits its shell (org + sandbox row): remove
     // every sandbox of the scratch org before dropping it, so the shell

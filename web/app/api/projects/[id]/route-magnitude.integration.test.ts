@@ -16,7 +16,7 @@ const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:t
 const sessionSource = `
   export async function guardPermission() {
     const s = globalThis.__projectPatchMagnitudeState;
-    return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
+    return { user: { roles: [], orgId: s.orgId, id: s.actorId }, permissions: new Set(), allowedSubsidiaryIds: null };
   }
 `
 registerHooks({

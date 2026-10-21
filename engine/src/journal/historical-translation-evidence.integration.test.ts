@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { createCabinetFile } from "../platform/file-ingestion.ts";
@@ -114,11 +115,11 @@ test("approved exact contribution sources translate in a read-only snapshot and 
     assert.ok("identity" in read.identity && read.identity.identity);
     const physical = await withOrgTransaction(f.org.orgId, () => db.execute<{ amount: string }>(sql`select amount::text from journal_lines where org_id=${f.org.orgId} and id=${first.lineId}`));
     assert.equal(physical.rows[0]!.amount, "-100.0000");
-    await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`update historical_translation_layers set rate=1.9 where org_id=${f.org.orgId} and basis_id=${applied.basisId}`)), /immutable/i);
-    await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`delete from historical_translation_contributions where org_id=${f.org.orgId} and id=${applied.basisId}`)), /immutable/i);
+    await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`update historical_translation_layers set rate=1.9 where org_id=${f.org.orgId} and basis_id=${applied.basisId}`)), error => errorChainMatches(error, /immutable/i));
+    await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`delete from historical_translation_contributions where org_id=${f.org.orgId} and id=${applied.basisId}`)), error => errorChainMatches(error, /immutable/i));
     await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`update file_versions set content_hash=${"b".repeat(64)}
-      where file_id=${f.source.fileId} and id=${f.source.versionId}`)), /immutable Cabinet version/);
-    await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`delete from file_blobs where version_id=${f.source.versionId}`)), /immutable Cabinet version/);
+      where file_id=${f.source.fileId} and id=${f.source.versionId}`)), error => errorChainMatches(error, /immutable Cabinet version/));
+    await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`delete from file_blobs where version_id=${f.source.versionId}`)), error => errorChainMatches(error, /immutable Cabinet version/));
     await assert.rejects(f.propose({ ...f.instruction(first.lineId, "-100", "1.2"), measurementCurrency: "EUR", presentationCurrency: "GBP" }), /different measurement currency/);
   } finally { await dropScratchOrg(f.org.orgId); }
 });
@@ -223,26 +224,29 @@ test("inaccessible optional originals do not block authoring or expose their ret
   } finally { await dropScratchOrg(f.org.orgId); }
 });
 
-test("native foreign-home members and platform operators retain their real creator identity", { skip: !DB }, async () => {
+test("mapped tenant members and foreign platform operators retain their actual acting identity", { skip: !DB }, async () => {
   const f = await fixture(), home = await createScratchOrg();
   try {
-    const actorId = await withBypassContext(() => createScratchUser(home.orgId, 'Visiting capital operator', 'visiting_accountant'));
+    const homeActorId = await withBypassContext(() => createScratchUser(home.orgId, 'Visiting capital operator', 'visiting_accountant'));
+    const memberActorId = await withBypassContext(() => createScratchUser(f.org.orgId, 'Mapped capital operator', 'mapped_member'));
     const roleId = randomUUID();
     await withBypassContext(async () => {
       assert.equal((await db.execute(sql`insert into app_roles(id,org_id,key,name,is_built_in,permissions,subsidiary_restriction)
         values(${roleId},${f.org.orgId},'capital_operator','Capital operator',false,'["close.run","documents.read"]'::jsonb,
           '{"mode":"all"}'::jsonb) returning id`)).rows.length, 1);
       assert.equal((await db.execute(sql`insert into role_assignments(org_id,user_id,role_id)
-        values(${f.org.orgId},${actorId},${roleId}) returning id`)).rows.length, 1);
+        values(${f.org.orgId},${memberActorId},${roleId}) returning id`)).rows.length, 1);
+      assert.equal((await db.execute(sql`insert into user_org_access(member_user_id,org_id,acting_user_id)
+        values(${homeActorId},${f.org.orgId},${memberActorId}) returning id`)).rows.length, 1);
       assert.equal((await db.execute(sql`insert into resource_grants(org_id,resource_type,resource_id,principal_type,principal_id,access,created_by)
-        values(${f.org.orgId},'folder',${f.folderId},'user',${actorId},'viewer',${f.actors.adminId}) returning id`)).rows.length, 1);
+        values(${f.org.orgId},'folder',${f.folderId},'user',${memberActorId},'viewer',${f.actors.adminId}) returning id`)).rows.length, 1);
     });
     for (const platform of [false, true]) {
       if (platform) await withBypassContext(async () => {
-        assert.equal((await db.execute(sql`delete from role_assignments where org_id=${f.org.orgId} and user_id=${actorId} returning id`)).rows.length, 1);
-        assert.equal((await db.execute(sql`delete from resource_grants where org_id=${f.org.orgId} and principal_id=${actorId} returning id`)).rows.length, 1);
-        assert.equal((await db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${actorId} returning id`)).rows.length, 1);
+        assert.equal((await db.execute(sql`delete from resource_grants where org_id=${f.org.orgId} and principal_id=${memberActorId} returning id`)).rows.length, 1);
+        assert.equal((await db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${homeActorId} returning id`)).rows.length, 1);
       });
+      const actorId = platform ? homeActorId : memberActorId;
       const posted = await f.entry('-100');
       const proposed = await f.propose(f.instruction(posted.lineId, '-100', '1.2'));
       await f.approve(proposed.changeId);
@@ -415,7 +419,7 @@ test("an applied correction can be reversed and corrected again without releasin
     assert.deepEqual(restored.layers[0]!.source, firstLayer.source);
     assert.equal(restored.layers[0]!.versionNumber, firstLayer.versionNumber);
     await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`update historical_translation_layers
-      set original_layer_id=${firstLayer.id} where org_id=${f.org.orgId} and id=${restored.layers[0]!.id}`)), /immutable/i);
+      set original_layer_id=${firstLayer.id} where org_id=${f.org.orgId} and id=${restored.layers[0]!.id}`)), error => errorChainMatches(error, /immutable/i));
     assert.equal((await withBypassContext(() => db.execute(sql`delete from resource_grants where org_id=${f.org.orgId}
       and resource_type='folder' and resource_id=${f.folderId} and principal_type='user'
       and principal_id=${f.authority.actorId} returning id`))).rows.length, 1);

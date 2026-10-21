@@ -28,7 +28,7 @@ test(`${route} drawer discards the reviewed draft with a JSON revision token`, a
       await page.goto(`${route}?doc=${id}`)
     }
     await page.getByRole('button', { name: 'Actions', exact: true }).last().click()
-    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Delete', exact: true }).click()
     const deleted = page.waitForResponse((r) => r.url().endsWith(`/api/documents/${id}`) && r.request().method() === 'DELETE')
     await page.getByRole('dialog').filter({ hasText: 'This permanently deletes the draft' }).getByRole('button', { name: 'Delete', exact: true }).click()
     const response = await deleted

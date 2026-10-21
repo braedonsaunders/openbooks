@@ -99,6 +99,8 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
  * logs (would carry production PII/history), and the org row itself (created
  * explicitly by the clone). */
 export const EXCLUDE = new Set([
+  // Exactly-once API responses and request identities never cross environment boundaries.
+  "application_idempotency_keys",
   // Scheduled source instructions and reminder-producing policies are environment-specific.
   "journal_reversal_instructions", "subscription_renewal_policies", "subscription_renewal_occurrences",
   // Executable warehouse suggestions and wave releases belong to the source environment.

@@ -63,7 +63,11 @@ async function party(orgId: string, nsId: string): Promise<string> {
 async function actor(orgId: string, permissions = ["time.manage", "time.read", "ar.create"]): Promise<string> {
   const id = await createScratchUser(orgId, "Source importer", `source_import_${randomUUID()}`);
   await grantScratchPermissions(orgId, id, permissions);
-  await db.execute(sql`update parties set custom = custom || '{"nsId":"C1"}'::jsonb where org_id = ${orgId} and id = (select party_id from customer_roles where org_id = ${orgId} order by party_id limit 1)`);
+  const customer = (await db.execute<{id:string}>(sql`select id from parties where org_id=${orgId} and kind='customer' order by id limit 1`)).rows[0];
+  assert.ok(customer, "the source importer fixture requires its native customer");
+  const role = (await db.execute(sql`select party_id from customer_roles where org_id=${orgId} and party_id=${customer.id}`)).rows[0];
+  if (!role) assert.equal((await db.execute(sql`insert into customer_roles(org_id,party_id) values(${orgId},${customer.id})`)).rowCount,1);
+  assert.equal((await db.execute(sql`update parties set custom=custom || '{"nsId":"C1"}'::jsonb where org_id=${orgId} and id=${customer.id}`)).rowCount,1);
   await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', '{"projects":true,"fieldTickets":true,"orders":true}'::jsonb) where id = ${orgId}`);
   return id;
 }
@@ -451,7 +455,7 @@ test("native order links retain exact source identity and audit the successful w
     assert.equal(linked.salesOrderLinesLinked, 1);
     const stored = (await db.execute<{ticket_id: string; audit_ticket_id: string}>(sql`
       select l.field_ticket_id::text ticket_id, a.changes->'after'->>'fieldTicketId' audit_ticket_id
-        from document_lines l join audit_log a on a.org_id = l.org_id and a.row_id = l.id::text
+        from document_lines l join audit_log a on a.org_id = l.org_id and a.row_id = l.id
        where l.org_id = ${org.orgId} and l.id = ${line}
          and a.changes->>'reason' = 'source_billable_timesheet_ticket_link'
     `)).rows;
@@ -560,7 +564,10 @@ test("a certified draft ticket admits its missing source charges only through th
     ]);
     assert.equal(raced[0]!.status, "fulfilled");
     const admitted = await importFieldTickets({...input, tickets: [ticket({jobRef: "1", approval: "No"})]});
-    assert.equal(admitted.billableChargesCreated, 1);
+    const racingImport = raced[1]!;
+    if (racingImport.status === "rejected") assert.match(String(racingImport.reason), /native_ticket_source_lineage_missing|source ticket 9, which is not present in this import or native tenant/);
+    assert.equal(admitted.billableChargesCreated + (racingImport.status === "fulfilled" ? racingImport.value.billableChargesCreated : 0), 1,
+      "certification and import admit the source charge exactly once across either lock order");
     assert.equal(admitted.nativeUpdated, 0);
     const replay = await importFieldTickets({...input, tickets: [], charges: [billableCharge()]});
     assert.equal(replay.billableChargesUnchanged, 1);

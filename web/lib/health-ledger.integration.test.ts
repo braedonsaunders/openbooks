@@ -204,6 +204,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
+const { approveBudgetScenarioFixture } = await import("@openbooks/engine/testing/budgets");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { getAuthz } = await import("./authz");
@@ -256,8 +257,7 @@ for (const boundary of ["service", "completed month", "page", "assistant", "acco
             await db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name) values (${scenario},${org.orgId},${org.bookId},2026,${label})`);
             const entries = index === 0 ? [[org.subsidiaryId,'-90']] : index === 1 ? [[org.subsidiaryId,'-120'],[hidden,'-990']] : [[hidden,'-500']];
             for (const [sub, amount] of entries) await db.execute(sql`insert into budget_lines(org_id,scenario_id,account_id,period_id,subsidiary_id,amount) values (${org.orgId},${scenario},${org.accounts.revenue},${org.periodId},${sub},${amount})`);
-            await db.execute(sql`update budget_scenarios set status='pending_approval',revision=revision+1 where id=${scenario}`);
-            await db.execute(sql`update budget_scenarios set status='approved',revision=revision+1,updated_at=${'2026-07-'+String(index+1).padStart(2,'0')}::date where id=${scenario}`);
+            await approveBudgetScenarioFixture(org.orgId, scenario);
           }
         });
         await withOrgContext(org.orgId, async () => {

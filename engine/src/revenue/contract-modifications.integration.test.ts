@@ -1,3 +1,4 @@
+import { grantScratchPermissions as grantDecisionDuties } from "@openbooks/engine/testing/fixtures";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -72,6 +73,7 @@ async function fixture(fn: (f: Fixture) => Promise<void>, postJuly = true) {
       assert.equal(r.posted, 1);
       assert.deepEqual(r.problems, []);
     }
+    await grantDecisionDuties(org.orgId, actors.approver1Id, ["ar.post"]);
     await seedApprovalFlow(org.orgId, {
       subjectKind: "financial_change",
       assignees: [{ type: "user", userId: actors.approver1Id }],
@@ -386,7 +388,7 @@ test(
         proposeRevenueModification(
           f.org.orgId,
           f.contractId,
-          f.actors.approver1Id,
+          f.actors.outsiderId,
           proposal(f),
         ),
         /ar.post/,

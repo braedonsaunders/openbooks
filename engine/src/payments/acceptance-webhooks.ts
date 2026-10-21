@@ -1,3 +1,4 @@
+import { lockPaymentAttempt } from "./payment-attempt-lock.ts";
 /** Provider webhook intake for payment acceptance: signature-verified
  *  deliveries are normalized by the adapters, then claimed and applied
  *  idempotently against the recorded checkout attempt. */
@@ -358,6 +359,7 @@ export async function processWebhookEvent(
     return "unknown_attempt";
   }
 
+  await lockPaymentAttempt(orgId,found.id);
   if (event.status === "succeeded") {
     const hasPaidAmount = event.paidAmount != null;
     const hasPaidCurrency = event.paidCurrency != null;

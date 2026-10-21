@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../platform/db.ts";
+import { db, withOrgTransaction, withBypassContext } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
@@ -21,7 +21,7 @@ import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 type Fixture = { org: ScratchOrg; actorId: string; wipId: string; departmentId: string };
 type Case = { name: string; run: (f: Fixture) => Promise<void> };
-function run<T>(work: (tx: SqlExecutor) => Promise<T>) { return withBypassContext(() => db.transaction(work)); }
+function run<T>(orgId: string, work: (tx: SqlExecutor) => Promise<T>) { return withOrgTransaction(orgId, () => work(db)); }
 
 async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
@@ -57,31 +57,31 @@ async function prepare(f: Fixture, input: {
 } = {}) {
   const cfg = { backflushAt: "none" as const, qualityGate: "none" as const, operationSeq: null as number | null,
     quantityPer: "2", scrapPct: null as string | null, orderQty: "1", tracking: "none" as const, ...input };
-  await run(async (tx) => {
+  await run(f.org.orgId, async (tx) => {
     await tx.execute(sql`update item_inventory_profiles set tracking=${cfg.tracking},allow_negative_inventory=false where org_id=${f.org.orgId} and item_id=${f.org.items.component} returning item_id`);
     await tx.execute(sql`update bom_components set quantity_per=${cfg.quantityPer},scrap_pct=${cfg.scrapPct},operation_seq=${cfg.operationSeq}
       where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} and component_item_id=${f.org.items.component} returning id`);
   });
-  const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+  const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
     code: `WC-${randomUUID()}`, name: "Assembly center", kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", departmentId: f.departmentId, absorbsOverhead: false,
   }));
   // An explicit zero machine rate: these cases exercise material flows, and
   // operation completion refuses a machine center with no rate at all.
-  await run((tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(center.id), { machineRatePerHour: "0", effectiveFrom: "2026-01-01" }));
-  const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
+  await run(f.org.orgId, (tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(center.id), { machineRatePerHour: "0", effectiveFrom: "2026-01-01" }));
+  const routing = await run(f.org.orgId, (tx) => createRouting(tx, f.org.orgId, f.actorId, {
     producedItemId: f.org.items.assembly, code: `RT-${randomUUID()}`, name: "Assembly route", effectiveFrom: "2026-01-01",
     defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "units",
   }));
-  await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
+  await run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
     sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "1",
     backflushAt: cfg.backflushAt, qualityGate: cfg.qualityGate,
   }));
   await approveFixtureRouting(f.org.orgId, f.actorId, String(routing.id));
-  const draft = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
+  const draft = await run(f.org.orgId, (tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
     producedItemId: f.org.items.assembly, quantityOrdered: cfg.orderQty, subsidiaryId: f.org.subsidiaryId,
     issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: f.org.date,
   }));
-  await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
+  await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
   return withBypassContext(async () => ({
     id: draft.id,
     number: draft.number,
@@ -116,7 +116,7 @@ async function orderPostingDate(f: Fixture, number: string) {
   return withBypassContext(async () => (await db.execute<{ date: string }>(sql`select posting_date::text as date from journal_entries where org_id=${f.org.orgId} and origin='manufacturing' and custom->>'work_order_number'=${number} order by id desc limit 1`)).rows[0]?.date);
 }
 async function issue(f: Fixture, orderId: string, materialId: string, quantity = "1", lotId?: string | null, serialId?: string | null) {
-  return run((tx) => issueMaterials(tx, f.org.orgId, f.actorId, orderId, [{ materialId, quantity, lotId, serialId }]));
+  return run(f.org.orgId, (tx) => issueMaterials(tx, f.org.orgId, f.actorId, orderId, [{ materialId, quantity, lotId, serialId }]));
 }
 async function componentLabel(f: Fixture) {
   return withBypassContext(async () => (await db.execute<{ label: string }>(sql`select coalesce(nullif(trim(code),''),name) as label from items where org_id=${f.org.orgId} and id=${f.org.items.component}`)).rows[0]!.label);
@@ -166,15 +166,15 @@ const cases: Case[] = [
   { name: "start backflush uses the organization's business date", run: async (f) => {
     const order = await prepare(f, { backflushAt: "start", operationSeq: 10 }); await stock(f, "4", "2");
     await withVancouverDate(f, async () => {
-      await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
+      await run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
       assert.equal(await orderPostingDate(f, order.number), "2026-10-31");
     });
   } },
   { name: "operation completion backflush uses the organization's business date", run: async (f) => {
     const order = await prepare(f, { backflushAt: "finish", operationSeq: 10 }); await stock(f, "4", "2");
     await withVancouverDate(f, async () => {
-      await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
-      await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId, { doneQty: "1" }));
+      await run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
+      await run(f.org.orgId, (tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId, { doneQty: "1" }));
       assert.equal(await orderPostingDate(f, order.number), "2026-10-31");
     });
   } },
@@ -207,22 +207,22 @@ const cases: Case[] = [
       assert.equal(copied.rows[0]!.tracking, "none");
       assert.equal(copied.rows[0]!.quantity, "5.0000");
       const clone = await withBypassContext(async () => (await db.execute<{ id: string; operation_id: string }>(sql`select wo.id,operation.id as operation_id from mfg_work_orders wo join mfg_wo_operations operation on operation.org_id=wo.org_id and operation.work_order_id=wo.id where wo.org_id=${orgId} and wo.number=${order.number}`)).rows[0]!);
-      await run((tx) => startWorkOrderOperation(tx, orgId, actorId, clone.id, clone.operation_id));
+      await run(orgId, (tx) => startWorkOrderOperation(tx, orgId, actorId, clone.id, clone.operation_id));
       assert.equal((await withBypassContext(async () => db.execute<{ quantity: string }>(sql`select quantity::text from inventory_movements where org_id=${orgId} and kind='assembly_consume'`))).rows[0]?.quantity, "-4.4000");
-      await refuses(run((tx) => completeWorkOrderOperation(tx, orgId, actorId, clone.id, clone.operation_id, { doneQty: "1" })), "measured_quantity_required", "measured quantity");
+      await refuses(run(orgId, (tx) => completeWorkOrderOperation(tx, orgId, actorId, clone.id, clone.operation_id, { doneQty: "1" })), "measured_quantity_required", "measured quantity");
     });
   } },
   { name: "finish backflush uses reported quantity and scrap", run: async (f) => {
     const order = await prepare(f, { backflushAt: "finish", operationSeq: 10, quantityPer: "2", scrapPct: "10", orderQty: "2" });
-    await stock(f, "5", "2"); await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
-    await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId, { doneQty: "1" }));
+    await stock(f, "5", "2"); await run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
+    await run(f.org.orgId, (tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId, { doneQty: "1" }));
     const row = await withBypassContext(async () => db.execute<{ quantity: string }>(sql`select quantity::text from inventory_movements where org_id=${f.org.orgId} and kind='assembly_consume'`));
     assert.equal(row.rows[0]?.quantity, "-2.2000");
   } },
   { name: "tracked backflush consumes oldest lots first", run: async (f) => {
     const order = await prepare(f, { backflushAt: "start", operationSeq: 10, quantityPer: "3", tracking: "lot" });
     const old = await stock(f, "2", "2", "LOT-OLD"), next = await stock(f, "2", "3", "LOT-NEXT");
-    await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
+    await run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
     const rows = await withBypassContext(async () => db.execute<{ lot_id: string; quantity: string }>(sql`select lot_id,quantity::text from inventory_movements where org_id=${f.org.orgId} and kind='assembly_consume'`));
     assert.equal(rows.rows.find((row) => row.lot_id === old)?.quantity, "-2.0000");
     assert.equal(rows.rows.find((row) => row.lot_id === next)?.quantity, "-1.0000");
@@ -231,7 +231,7 @@ const cases: Case[] = [
     const order = await prepare(f, { backflushAt: "start", operationSeq: 10, quantityPer: "3", tracking: "lot" });
     const component = await componentLabel(f);
     await stock(f, "1", "2", "LOT-SHORT");
-    await refuses(run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId)), "backflush_lot_shortage", `Component ${component} is short by 2.0000`);
+    await refuses(run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId)), "backflush_lot_shortage", `Component ${component} is short by 2.0000`);
     const count = await withBypassContext(async () => db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId} and origin='manufacturing'`));
     assert.equal(count.rows[0]?.n, 0);
   } },
@@ -241,7 +241,7 @@ const cases: Case[] = [
   } },
   { name: "hold reason blocks material issue", run: async (f) => {
     const order = await prepare(f); await stock(f, "3", "2");
-    await run((tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, order.id, "Quality review"));
+    await run(f.org.orgId, (tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, order.id, "Quality review"));
     await refuses(issue(f, order.id, order.materialId), "work_order_on_hold", "Quality review", "Resume the work order before issuing materials or completing an operation.");
   } },
   { name: "missing manufacturing WIP mapping refuses by role", run: async (f) => {
@@ -250,12 +250,12 @@ const cases: Case[] = [
     await refuses(issue(f, order.id, order.materialId), "mfg_wip_account_missing", "role mfgWip", "Map Manufacturing WIP under Setup → Company & Accounting → Control accounts.");
   } },
   { name: "operation tolerance refusal names percentage and remedy", run: async (f) => {
-    const order = await prepare(f); await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
-    await refuses(run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId, { doneQty: "1.02" })), "completion_tolerance_exceeded", "1% completion tolerance", "Revise the order quantity.");
+    const order = await prepare(f); await run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
+    await refuses(run(f.org.orgId, (tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId, { doneQty: "1.02" })), "completion_tolerance_exceeded", "1% completion tolerance", "Revise the order quantity.");
   } },
   { name: "measure quality gate requires a reported measurement", run: async (f) => {
-    const order = await prepare(f, { qualityGate: "measure" }); await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
-    await refuses(run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId, { doneQty: "1" })), "measured_quantity_required", "measured quantity", "Enter measuredQty before completing this operation.");
+    const order = await prepare(f, { qualityGate: "measure" }); await run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
+    await refuses(run(f.org.orgId, (tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId, { doneQty: "1" })), "measured_quantity_required", "measured quantity", "Enter measuredQty before completing this operation.");
   } },
   { name: "WIP GL balance ties to issued layer cost", run: async (f) => {
     const order = await prepare(f); await stock(f, "5", "3"); const result = await issue(f, order.id, order.materialId, "2");
@@ -274,13 +274,13 @@ const cases: Case[] = [
 ];
 
 cases.push(...(["finish", "start"] as const).map(trigger => ({name:`${trigger} backflush consumes attempted quantity once with normal loss`,run:async (f: Fixture)=>{
- await run(tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.manage","items.post"]'::jsonb where org_id=${f.org.orgId} returning id`));
+ await run(f.org.orgId, tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.manage","items.post"]'::jsonb where org_id=${f.org.orgId} returning id`));
   const order=await prepare(f,{backflushAt:trigger,operationSeq:10,quantityPer:'2',orderQty:'10'});await stock(f,'20','3');
-  await run(tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId));
-  const reasonId=randomUUID();await run(tx=>tx.execute(sql`insert into mfg_scrap_reasons (id,org_id,code,name,classification) values (${reasonId},${f.org.orgId},${reasonId},'Normal loss','normal') returning id`));
-  await run(tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,order.id,randomUUID(),{operationId:order.operationId,quantity:'2',reasonId}));
-  await run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId,{doneQty:'8'}));
-  await run(tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId,{doneQty:'8'}));
+  await run(f.org.orgId, tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId));
+  const reasonId=randomUUID();await run(f.org.orgId, tx=>tx.execute(sql`insert into mfg_scrap_reasons (id,org_id,code,name,classification) values (${reasonId},${f.org.orgId},${reasonId},'Normal loss','normal') returning id`));
+  await run(f.org.orgId, tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,order.id,randomUUID(),{operationId:order.operationId,quantity:'2',reasonId}));
+  await run(f.org.orgId, tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId,{doneQty:'8'}));
+  await run(f.org.orgId, tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId,{doneQty:'8'}));
   const result=await withBypassContext(async()=>(await db.execute<{quantity:string;entries:number}>(sql`select m.backflush_qty::text as quantity,(select count(*)::int from journal_entries where org_id=${f.org.orgId} and custom->>'operation_id'=${order.operationId} and custom->>'backflush_trigger'=${trigger}) as entries from mfg_wo_materials m where m.org_id=${f.org.orgId} and m.work_order_id=${order.id}`)).rows[0]!);
   assert.deepEqual(result,{quantity:'20.0000',entries:1});
 }})));

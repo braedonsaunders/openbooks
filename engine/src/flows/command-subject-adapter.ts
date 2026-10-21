@@ -29,6 +29,8 @@ interface CommandSubjectDefinition {
   }>;
   /** Additional child or aggregate evidence, evaluated against the parent alias s. */
   integrity?: SQL;
+  /** Native domain fingerprint for records with operational history outside approved terms. */
+  fingerprint?: SQL;
 }
 const identifiers = /^[a-z_][a-z0-9_]*$/;
 
@@ -76,7 +78,7 @@ export function defineCommandSubject(
       }>(sql`
    select (${config.statusSql ?? sql`s.${sql.identifier(config.statusColumn)}`})::text as status,s.${sql.identifier(config.makerColumn ?? "created_by")} as maker,
     jsonb_build_object(${sql.join(pairs, sql`, `)}) as facts,${config.makerIds ?? sql`null::text[]`} as makers,
-    public.flow_command_record_fingerprint(to_jsonb(s),${config.integrity ?? sql`null`}) as fingerprint
+    ${config.fingerprint ?? sql`public.flow_command_record_fingerprint(to_jsonb(s),${config.integrity ?? sql`null`})`} as fingerprint
    from ${sql.identifier(config.table)} s where s.id=${id} and (${config.where ?? sql`true`})`)
     ).rows[0];
     return row

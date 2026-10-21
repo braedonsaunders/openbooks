@@ -10,10 +10,12 @@ import {
   INBOUND_PAYMENT_RUN_SUBJECT_KIND,
   OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
 } from "../flows/payment-runs-adapter.ts";
-import { PaymentError } from "../payments-core/payment-errors.ts";
+import { FlowDispatchError } from "../flows/dispatch-result.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { releasePaymentRunApproval, submitPaymentRun } from "./operations.ts";
 import {
   createScratchOrg,
+  grantScratchPermissions,
   dropScratchOrg,
   seedApprovalFlow,
   seedFlowActors,
@@ -30,6 +32,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 test("payment runs retain explicit solo approval after an authored policy change", { skip: !DB }, async () => {
   for (const direction of ["outbound", "inbound"] as const) {
     await withOrg(async (org, actors) => {
+      await grantScratchPermissions(org.orgId, actors.submitterId, [direction === "outbound" ? "ap.approve" : "ar.approve"]);
       const subjectKind = direction === "outbound" ? OUTBOUND_PAYMENT_RUN_SUBJECT_KIND : INBOUND_PAYMENT_RUN_SUBJECT_KIND;
       const { flowId } = await seedApprovalFlow(org.orgId, { subjectKind,
         assignees: [{ type: "user", userId: actors.submitterId }], mode: "any", preventSelfApproval: false });
@@ -50,24 +53,27 @@ test("payment runs retain explicit solo approval after an authored policy change
   }
 });
 
-test("a legacy payment gate cannot acquire solo authority from the current flow", { skip: !DB }, async () => {
+test("submitted payment policy cannot be removed or replaced before its native decision", { skip: !DB }, async () => {
   await withOrg(async (org, actors) => {
+    await grantScratchPermissions(org.orgId, actors.submitterId, ["ap.approve"]);
     await seedApprovalFlow(org.orgId, { subjectKind: OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
       assignees: [{ type: "user", userId: actors.submitterId }, { type: "user", userId: actors.approver2Id }],
       mode: "any", preventSelfApproval: false });
     const runId = await seedDraftRun(org, actors.submitterId);
     await submitPaymentRun(runId, org.orgId, actors.submitterId);
-    await db.execute(sql`update flow_runs set context=context-'submissionPolicy'
-      where org_id=${org.orgId} and subject_id=${runId}`);
+    await assert.rejects(db.execute(sql`update flow_runs set context=context-'submissionPolicy'
+      where org_id=${org.orgId} and subject_id=${runId}`),
+      error => errorChainMatches(error, /submitted Flow identity, policy and record facts are immutable/));
     const gate = (await openGates(org.orgId, runId)).find(row => row.assignee_user_id === actors.submitterId);
     assert.ok(gate);
-    await assert.rejects(decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId }), /own submission/);
-    assert.equal((await runState(org.orgId, runId)).status, "pending_approval");
+    await decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId });
+    assert.equal((await runState(org.orgId, runId)).status, "approved");
   });
 });
 
 test("bank details release under an explicit frozen solo policy with audit evidence", { skip: !DB }, async () => {
   await withOrg(async (org, actors) => {
+    await grantScratchPermissions(org.orgId, actors.submitterId, ["parties.manage"]);
     const { flowId } = await seedApprovalFlow(org.orgId, { subjectKind: "party_bank_account", trigger: "on_create",
       assignees: [{ type: "user", userId: actors.submitterId }], mode: "any", preventSelfApproval: false });
     const id = randomUUID();
@@ -192,11 +198,11 @@ test("a payment-run flow parks the run until an independent approver releases it
     const gates = await openGates(org.orgId, runId);
     const gate = gates.find(row => row.assignee_user_id === actors.approver2Id);
     const makerGate = gates.find(row => row.assignee_user_id === actors.approver1Id);
-    assert.ok(makerGate);
+    assert.equal(makerGate, undefined, "the authored separation rule excludes the maker from assignment");
     assert.equal(gate?.subject_kind, OUTBOUND_PAYMENT_RUN_SUBJECT_KIND);
 
     const before = await runState(org.orgId, runId);
-    await assert.rejects(decideGate({ gateId: makerGate.id, decision: "approved", userId: actors.approver1Id }));
+    await assert.rejects(decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver1Id }));
     assert.deepEqual(await runState(org.orgId, runId), before, "the maker's refused decision changes nothing");
 
     await decideGate({ gateId: gate!.id, decision: "approved", userId: actors.approver2Id });
@@ -250,7 +256,7 @@ test("a payment-run flow that cannot route refuses the submit by name and leaves
     const runId = await seedDraftRun(org, actors.submitterId);
     await assert.rejects(
       submitPaymentRun(runId, org.orgId, actors.submitterId),
-      (error: unknown) => error instanceof PaymentError && /approval routing failed/.test(error.message),
+      (error: unknown) => error instanceof FlowDispatchError && /zero assignees/.test(error.message) && /Open Flows/.test(error.message),
     );
     assert.equal((await runState(org.orgId, runId)).status, "draft");
     assert.deepEqual(await openGates(org.orgId, runId), []);

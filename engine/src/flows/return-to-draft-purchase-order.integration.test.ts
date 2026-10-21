@@ -8,6 +8,7 @@ import {
   seedApprovalFlow,
   seedDraftDocument,
   seedFlowActors,
+  grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import { decideGate } from "./gates.ts";
 import {
@@ -27,6 +28,12 @@ import {
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function seedReturnActors(orgId: string) {
+  const actors = await seedFlowActors(orgId);
+  await grantScratchPermissions(orgId, actors.approver1Id, ["purchase_orders.create"]);
+  return actors;
+}
 
 async function docStatus(orgId: string, id: string): Promise<string> {
   const rows = (await db.execute<{ status: string }>(sql`
@@ -59,7 +66,7 @@ async function seedApprovedPurchaseOrder(orgId: string, actorId: string): Promis
 test("an untouched approved purchase order returns to draft and re-approves", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await seedReturnActors(org.orgId);
     const orderId = await seedApprovedPurchaseOrder(org.orgId, actors.submitterId);
 
     const reason = "vendor confirmed the wrong ship date on every line";
@@ -89,7 +96,7 @@ test("an untouched approved purchase order returns to draft and re-approves", { 
 test("a purchase order with received lines refuses with the applied remedy", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await seedReturnActors(org.orgId);
     const orderId = await seedApprovedPurchaseOrder(org.orgId, actors.submitterId);
     // A posted receipt's advance on the line: approved lines are
     // storage-immutable, so the receipt reopens, advances, and restores.
@@ -120,7 +127,7 @@ test("a purchase order with received lines refuses with the applied remedy", { s
 test("a purchase order with billed lines refuses with the applied remedy", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await seedReturnActors(org.orgId);
     const orderId = await seedApprovedPurchaseOrder(org.orgId, actors.submitterId);
     // A bill matched against the line: approved lines are
     // storage-immutable, so the billing conversion reopens and restores.
@@ -150,7 +157,7 @@ test("a purchase order with billed lines refuses with the applied remedy", { ski
 test("a flow-governed purchase order resubmits into a new run after return", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actors = await seedFlowActors(org.orgId);
+    const actors = await seedReturnActors(org.orgId);
     await seedApprovalFlow(org.orgId, {
       subjectKind: "purchase_order",
       assignees: [{ type: "user", userId: actors.approver1Id }],

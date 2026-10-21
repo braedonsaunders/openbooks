@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { errorChainMatches } from "../../testing/error-chain.ts";
 import {
   DB,
   gateOf,
@@ -94,6 +95,16 @@ test("bank change with no flow applies sealed, masked, audited, and notified", {
     assert.equal(rows[0]!.status, "approved");
     assert.equal(rows[0]!.isActive, true);
     assert.equal(rows[0]!.lastFour, "3210");
+    assert.equal((rows[0]!.row as Record<string, unknown>).source_change_request_id, filed.request.id);
+    await assert.rejects(db.execute(sql`update party_bank_accounts set routing='{"institution":"changed"}'::jsonb
+      where org_id=${h.org.orgId} and id=${rows[0]!.id as string}`), error => errorChainMatches(error, /bank details are immutable/));
+    await assert.rejects(db.execute(sql`update party_bank_accounts set source_change_request_id=null
+      where org_id=${h.org.orgId} and id=${rows[0]!.id as string}`), error => errorChainMatches(error, /source request is immutable/));
+    await assert.rejects(db.execute(sql`insert into party_bank_accounts(org_id,party_id,source_change_request_id,
+      bank_name,account_number_encrypted,account_last_four,approval_status,is_active,approved_at,approved_by,submitted_by)
+      select org_id,party_id,source_change_request_id,bank_name,account_number_encrypted,account_last_four,
+        approval_status,is_active,approved_at,approved_by,submitted_by from party_bank_accounts
+      where org_id=${h.org.orgId} and id=${rows[0]!.id as string}`), error => errorChainMatches(error, /exact bank details through their completed native employment-change Flow/));
     assert.ok(typeof rows[0]!.sealed === "string" && (rows[0]!.sealed as string).length > 0);
     assert.ok(!(rows[0]!.sealed as string).includes("98765432"), "the sealed text is not the number");
 
@@ -200,7 +211,7 @@ test("bank filing refusals name the field and store nothing", { skip: !DB }, asy
       SelfServiceError,
     );
     assert.equal(noOwn.code, "FORBIDDEN");
-    assert.match(noOwn.message, /no employment record/);
+    assert.match(noOwn.message, /own employment/);
 
     // Field refusals name their fields.
     const shortAccount = await refusalOf(

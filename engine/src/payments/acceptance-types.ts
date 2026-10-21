@@ -205,7 +205,6 @@ export type ProviderConfigRow = {
   settings: Record<string, unknown>;
   surcharge_rule_id: string | null;
   secrets: string | null;
-  refund_policy: "automatic" | "review" | null;
   default_disputed_funds_account_id: string | null;
   default_chargeback_loss_account_id: string | null;
   default_dispute_fee_account_id: string | null;

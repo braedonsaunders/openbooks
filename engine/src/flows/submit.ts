@@ -1,4 +1,6 @@
 import { lockApprovalSubject } from "../platform/approval-routing.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { documentKindPermissions } from "../records/document-kind-permissions.ts";
 import { and, eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrgTransaction } from "../platform/db.ts";
@@ -523,6 +525,9 @@ export async function returnDocumentToDraft(
         "not-found",
       );
     }
+    const authority = documentKindPermissions(locked.kind);
+    if (!input.actorId || !authority) throw new ScopeNotFoundError();
+    await lockActorCommandAuthority(db, input.orgId, input.actorId, locked.subsidiaryId, authority.approve);
     if (
       input.allowedSubsidiaryIds !== undefined &&
       !subsidiaryScopeAllows(input.allowedSubsidiaryIds, locked.subsidiaryId)

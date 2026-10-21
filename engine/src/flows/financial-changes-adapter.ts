@@ -12,6 +12,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import {
   ACCOUNT_MERGE_OPERATION,
   FINANCIAL_CHANGE_AUTHORITY,
+  financialChangeFeature,
   ADJUDICATED_HOLIDAY_HOURS_OPERATION,
   HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION,
   MANUFACTURING_SCRAP_RESTATEMENT_OPERATION,
@@ -391,14 +392,8 @@ export async function submitFinancialChange(
         row.subsidiary_id,
         authority.permission,
       );
-      if (
-        authority.feature &&
-        !(
-          row.domain === "consolidation" &&
-          row.operation === "net_investment_oci_reversal"
-        ) &&
-        !(await lockAndCheckOrgFeature(tx, orgId, authority.feature))
-      )
+      const feature = financialChangeFeature(row.domain, row.operation);
+      if (feature && !(await lockAndCheckOrgFeature(tx, orgId, feature)))
         throw new ScopeNotFoundError();
 
       if (

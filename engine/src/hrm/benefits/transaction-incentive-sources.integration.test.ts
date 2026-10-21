@@ -11,7 +11,7 @@ import { measureTransactionIncentiveSources as measure, type TransactionIncentiv
 import { requireTransactionPolicyStorage } from "./transaction-policy.ts";
 
 const SPEC = { users: [
-  { key: "reader", name: "Transaction Benefits Reader", handle: "transaction_benefits_reader", permissions: ["hrm.benefits.read", "ar.read"], link: true },
+  { key: "reader", name: "Transaction Benefits Reader", handle: "transaction_benefits_reader", permissions: ["hrm.benefits.read", "ar.read", "estimates.read"], link: true },
   { key: "hrOnly", name: "Benefits Only Reader", handle: "benefits_only_reader", permissions: ["hrm.benefits.read"], link: true },
 ] } as const;
 type Harness = Awaited<ReturnType<typeof setupHarness<typeof SPEC>>>;

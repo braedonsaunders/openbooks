@@ -1,3 +1,4 @@
+import { createInventoryCountFixture } from "../testing/inventory-counts.ts";
 import { confirmCountObservation } from "../testing/inventory-counts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -12,7 +13,7 @@ import {
   submitStockCountForReview,
 } from "./stock-counts.ts";
 import { InventoryError } from "./contracts.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { receiveTen } from "./integration-seeds.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -29,7 +30,7 @@ async function countRows(orgId: string): Promise<string> {
     select count(*)::text as n from stock_counts where org_id = ${orgId}`)).rows[0]!.n;
 }
 
-async function openCounted(org: ScratchOrg, counted: string): Promise<{ countId: string; lineId: string }> {
+async function openCounted(org: ScratchOrg & { actorId: string }, counted: string): Promise<{ countId: string; lineId: string }> {
   const count = await createStockCount(org.orgId, null, {
     locationId: org.locationId,
     subsidiaryId: org.subsidiaryId,
@@ -45,7 +46,7 @@ async function openCounted(org: ScratchOrg, counted: string): Promise<{ countId:
 }
 
 /** A second legal entity the warehouse can be restricted to (a child: one root per org). */
-async function seedOtherSubsidiary(org: ScratchOrg): Promise<string> {
+async function seedOtherSubsidiary(org: ScratchOrg & { actorId: string }): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
@@ -54,7 +55,7 @@ async function seedOtherSubsidiary(org: ScratchOrg): Promise<string> {
 }
 
 test("creating a count on an inactive warehouse refuses by name before any draft", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     await db.execute(sql`
@@ -82,7 +83,7 @@ test("creating a count on an inactive warehouse refuses by name before any draft
 });
 
 test("creating a count on a warehouse restricted to another entity refuses", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     const foreign = await seedOtherSubsidiary(org);
@@ -111,7 +112,7 @@ test("creating a count on a warehouse restricted to another entity refuses", { s
 });
 
 test("a restriction edited after creation refuses at submit with the count still open", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     const { countId } = await openCounted(org, "9");
@@ -120,7 +121,7 @@ test("a restriction edited after creation refuses at submit with the count still
       update locations set subsidiary_id = ${foreign}, subsidiary_include_children = false
        where org_id = ${org.orgId} and id = ${org.locationId}`);
     await assert.rejects(
-      submitStockCountForReview(org.orgId, null, countId),
+      submitStockCountForReview(org.orgId, org.actorId, countId),
       (e: unknown) => {
         assert.ok(e instanceof InventoryError, "must refuse as InventoryError (HTTP 422)");
         assert.match((e as Error).message, /another legal entity/, "the refusal must name the entity boundary");
@@ -139,17 +140,17 @@ test("a restriction edited after creation refuses at submit with the count still
 });
 
 test("a warehouse deactivated after review refuses at post with no adjustment", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await createInventoryCountFixture();
   try {
     await receiveTen(org);
     const { countId } = await openCounted(org, "10");
-    await submitStockCountForReview(org.orgId, null, countId);
+    await submitStockCountForReview(org.orgId, org.actorId, countId);
     await db.execute(sql`
       update stock_locations set is_active = false where org_id = ${org.orgId} and id = ${org.stockLocationId}`);
     const movementsBefore = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`)).rows[0]!.n;
     await assert.rejects(
-      withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId)),
+      withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, countId)),
       (e: unknown) => {
         assert.ok(e instanceof InventoryError, "must refuse as InventoryError (HTTP 422)");
         assert.match((e as Error).message, /MAIN/, "the refusal must name the warehouse");

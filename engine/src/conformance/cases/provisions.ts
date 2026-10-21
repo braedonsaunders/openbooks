@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db,  withOrgContext } from '../../platform/db.ts'
-import { seedFlowActors, seedApprovalFlow } from '../../testing/fixtures.ts'
+import { seedFlowActors, seedApprovalFlow, grantScratchPermissions as grantDecisionDuties } from '../../testing/fixtures.ts'
 import { submitFinancialChange } from '../../flows/financial-changes-adapter.ts'
 import { decideGate } from '../../flows/gates.ts'
 import { proposeProvisionAssessment, applyProvisionAssessment, type ProvisionProposal } from '../../provisions/assessments.ts'
@@ -17,6 +17,7 @@ async function approvedAssessment(ctx: CaseContext) {
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{reportingFramework}','"ifrs"') where id=${ledger.orgId}`)
     await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values
       (${ledger.orgId},${actors.submitterId},'gl.manage','grant'),(${ledger.orgId},${actors.submitterId},'gl.post','grant')`)
+    await grantDecisionDuties(ledger.orgId, actors.approver1Id, ["gl.manage"]);
     await seedApprovalFlow(ledger.orgId, { subjectKind: 'financial_change', assignees: [{ type: 'user', userId: actors.approver1Id }], mode: 'any', preventSelfApproval: true })
     return actors
   })

@@ -18,8 +18,8 @@ import { reversePaymentForReturn } from "./payment-return.ts";
 import { postReturnReceipt, returnFinancialStage } from "./psp-return-stages.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
-import { approveDisputeReview, rejectDisputeReview, processProviderDisputeEvent } from "./psp-refund-automation.ts";
-import { settleHarness, settle, invoiceOpen, disputeRows, type Harness } from "./refund-test-fixtures.ts";
+import { approveDisputeReview, rejectDisputeReview, processProviderDisputeEvent, processProviderRefundEvent } from "./psp-refund-automation.ts";
+import { settleHarness, settle, invoiceOpen, disputeRows, seedProviderReviewFlow, decideProviderReview, type Harness } from "./refund-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -95,7 +95,7 @@ async function approveReceipts(orgId: string, actorId: string) {
 
 async function gateReceipts(orgId: string) {
   const actorId = await createScratchUser(orgId, "Receipt approver", "receipt_approver");
-  await grantScratchPermissions(orgId, actorId, ["ar.pay"]);
+  await grantScratchPermissions(orgId, actorId, ["ar.approve"]);
   await seedApprovalFlow(orgId, { subjectKind: "customer_payment", assignees: [{ type: "user", userId: actorId }], mode: "any" });
   return actorId;
 }
@@ -185,6 +185,86 @@ test("a gated partial refund preserves the original payment and resumes the same
     assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "30.0000");
     assert.equal((await receipts(org.orgId)).find(row => row.id === staged.id)?.status, "posted");
     assert.equal((await receipts(org.orgId)).length, 2);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("a full provider refund waits for its tenant Flow and posts once across concurrent approval and redelivery", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const h = await settleHarness(org, { reviewFlow: true });
+    await settle(h, 10000);
+    const original = (await receipts(org.orgId))[0]!;
+    const event = refund(h, 10000);
+    assert.equal((await h.fire(event))?.status, "refunded_pending_review");
+    const review = (await disputeRows(org.orgId))[0]!;
+    const snapshot = async () => (await db.execute<{ fingerprint: string; submissions: number }>(sql`
+      select public.provider_return_approval_fingerprint(${org.orgId}, ${review.id}) as fingerprint,
+        (select count(*)::int from flow_submissions where org_id=${org.orgId}
+          and subject_kind='payment_dispute_review' and subject_id=${review.id}) as submissions`)).rows[0]!;
+    const before = await snapshot();
+    assert.equal(before.submissions, 1);
+    assert.equal((await receipts(org.orgId)).find(row => row.id === original.id)?.status, "posted");
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+    await h.fire({ ...event, id: `redelivery-${randomUUID()}` });
+    assert.deepEqual(await snapshot(), before, "redelivery retains the frozen submission");
+    await Promise.all([
+      decideProviderReview(org.orgId, review.id, h.userId, "approved"),
+      h.fire({ ...event, id: `concurrent-redelivery-${randomUUID()}` }),
+    ]);
+    assert.equal((await disputeRows(org.orgId))[0]!.status, "posted");
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "100.0000");
+    assert.equal((await snapshot()).submissions, 1);
+    const reversals = (await db.execute<{ count: number }>(sql`select count(*)::int as count
+      from journal_entries where org_id=${org.orgId} and reverses_entry_id is not null`)).rows[0]!;
+    assert.equal(reversals.count, 1);
+    assert.equal((await h.fire(event))?.status, "refunded_duplicate");
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("completed provider gates remain authoritative while a replacement receipt awaits its own tenant gates", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const h = await settleHarness(org, { reviewFlow: true });
+    await settle(h, 10000);
+    const receiptApprover = await gateReceipts(org.orgId);
+    const event = refund(h, 3000);
+    assert.equal((await h.fire(event))?.status, "refunded_pending_review");
+    const review = (await disputeRows(org.orgId))[0]!;
+    assert.equal((await decideProviderReview(org.orgId, review.id, h.userId, "approved")).status, "pending_review");
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+    assert.equal((await receipts(org.orgId)).filter(row => row.status === "pending_approval").length, 1);
+    await h.fire({ ...event, id: `redelivery-${randomUUID()}` });
+    await approveReceipts(org.orgId, receiptApprover);
+    assert.equal((await approveDisputeReview(org.orgId, review.id, h.userId, null)).status, "posted");
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "30.0000");
+    const decisions = (await db.execute<{ submissions: number; pending: number }>(sql`
+      select (select count(*)::int from flow_submissions where org_id=${org.orgId}
+        and subject_kind='payment_dispute_review' and subject_id=${review.id}) as submissions,
+        (select count(*)::int from flow_gates where org_id=${org.orgId}
+        and subject_kind='payment_dispute_review' and subject_id=${review.id} and status='pending') as pending`)).rows[0]!;
+    assert.deepEqual(decisions, { submissions: 1, pending: 0 });
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("changed provider evidence cannot replace the terms of a pending return approval", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const h = await settleHarness(org, { reviewFlow: true });
+    await settle(h, 10000);
+    const event = { provider: "stripe", providerEventId: `event-${randomUUID()}`, attemptId: h.attemptId,
+      refundedAmount: "30.0000", refundCurrency: "CAD", providerRef: "charge-evidence",
+      refundAmountBasis: "incremental" as const, providerRefundId: "refund-evidence" };
+    const outcome = await withOrgTransaction(org.orgId, () => processProviderRefundEvent(org.orgId, event));
+    assert.equal(outcome.status, "pending_review");
+    const fingerprint = async () => (await db.execute<{ value: string }>(sql`
+      select public.provider_return_approval_fingerprint(${org.orgId},${outcome.disputeId}) as value`)).rows[0]!.value;
+    const before = await fingerprint();
+    await assert.rejects(withOrgTransaction(org.orgId, () => processProviderRefundEvent(org.orgId,
+      { ...event, providerEventId: `changed-${randomUUID()}`, refundedAmount: "40.0000" })), /changed while its Flow gates are pending/);
+    assert.equal(await fingerprint(), before);
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+    assert.equal((await decideProviderReview(org.orgId, outcome.disputeId, h.userId, "approved")).status, "posted");
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "30.0000");
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -310,12 +390,12 @@ test("reviewing a lost dispute preserves the confirmed provider fee", { skip: !D
     await settle(h, 10000);
     const ref = `fee-dispute-${randomUUID()}`;
     await h.fire(dispute(h, ref, "opened"));
-    await db.execute(sql`update psp_provider_configs set refund_policy = 'review' where org_id = ${org.orgId} and provider = 'stripe'`);
+    await seedProviderReviewFlow(org.orgId, h.userId);
     const event = { provider: "stripe", providerEventId: `fee-event-${randomUUID()}`, attemptId: h.attemptId,
       dispute: { id: ref, state: "lost" as const, amount: "100", currency: "CAD" }, raw: { feeAmount: "5" } };
     assert.equal((await processProviderDisputeEvent(org.orgId, event)).status, "pending_review");
     const review = (await disputeRows(org.orgId))[0]!;
-    assert.equal((await approveDisputeReview(org.orgId, review.id, h.userId, null)).status, "posted");
+    assert.equal((await decideProviderReview(org.orgId, review.id, h.userId, "approved")).status, "lost");
     const fee = (await db.execute<{ amount: string }>(sql`select sum(jl.amount)::numeric(19,4)::text as amount
       from journal_lines jl join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id and e.status = 'posted'
       join accounts a on a.id = jl.account_id and a.org_id = jl.org_id where jl.org_id = ${org.orgId} and a.name = 'Dispute Fees'`)).rows[0];
@@ -353,7 +433,7 @@ test("gated dispute receipts preserve the source and a gated win preserves the h
 test("rejected refunds stay rejected across delivery identities and scoped reviewers cannot act", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const h = await settleHarness(org, { policy: "review" });
+    const h = await settleHarness(org, { reviewFlow: true });
     await settle(h, 10000);
     const event = refund(h, 10000);
     await h.fire(event);
@@ -366,7 +446,7 @@ test("rejected refunds stay rejected across delivery identities and scoped revie
     await assert.rejects(approveDisputeReview(org.orgId, row.id, h.userId, null), ScopeNotFoundError);
     await assert.rejects(rejectDisputeReview(org.orgId, row.id, h.userId, "Cannot act after scope revocation", null), ScopeNotFoundError);
     await db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
-    await rejectDisputeReview(org.orgId, row.id, h.userId, "Customer confirmed a duplicate provider notice", null);
+    await decideProviderReview(org.orgId, row.id, h.userId, "rejected", "Customer confirmed a duplicate provider notice");
     assert.equal((await h.fire(event))?.status, "refunded_duplicate");
     assert.equal((await h.fire(refund(h, 10000)))?.status, "refunded_duplicate");
     assert.equal((await disputeRows(org.orgId))[0]?.status, "rejected");
@@ -524,5 +604,34 @@ test("a caught nested financial rollback admits no receipt effects and the same 
     assert.equal((await receipts(org.orgId)).length, 2);
     assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "30.0000");
     await assertReceiptEffectsCompleted(org.orgId);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+
+test("provider returns retain the original receipt author and refuse revoked authority before any financial change", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const h = await settleHarness(org);
+    await settle(h, 10000);
+    const original = (await receipts(org.orgId)).find(row => row.status === "posted")!;
+    const entries = async () => (await db.execute<{ id: string; status: string }>(sql`
+      select id,status from journal_entries where org_id=${org.orgId} order by id`)).rows;
+    const before = await entries();
+    const event = refund(h, 3000);
+    await db.execute(sql`update user_permission_overrides set effect='deny'
+      where org_id=${org.orgId} and user_id=${h.userId} and permission='ar.pay'`);
+    assert.equal((await h.fire(event))?.status, "refunded_pending_review");
+    const review = (await disputeRows(org.orgId))[0]!;
+    assert.equal(review.status, "pending_review");
+    const reason = (await db.execute<{reason:string}>(sql`select reason from payment_disputes where org_id=${org.orgId} and id=${review.id}`)).rows[0]!.reason;
+    assert.match(reason, /original receipt.*acting user.*receipt authority/i);
+    assert.deepEqual(await entries(), before, "refused provider returns retain every original journal");
+    assert.deepEqual(await receipts(org.orgId), [original], "no receipt is reversed or staged without current authority");
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+    await grantScratchPermissions(org.orgId, h.userId, ["ar.pay"]);
+    assert.equal((await approveDisputeReview(org.orgId, review.id, h.userId, null)).status, "posted");
+    const replacement = (await db.execute<{ created_by: string }>(sql`
+      select created_by from documents where org_id=${org.orgId} and kind='customer_payment' and status='posted'`)).rows;
+    assert.deepEqual(replacement, [{ created_by: h.userId }]);
   } finally { await dropScratchOrg(org.orgId); }
 });

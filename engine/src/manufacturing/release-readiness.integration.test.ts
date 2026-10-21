@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../platform/db.ts";
+import { db, withOrgTransaction, withBypassContext } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { approveFixtureRouting, createManufacturingOperator } from "../testing/manufacturing.ts";
@@ -13,8 +13,8 @@ import { createWorkOrder, readWorkOrderReleaseReadiness, releaseWorkOrder } from
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-  return withBypassContext(() => db.transaction(work));
+function run<T>(orgId: string, work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+  return withOrgTransaction(orgId, () => work(db));
 }
 
 /** Two departments and no labor rates: nothing can default, so every gap shows. */
@@ -49,28 +49,28 @@ test("a draft work order lists every unmet release prerequisite at once, and rel
   try {
     const centers: string[] = [];
     for (const name of ["Roast", "Pack"]) {
-      const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+      const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
         code: `WC-${randomUUID()}`, name, kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false,
       }));
       centers.push(String((center as Record<string, unknown>).id));
     }
-    const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
+    const routing = await run(f.org.orgId, (tx) => createRouting(tx, f.org.orgId, f.actorId, {
       producedItemId: f.org.items.assembly, code: `RT-${randomUUID()}`, name: "Roast and pack", effectiveFrom: "2026-01-01",
       defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "units",
     }));
     const routingId = String((routing as Record<string, unknown>).id);
     for (const [index, centerId] of centers.entries()) {
-      await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, routingId, {
+      await run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, routingId, {
         sequence: (index + 1) * 10, name: `Step ${index + 1}`, workCenterId: centerId, setupMinutes: "0", runMinutesPerUnit: "1",
       }));
     }
     await approveFixtureRouting(f.org.orgId, f.actorId, routingId);
-    const order = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
+    const order = await run(f.org.orgId, (tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
       producedItemId: f.org.items.assembly, quantityOrdered: "1", subsidiaryId: f.org.subsidiaryId,
       issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: f.org.date,
     }));
 
-    const blocked = await run((tx) => readWorkOrderReleaseReadiness(tx, f.org.orgId, f.actorId, order.id));
+    const blocked = await run(f.org.orgId, (tx) => readWorkOrderReleaseReadiness(tx, f.org.orgId, f.actorId, order.id));
     assert.equal(blocked.status, "blocked");
     const departmentGaps = blocked.findings.filter((finding) => finding.code === "work_center_department_required");
     assert.equal(departmentGaps.length, 2, "both operations' missing departments are listed together, not one per attempt");
@@ -80,25 +80,25 @@ test("a draft work order lists every unmet release prerequisite at once, and rel
         from mfg_work_orders w where w.org_id = ${f.org.orgId} and w.id = ${order.id}`))).rows[0]!;
     assert.deepEqual(unchanged, { status: "draft", n: 0 }, "reading readiness never releases or snapshots the order");
 
-    await assert.rejects(run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, order.id)), (error: unknown) => {
+    await assert.rejects(run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, order.id)), (error: unknown) => {
       assert.ok(error instanceof ManufacturingError);
       assert.ok(blocked.findings.some((finding) => finding.code === error.code), "release refuses with a prerequisite readiness listed");
       return true;
     });
 
     for (const [index, centerId] of centers.entries()) {
-      await run((tx) => updateWorkCenter(tx, f.org.orgId, f.actorId, centerId, { departmentId: f.departments[index]! }));
+      await run(f.org.orgId, (tx) => updateWorkCenter(tx, f.org.orgId, f.actorId, centerId, { departmentId: f.departments[index]! }));
     }
     for (const departmentId of f.departments) {
       await withBypassContext(() => db.execute(sql`insert into labor_cost_rates
         (org_id, department_id, currency, rate, basis, annual_hours, effective_from, is_active, created_by, updated_by)
         values (${f.org.orgId}, ${departmentId}, 'CAD', '0', 'hour', '2080', '2026-01-01', true, ${f.actorId}, ${f.actorId})`));
     }
-    const ready = await run((tx) => readWorkOrderReleaseReadiness(tx, f.org.orgId, f.actorId, order.id));
+    const ready = await run(f.org.orgId, (tx) => readWorkOrderReleaseReadiness(tx, f.org.orgId, f.actorId, order.id));
     assert.deepEqual(ready, { status: "ready", findings: [] });
-    const released = await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, order.id));
+    const released = await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, order.id));
     assert.equal(released.status, "released", "a ready order releases");
-    const after = await run((tx) => readWorkOrderReleaseReadiness(tx, f.org.orgId, f.actorId, order.id));
+    const after = await run(f.org.orgId, (tx) => readWorkOrderReleaseReadiness(tx, f.org.orgId, f.actorId, order.id));
     assert.equal(after.status, "not_draft");
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));

@@ -3,14 +3,10 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  approveDisputeReview,
-  rejectDisputeReview,
-} from "./psp-refund-automation.ts";
 import { applyPaymentToOpenItem } from "./psp-automation-postings.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
-import { settleHarness, settle, invoiceOpen, disputeRows } from "./refund-test-fixtures.ts";
+import { settleHarness, settle, invoiceOpen, disputeRows, decideProviderReview } from "./refund-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -283,10 +279,10 @@ test("a refund parked before settlement posts when the payment lands", { skip: !
   }
 });
 
-test("review policy parks the refund until approved or rejected", { skip: !DB }, async () => {
+test("the tenant return Flow holds a full refund until its native approval", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const h = await settleHarness(org, { policy: "review" });
+    const h = await settleHarness(org, { reviewFlow: true });
     await settle(h, 10_000);
     const queued = await h.fire({
       id: `evt_rev_${randomUUID().slice(0, 8)}`,
@@ -299,7 +295,7 @@ test("review policy parks the refund until approved or rejected", { skip: !DB },
     const rows = await disputeRows(h.orgId);
     assert.equal(rows[0]!.status, "pending_review");
 
-    const approved = await approveDisputeReview(h.orgId, rows[0]!.id, h.userId, null);
+    const approved = await decideProviderReview(h.orgId, rows[0]!.id, h.userId, "approved");
     assert.equal(approved.status, "posted");
     assert.equal(await invoiceOpen(h.orgId, h.invoiceId), "100.0000");
   } finally {
@@ -310,7 +306,7 @@ test("review policy parks the refund until approved or rejected", { skip: !DB },
 test("a rejected review moves no money", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const h = await settleHarness(org, { policy: "review" });
+    const h = await settleHarness(org, { reviewFlow: true });
     await settle(h, 10_000);
     await h.fire({
       id: `evt_rej_${randomUUID().slice(0, 8)}`,
@@ -318,7 +314,7 @@ test("a rejected review moves no money", { skip: !DB }, async () => {
       data: { object: { id: "ch_1", payment_intent: h.intentId, amount_refunded: 10_000, amount: 10_000, currency: "cad" } },
     });
     const rows = await disputeRows(h.orgId);
-    await rejectDisputeReview(h.orgId, rows[0]!.id, h.userId, "customer confirmed the charge is legitimate", null);
+    await decideProviderReview(h.orgId, rows[0]!.id, h.userId, "rejected", "Customer confirmed the charge is legitimate");
     const after = await disputeRows(h.orgId);
     assert.equal(after[0]!.status, "rejected");
     assert.equal(await invoiceOpen(h.orgId, h.invoiceId), "0.0000");

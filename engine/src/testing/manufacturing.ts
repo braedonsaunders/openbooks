@@ -27,6 +27,8 @@ export function createManufacturingOperator(orgId: string, name: string) {
 
 /** Disposable callers obtain a real independent decision through the native flow. */
 export async function approveFixtureRouting(orgId:string,actorId:string,routingId:string) {
+ const { installEngineSeams } = await import("../composition/install.ts");
+ installEngineSeams();
  return withOrgTransaction(orgId,async()=>{
   const subsidiary=(await db.execute<{id:string}>(sql`select id from subsidiaries where org_id=${orgId} and is_active and not is_elimination order by id limit 1`)).rows[0];
   if(!subsidiary)throw new Error("Routing fixture requires an operating legal entity.");

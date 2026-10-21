@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../platform/db.ts";
+import { db, withOrgTransaction, withBypassContext } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { approveFixtureRouting, createManufacturingOperator } from "../testing/manufacturing.ts";
@@ -13,8 +13,8 @@ import { createWorkOrder, releaseWorkOrder } from "./work-orders.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-  return withBypassContext(() => db.transaction(work));
+function run<T>(orgId: string, work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+  return withOrgTransaction(orgId, () => work(db));
 }
 
 async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmentId: string }> {
@@ -45,16 +45,16 @@ async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmen
 }
 
 async function routeWithBareCenter(f: { org: ScratchOrg; actorId: string }): Promise<{ routingId: string; centerId: string }> {
-  const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+  const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
     code: `WC-${randomUUID()}`, name: "Roast center", kind: "machine",
     capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false,
   }));
   assert.equal(String((center as Record<string, unknown>).departmentId ?? ""), "");
-  const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
+  const routing = await run(f.org.orgId, (tx) => createRouting(tx, f.org.orgId, f.actorId, {
     producedItemId: f.org.items.assembly, code: `RT-${randomUUID()}`, name: "Assembly route", effectiveFrom: "2026-01-01",
     defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "units",
   }));
-  await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String((routing as Record<string, unknown>).id), {
+  await run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String((routing as Record<string, unknown>).id), {
     sequence: 10, name: "Assemble", workCenterId: String((center as Record<string, unknown>).id), setupMinutes: "0", runMinutesPerUnit: "1",
   }));
   await approveFixtureRouting(f.org.orgId, f.actorId, String((routing as Record<string, unknown>).id));
@@ -62,7 +62,7 @@ async function routeWithBareCenter(f: { org: ScratchOrg; actorId: string }): Pro
 }
 
 async function draft(f: { org: ScratchOrg; actorId: string }): Promise<string> {
-  const order = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
+  const order = await run(f.org.orgId, (tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
     producedItemId: f.org.items.assembly, quantityOrdered: "1", subsidiaryId: f.org.subsidiaryId,
     issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: f.org.date,
   }));
@@ -74,12 +74,12 @@ test("release defaults an unassigned work center to the org's single active depa
   try {
     await routeWithBareCenter(f);
     const first = await draft(f);
-    const released = await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, first));
+    const released = await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, first));
     assert.equal(released.status, "released");
 
     await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${f.org.orgId}, 'Packing')`));
     const second = await draft(f);
-    await assert.rejects(run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, second)), (error: unknown) => {
+    await assert.rejects(run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, second)), (error: unknown) => {
       assert.ok(error instanceof ManufacturingError && error.code === "work_center_department_required");
       assert.match(error.remedy ?? "", /Manufacturing → Work centers/);
       assert.ok(!(error.remedy ?? "").includes("Company Settings"), "an ambiguous default points at the drawer, not setup");
@@ -99,7 +99,7 @@ test("release without any department names department setup and the drawer", { s
       await db.execute(sql`delete from departments where org_id = ${f.org.orgId}`);
     });
     const third = await draft(f);
-    await assert.rejects(run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, third)), (error: unknown) => {
+    await assert.rejects(run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, third)), (error: unknown) => {
       assert.ok(error instanceof ManufacturingError && error.code === "work_center_department_required");
       assert.match(error.remedy ?? "", /Company Settings → Departments/);
       assert.match(error.remedy ?? "", /Manufacturing → Work centers/);
@@ -113,12 +113,12 @@ test("release without any department names department setup and the drawer", { s
 test("department assignment on a work center saves with an audit trail", { skip: !DB }, async () => {
   const f = await setupOrg();
   try {
-    const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+    const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
       code: `WC-${randomUUID()}`, name: "Roast center", kind: "machine",
       capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false,
     }));
     const id = String((center as Record<string, unknown>).id);
-    const updated = await run((tx) => updateWorkCenter(tx, f.org.orgId, f.actorId, id, { departmentId: f.departmentId }));
+    const updated = await run(f.org.orgId, (tx) => updateWorkCenter(tx, f.org.orgId, f.actorId, id, { departmentId: f.departmentId }));
     assert.equal(String((updated as Record<string, unknown>).departmentId), f.departmentId);
     const audit = (await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
