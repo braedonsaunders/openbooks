@@ -6,7 +6,7 @@ import { ApplicationError } from "./errors";
 
 const { listSetupRecords } = await import("./setup-read");
 const { getSetupRecord, listSetupEntities } = await import("./setup-read");
-const { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate } = await import("../setup/registry");
+const { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY, resolveSetupEntityGate } = await import("../setup/registry");
 const { resolvedFeatureState } = await import("../features");
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
@@ -68,6 +68,13 @@ function registerAnyOfProbe(key: string, featureKeysAny: string[]): void {
     columns: [],
     fields: [],
   });
+  SETUP_ENTITIES.push(SETUP_ENTITY_BY_KEY.get(key)!);
+}
+
+function removeProbe(key: string): void {
+  SETUP_ENTITY_BY_KEY.delete(key);
+  const index = SETUP_ENTITIES.findIndex(entity => entity.key===key);
+  if (index!==-1) SETUP_ENTITIES.splice(index,1);
 }
 
 async function assertSetupMissing(promise: Promise<unknown>): Promise<void> {
@@ -102,7 +109,7 @@ test("setup catalog and reads honor an any-of descriptor through the shared gate
     const admitted = await listSetupEntities(readContext(org.orgId));
     assert.equal(admitted.entities.find((entity) => entity.key === probeKey)?.enabled, true);
   } finally {
-    SETUP_ENTITY_BY_KEY.delete(probeKey);
+    removeProbe(probeKey);
     await dropScratchOrgReporting(org.orgId);
   }
 });
@@ -124,6 +131,7 @@ test("setup reads fail closed on unknown keys and conflicting descriptors", { sk
     columns: [],
     fields: [],
   });
+  SETUP_ENTITIES.push(SETUP_ENTITY_BY_KEY.get(conflictKey)!);
   try {
     // Every named feature is on: only the unknown member and the descriptor
     // conflict itself can still refuse.
@@ -134,8 +142,8 @@ test("setup reads fail closed on unknown keys and conflicting descriptors", { sk
     assert.equal(catalog.entities.find((entity) => entity.key === unknownKey)?.enabled, false);
     assert.equal(catalog.entities.find((entity) => entity.key === conflictKey)?.enabled, false);
   } finally {
-    SETUP_ENTITY_BY_KEY.delete(unknownKey);
-    SETUP_ENTITY_BY_KEY.delete(conflictKey);
+    removeProbe(unknownKey);
+    removeProbe(conflictKey);
     await dropScratchOrgReporting(org.orgId);
   }
 });

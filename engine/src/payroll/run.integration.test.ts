@@ -1959,7 +1959,7 @@ test(
         "a config write landing inside the gate gap must refuse the commit");
       assert.match(
         ((result as PromiseRejectedResult).reason as Error).message,
-        /inputs changed after it was last calculated \(wages\)/,
+        /inputs changed after it was approved \(wages\)/,
       );
 
       // Nothing was written by the refused commit: no terminal state, no GL

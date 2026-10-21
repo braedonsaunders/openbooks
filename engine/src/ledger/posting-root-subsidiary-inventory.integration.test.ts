@@ -404,7 +404,7 @@ test("a root-subsidiary invoice short of stock refuses its post and commits noth
   }
 });
 
-test("a purchase order converted into a vendor bill receives its inventory at the root entity", { skip: !DB }, async () => {
+test("a received purchase order bills once without duplicating root-entity inventory", { skip: !DB }, async () => {
   // convertOrder lives behind 'server-only', so the conversion runs in a child
   // process under the react-server export condition (house pattern from
   // web/lib/project-dimension-inheritance.integration.test.ts), against the
@@ -422,13 +422,14 @@ test("a purchase order converted into a vendor bill receives its inventory at th
     } from "./engine/src/testing/fixtures.ts";
     import { postDocument } from "./engine/src/ledger/posting-document.ts";
     import { toUnits } from "./engine/src/money/money.ts";
-    import { inventoryPostingEffectKey } from "./engine/src/inventory/document-lines.ts";
-import { receiveInventory } from "./engine/src/inventory/movements.ts";
-    import { convertOrder, createOrderDraft } from "./web/lib/order-cycle.ts";
+    import { installEngineSeams } from "./engine/src/composition/install.ts";
+    import { submitAndReleaseIfUngated } from "./engine/src/flows/submit.ts";
+    import { convertOrder, createOrderDraft, receivePurchaseOrder } from "./web/lib/order-cycle.ts";
 
     // Web modules install the normal request resolver during evaluation.
     // Re-establish the explicit test-only trusted boundary afterwards.
     installTrustedTestDatabaseBypass();
+    installEngineSeams();
 
     const org = await createScratchOrg();
     try {
@@ -460,37 +461,11 @@ import { receiveInventory } from "./engine/src/inventory/movements.ts";
                party_id = \${org.vendorId}, document_date = \${org.date}
          where id = \${po.id} and org_id = \${org.orgId}\`);
 
-      // The shared three-way PO match refuses to bill stock that has not been
-      // received, so record the receipt BEFORE converting: the real production
-      // receipt kernel posts the physical receipt against the purchase-order
-      // line (DR inventory / CR received-not-billed), and the line's received
-      // quantity advances under the same guarded ceiling every fulfillment
-      // writer uses. Conversion still reads this receipt evidence through the
-      // matcher — an unreceived line bills nothing.
-      const receipt = await receiveInventory(org.orgId, userId, {
-        itemId: org.items.fifo,
-        stockLocationId: org.stockLocationId,
-        quantity: "50",
-        unitCost: "2",
-        subsidiaryId: root,
-        offsetAccountId: org.accounts.clearing,
-        date: org.date,
-        documentLineId: poLineId,
-        idempotencyKey: inventoryPostingEffectKey(poLineId, "receipt"),
-        memo: "Purchase order receipt",
-      });
-      assert.ok(receipt.movementId);
-      const received = (await db.execute(sql\`
-        update document_lines
-           set quantity_fulfilled = quantity_fulfilled + '50'
-         where id = \${poLineId} and org_id = \${org.orgId}
-           and quantity_fulfilled + '50' <= quantity
-        returning id\`)).rows[0];
-      assert.ok(received, "the receipt must fit inside the ordered quantity");
-
-      await db.execute(sql\`
-        update documents set status='approved'
-         where id = \${po.id} and org_id = \${org.orgId}\`);
+      await withOrg(org.orgId, () => submitAndReleaseIfUngated("purchase_order",po.id,userId));
+      const receipt = await withOrg(org.orgId, () => receivePurchaseOrder(org.orgId,userId,po.id,{
+        receiptDate:org.date,idempotencyKey:randomUUID(),lines:[{sourceLineId:poLineId,quantity:"50"}],
+      }));
+      assert.ok(receipt.id);
 
       const bill = await withOrg(org.orgId, () =>
         convertOrder(org.orgId, userId, po.id, "vendor_bill"),
@@ -515,11 +490,7 @@ import { receiveInventory } from "./engine/src/inventory/movements.ts";
            and link_type = 'bills'\`)).rows[0];
       assert.equal(link.n, 1);
 
-      // Converted bills start as drafts; complete the same approval step
-      // every bill passes before the engine will post it.
-      await db.execute(sql\`
-        update documents set status='approved'
-         where id = \${bill.id} and org_id = \${org.orgId}\`);
+      await withOrg(org.orgId, () => submitAndReleaseIfUngated("vendor_bill",bill.id,userId));
 
       const entryId = await postDocument(bill.id, {
         control: {
@@ -533,7 +504,7 @@ import { receiveInventory } from "./engine/src/inventory/movements.ts";
       const facts = (await db.execute(sql\`
         with line as (
           select id from document_lines
-           where document_id = \${bill.id} order by line_number limit 1
+           where document_id = \${receipt.id} order by line_number limit 1
         ), moves as (
           select m.* from inventory_movements m, line
            where m.org_id = \${org.orgId}
@@ -564,24 +535,19 @@ import { receiveInventory } from "./engine/src/inventory/movements.ts";
            where l.org_id = \${org.orgId} and e.subsidiary_id = \${root}
              and l.account_id = \${org.accounts.clearing}) as clearing_gl\`)).rows[0];
 
-      // The converted bill's own receipt: exactly ONE receipt movement on its
-      // line, owned by the ROOT entity, and exactly one cost layer born from
-      // it at the bill's unit cost.
+      // The receipt owns inventory; the bill settles its accrual exactly once.
       assert.equal(facts.receipts, 1);
       assert.equal(facts.receipt_sub, root);
       assert.equal(facts.layers, 1);
       assert.equal(toUnits(facts.layer_value), toUnits("100"));
-
-      // Root-entity GL. The seeded purchase-order receipt contributed DR
-      // inventory 100 / CR received-not-billed 100; the bill's own receipt
-      // adds its 100 of inventory, the bill debits received-not-billed 100,
-      // and its receipt credit leaves the accrual at −100 while AP carries
-      // the debt. The inventory asset corroborates the entity's total layer
-      // value exactly.
-      assert.equal(toUnits(facts.inv_gl), toUnits("200"));
+      assert.equal(toUnits(facts.inv_gl), toUnits("100"));
       assert.equal(toUnits(facts.inv_gl), toUnits(facts.total_layer_value));
       assert.equal(toUnits(facts.ap_gl), toUnits("-100"));
-      assert.equal(toUnits(facts.clearing_gl), toUnits("-100"));
+      assert.equal(toUnits(facts.clearing_gl), 0n);
+      const billReceipts = (await db.execute(sql\`select count(*)::int as n from inventory_movements movement
+        join document_lines line on line.org_id=movement.org_id and line.id=movement.document_line_id
+        where line.org_id=\${org.orgId} and line.document_id=\${bill.id} and movement.kind='receipt'\`)).rows[0];
+      assert.equal(billReceipts.n,0,"billing received stock must not create a second receipt");
 
       const effects = (await db.execute(sql\`
         select status from posting_effects where document_id = \${bill.id}\`)).rows[0];

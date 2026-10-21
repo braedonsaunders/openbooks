@@ -229,7 +229,9 @@ const consolidatedRows = [
             assert.ok(disposition.includes(stamp), "the download filename names the business day");
             const pdf = Buffer.from(await response.arrayBuffer());
             assert.ok(pdf.length > 1000, "a real PDF document came back");
-            assert.ok(pdfContentText(pdf).includes(stamp), "the rendered PDF footer carries the business-day stamp");
+            const localizedStamp = new Intl.DateTimeFormat("en",{dateStyle:"medium",timeZone:"UTC"})
+              .format(new Date(`${stamp}T00:00:00Z`));
+            assert.ok(pdfContentText(pdf).replace(/\n/g,"").includes(localizedStamp), "the rendered PDF footer localizes the same business-day stamp");
           } finally {
             await withBypass(() => dropScratchOrg(scratch.orgId));
           }

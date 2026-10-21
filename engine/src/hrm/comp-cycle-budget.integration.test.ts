@@ -484,13 +484,9 @@ test("F02 frozen inputs and headers cannot be rewritten; reopen does not reprice
     const unmoved = await storedLine(org.orgId, line!.id);
     assert.equal(unmoved.budget_annual_hours, "2000.0000");
     assert.equal(unmoved.budget_envelope, "100000.0000");
-    // Ordinary writes still work, and a reopen carries frozen inputs
-    // forward untouched: approve (by a second approver — the proposer
-    // cannot decide their own line), reopen, same pacing.
-    const approver = await createScratchUser(org.orgId, "Guard Approver", "guard_approver");
-    await grantPermissions(org.orgId, approver, ["hrm.compensation.approve"]);
-    await linkPerson(org.orgId, approver);
-    const approved = await approveLine({ orgId: org.orgId, actorId: approver, lineId: line!.id });
+    // The tenant's zero-gate policy releases the submitted line. Reopening
+    // retains the original budget inputs and pacing.
+    const approved = await approveLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id });
     assert.equal(approved.status, "approved");
     const pacingBefore = await cyclePacing(org.orgId, h.hrId, cycle.id);
     const reopened = await reopenLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, reason: "recheck" });

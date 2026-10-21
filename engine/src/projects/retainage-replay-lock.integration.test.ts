@@ -13,7 +13,6 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
-  approvePayApplication,
   createPayApplication,
   generatePayApplicationInvoice,
   submitPayApplication,
@@ -21,7 +20,7 @@ import {
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
-  approveVendorPayApplication,
+  submitSubcontract,
   createVendorPayApplication,
   generateVendorPayApplicationBill,
   submitVendorPayApplication,
@@ -109,7 +108,6 @@ test("concurrent customer draws serialize on the project lock during replay", en
     const prior = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "10", null));
     await withOrgTransaction(org.orgId, () =>
       submitPayApplication(org.orgId, actor, prior.id, [{ sovLineId: sov, thisPeriodCompleted: "333.33", materialsStored: "0" }], null));
-    await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, prior.id, null));
     const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, prior.id, null));
     await postInvoice(org, actor, approver, "customer_invoice", generated.invoiceId);
     const draft = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, addCalendarDays(org.date, 1), "10", null));
@@ -149,8 +147,10 @@ test("concurrent vendor draws serialize on the subcontract lock during replay", 
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status)
       values(${project},${org.orgId},${org.subsidiaryId},'LOCK-V','Vendor lock job',${org.customerId},${type},'active')`);
     await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active) values(${vendor},${org.orgId},'vendor','Lock vendor',true)`);
-    await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-LOCK','Lock scope','CAD','5000','active')`);
+    await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-LOCK','Lock scope','CAD','10000','draft')`);
     await db.execute(sql`insert into subcontract_sov_lines(id,org_id,subcontract_id,description,scheduled_value,expense_account_id,sort_order) values(${sov},${org.orgId},${subcontract},'Work','10000',${org.accounts.cogs},1)`);
+
+    await withOrgTransaction(org.orgId, () => submitSubcontract(org.orgId,actor,subcontract));
 
     const draw = async (work: string, date: string) => {
       const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: date }));
@@ -163,7 +163,6 @@ test("concurrent vendor draws serialize on the subcontract lock during replay", 
     const closeDraw = async (work: string, date: string): Promise<string> => {
       const appId = await draw(work, date);
       await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, appId));
-      await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, appId));
       const generated = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, appId));
       await postInvoice(org, actor, approver, "vendor_bill", generated.vendorBillDocumentId);
       return appId;

@@ -1,4 +1,4 @@
-import { releaseBudgetScenario } from "./budget-submission.ts";
+import { releaseBudgetScenario, budgetScenarioScopeOwners } from "./budget-submission.ts";
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
@@ -95,13 +95,13 @@ async function loadBudget(subjectId: string): Promise<BudgetRow | null> {
 export const budgetScenariosFlowAdapter: FlowSubjectAdapter =
   defineTableSubjectAdapter({
     subjectKind: BUDGET_SCENARIO_SUBJECT_KIND,
-    // Checker decisions require budgets.approve. Scenarios are org-wide.
+    // Checker decisions require the tenant approval grant and every line's entity.
     permissions: {
       read: "budgets.read",
       edit: "budgets.manage",
       approve: "budgets.approve",
     },
-    scope: { via: "none" },
+    scope: { via: "custom", subsidiaryOf: budgetScenarioScopeOwners },
     profile: budgetScenarioSubjectProfile,
 
     async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {

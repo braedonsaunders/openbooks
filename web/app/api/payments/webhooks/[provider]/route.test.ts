@@ -294,6 +294,7 @@ test("the route returns 500 after isolating a poison event and committing its la
       received: true,
       status: "processing_failed",
       events: [
+        { externalRef: "MD-1", status: "unknown_setup" },
         { externalRef: "PM-1", status: "processing_failed" },
         { externalRef: "PM-2", status: "failed" },
       ],

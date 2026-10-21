@@ -1,3 +1,4 @@
+import { installEngineSeams } from "../composition/install.ts";
 import assert from "node:assert/strict";
 import { inspect } from "node:util";
 import { randomUUID } from "node:crypto";
@@ -20,11 +21,13 @@ import {
   dropScratchOrg,
   seedApprovalFlow,
   seedFlowActors,
+  grantScratchPermissions,
   seedPostingAccount,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+installEngineSeams();
 
 /** Explicit controller-supplied historical evidence, separate from spot quotes. */
 async function seedHistoricalRateBasis(org: ScratchOrg, pairs: readonly (readonly [string, string, string])[]): Promise<string> {
@@ -2502,6 +2505,7 @@ test("a later asset-transfer period eliminates the outstanding intercompany bala
     const actors = await seedFlowActors(org.orgId);
     const adminId = actors.adminId;
     const submitterId = actors.submitterId;
+    await grantScratchPermissions(org.orgId, actors.approver1Id, ["assets.manage"]);
     await db.execute(sql`
       insert into user_permission_overrides(org_id,user_id,permission,effect)
       values (${org.orgId},${submitterId},'assets.manage','grant')

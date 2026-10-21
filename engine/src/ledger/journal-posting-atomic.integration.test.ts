@@ -38,7 +38,7 @@ test("script journal submission keeps its provenance while ordinary submissions 
       const graph = (await db.execute<{ graph: { nodes: unknown[]; edges: unknown[] } }>(sql`
         select graph from flows where org_id = ${org.orgId} and id = ${seeded.flowId}`)).rows[0]!.graph;
       graph.nodes.push({ id: "source", position: { x: 110, y: 0 }, data: {
-        kind: "condition", rule: { op: "eq", field: "event_source", value: "api" },
+        kind: "condition", rule: { op: "eq", field: "event_source", value: "ui" },
       } });
       graph.edges = [
         { id: "source-trigger", source: "trigger", target: "source", sourceHandle: "next" },
@@ -53,7 +53,7 @@ test("script journal submission keeps its provenance while ordinary submissions 
           { accountId: org.accounts.cogs, amount: "-10" },
         ],
       }, { post: true, allowedSubsidiaryIds: null });
-      assert.ok(scripted.entryId, "the configured API-only gate does not intercept script provenance");
+      assert.ok(scripted.entryId, "the configured UI-only gate does not intercept script provenance");
       const ordinary = await seedBalancedDraftJournal(org, `MANUAL-${randomUUID()}`, actors.adminId);
       const submitted = await submitAndReleaseIfUngated("journal", ordinary, actors.adminId);
       assert.equal(submitted.gated, true);

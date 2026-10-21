@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import test, { after, before } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, pool } from "../platform/db.ts";
+import { waitForLockWaiter } from "../testing/lock-wait.ts";
 import { sealJson } from "../platform/secrets.ts";
 import {
   checkoutSessionLockKey,
@@ -1070,10 +1071,10 @@ test("checkout rechecks a link voided while it waits for its per-link lock", { s
     const lockKey = checkoutSessionLockKey(org.orgId, fx.link.id);
     let providerCalls = 0;
     let checkout: Promise<{ redirectUrl: string }> | undefined;
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`
-        select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
-      `);
+    const holder = await pool.connect();
+    try {
+      await holder.query("begin");
+      await holder.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [lockKey]);
       checkout = createCheckoutSession(
         fx.link.token,
         `https://app.test/pay/${fx.link.token}`,
@@ -1082,23 +1083,15 @@ test("checkout rechecks a link voided while it waits for its per-link lock", { s
           return { status: 200, json: async () => ({ id: "cs_voided", url: "https://checkout.stripe.test/cs_voided" }) };
         },
       );
-
-      const deadline = Date.now() + 5_000;
-      let waiting = false;
-      while (Date.now() < deadline) {
-        const locks = await db.execute<{ waiting: number }>(sql`
-          select count(*)::int as waiting from pg_locks
-           where locktype = 'advisory' and not granted
-        `);
-        if (locks.rows[0]!.waiting > 0) {
-          waiting = true;
-          break;
-        }
-        await new Promise<void>((resolve) => setTimeout(resolve, 10));
-      }
-      assert.ok(waiting, "checkout must reach the held lock before the admin voids the link");
+      void checkout.catch(() => {});
+      await waitForLockWaiter(holder, {label:"payment-link checkout"});
       await voidPaymentLink(org.orgId, fx.userId, fx.link.id, null);
-    });
+      await holder.query("commit");
+    } finally {
+      await holder.query("rollback");
+      holder.release();
+      if (checkout) await Promise.allSettled([checkout]);
+    }
 
     await assert.rejects(
       checkout!,

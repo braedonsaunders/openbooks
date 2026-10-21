@@ -1,3 +1,4 @@
+import { errorChainMatches } from "../testing/error-chain.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -145,7 +146,7 @@ test("the internal flag locks once time is booked, in storage and at the API", a
 
     await assert.rejects(
       db.execute(sql`update projects set is_internal = false where id = ${shop} and org_id = ${org.orgId}`),
-      /immutable/,
+      (error: unknown) => errorChainMatches(error,/immutable/),
       "storage refuses the flip under booked time",
     );
     assert.equal(await projectFlag(org.orgId, shop), true);

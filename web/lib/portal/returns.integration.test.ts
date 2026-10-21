@@ -1,3 +1,4 @@
+import { withSimClock } from "@openbooks/engine/testing/platform/clock";
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { test } from 'node:test'
@@ -71,13 +72,13 @@ test('a portal return request creates an RMA through the standard pipeline', { s
     const sources = await portalReturnableSources(token, sale.documentId)
     assert.equal(sources.length, 1)
     assert.equal(sources[0]!.movementId, sale.issueId)
-    const authorization = await requestPortalReturn({
+    const authorization = await withSimClock("2026-07-20T12:00:00Z", () => requestPortalReturn({
       sessionToken: token,
       sourceDocumentId: sale.documentId,
       reasonCode: 'damaged',
       resolution: 'store_credit',
       lines: [{ sourceIssueMovementId: sale.issueId, quantity: '4' }],
-    })
+    }))
     assert.equal(authorization.stage, 'requested')
     assert.match(authorization.documentNumber, /^RMA/)
     const stored = (await withBypassContext(() => db.execute<{ memo: string | null }>(sql`

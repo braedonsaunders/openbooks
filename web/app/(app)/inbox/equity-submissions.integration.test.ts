@@ -309,11 +309,11 @@ test("All approvals lists every pending approval in the organization within the 
     assert.equal(approverView!.approvalRows.find((r) => r.kind === "equity_action")?.canDelegate, true, "the direct assignee may delegate");
     assert.equal(approverView!.approvalRows.find((r) => r.gateId === change.gateId)?.canDecide, false);
 
-    // An organization admin decides and delegates any gate, as the decide path allows.
+    // Flow management permits reassignment; decisions remain with the configured assignee.
     state.authz = authzFor(org.orgId, adminId, "admin", ["flows.manage", "flows.approve"]);
     const adminView = await withOrgContext(org.orgId, () => loadApprovals({ tab: "all" }));
     const adminChange = adminView!.approvalRows.find((r) => r.gateId === change.gateId);
-    assert.equal(adminChange?.canDecide, true);
+    assert.equal(adminChange?.canDecide, false, "an administrator cannot replace the configured approver");
     assert.equal(adminChange?.canDelegate, true);
 
     // Without flows.manage the tab falls back to the caller's own worklist.

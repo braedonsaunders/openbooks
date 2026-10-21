@@ -24,12 +24,17 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
           from journal_lines l where l.org_id=${org.orgId}),
         'activity',(select coalesce(jsonb_agg(to_jsonb(g) order by g.account_id,g.subsidiary_id),'[]'::jsonb)
           from gl_month_activity g where g.org_id=${org.orgId})) as evidence`)).rows[0]!.evidence;
-    const headers = async (ids: readonly string[], status: "draft" | "posted" = "posted") => {
+    const headers = async (ids: readonly string[], status: "draft" | "posted" = "draft") => {
       await db.execute(sql`insert into journal_entries
         (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,posted_at)
         values ${sql.join(ids.map(id => sql`(${id},${org.orgId},${org.bookId},${org.subsidiaryId},
           ${`BALANCE-${id}`},${org.date},${org.periodId},${status},'manual',
           case when ${status}='posted' then now() else null end)`),sql`,`)}`);
+    };
+    const post = async (ids: readonly string[]) => {
+      const result = await db.execute(sql`update journal_entries set status='posted',posted_at=now()
+        where org_id=${org.orgId} and id=any(${`{${ids.join(",")}}`}::uuid[]) and status='draft' returning id`);
+      assert.equal(result.rows.length,ids.length);
     };
     const lines = async (rows: readonly {
       entryId: string; number: number; amount: string; subsidiaryId?: string; dims?: Record<string,string>;
@@ -43,13 +48,12 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
     };
     const ids = Array.from({ length: 16 }, () => randomUUID());
     await withMaintenanceTransaction(null, async () => {
-      await db.execute(sql`select set_config('openbooks.migration','on',true),
-        set_config('openbooks.amend','on',true),set_config('openbooks.clone','on',true)`);
       await headers(ids);
       await lines(ids.flatMap(entryId => [
         { entryId, number: 1, amount: '1.2500' },
         { entryId, number: 2, amount: '-1.2500' },
       ]));
+      await post(ids);
       await db.execute(sql`set constraints all immediate`);
       assert.deepEqual((await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`)).rows,[]);
       const before = await evidence();
@@ -68,10 +72,15 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
       // The batch totals zero, but each affected entry is independently wrong.
       // A validator that checks only the combined batch would admit it.
       await refusal(async () => {
+        const [a,b] = [randomUUID(),randomUUID()];
+        await headers([a,b]);
         await lines([
-          { entryId: ids[0]!, number: 3, amount: '1' },
-          { entryId: ids[1]!, number: 3, amount: '-1' },
+          { entryId: a, number: 1, amount: '2' },
+          { entryId: a, number: 2, amount: '-1' },
+          { entryId: b, number: 1, amount: '1' },
+          { entryId: b, number: 2, amount: '-2' },
         ]);
+        await post([a,b]);
       },/journal entry .* does not balance \(sum = -?1\.0000\)/);
       await refusal(async () => {
         const id = randomUUID();
@@ -80,6 +89,7 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
           { entryId: id, number: 1, amount: '10' },
           { entryId: id, number: 2, amount: '-10', subsidiaryId: child },
         ]);
+        await post([id]);
       },/journal entry .* does not balance for subsidiary .* \(sum = -?10\.0000\)/);
       // Reversing the signs preserves batch-level subsidiary totals too;
       // subsidiary balances must still be enforced per entry.
@@ -92,6 +102,7 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
           { entryId: b, number: 1, amount: '-10' },
           { entryId: b, number: 2, amount: '10', subsidiaryId: child },
         ]);
+        await post([a,b]);
       },/does not balance for subsidiary/);
       await refusal(async () => {
         await db.execute(sql`update journal_lines set amount=amount+1,txn_amount=txn_amount+1
@@ -113,8 +124,6 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
             (${valueB},${org.orgId},${segmentId},'B','Allocation B')`);
     const beforeSegment = await evidence();
     await assert.rejects(withMaintenanceTransaction(null, async () => {
-      await db.execute(sql`select set_config('openbooks.migration','on',true),
-        set_config('openbooks.amend','on',true),set_config('openbooks.clone','on',true)`);
       const [a,b] = [randomUUID(),randomUUID()];
       await headers([a,b]);
       await lines([
@@ -123,18 +132,15 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
         { entryId: b, number: 1, amount: '-10', dims: { allocation: valueA } },
         { entryId: b, number: 2, amount: '10', dims: { allocation: valueB } },
       ]);
+      await post([a,b]);
     }), (error: unknown) => errorChainMatches(error,/journal entry .* does not balance for segment allocation value .* \(sum = -?10\.0000\)/));
     assert.deepEqual(await evidence(),beforeSegment);
     await assert.rejects(withOrgTransaction(org.orgId, async () => {
-      await db.execute(sql`select set_config('openbooks.migration','on',true),
-        set_config('openbooks.amend','on',true),set_config('openbooks.clone','on',true)`);
       await lines([{ entryId: ids[0]!, number: 3, amount: '1' }]);
     }), (error: unknown) => errorChainMatches(error,/lines of a posted journal entry are immutable/));
     assert.deepEqual(await evidence(),beforeSegment);
 
     await withMaintenanceTransaction(null, async () => {
-      await db.execute(sql`select set_config('openbooks.migration','on',true),
-        set_config('openbooks.amend','on',true),set_config('openbooks.clone','on',true)`);
       const balanced = randomUUID();
       await headers([balanced]);
       await lines([
@@ -143,6 +149,7 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
         { entryId: balanced, number: 3, amount: '5', dims: { allocation: valueB } },
         { entryId: balanced, number: 4, amount: '-5', dims: { allocation: valueB } },
       ]);
+      await post([balanced]);
       await db.execute(sql`set constraints all immediate`);
       assert.equal((await db.execute(sql`select 1 from journal_lines
         where org_id=${org.orgId} and entry_id=${balanced}`)).rows.length,4);

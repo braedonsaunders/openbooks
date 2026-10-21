@@ -27,6 +27,12 @@ async function withLegacyRoster(seed: Seed, run: (client: pg.Client, ids: Record
   await client.connect();
   try {
     await client.query("begin");
+    // Replay the carry-forward at its published schema boundary. The later
+    // Flow migration retires governed timing; its current constraint cannot
+    // validate the earlier migration's output before that forward step runs.
+    // Every predecessor object and row below is rolled back together.
+    await client.query(`alter table public.schedule_boards drop constraint schedule_boards_publish_policy_check,
+      add constraint schedule_boards_publish_policy_check check (publish_policy in ('live','staged','governed'))`);
     await client.query(legacy);
     await client.query("set local session_replication_role = replica");
     const ids = {
@@ -176,6 +182,12 @@ test("a draft template and an inactive device move without creating a roster boa
   await client.connect();
   try {
     await client.query("begin");
+    // Replay the carry-forward at its published schema boundary. The later
+    // Flow migration retires governed timing; its current constraint cannot
+    // validate the earlier migration's output before that forward step runs.
+    // Every predecessor object and row below is rolled back together.
+    await client.query(`alter table public.schedule_boards drop constraint schedule_boards_publish_policy_check,
+      add constraint schedule_boards_publish_policy_check check (publish_policy in ('live','staged','governed'))`);
     await client.query(legacy);
     await client.query("set local session_replication_role = replica");
     const template = randomUUID(), device = randomUUID(), person = randomUUID();

@@ -1,3 +1,6 @@
+import { installEngineSeams } from "../composition/install.ts";
+import { requestPeriodReopen, recloseApprovedReopen } from "../close/reopening.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -1776,6 +1779,12 @@ test("authenticated source settlement replay reverses and replaces FX evidence w
     await db.execute(sql`insert into period_locks(org_id,period_id,book_id,subsidiary_id,module,state,reason)
       values(${org.orgId},${org.periodId},${org.bookId},null,'ar','closed','Controller close'),
         (${org.orgId},${org.periodId},${org.bookId},null,'gl','closed','Controller close')`);
+    await assert.rejects(() => reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],{...snapshot,syncRunId:runId}),
+      error => errorChainMatches(error,/period is closed for AR posting/));
+    assert.deepEqual(await settlementSnapshot(org.orgId),before,"source replay cannot bypass a controller's close");
+    installEngineSeams();
+    const reopenId = await requestPeriodReopen({orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,
+      actorId,modules:["ar","gl"],hours:1,reason:"Correct the authenticated source settlement through a controlled reopen"});
     const result=await reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],{...snapshot,syncRunId:runId});
     assert.equal(result.released,1);
     assert.equal(result.insertedAmount,"55.0000");
@@ -1790,6 +1799,7 @@ test("authenticated source settlement replay reverses and replaces FX evidence w
     const replay=await reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],{...snapshot,syncRunId:runId});
     assert.equal(replay.released,0);assert.equal(replay.inserted,0);
     assert.deepEqual(await settlementSnapshot(org.orgId),after);
+    await recloseApprovedReopen({orgId:org.orgId,requestId:reopenId,actorId,reason:"Authenticated source settlement correction completed"});
   } finally { await dropScratchOrg(org.orgId); }
 });
 

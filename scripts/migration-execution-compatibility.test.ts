@@ -60,3 +60,18 @@ test("apply-time drift and conflicting execution evidence cannot commit a migrat
   await assert.rejects(executeMigrationAttempt(client, { ...attempt, digest: "0".repeat(64) }), /exact published identity/);
   await assert.rejects(executeMigrationAttempt(client, { ...attempt, body: result.content + "\n" }), /executable differs/);
 });
+
+
+test("fresh baseline preserves host-owned extension metadata without changing application DDL or published identity", () => {
+  const file = "baselines/alpha29.sql";
+  const baseline = readFileSync(new URL(`../schema/migrations/${file}`, import.meta.url), "utf8");
+  const result = migrationExecutionCompatibility(file, baseline);
+  assert.equal(result.correction?.publishedSha256, sha(baseline));
+  assert.equal(result.correction?.executedSha256, sha(result.content));
+  assert.equal(result.content, baseline
+    .replace("COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiST';", "")
+    .replace("COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';", ""));
+  for (const extension of ["btree_gist", "pgcrypto"])
+    assert.ok(result.content.includes(`CREATE EXTENSION IF NOT EXISTS ${extension} WITH SCHEMA public;`));
+  assert.throws(() => migrationExecutionCompatibility(file, baseline + "\n"), /exact published digest/);
+});

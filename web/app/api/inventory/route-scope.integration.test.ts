@@ -1,3 +1,4 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -40,6 +41,7 @@ const { POST: advancedPost } = await import("./advanced/route");
 
 
 async function fixture() {
+  installEngineSeams();
   const org = await createScratchOrg();
   const actor = (await seedFlowActors(org.orgId)).adminId;
   state.user = { orgId: org.orgId, id: actor };

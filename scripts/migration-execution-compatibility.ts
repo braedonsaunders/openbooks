@@ -11,12 +11,30 @@ export type MigrationExecutionCorrection = {
   executedSha256: string;
 };
 
-/** Parentheses distinguish a published SQL CASE from its enclosing PL/pgSQL
- * IF. Preserve the source identity and separately record the executable form. */
+/** Apply exact reviewed corrections while retaining the immutable source
+ * identity and separately recording the executable form. */
 export function migrationExecutionCompatibility(filename: string, content: string): {
   content: string;
   correction?: MigrationExecutionCorrection;
 } {
+  if (filename === "baselines/alpha29.sql") {
+    const published = "4b29a81bdc359b46b467634ae6d800f9ae9c33b8f17e7efa4b0696218428456c";
+    if (digest(content) !== published) throw new Error(`${filename}: execution compatibility requires the exact published digest`);
+    // Host administrators own installed extensions. Their descriptive comments
+    // are not application schema and require ownership the migration role lacks.
+    const comments = [
+      "COMMENT ON EXTENSION btree_gist IS 'support for indexing common datatypes in GiST';",
+      "COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';",
+    ];
+    let executable = content;
+    for (const comment of comments) {
+      if (executable.split(comment).length !== 2) throw new Error(`${filename}: execution correction requires one exact extension comment`);
+      executable = executable.replace(comment, "");
+    }
+    return { content: executable, correction: {
+      id: "host-owned-extension-metadata", publishedSha256: published, executedSha256: digest(executable),
+    } };
+  }
   if (filename !== FILE) return { content };
   if (digest(content) !== PUBLISHED) throw new Error(`${filename}: execution compatibility requires the exact published digest`);
   if (content.split(EXPRESSION).length !== 2) throw new Error(`${filename}: execution compatibility requires one exact CASE expression`);

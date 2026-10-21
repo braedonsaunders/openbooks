@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
@@ -12,9 +13,18 @@ const state: { orgId: string; actorId: string; allowed: Set<string> | null } = {
   orgId: '', actorId: '', allowed: null,
 }
 Object.assign(globalThis, { __expenseAccountlessState: state })
+const root = pathToFileURL(process.cwd() + '/').href
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
+    if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) return virtual(`
+      export * from ${JSON.stringify(root + 'web/lib/auth.ts')};
+      export async function currentUser() {
+        const s=globalThis.__expenseAccountlessState;
+        return {id:s.actorId,orgId:s.orgId,name:'Expense clerk',email:'expense@example.test',roles:[],isSuperAdmin:false,
+          envKind:'production',productionOrgId:s.orgId,homeOrgId:s.orgId,homeUserId:s.actorId};
+      }
+    `)
     if (specifier === 'next-intl/server') return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
     // The route factory resolves the gate by @/ alias at request time; serve
     // the same intended session for its literal as for the relative import.
@@ -29,7 +39,7 @@ registerHooks({
 })
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } = await import('@openbooks/engine/testing/fixtures')
 const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
 const { PATCH } = await import('./route')
 
@@ -48,6 +58,7 @@ test('expenses PATCH refuses an account-less contentful line with its line numbe
   try {
     state.orgId = org.orgId
     state.actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Expense clerk', 'accountant'))
+    await withBypassContext(() => grantScratchPermissions(org.orgId,state.actorId,['expenses.read','expenses.create']))
     state.allowed = null
     const id = randomUUID()
     await withBypassContext(async () => {

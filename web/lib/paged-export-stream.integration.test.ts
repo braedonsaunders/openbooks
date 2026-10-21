@@ -331,7 +331,7 @@ test("the definitions export route streams paged CSV/XLSX and keeps PDF buffered
     assert.equal(back.headers[0], "Recall");
     assert.ok(back.rows.length >= 1200);
     const pdf = await run(() => GET(new Request(`http://test.local/api/reports/definitions/${defId}/export?format=pdf`), params));
-    assert.equal(pdf.status, 200);
+    assert.equal(pdf.status, 200,pdf.status===200?undefined:await pdf.clone().text());
     assert.match(pdf.headers.get("content-type") ?? "", /application\/pdf/);
   } finally { await release(fx); }
 });

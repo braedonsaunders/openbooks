@@ -12,7 +12,7 @@ async function setup() {
   const org = await withBypass(() => createScratchOrg())
   const actorId = await withBypass(() => createScratchUser(org.orgId, 'Payroll registration administrator', 'admin'))
   await withBypass(async () => {
-    await db.execute(sql`update orgs set settings=settings || '{"features":{"payroll":true}}'::jsonb where id=${org.orgId}`)
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true,"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`)
     await db.execute(sql`update subsidiaries set country='US' where org_id=${org.orgId} and id=${org.subsidiaryId}`)
   })
   const actor = { orgId: org.orgId, id: actorId, permissions: ['admin.setup.manage'], allowedSubsidiaryIds: null }

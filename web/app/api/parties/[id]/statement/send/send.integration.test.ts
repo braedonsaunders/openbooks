@@ -55,6 +55,6 @@ test('statement send prefills, validates, and fails closed without transport', a
     const unconfigured = await withOrgContext(org.orgId, () =>
       send.POST(new Request('http://audit.local/api?side=ar', { method: 'POST', body: JSON.stringify({ to: 'billing@example.com' }) }), { params } as never))
     assert.equal(unconfigured.status, 422)
-    assert.match((await unconfigured.json() as { error: string }).error, /not configured/i)
+    assert.match((await unconfigured.json() as { error: string }).error, /Email delivery is not enabled/i)
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })

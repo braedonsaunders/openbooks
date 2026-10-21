@@ -11,6 +11,30 @@ export class BudgetApprovalError extends Error {
   readonly status = 409;
 }
 
+/** A budget decision covers every retained line, including lines outside the actor's entities. */
+export async function budgetScenarioScopeOwners(
+  orgId: string, ids: readonly string[], allowed: ReadonlySet<string> | null, lock: boolean,
+): Promise<Map<string,string|null>> {
+  if (!ids.length) return new Map();
+  const selected = sql`(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)`;
+  const budgets = (await db.execute<{id:string}>(sql`select id from budget_scenarios
+    where org_id=${orgId} and id in ${selected} order by id ${lock ? sql`for share` : sql``}`)).rows;
+  const lines = (await db.execute<{scenario_id:string;subsidiary_id:string|null}>(sql`
+    select scenario_id,subsidiary_id from budget_lines where org_id=${orgId} and scenario_id in ${selected}
+    order by id ${lock ? sql`for share` : sql``}`)).rows;
+  const byBudget = new Map<string,Array<string|null>>();
+  for (const line of lines) {
+    const entities = byBudget.get(line.scenario_id) ?? [];
+    entities.push(line.subsidiary_id);
+    byBudget.set(line.scenario_id,entities);
+  }
+  return new Map(budgets.map((budget): [string,string|null] => {
+    const entities = byBudget.get(budget.id) ?? [];
+    const visible = allowed===null || entities.every(id => id!==null && allowed.has(id));
+    return [budget.id,visible ? entities[0] ?? null : null];
+  }));
+}
+
 async function lockBudget(
   orgId: string,
   actorId: string,
@@ -38,15 +62,7 @@ async function lockBudget(
   `)
   ).rows[0];
   if (!budget) throw new BudgetApprovalError("Budget not found.");
-  const entities = (
-    await db.execute<{ subsidiary_id: string | null }>(sql`
-    select distinct subsidiary_id from budget_lines where org_id=${orgId} and scenario_id=${id}
-  `)
-  ).rows;
-  if (
-    scope !== null &&
-    entities.some((row) => !row.subsidiary_id || !scope.has(row.subsidiary_id))
-  )
+  if (scope !== null && !(await budgetScenarioScopeOwners(orgId,[id],scope,true)).get(id))
     throw new BudgetApprovalError(
       "This action requires access to every legal entity in the budget.",
     );

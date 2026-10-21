@@ -113,7 +113,7 @@ test('busy-season gaps, spans, evidence, and fail-closed refusals', enabled, asy
       (${extra.closedProject}, ${main.org.orgId}, ${main.org.subsidiaryId}, 'BUSY-6', 'Closed engagement', ${main.org.customerId}, 'closed', true, '{}'::jsonb),
       (${extra.cancelledProject}, ${main.org.orgId}, ${main.org.subsidiaryId}, 'BUSY-5', 'Cancelled engagement', ${main.org.customerId}, 'cancelled', true, '{}'::jsonb)`)
     await db.execute(sql`insert into crm_opportunity_statuses(id,org_id,key,name,sequence,probability,is_closed,is_won,is_active) values (${extra.wonStatus},${main.org.orgId},'busy-won','Won',20,100,true,true,true)`)
-    await db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,status_id,forecast_category,probability,currency,is_active) values (${extra.wonOpp},${main.org.orgId},'BUSY-WON','Won tax work',${extra.wonStatus},'upside',100,'USD',true)`)
+    await db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,status_id,forecast_category,probability,currency,is_active,effective_date) values (${extra.wonOpp},${main.org.orgId},'BUSY-WON','Won tax work',${extra.wonStatus},'upside',100,'USD',true,'2026-01-01')`)
   })
   await addLines(main, [
     { id: extra.manualLine, dept: ids.taxDept, title: 'Senior Tax Associate', first: '2026-01-04', last: '2026-01-11', hours: '10.0000' },

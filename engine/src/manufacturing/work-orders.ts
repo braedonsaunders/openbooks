@@ -1367,7 +1367,7 @@ export async function releaseWorkOrder(
   if (!decision) {
     if (options.approvalRunId)
       refuse(
-        "The work-order Flow decision is incomplete.",
+        `Work order ${order.number} has an incomplete Flow decision.`,
         "work_order_approval_required",
         "Complete every configured work-order approval gate.",
         409,

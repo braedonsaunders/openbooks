@@ -10,6 +10,7 @@ import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
+  grantScratchPermissions,
 } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -346,6 +347,7 @@ test('credits follow prospective reallocation into an added promise rather than 
  const org=await createScratchOrg();
  try {
   const actors=await seedFlowActors(org.orgId);
+  await grantScratchPermissions(org.orgId,actors.approver1Id,["ar.post"]);
   await seedRecognitionTermPeriods(org);
   const invoiceId=await postInvoice(org,actors.adminId,'INV-AMENDED-CREDIT');
   const first=await runRevenueRecognition(org.orgId,'2026-09-30',actors.adminId);assert.equal(first.totalAmount,'300.0000');

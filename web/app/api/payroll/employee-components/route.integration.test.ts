@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { stubModules } from '../../../../testing/stub-modules'
 import { db, withBypassContext } from '@openbooks/engine/platform/database'
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
+import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } from '@openbooks/engine/testing/fixtures'
 import { setFeatures } from '@openbooks/engine/testing/hrm-harness'
 import { seedPayrollComponents } from '@openbooks/engine/payroll/run-setup'
 import { seedOntarioEhtFixture } from '@openbooks/engine/testing/payroll/filing-test-fixtures'
@@ -92,6 +92,7 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
   try {
     await withBypassContext(() => setFeatures(org.orgId, { payroll: true }))
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Payroll manager', 'payroll_manager'))
+    await withBypassContext(() => grantScratchPermissions(org.orgId,actorId,['payroll.manage']))
     state.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(['payroll.manage']), allowedSubsidiaryIds: null }
     await withBypassContext(() => seedPayrollComponents(org.orgId, actorId, 'CA'))
     await withBypassContext(() => seedOntarioEhtFixture(org.orgId, actorId))
@@ -126,7 +127,7 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
       action: 'save-assignment', employeePartyId: partyId, employmentId, componentId,
       runApplicability: 'regular_only', value: '25.00', effectiveFrom: '2026-01-01', effectiveTo: null,
     })
-    assert.equal(saved.status, 200)
+    assert.equal(saved.status, 200,JSON.stringify(saved.body))
     assert.ok(saved.body.id)
     const listed = await get(partyId)
     assert.equal(listed.status, 200)
@@ -188,6 +189,7 @@ test('a statutory component refuses with its remedy', { skip: !DB }, async () =>
   try {
     await withBypassContext(() => setFeatures(org.orgId, { payroll: true }))
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Payroll manager', 'payroll_manager'))
+    await withBypassContext(() => grantScratchPermissions(org.orgId,actorId,['payroll.manage']))
     state.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(['payroll.manage']), allowedSubsidiaryIds: null }
     await withBypassContext(() => seedPayrollComponents(org.orgId, actorId, 'CA'))
     const partyId = randomUUID()
@@ -202,7 +204,7 @@ test('a statutory component refuses with its remedy', { skip: !DB }, async () =>
       action: 'save-assignment', employeePartyId: partyId, employmentId, componentId: statutory.rows[0]!.id,
       value: '5', effectiveFrom: '2026-01-01', effectiveTo: null,
     })
-    assert.equal(refused.status, 422)
+    assert.equal(refused.status, 422,JSON.stringify(refused.body))
     assert.match(refused.body.error ?? '', /is statutory.*assign a user-defined component instead/)
   } finally {
     state.authz = null

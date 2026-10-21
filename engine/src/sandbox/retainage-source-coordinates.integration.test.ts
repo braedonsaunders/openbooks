@@ -2,8 +2,16 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
+import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
+import { installEngineSeams } from "../composition/install.ts";
+import { submitAndReleaseIfUngated } from "../flows/submit.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import {
+  createSubcontract, addSubcontractSovLine, submitSubcontract, createVendorPayApplication,
+  updateVendorPayApplicationLines, submitVendorPayApplication, generateVendorPayApplicationBill, releaseVendorRetainage,
+} from "../projects/subcontracts.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrgReporting, grantScratchPermissions } from "../testing/fixtures.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import type { TableInfo } from "./catalog.ts";
 import { generateCopySql, validateVendorRetainageSourceAllocations, type CloneOptions } from "./clone.ts";
@@ -61,35 +69,58 @@ test("sandbox copy stores cloned retainage source bills with exact historical fi
   const org = await createScratchOrg();
   let failure: unknown;
   try {
+    installEngineSeams();
     const actorId = await createScratchUser(org.orgId, "Retainage sandbox owner", "admin");
-    const projectId = randomUUID(), subcontractId = randomUUID();
-    const bills = [randomUUID(), randomUUID()], releaseBill = randomUUID(), legacyBill = randomUUID();
-    assert.equal((await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status)
-      values(${projectId},${org.orgId},${org.subsidiaryId},'RETAINAGE-COPY','Recorded subcontract',${org.customerId},'active') returning id`)).rows.length, 1);
-    assert.equal((await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status)
-      values(${subcontractId},${org.orgId},${projectId},${org.vendorId},'SC-COPY','Recorded subcontract','CAD','100000000000001.2490','active') returning id`)).rows.length, 1);
-    for (const [index, id] of [...bills, releaseBill, legacyBill].entries()) {
-      assert.equal((await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,currency,status,party_id,project_id,subsidiary_id)
-        values(${id},${org.orgId},'vendor_bill',${`COPY-${index}`},${org.date},'CAD','draft',${org.vendorId},${projectId},${org.subsidiaryId}) returning id`)).rows.length, 1);
+    await grantScratchPermissions(org.orgId, actorId, ["ap.create"]);
+    const projectId = randomUUID(), typeId = randomUUID();
+    const profile = BUILTIN_PROJECT_TYPES.find(row => row.key === "schedule_of_values")!;
+    await db.execute(sql`update orgs set settings=jsonb_set(
+      jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":true}'::jsonb),
+      '{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('retainagePayable',${org.accounts.deferred}::text)) where id=${org.orgId}`);
+    await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+      values(${typeId},${org.orgId},'retainage_copy','Retainage copy','fixed_price',${JSON.stringify(profile.invoicingProfile)}::jsonb,${JSON.stringify(profile.backupProfile)}::jsonb)`);
+    await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+      values(${org.orgId},${typeId},'2000-01-01',${JSON.stringify(profile.financialProfile)}::jsonb,'Retainage copy policy')`);
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status)
+      values(${projectId},${org.orgId},${org.subsidiaryId},'RETAINAGE-COPY','Recorded subcontract',${org.customerId},${typeId},'active')`);
+    await db.execute(sql`insert into vendor_roles(org_id,party_id) values(${org.orgId},${org.vendorId})`);
+    const transact = <T,>(work: () => Promise<T>) => withOrgTransaction(org.orgId, work);
+    const { id: subcontractId } = await transact(() => createSubcontract({orgId:org.orgId,userId:actorId,projectId,
+      vendorId:org.vendorId,number:'SC-COPY',title:'Recorded subcontract',currency:'CAD',originalCommitment:'100000000000001.25'}));
+    const { id: sovLineId } = await transact(() => addSubcontractSovLine({orgId:org.orgId,userId:actorId,subcontractId,
+      description:'Work',scheduledValue:'100000000000001.25',expenseAccountId:org.accounts.cogs}));
+    await transact(() => submitSubcontract(org.orgId,actorId,subcontractId));
+    const postBill = async (id: string) => {
+      await transact(async () => {
+        assert.equal((await submitAndReleaseIfUngated('vendor_bill',id,actorId)).autoApproved,true);
+        await postDocument(id,{control:{ar:org.accounts.ar,ap:org.accounts.ap,bank:org.accounts.bank}},
+          {audit:{actorId,source:'test'}});
+      });
+    };
+    const bills: string[] = [];
+    for (const [date, work] of [[org.date,'100000000000000.00'],['2026-07-16','1.25']] as const) {
+      const app = await transact(() => createVendorPayApplication({orgId:org.orgId,userId:actorId,subcontractId,periodEnd:date}));
+      await transact(() => updateVendorPayApplicationLines({orgId:org.orgId,userId:actorId,payApplicationId:app.id,
+        expectedRevision:1,lines:[{sovLineId,workCompletedThisPeriod:work,materialsStoredCurrent:'0'}]}));
+      await transact(() => submitVendorPayApplication(org.orgId,actorId,app.id));
+      const generated = await transact(() => generateVendorPayApplicationBill(org.orgId,actorId,app.id));
+      await postBill(generated.vendorBillDocumentId);
+      bills.push(generated.vendorBillDocumentId);
     }
-    for (const [index, bill] of bills.entries()) {
-      const gross = index === 0 ? "100000000000000.0000" : "1.2500";
-      const held = index === 0 ? "10000000000000.0000" : "0.1250";
-      const net = index === 0 ? "90000000000000.0000" : "1.1250";
-      assert.equal((await db.execute(sql`insert into vendor_pay_applications(org_id,subcontract_id,application_number,period_end,status,gross_this_period,retainage_this_period,net_due,vendor_bill_document_id)
-        values(${org.orgId},${subcontractId},${index + 1},${org.date},'billed',${gross},${held},${net},${bill}) returning id`)).rows.length, 1);
-    }
-    const sources = [
-      { documentId: bills[1]!, held: "0.1250", previousAmount: "0.0000", amount: "0.1249" },
-      { documentId: bills[0]!.toUpperCase(), held: "10000000000000.0000", previousAmount: "0.1250", amount: "9007199254740.0001" },
-    ];
-    assert.equal((await db.execute(sql`insert into vendor_retainage_releases(org_id,subcontract_id,period_end,amount,vendor_bill_document_id,source_bill_allocations)
-      values(${org.orgId},${subcontractId},${org.date},'9007199254740.1250',${releaseBill},${JSON.stringify(sources)}::jsonb),
-        (${org.orgId},${subcontractId},${org.date},'1.0000',${legacyBill},null) returning id`)).rows.length, 2);
+    for (const amount of ['0.13','9999999999999.99'])
+      await transact(() => releaseVendorRetainage({orgId:org.orgId,userId:actorId,subcontractId,periodEnd:'2026-07-17',amount}));
+    type Allocation = { documentId: string; held: string; previousAmount: string; amount: string };
+    const expected = (await db.execute<{amount:string;sources:Allocation[]}>(sql`select amount::text as amount,
+      source_bill_allocations as sources from vendor_retainage_releases where org_id=${org.orgId} order by amount desc`)).rows;
+    assert.equal(expected.length,2);
+    assert.deepEqual(expected[0],{amount:'9999999999999.9900',sources:[
+      {documentId:bills[0]!,held:'10000000000000.0000',previousAmount:'0.1300',amount:'9999999999999.8700'},
+      {documentId:bills[1]!,held:'0.1300',previousAmount:'0.0000',amount:'0.1200'},
+    ]});
     const original = (await db.execute(sql`select to_jsonb(r) as row from vendor_retainage_releases r where org_id=${org.orgId} order by id`)).rows;
     const sandbox = await createSandbox({ productionOrgId: org.orgId, name: "Retainage coordinate copy", tier: "full", masked: false,
       createdBy: actorId, lifecycleAuthority: { actorId } });
-    const copied = (await db.execute<{ amount: string; sources: typeof sources | null }>(sql`
+    const copied = (await db.execute<{ amount: string; sources: Allocation[] }>(sql`
       select amount::text as amount,source_bill_allocations as sources from vendor_retainage_releases where org_id=${sandbox.sandboxOrgId} order by amount desc`)).rows;
     assert.equal(copied.length, 2);
     const sourceToTarget = new Map((await db.execute<{ source_id: string; target_id: string }>(sql`
@@ -97,10 +128,10 @@ test("sandbox copy stores cloned retainage source bills with exact historical fi
       join documents copied on copied.org_id=target.id and copied.id=ob_rebase(source.id,target.sandbox_seed)
       where source.org_id=${org.orgId} and source.id in (${bills[0]!},${bills[1]!})`)).rows.map(row => [row.source_id, row.target_id]));
     assert.equal(sourceToTarget.size, 2, "both referenced bills have native sandbox counterparts");
-    assert.deepEqual(copied[0], { amount: "9007199254740.1250", sources: sources.map(source => ({ ...source, documentId: sourceToTarget.get(source.documentId.toLowerCase())! })) });
-    assert.deepEqual(copied[1], { amount: "1.0000", sources: null });
+    assert.deepEqual(copied,expected.map(row => ({...row,sources:row.sources.map(source =>
+      ({...source,documentId:sourceToTarget.get(source.documentId.toLowerCase())!}))})));
     await assert.rejects(() => db.execute(sql`update vendor_retainage_releases set source_bill_allocations='[]'::jsonb
-      where org_id=${sandbox.sandboxOrgId} and vendor_bill_document_id<>ob_rebase(${legacyBill}::uuid,(select sandbox_seed from orgs where id=${sandbox.sandboxOrgId}))`),
+      where org_id=${sandbox.sandboxOrgId}`),
     error => errorChainMatches(error, /Retainage source allocations are immutable/));
     assert.deepEqual((await db.execute(sql`select to_jsonb(r) as row from vendor_retainage_releases r where org_id=${org.orgId} order by id`)).rows, original);
   } catch (error) {

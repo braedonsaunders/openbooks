@@ -105,7 +105,7 @@ test('close list names the locked modules and book for a period locked outside a
     const view = await loadClose({})
     const row = view.rows.find((r) => r.id === org.periodId)
     assert.ok(row, 'the locked period is listed')
-    assert.equal(row.lockLabel, 'AR, GL locked · Primary')
+    assert.match(row.lockLabel!, /^AR \([^)]+\), GL \([^)]+\) locked · Primary$/)
     // An unlocked period carries no lock detail.
     for (const other of view.rows.filter((r) => r.id !== org.periodId)) {
       assert.equal(other.lockLabel, null)

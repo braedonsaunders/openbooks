@@ -1,3 +1,4 @@
+import { withSimClock } from "@openbooks/engine/testing/platform/clock"
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
@@ -70,7 +71,7 @@ test('customer pulse keeps money exact through aggregation and JSON', { skip: !e
       await db.execute(sql`update documents set status = 'posted' where id = ${bigDoc}`)
     })
 
-    await withOrgContext(scratch.orgId, async () => {
+    await withSimClock("2026-07-15T12:00:00Z", () => withOrgContext(scratch.orgId, async () => {
       const small = await loadCustomerPulse(scratch.customerId, scratch.orgId, null, AR_ONLY)
       assert.ok(small?.aging)
       assert.equal(small.aging.totalOpen, '0.3000')
@@ -83,7 +84,7 @@ test('customer pulse keeps money exact through aggregation and JSON', { skip: !e
       assert.ok(big?.aging)
       assert.equal(big.aging.totalOpen, HUGE)
       assert.equal(big.credit?.openArBalance, HUGE)
-    })
+    }))
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

@@ -651,12 +651,12 @@ test("hire without an approval flow applies directly through the governed admiss
       select version_no as no, status from worker_employment_versions
        where employment_id = ${hire.employmentId} and recorded_until is null order by version_no`)).rows;
     assert.deepEqual(versions, [{ no: 1, status: "active" }]);
-    const stored = (await db.execute<{ status: string; snapshot: { mode: string; gates: unknown[]; policy: { flowConfigured: boolean } } }>(sql`
+    const stored = (await db.execute<{ status: string; snapshot: { mode: string; gates: unknown[]; policy: { kind: string } } }>(sql`
       select status, decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}`)).rows[0]!;
     assert.equal(stored.status, "applied");
     assert.equal(stored.snapshot.mode, "automatic");
     assert.deepEqual(stored.snapshot.gates, []);
-    assert.equal(stored.snapshot.policy.flowConfigured, false);
+    assert.equal(stored.snapshot.policy.kind, "ungated");
     assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_offers where id = ${offer.id}`)).rows[0]!.status, "accepted");
     assert.equal(
       (await db.execute<{ status: string }>(sql`select status from hrm_applications where id = ${application.id}`)).rows[0]!.status,
@@ -1043,6 +1043,7 @@ test("hire refuses an offer whose rendered letter is unsigned, writing nothing",
       clauses: [],
     });
     await renderOfferVersion({ orgId, actorId: h.recruiterId, offerId, templateId: template.id });
+    await sendOffer({ orgId, actorId: h.recruiterId, offerId });
     await assert.rejects(
       acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId }),
       /unsigned/,

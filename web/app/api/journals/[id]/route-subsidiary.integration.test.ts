@@ -122,6 +122,9 @@ test(
           values (
             ${org.orgId}, ${documentId}, 1, ${org.accounts.cogs}, 1, 100,
             100, ${org.subsidiaryId}, '{}'::jsonb, ${adminId}, ${adminId}
+          ), (
+            ${org.orgId}, ${documentId}, 2, ${org.accounts.bank}, 1, -100,
+            -100, ${org.subsidiaryId}, '{}'::jsonb, ${adminId}, ${adminId}
           )
         `);
       });
@@ -142,7 +145,7 @@ test(
       // still saves, so the refusal is the null — not the harness.
       const memo = patchRequest(documentId, { memo: "still editable", expectedUpdatedAt: token });
       const saved = await withOrgContext(org.orgId, () => PATCH(memo.req, memo.ctx));
-      assert.equal(saved.status, 200);
+      assert.equal(saved.status, 200, await saved.clone().text());
     } finally {
       routeState.authz = null;
       await dropScratchOrg(org.orgId);

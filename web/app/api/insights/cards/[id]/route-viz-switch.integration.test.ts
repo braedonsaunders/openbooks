@@ -47,8 +47,8 @@ test('a Bar-to-Table autosave persists the table viz with bar leftovers intact',
     const actor = await createScratchUser(org.orgId, 'Viz switch', 'reviewer')
     await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
     const cardId = randomUUID()
-    await db.execute(sql`insert into insight_cards (id, org_id, name, status, viz_type, created_by, updated_by)
-      values (${cardId}, ${org.orgId}, ${'Viz switch card'}, ${'draft'}, ${'bar'}, ${actor}, ${actor})`)
+    await db.execute(sql`insert into insight_cards (id, org_id, name, status, viz_type, query, created_by, updated_by)
+      values (${cardId}, ${org.orgId}, ${'Viz switch card'}, ${'draft'}, ${'bar'}, ${JSON.stringify(QUERY)}::jsonb, ${actor}, ${actor})`)
     signIn(org.orgId, actor)
 
     await withOrgContext(org.orgId, async () => {
@@ -92,8 +92,8 @@ test('a stale revision is refused, never a 200, leaving the row untouched', asyn
     const actor = await createScratchUser(org.orgId, 'Stale revision', 'reviewer')
     await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`)
     const cardId = randomUUID()
-    await db.execute(sql`insert into insight_cards (id, org_id, name, status, viz_type, created_by, updated_by)
-      values (${cardId}, ${org.orgId}, ${'Stale card'}, ${'draft'}, ${'bar'}, ${actor}, ${actor})`)
+    await db.execute(sql`insert into insight_cards (id, org_id, name, status, viz_type, query, created_by, updated_by)
+      values (${cardId}, ${org.orgId}, ${'Stale card'}, ${'draft'}, ${'bar'}, ${JSON.stringify(QUERY)}::jsonb, ${actor}, ${actor})`)
     signIn(org.orgId, actor)
 
     await withOrgContext(org.orgId, async () => {

@@ -29,7 +29,8 @@ test('native invoice editing selects dated goods tax and preserves entity, manua
     await assert.rejects(edit({custom:{canadianGoodsTax:{...selection,deliveryProvince:'ON'}}}),/Save the invoice lines/)
     await edit({custom:{canadianGoodsTax:{...selection,deliveryProvince:'ON'}},lines})
     assert.equal((await db.execute<{tax_total:string}>(sql`select tax_total::text from documents where org_id=${ledger.orgId} and id=${id}`)).rows[0]!.tax_total,'13.0000')
-    await edit({lines:[{...lines[0]!,taxOverridden:true,taxAmount:'0'}]})
+    const gst=(await db.execute<{id:string}>(sql`select id from tax_codes where org_id=${ledger.orgId} and code='CA-GST' and is_active`)).rows[0]!
+    await edit({lines:[{...lines[0]!,taxCodeId:gst.id,taxOverridden:true,taxAmount:'0'}]})
     assert.equal((await db.execute(sql`select 1 from document_goods_tax_snapshots where org_id=${ledger.orgId}`)).rows.length,0)
     await edit({lines})
     await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${id}`)

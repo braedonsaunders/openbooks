@@ -1,3 +1,4 @@
+import { installEngineSeams } from "../composition/install.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -89,6 +90,7 @@ async function signOffJulySession(
   actorId: string,
   label: string,
 ): Promise<{ reconId: string; ctx: { orgId: string; userId: string; allowedSubsidiaryIds: null } }> {
+  installEngineSeams();
   const ctx = { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null };
   await db.execute(sql`
     update accounts
@@ -127,7 +129,7 @@ async function signOffJulySession(
     { reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: period.lineIds },
     ctx,
   );
-  assert.deepEqual(await markReconciled(recon.id, ctx), { journalLinesReconciled: 1 });
+  assert.deepEqual(await markReconciled(recon.id, ctx), { journalLinesReconciled: 1, status: "signed_off" });
   return { reconId: recon.id, ctx };
 }
 

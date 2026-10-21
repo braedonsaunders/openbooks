@@ -457,11 +457,11 @@ test(
 );
 
 test(
-  'an explicitly authored update Flow distributes saved bookings while a provider refusal leaves bookings saved',
+  'an explicitly authored publication Flow distributes published bookings while a provider refusal preserves them',
   enabled,
   () =>
     fixture(async (f) => {
-      await f.flow('on_update');
+      await f.flow('after_post');
       await withBypassContext(() =>
         db.execute(
           sql`update orgs set settings=jsonb_set(settings,'{email,enabled}','false'::jsonb) where id=${f.orgId}`,

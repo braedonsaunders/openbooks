@@ -1,3 +1,11 @@
+import { before } from "node:test";
+
+before(async () => {
+  if (!process.env.OPENBOOKS_DB_URL) return;
+  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  installEngineSeams();
+});
+
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";

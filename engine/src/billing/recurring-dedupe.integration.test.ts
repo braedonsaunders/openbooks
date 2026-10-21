@@ -351,7 +351,7 @@ test(
           from recurring_schedules schedule
          where schedule.org_id = ${org.orgId}
       `)).rows[0]!;
-      assert.match(state.lastError ?? "", /approval could not be routed/);
+      assert.match(state.lastError ?? "", /approval flow "Test approval" failed: gate.*zero assignees/);
       assert.equal(state.documents, 0, "a system submission never bypasses an unresolved approval gate");
       assert.equal(state.lineage, 0, "the refused generation consumes no occurrence");
     } finally {

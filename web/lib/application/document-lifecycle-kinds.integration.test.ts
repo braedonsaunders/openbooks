@@ -222,7 +222,9 @@ test("credits, deposits, transfers, and card charges traverse submit, post, void
         const corrected = await run("correct_document", {
           documentId: correctId,
           correction: {
-            amendmentReason: `correct the ${kind} evidence`,
+            amendmentReason: `correct the ${kind} amount after final reconciliation`,
+            lines: body.lines.map((line,index) => ({...line,quantity:"1",unitPrice:index===0?"101.0000":line.amount,
+              amount:index===0?"101.0000":line.amount})),
             expectedUpdatedAt: await revisionOf(org.orgId, correctId),
           },
           idempotencyKey: `a05-${kind}-correct-1`,

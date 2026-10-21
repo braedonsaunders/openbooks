@@ -6,6 +6,7 @@ import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
+  grantScratchPermissions,
   seedApprovalFlow,
   seedDraftDocument,
   type ScratchOrg,
@@ -39,6 +40,7 @@ async function withOwnSubmissionFixture(
   try {
     const actors = await seedFlowActors(org.orgId);
     const maker = actors.approver1Id;
+    await grantScratchPermissions(org.orgId, maker, ["ap.create"]);
     await seedApprovalFlow(org.orgId, {
       subjectKind: "vendor_bill",
       assignees: [{ type: "role", role: "approver" }],

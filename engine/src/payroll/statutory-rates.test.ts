@@ -1,3 +1,4 @@
+import { seedUsEinAccount, seedUsSuiAccount } from "./filing-test-fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -351,12 +352,16 @@ async function seedTwoAccountEmployer(): Promise<UsFixture> {
               ${state}, false, true, ${actorId}, ${actorId})`);
     return id;
   };
-  return {
-    orgId: org.orgId,
-    actorId,
-    ein1: await account("38-1234567/MI-001", "Northshore Drywall — MI SUI", "us_state_sui", "MI"),
-    ein2: await account("38-7654321/MI-002", "Lakeside Mechanical — MI SUI", "us_state_sui", "MI"),
-  };
+  await db.execute(sql`update subsidiaries set country='US' where org_id=${org.orgId} and id=${org.subsidiaryId}`);
+  const ein1 = await account("38-1234567/MI-001", "Northshore Drywall — MI SUI", "us_state_sui", "MI");
+  const ein2 = await account("38-7654321/MI-002", "Lakeside Mechanical — MI SUI", "us_state_sui", "MI");
+  for (const [filingAccountId,number] of [[ein1,"38-1234567"],[ein2,"38-7654321"]] as const) {
+    const federalAccountId = await seedUsEinAccount(org.orgId,actorId,org.subsidiaryId,number);
+    await seedUsSuiAccount(org.orgId,actorId,"MI",{filingAccountId,federalAccountId,
+      subsidiaryId:org.subsidiaryId,effectiveFrom:"2026-01-01",effectiveTo:null,
+      sourceReference:"Original Michigan employer registration"});
+  }
+  return { orgId: org.orgId, actorId, ein1, ein2 };
 }
 
 test(

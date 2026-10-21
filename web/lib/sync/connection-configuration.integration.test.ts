@@ -20,17 +20,17 @@ test('native connection edits preserve identity, audit nested content choices an
     const userId = await createScratchUser(org.orgId, 'Connection administrator', 'connection_admin')
     const id = randomUUID()
     const qboId = randomUUID()
-    const original = { account: '1234567', host: 'https://1.1.1.1', baseCurrency: 'CAD', mappingJson: JSON.stringify({ projectForemanField: 'custentity_foreman' }) }
+    const original = { account: '1234567', host: 'https://1.1.1.1', baseCurrency: 'CAD', entityMappings: {version:1,entities:{},sourceOptions:{projectForemanField:'custentity_foreman'}} }
     await db.execute(sql`insert into connections (id, org_id, source, display_name, auth_kind, config) values
       (${id}, ${org.orgId}, 'netsuite', 'Source account', 'token', ${JSON.stringify(original)}::jsonb),
       (${qboId}, ${org.orgId}, 'qbo', 'OAuth account', 'oauth2', '{"environment":"sandbox","realmId":"callback-owned"}'::jsonb)`)
     const actor = { orgId: org.orgId, userId }
     const selection = { attachments: false, projectFinancials: true, crm: false, fixedAssets: true }
-    const mappingJson = { projectForemanField: 'custentity_foreman', timeTypeRecord: 'customrecord_time', timeTypeMultiplierField: 'custrecord_multiplier', projectStatuses: { Completed: 'closed' } }
-    const edited = await withOrgContext(org.orgId, () => updateConnection(actor, id, { config: { mappingJson, syncOptions: selection } }))
+    const sourceOptions = { projectForemanField: 'custentity_foreman', timeTypeRecord: 'customrecord_time', timeTypeMultiplierField: 'custrecord_multiplier', projectStatuses: { Completed: 'closed' } }
+    const edited = await withOrgContext(org.orgId, () => updateConnection(actor, id, { config: { entityMappings:{version:1,entities:{},sourceOptions}, syncOptions: selection } }))
     assert.equal(edited.status, 200)
     const saved = await getConnection(org.orgId, id)
-    assert.deepEqual(saved?.config, { ...original, mappingJson, syncOptions: selection })
+    assert.deepEqual(saved?.config, { ...original, entityMappings:{version:1,entities:{},sourceOptions}, syncOptions: selection })
     const audit = (await db.execute<{ actor_id: string; changes: { before: { config: unknown }; after: { config: unknown }; credentialsChanged: boolean } }>(sql`
       select actor_id, changes from audit_log where org_id=${org.orgId} and table_name='connections' and row_id=${id}`)).rows
     assert.equal(audit.length, 1)
@@ -39,7 +39,7 @@ test('native connection edits preserve identity, audit nested content choices an
     assert.deepEqual(audit[0]!.changes.after.config, saved!.config)
     assert.equal(audit[0]!.changes.credentialsChanged, false)
 
-    const broken = await withOrgContext(org.orgId, () => updateConnection(actor, id, { config: { mappingJson: { timeTypeMultiplierField: 'custrecord_multiplier' } } }))
+    const broken = await withOrgContext(org.orgId, () => updateConnection(actor, id, { config: { entityMappings:{version:1,entities:{},sourceOptions:{timeTypeMultiplierField:'custrecord_multiplier'}} } }))
     assert.equal(broken.status, 400)
     assert.match(String(broken.body.error), /requires timeTypeRecord/)
     assert.deepEqual((await getConnection(org.orgId, id))!.config, saved!.config)

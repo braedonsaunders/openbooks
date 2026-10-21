@@ -13,10 +13,9 @@ import {
   moveFolder,
 } from "../../../../lib/file-cabinet";
 import { inDbTransaction } from "@openbooks/engine/platform/db";
-import { isUuid } from "../../../../lib/list-params";
 import { fileViewer } from "../lib";
 const itemIds = z.array(uuidString("selection ids must be valid UUIDs")).max(500).default([]);
-const postBodySchema0 = z.discriminatedUnion("action", [
+const postBodySchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("delete"), fileIds: itemIds, folderIds: itemIds }),
   z.strictObject({
     action: z.literal("move"),
@@ -30,12 +29,6 @@ const postBodySchema0 = z.discriminatedUnion("action", [
 );
 
 export const runtime = "nodejs";
-
-function idList(v: unknown): string[] {
-  return Array.isArray(v)
-    ? v.filter((x): x is string => typeof x === "string" && isUuid(x))
-    : [];
-}
 
 type BulkItemResult = {
   id: string;
@@ -54,35 +47,14 @@ type BulkItemResult = {
  */
 export const POST = defineRoute({
   public: "session",
-  body: postBodySchema0,
+  body: postBodySchema,
   handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     const orgId = gate.user.orgId;
     const viewer = fileViewer(gate);
 
-    const body = routeBody as Record<string, unknown> | null;
-    const action = body?.action;
-    const fileIds = idList(body?.fileIds);
-    const folderIds = idList(body?.folderIds);
-    if (action !== "delete" && action !== "move") {
-      return NextResponse.json(
-        { error: "action must be delete or move" },
-        { status: 400 },
-      );
-    }
-    if (fileIds.length === 0 && folderIds.length === 0) {
-      return NextResponse.json({ error: "nothing selected" }, { status: 400 });
-    }
-
-    let targetFolderId: string | null = null;
-    if (action === "move") {
-      const candidate = body?.targetFolderId;
-      if (typeof candidate !== "string" || !isUuid(candidate)) {
-        return NextResponse.json(
-          { error: "valid targetFolderId is required" },
-          { status: 400 },
-        );
-      }
-      targetFolderId = candidate;
+    const { action, fileIds, folderIds } = routeBody;
+    const targetFolderId = routeBody.action === "move" ? routeBody.targetFolderId : null;
+    if (targetFolderId !== null) {
       // Destination needs Editor+.
       if (
         !accessAtLeast(

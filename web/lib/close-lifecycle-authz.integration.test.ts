@@ -1,3 +1,5 @@
+import { seedCloseRunApprovalFixture } from "@openbooks/engine/testing/close";
+import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/close/run-completion";
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
@@ -65,6 +67,16 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
       const taskId = await withBypassContext(async () => (await db.execute<{id:string}>(sql`select id from close_run_tasks where run_id=${runId} and org_id=${org.orgId} order by sort_order limit 1`)).rows[0]!.id)
       const params = { params: Promise.resolve({id:runId, taskId}) }
       const target = {periodId:org.periodId,bookId:org.bookId}
+      let expectedBinder: unknown;
+      if (boundary === 'binder') {
+        const publisher = await withBypassContext(() => createScratchUser(org.orgId, 'Close publisher', 'admin'))
+        await withBypassContext(async () => {
+          await seedCloseRunApprovalFixture(org.orgId, runId, publisher)
+          await closeApprovedRun(org.orgId, runId, publisher)
+          await publishCloseRun(org.orgId, runId, publisher)
+          expectedBinder = (await db.execute<{snapshot: unknown}>(sql`select binder_snapshot as snapshot from close_runs where org_id=${org.orgId} and id=${runId}`)).rows[0]!.snapshot
+        })
+      }
       await withOrgContext(org.orgId, async () => {
         if (boundary === 'creation') assert.equal((await create(request(target))).status,404)
         if (boundary === 'actions') {
@@ -74,7 +86,6 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
         if (boundary === 'task') assert.equal((await task(request({action:'start'}),params)).status,404)
         if (boundary === 'evidence') assert.equal((await evidence(request({taskId,evidenceType:'note',label:'Unauthorized note',snapshot:{note:'test'}}),params)).status,404)
         if (boundary === 'binder') {
-          await withBypassContext(() => db.execute(sql`update close_runs set status='published',binder_snapshot='{"sensitive":true}'::jsonb,binder_hash=${'a'.repeat(64)} where id=${runId} and org_id=${org.orgId}`))
           assert.equal((await binder(request({}),params)).status,404)
         }
         if (boundary === 'page') await assert.rejects(page({searchParams:Promise.resolve({run:runId})}), /NEXT_HTTP_ERROR_FALLBACK;404/)
@@ -150,7 +161,7 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
           const result = await binder(request({}),params)
           assert.equal(result.status,200)
           assert.equal(result.headers.get('cache-control'),'private, no-store')
-          assert.deepEqual((await result.json()).binder,{sensitive:true})
+          assert.deepEqual((await result.json()).binder,expectedBinder)
           await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:[]})}::jsonb where org_id=${org.orgId} and key='close_auditor'`))
           assert.equal((await binder(request({}),params)).status,404)
         }

@@ -91,7 +91,8 @@ test("dated wage rounding reaches native stubs, audits, replay and stale-calcula
       assert.deepEqual(await lines(), initial, "native replay cannot duplicate or reprice the entries");
       if (end === "2026-07-11") {
         const source = await withOrgContext(fx.orgId, () => payRunCalculationSource(fx.orgId, run.documentId));
-        assert.ok(!Object.hasOwn(source!.payRates[0]!, "payrollRateScale"), "unchanged default terms retain the legacy source shape");
+        assert.equal(source!.payRates[0]!.payrollRateScale, 4);
+        assert.equal(source!.payRates[0]!.payrollAmountRounding, "dimension_group");
       }
       if (end === "2026-07-18") {
         const source = await withOrgContext(fx.orgId, () => payRunCalculationSource(fx.orgId, run.documentId));

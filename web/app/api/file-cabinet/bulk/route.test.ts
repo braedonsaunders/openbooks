@@ -202,15 +202,20 @@ test('an unknown action and an empty selection are refused before any write', { 
 
     const unknown = await POST(postRequest({ action: 'archive', folderIds: [a] }))
     assert.equal(unknown.status, 400)
-    assert.deepEqual(await unknown.json(), { error: 'action must be delete or move' })
+    const invalidAction = await unknown.json() as {error:string;issues:{path:string;message:string}[]}
+    assert.match(invalidAction.error,/delete.*move/)
+    assert.equal(invalidAction.issues[0]?.path,'action')
 
     const empty = await POST(postRequest({ action: 'delete', folderIds: [] }))
     assert.equal(empty.status, 400)
-    assert.deepEqual(await empty.json(), { error: 'nothing selected' })
+    const emptySelection = await empty.json() as {error:string}
+    assert.equal(emptySelection.error,'select at least one file or folder')
 
     const noTarget = await POST(postRequest({ action: 'move', folderIds: [a] }))
     assert.equal(noTarget.status, 400)
-    assert.deepEqual(await noTarget.json(), { error: 'valid targetFolderId is required' })
+    const missingTarget = await noTarget.json() as {issues:{path:string;message:string}[]}
+    assert.equal(missingTarget.issues[0]?.path,'targetFolderId')
+    assert.match(missingTarget.issues[0]!.message,/valid id/)
 
     assert.equal(await isInactive(org.orgId, a), false)
     assert.deepEqual(await auditEvents(org.orgId, a), [])

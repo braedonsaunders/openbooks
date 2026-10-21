@@ -36,7 +36,7 @@ registerHooks({
 })
 const { sql } = await import('drizzle-orm')
 const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } = await import('@openbooks/engine/testing/fixtures')
 const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
 const { submitAndReleaseIfUngated } = await import('@openbooks/engine/flows/submit')
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
@@ -47,6 +47,9 @@ const { POST } = await import('./route.ts')
 // AFTER the web imports; the route scopes itself explicitly.
 const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
 installTrustedTestDatabaseBypass()
+const { installEngineSeams } = await import("@openbooks/engine/composition/install")
+const { withSimClock } = await import("@openbooks/engine/testing/platform/clock")
+installEngineSeams()
 
 function as(actorId: string, permissions: string[] = ['expenses.create', 'ap.post']) {
   state.actorId = actorId
@@ -55,14 +58,14 @@ function as(actorId: string, permissions: string[] = ['expenses.create', 'ap.pos
 }
 
 async function correct(id: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> | null }> {
-  const response = await withOrgContext(state.orgId, () => POST(
+  const response = await withSimClock("2026-07-20T12:00:00Z", () => withOrgContext(state.orgId, () => POST(
     new Request(`http://expenses.test/api/expenses/${id}/correct`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id }) },
-  ))
+  )))
   return { status: response.status, json: (await response.json().catch(() => null)) as Record<string, unknown> | null }
 }
 
@@ -100,6 +103,7 @@ async function postedFixture(opts: {
   const org = await createScratchOrg()
   state.orgId = org.orgId
   const actorId = await createScratchUser(org.orgId, 'Sammy Sloppy', 'accountant')
+  await grantScratchPermissions(org.orgId, actorId, ['expenses.create'])
   as(actorId)
   const reportSubsidiaryId = opts.nonRootSubsidiary ? randomUUID() : org.subsidiaryId
   if (opts.nonRootSubsidiary) {
@@ -128,12 +132,6 @@ async function postedFixture(opts: {
     update orgs
        set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts,employeePayable}', to_jsonb(${employeePayable}::text), true)
      where id = ${org.orgId}`)
-  // The void reversal posts into the org's business today: seed an open
-  // period covering it (scratch orgs ship only 2026-07).
-  const calendar = (await db.execute<{ id: string }>(sql`select id from fiscal_calendars where org_id = ${org.orgId} and is_default limit 1`)).rows[0]!.id
-  await db.execute(sql`
-    insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-    values (${randomUUID()}, ${org.orgId}, 2026, 9, '2026-09', '2026-09-01', '2026-09-30', false, ${calendar})`)
   const employeeId = randomUUID()
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
@@ -148,14 +146,7 @@ async function postedFixture(opts: {
     values (${randomUUID()}, ${org.orgId}, ${id}, 1, ${org.accounts.cogs}, 'Travel', '1', '875.50', '875.50', '0')`)
   await withOrgContext(org.orgId, () => submitAndReleaseIfUngated('expense_report', id, actorId))
   assert.equal(await statusOf(id), 'approved')
-  const cleanup = async () => {
-    await db.execute(sql`delete from employee_roles where org_id = ${org.orgId}`)
-    await db.execute(sql`update users set is_active = false where org_id = ${org.orgId}`)
-    await db.execute(sql`delete from role_assignments where org_id = ${org.orgId}`)
-    await dropScratchOrg(org.orgId)
-    await db.execute(sql`delete from users where org_id = ${org.orgId}`)
-    await db.execute(sql`delete from app_roles where org_id = ${org.orgId}`)
-  }
+  const cleanup = () => dropScratchOrg(org.orgId)
   const control = { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, employeePayable }
   if (opts.stopBeforePosting) return { orgId: org.orgId, subsidiaryId: reportSubsidiaryId, documentDate: org.date, actorId, employeeId, cogs: org.accounts.cogs, id, control, cleanup }
   await postDocument(id, { control })

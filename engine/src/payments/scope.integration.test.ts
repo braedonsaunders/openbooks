@@ -616,7 +616,7 @@ test(
         sql`update documents set status='approved' where id=${generated.id}`,
       );
       await db.execute(sql`update payment_runs set status='generated' where id=${run.id} and org_id=${org.orgId}`);
-      await postPaymentRun(run.id, org.orgId, actor);
+      assert.deepEqual(await postPaymentRun(run.id, org.orgId, actor), {posted:1,failures:[]});
       assert.deepEqual(
         await openItemsForParty(org.vendorId, "ap", org.orgId),
         [],
