@@ -19,9 +19,9 @@ async function insertAccount(
   const id = randomUUID();
   await db.execute(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
-      reconcilable, required_dimensions, custom, subsidiary_include_children)
+      reconcilable, currency_restriction, required_dimensions, custom, subsidiary_include_children)
     values (${id}, ${orgId}, ${number}, ${`Fixture ${number}`}, ${type}, ${flags.isSummary ?? false},
-      ${flags.isActive ?? true}, false, ${flags.reconcilable ?? true}, '[]'::jsonb, '{}'::jsonb, true)`);
+      ${flags.isActive ?? true}, false, ${flags.reconcilable ?? true}, 'CAD', '[]'::jsonb, '{}'::jsonb, true)`);
   return id;
 }
 
@@ -30,7 +30,7 @@ test("a reconcilable credit line is a Banking account; other liabilities need th
   try {
     const creditLine = await withBypassContext(() => insertAccount(org.orgId, "2650", "liability_current_other"));
     const loan = await withBypassContext(() => insertAccount(org.orgId, "2700", "liability_long_term", { reconcilable: false }));
-    const payable = await withBypassContext(() => insertAccount(org.orgId, "2000", "liability_payable", { reconcilable: false }));
+    const payable = await withBypassContext(() => insertAccount(org.orgId, "9250", "liability_payable", { reconcilable: false }));
 
     const transferIds = (await withBypassContext(() => transferAccountOptions(org.orgId))).map((option) => option.id);
     assert.ok(transferIds.includes(creditLine), "a reconcilable credit line is a transfer leg");
