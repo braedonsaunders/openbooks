@@ -136,8 +136,7 @@ const FEATURE_OFF = new Set([
   // HR-20 end
 ]);
 
-function readerAuthz(orgId: string): Authz {
-  const userId = randomUUID();
+function readerAuthz(orgId: string, userId: string = randomUUID()): Authz {
   const user: SessionUser = {
     id: userId,
     orgId,
@@ -238,9 +237,9 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
       update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify(flags)}::jsonb)
       where id = ${org.orgId}
     `));
-    const authz = readerAuthz(org.orgId);
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Contract reader", "contract-reader"));
+    const authz = readerAuthz(org.orgId, actorId);
     await withBypassContext(async () => {
-      authz.user.id = await createScratchUser(org.orgId, "Contract reader", "contract-reader");
       await grantScratchPermissions(org.orgId, authz.user.id, [...READER_PERMS]);
       const item = await db.execute(sql`update items set code='CONTRACT-FIFO' where org_id=${org.orgId} and id=${org.items.fifo} returning id`);
       assert.equal(item.rows.length, 1);
