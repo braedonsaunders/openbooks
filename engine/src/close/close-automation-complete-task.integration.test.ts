@@ -335,6 +335,7 @@ test("closing refuses changed manual evidence and retains its invalidation witho
  const {closeApprovedRun}=await import("./run-completion.ts");
  try{
   const taskId=await insertTask(h,"retained-statement-review");
+  await refreshCloseRun(h.orgId,h.runId,h.submitterId);
   await updateCloseTask({orgId:h.orgId,runId:h.runId,taskId,actorId:h.submitterId,action:"complete"});
   await requestCloseApproval(h.orgId,h.runId,h.submitterId);
   await db.execute(sql`insert into close_task_evidence(org_id,run_id,task_id,evidence_type,label,snapshot,content_hash,created_by,updated_by)

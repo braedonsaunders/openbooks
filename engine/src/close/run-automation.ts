@@ -188,7 +188,6 @@ export async function refreshCloseRun(
          where run_id = ${runId} and org_id = ${orgId} and key = ${taskKey} and completion_mode = 'computed'`);
     }
 
-    await resolveTaskDependenciesTx(tx, orgId, runId);
     await tx.execute(sql`
       update close_runs set readiness_score = ${readinessScore}, data_fingerprint = ${fingerprint},
              status = case when ${dataChanged || invalidated>0} and status in ('review','approved') then 'in_progress' else status end,
@@ -207,6 +206,8 @@ export async function refreshCloseRun(
              end,
              last_validated_at = now(), updated_at = now(), updated_by = ${actorId ?? null}
        where id = ${runId} and org_id = ${orgId}`);
+    // Dependency state must compare preparation against the newly validated fingerprint.
+    await resolveTaskDependenciesTx(tx, orgId, runId);
     const open = (await tx.execute<{ count: string }>(sql`
       select count(*) as count from close_exceptions where run_id = ${runId} and org_id = ${orgId} and status = 'open'`));
     return {
