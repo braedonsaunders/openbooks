@@ -20,12 +20,8 @@ import { preflightNeedsPendingPrerequisite, preflightNeedsRecordedGuardTransitio
 import { baselineTransitionCandidate, verifyBaselineTransitionCatalog } from "../migration-baseline-transitions.ts"
 import { migrationBusinessOwnerRole, migrationRequiresMaintenanceAuthority } from "../migration-owner-authority.ts"
 
-/**
- * A fresh installation hands business objects to the dedicated schema owner
- * once private retirement authority exists. Later migrations then run as that
- * owner, as constrained deployments do, so objects they create share its
- * ownership and its catalog functions can manage their privileges.
- */
+/** Business DDL retains the installation's restricted owner. Catalog and
+ * private-authority publishers keep the maintenance session's authority. */
 async function provisionedSchemaOwnerRole(client: pg.PoolClient): Promise<string | undefined> {
   const row = (await client.query<{ owner: string; privileged: boolean; current: string }>(`select
       n.nspowner::regrole::text as owner, current_user::text as current,
@@ -39,6 +35,12 @@ async function provisionedSchemaOwnerRole(client: pg.PoolClient): Promise<string
     if (!provisioned?.safe) throw new Error("Host-managed installation requires a restricted database owner distinct from its maintenance administrator");
     return provisioned.owner;
   }
+  const established = (await client.query<{ owner: string; safe: boolean; isolated: boolean }>(`select r.rolname as owner,
+      not (r.rolsuper or r.rolbypassrls or r.rolcreatedb or r.rolcreaterole or r.rolreplication) as safe,
+      not pg_has_role(b.relowner,a.relowner,'MEMBER') as isolated
+    from pg_class b join pg_roles r on r.oid=b.relowner cross join pg_class a
+    where b.oid=to_regclass('public.orgs') and a.oid=to_regclass('tenant_retirement.runs')`)).rows[0];
+  if (established?.safe && established.isolated && established.owner !== row.current) return established.owner;
   if (row.owner !== "openbooks_schema_owner" || row.current === row.owner) return undefined;
   return row.owner;
 }

@@ -131,6 +131,19 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
       assert.equal((await ownerPool.query("select sha256 from _applied_migrations where filename=$1", [filename])).rows[0].sha256, removed.rows[0].sha256);
       assert.deepEqual((await ownerPool.query("select filename, sha256, applied_at from _applied_migrations where filename <> $1 order by filename", [filename])).rows, before.rows);
     });
+    await t.test("maintenance upgrades retain the established restricted business owner", async () => {
+      const filename = "generated/0789_portal_return_flow_principal.sql";
+      const before = await ownerPool.query("select filename,sha256,applied_at from _applied_migrations where filename<>$1 order by filename", [filename]);
+      // Reconstruct the missing forward function only in this owned installation.
+      await ownerPool.query("drop function public.flow_portal_return_source_valid(uuid,uuid,jsonb)");
+      const removed = await ownerPool.query("delete from _applied_migrations where filename=$1 returning sha256", [filename]);
+      assert.equal(removed.rowCount, 1);
+      await bootstrap({ OPENBOOKS_PRECREATED_ROLES: "0", OPENBOOKS_MIGRATION_DB_URL: provisionerUrl.toString() });
+      const authority = await ownerPool.query("select proowner::regrole::text as owner from pg_proc where oid='public.flow_portal_return_source_valid(uuid,uuid,jsonb)'::regprocedure");
+      assert.equal(authority.rows[0].owner, owner);
+      assert.equal((await ownerPool.query("select sha256 from _applied_migrations where filename=$1", [filename])).rows[0].sha256, removed.rows[0].sha256);
+      assert.deepEqual((await ownerPool.query("select filename,sha256,applied_at from _applied_migrations where filename<>$1 order by filename", [filename])).rows,before.rows);
+    });
     await t.test("effective PUBLIC leaks and missing governed-view grants are refused", async () => {
       await ownerPool.query("grant select on public.orgs to public");
       try { await assert.rejects(verifyPrecreatedObjectAccess(ownerPool, config), /outside the governed read-only surface: public.orgs/); }

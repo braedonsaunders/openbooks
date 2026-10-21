@@ -153,6 +153,8 @@ export function documentKindPermissions(
   kind: string,
 ): DocumentKindPermissions | null {
   if (kind === "pay_run") return PAY_RUN_WORKFLOW_PERMISSIONS;
+  // Return authorization governs fulfillment; its later credit has separate AR authority.
+  if (kind === "rma") return { read: "orders.fulfill", edit: "orders.fulfill", approve: "orders.fulfill" };
   if (DOCUMENT_PERMISSION_NAMESPACE[kind]) {
     return {
       read: documentReadPermission(kind),
