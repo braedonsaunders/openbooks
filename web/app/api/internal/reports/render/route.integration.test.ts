@@ -7,7 +7,7 @@ import { createTranslator, type AbstractIntlMessages } from 'next-intl'
 import messages from '../../../../../messages/en/index.ts'
 
 Object.assign(globalThis, { __internalReportTranslations: (input: string | { namespace?: string }) =>
-  createTranslator({ locale: 'en', messages: messages as AbstractIntlMessages, namespace: typeof input === 'string' ? input : input?.namespace }) })
+  createTranslator({ locale: 'en', messages: messages as unknown as AbstractIntlMessages, namespace: typeof input === 'string' ? input : input?.namespace }) })
 
 const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href

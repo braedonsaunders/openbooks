@@ -36,7 +36,7 @@ test("work-order completion validates options before applying lifecycle rules", 
       update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb)
       where id=${org.orgId} returning id`));
     assert.equal(feature.rows.length, 1, "manufacturing feature setup must affect exactly one organization");
-    const order = await withOrgTransaction(org.orgId, (tx) => createWorkOrder(tx, org.orgId, actorId, {
+    const order = await withOrgTransaction(org.orgId, () => createWorkOrder(db, org.orgId, actorId, {
       producedItemId: org.items.assembly, quantityOrdered: "1", subsidiaryId: org.subsidiaryId,
     }));
     gateState.authz = {

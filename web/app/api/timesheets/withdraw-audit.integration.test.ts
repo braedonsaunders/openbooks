@@ -119,7 +119,7 @@ async function seedSubmittedWeek(status: "submitted" | "approved" | "draft" = "s
     await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: 'timesheet_week',
       assignees: [{ type: 'user', userId: actorId }], mode: 'any', preventSelfApproval: false }));
     await withOrgTransaction(org.orgId, () => routeSubjectSubmission({ orgId: org.orgId, actorId,
-      subjectKind: 'timesheet_week', subjectId: headerId, event: { kind: 'on_submit', source: 'api' } }));
+      subjectKind: 'timesheet_week', subjectId: headerId, source: 'api' }));
     runId = (await withBypassContext(() => db.execute<{ run_id: string }>(sql`select run_id from flow_gates
       where org_id=${org.orgId} and subject_id=${headerId} and status='pending'`))).rows[0]!.run_id;
   }

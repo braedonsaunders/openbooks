@@ -318,15 +318,16 @@ test("another vendor's received cover is invisible to the guard and the dialog",
     await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${seed.orgId}`);
     const dialog = await withOrg(seed.orgId, () => billMatchCandidates(seed.orgId, billId));
     assert.deepEqual(candidateNumbers(dialog.lines, 1), [], "a different vendor's order is never offered");
-    await assert.rejects(postBill(seed, billId), (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.equal((error as Error & { code: string }).code, "BILL_LINES_UNMATCHED");
-      return true;
-    });
+    await postBill(seed, billId);
     const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${billId}`)).rows[0]!.status;
-    assert.equal(status, "approved", "the refused posting preserves the approved bill");
-    const movements = (await db.execute(sql`select id from inventory_movements where org_id=${seed.orgId}`)).rows;
-    assert.equal(movements.length, 0, "unreceived stock is not received through an unmatched bill");
+    assert.equal(status, "posted", "an unrelated vendor's order does not block this bill");
+    const otherOrder = (await db.execute<{ quantity_billed: string }>(sql`select quantity_billed::text from document_lines where org_id=${seed.orgId} and id=${po.lineA}`)).rows[0]!;
+    assert.equal(toUnits(otherOrder.quantity_billed), 0n, "the bill cannot consume another vendor's received cover");
+    const ownReceipt = (await db.execute<{ quantity: string }>(sql`
+      select sum(m.quantity)::text as quantity from inventory_movements m
+      join document_lines l on l.org_id=m.org_id and l.id=m.document_line_id
+      where m.org_id=${seed.orgId} and l.document_id=${billId} and m.status='posted'`)).rows[0]!;
+    assert.equal(toUnits(ownReceipt.quantity), toUnits("2128"), "the independent bill receives its own stock");
   } finally {
     await dropScratchOrg(seed.orgId);
   }

@@ -6,7 +6,7 @@ import { createTranslator, type AbstractIntlMessages } from "next-intl";
 import messages from "../../messages/en/index.ts";
 
 Object.assign(globalThis, { __assistantContractTranslations: (input: string | { namespace?: string }) =>
-  createTranslator({ locale: "en", messages: messages as AbstractIntlMessages, namespace: typeof input === "string" ? input : input?.namespace }) });
+  createTranslator({ locale: "en", messages: messages as unknown as AbstractIntlMessages, namespace: typeof input === "string" ? input : input?.namespace }) });
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === "next-intl/server") return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
     'export async function getTranslations(input){return globalThis.__assistantContractTranslations(input)}; export async function getLocale(){return "en"}'
@@ -204,6 +204,8 @@ const HARNESS_FEATURES = [
   "crm",
   "subscriptionBilling",
   "inventory",
+  "barcodeScanning",
+  "customerPartNumbers",
   "orders",
   "fixedAssets",
   "equipment",
@@ -238,8 +240,10 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
     `));
     const authz = readerAuthz(org.orgId);
     await withBypassContext(async () => {
-      await createScratchUser(org.orgId, "Contract reader", "contract-reader", authz.user.id);
+      authz.user.id = await createScratchUser(org.orgId, "Contract reader", "contract-reader");
       await grantScratchPermissions(org.orgId, authz.user.id, [...READER_PERMS]);
+      const item = await db.execute(sql`update items set code='CONTRACT-FIFO' where org_id=${org.orgId} and id=${org.items.fifo} returning id`);
+      assert.equal(item.rows.length, 1);
     });
     await withOrgContext(org.orgId, async () => {
       // Resolve seed-dependent ids from the scratch org's own list tools.
@@ -338,7 +342,7 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         list_fx_rates: { fromCurrency: "USD", toCurrency: "CAD" },
         get_consolidation_view: { periodId: randomUUID() },
         get_budget_workspace: { scenarioId: randomUUID() },
-        resolve_scan_value: { field: "item", value: "CONTRACT-UNKNOWN-ITEM" },
+        resolve_scan_value: { field: "item", value: "CONTRACT-FIFO" },
         list_customer_item_numbers: { customerId: partyId },
         get_resourcing_assignment: { assignmentId: randomUUID() },
         get_staffing_demand: { firstSunday: "2026-07-05", lastSunday: "2026-07-26" },
@@ -364,6 +368,9 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
           assert.equal(typeof record.ok, "boolean", `tool ${tool.name} returned no ok flag`);
           if (record.ok) {
             assert.ok("data" in record, `tool ${tool.name} returned ok without data`);
+            if (tool.name === "resolve_scan_value") {
+              assert.equal((record.data as { id: string }).id, org.items.fifo);
+            }
             if (tool.name === "cash_flow_indirect") {
               const data = record.data as Record<string, unknown>;
               for (const group of ["adjustments", "workingCapital", "investing", "financing"]) {
