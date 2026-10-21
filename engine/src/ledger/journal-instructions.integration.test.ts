@@ -169,6 +169,14 @@ test("adjustment-only books resolve primary plus adjustments while full books re
   assert.deepEqual(await basis(adjustment),[org.bookId,adjustment].sort());
   assert.deepEqual(await basis(full),[full]);
   assert.deepEqual(await basis(org.bookId),[org.bookId]);
+  await db.execute(sql`update accounting_books set is_active=false where org_id=${org.orgId} and id in (${adjustment},${full})`);
+  assert.deepEqual(await basis(adjustment),[org.bookId,adjustment].sort(),"retirement preserves the adjustment reporting basis");
+  assert.deepEqual(await basis(full),[full],"retirement preserves the independent full-book basis");
+  await assert.rejects(()=>postEntry(db,{orgId:org.orgId,bookId:full,subsidiaryId:org.subsidiaryId,entryNumber:'RETIRED',postingDate:org.date,periodId:org.periodId,origin:'manual',lines:[
+   {accountId:org.accounts.cogs,amount:'1',currency:'CAD'},
+   {accountId:org.accounts.bank,amount:'-1',currency:'CAD'},
+  ]}),/not an active posting book/);
+  assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and book_id=${full}`)).rows[0]?.n,0);
   await assert.rejects(()=>basis(randomUUID()));
  });}finally{await dropScratchOrg(org.orgId);}
 });

@@ -2355,7 +2355,7 @@ test(
       const actorId = await withBypassContext(() =>
         createScratchUser(org.orgId, "Currency remedy clerk", "currency_remedy_clerk"),
       );
-      await grantRolePermissions(org.orgId, "currency_remedy_clerk", ["ar.create", "ar.post"]);
+      await grantRolePermissions(org.orgId, "currency_remedy_clerk", ["ar.create", "ar.post", "ar.pay"]);
       const approverId = await withBypassContext(() =>
         createScratchUser(org.orgId, "Currency remedy approver", "currency_remedy_approver"),
       );
@@ -2427,7 +2427,7 @@ test(
       const actorId = await withBypassContext(() =>
         createScratchUser(org.orgId, "Legacy exposure clerk", "legacy_exposure_clerk"),
       );
-      await grantRolePermissions(org.orgId, "legacy_exposure_clerk", ["ar.create", "ar.post"]);
+      await grantRolePermissions(org.orgId, "legacy_exposure_clerk", ["ar.create", "ar.post", "ar.pay"]);
       await enableSalesFx(org.orgId, org.date);
       await seedCustomerRole(org, actorId);
 
@@ -2794,7 +2794,7 @@ const consolidatedRows = [
               const actorId = await withBypassContext(() =>
                 createScratchUser(org.orgId, "Party remedy clerk", "party_remedy_clerk"),
               );
-              await grantRolePermissions(org.orgId, "party_remedy_clerk", ["ar.create", "ar.post"]);
+              await grantRolePermissions(org.orgId, "party_remedy_clerk", ["ar.create", "ar.post", "ar.pay"]);
               const approverId = await withBypassContext(() =>
                 createScratchUser(org.orgId, "Party remedy approver", "party_remedy_approver"),
               );
