@@ -1,0 +1,102 @@
+{
+  "title": "Lançamento de contas a pagar em lote",
+  "description": "Registre uma pilha de contas de fornecedores em uma única grade, confira-as com os totais de controle e salve ou lance todas juntas.",
+  "back": "Contas a pagar",
+  "menuLabel": "Lançamento em lote",
+  "helpLink": "Como funciona o lançamento em lote",
+  "noTax": "Sem imposto",
+  "createVendor": "Criar o fornecedor “{name}”",
+  "createVendorFailed": "Não foi possível criar o fornecedor.",
+  "keyboardHint": "Enter ou Tab percorre os campos de uma conta, e Tab após o último campo inicia a próxima. F8 copia o campo de cima. Cole linhas de uma planilha, com uma linha de cabeçalho para associar as colunas pelo nome. Ctrl+S (⌘S) salva cada conta como rascunho.",
+  "keyboardHintPost": "Enter ou Tab percorre os campos de uma conta, e Tab após o último campo inicia a próxima. F8 copia o campo de cima. Cole linhas de uma planilha, com uma linha de cabeçalho para associar as colunas pelo nome. Ctrl+S (⌘S) salva cada conta como rascunho; Ctrl+Enter (⌘Enter) lança todas.",
+  "columns": {
+    "vendor": "Fornecedor",
+    "reference": "Nº de ref. do fornecedor",
+    "billDate": "Data da conta",
+    "dueDate": "Data de vencimento",
+    "dueDateHelp": "Deixe em branco para usar as condições de pagamento do fornecedor. A coluna de situação mostra a data resultante.",
+    "account": "Conta contábil",
+    "memo": "Memorando",
+    "amount": "Valor",
+    "tax": "Imposto",
+    "status": "Situação"
+  },
+  "control": {
+    "heading": "Totais de controle",
+    "subsidiary": "Subsidiária",
+    "count": "Número de contas",
+    "total": "Total do lote",
+    "entered": "Registrado: {count, plural, one {# conta} other {# contas}} · {total}",
+    "countMatched": "O número de contas confere",
+    "countOff": "Diferença no número de contas: {difference, number}",
+    "countInvalid": "Informe o número de contas como número inteiro",
+    "totalMatched": "O total do lote confere",
+    "totalOff": "Diferença no total do lote: {difference}",
+    "totalInvalid": "Informe o total do lote como valor"
+  },
+  "actions": {
+    "saveAll": "Salvar tudo como rascunho",
+    "postAll": "Lançar tudo",
+    "clearFinished": "Remover linhas concluídas ({count, number})",
+    "addBill": "Adicionar conta",
+    "progress": "Salvando {done, number} de {total, number}…"
+  },
+  "shortcuts": {
+    "saveAll": "Salvar todas as contas como rascunho",
+    "postAll": "Lançar todas as contas"
+  },
+  "status": {
+    "saving": "Salvando…",
+    "saved": "Salva {number}",
+    "posted": "Lançada {number}",
+    "pending": "{number} aguardando aprovação",
+    "termsDue": "Vence em {date} pelas condições",
+    "openExisting": "Abrir a conta existente"
+  },
+  "issues": {
+    "vendor": "Escolha um fornecedor",
+    "billDate": "Informe a data da conta",
+    "amountMissing": "Informe o valor",
+    "amountInvalid": "O valor não é um número",
+    "amountNotPositive": "Informe um valor positivo; registre uma conta negativa como crédito de fornecedor",
+    "account": "Escolha uma conta contábil"
+  },
+  "duplicates": {
+    "badge": "Possível duplicata",
+    "inBatch": "Mesmo fornecedor e nº de ref. da linha {rows}",
+    "onFile": "Corresponde a {number} de {date}",
+    "title": "Possíveis contas duplicadas",
+    "message": "{count, plural, one {# conta tem} other {# contas têm}} o mesmo fornecedor e nº de ref. de outra conta deste lote ou já registrada. Salvar mesmo assim?",
+    "row": "Linha {row}: {vendor}, {reference}",
+    "confirm": "Salvar mesmo assim"
+  },
+  "refusals": {
+    "nothingToSave": "Este lote não tem contas não salvas.",
+    "rowsNeedAttention": "{count, plural, one {# conta precisa} other {# contas precisam}} de correção antes de salvar qualquer coisa. {first}",
+    "rowIssue": "Linha {row}: {issue}.",
+    "controlInvalid": "Não é possível ler os totais de controle. Informe o número de contas como número inteiro e o total do lote como valor, ou limpe-os.",
+    "controlCount": "O lote tem {entered, plural, one {# conta} other {# contas}}, mas o número de controle é {control, number}. Encontre a conta que falta ou sobra, ou corrija o número de controle.",
+    "controlTotal": "As contas somam {entered}, {difference} a {direction, select, over {mais} other {menos}} que o total do lote. Corrija os valores ou o total do lote.",
+    "saveFailed": "Não foi possível salvar a conta.",
+    "unavailable": "Não foi possível acessar o servidor. O lote foi mantido; salve novamente para tentar de novo, e contas já salvas não são criadas duas vezes.",
+    "conflict": "A conta desta linha talvez já tenha sido salva com outros dados. Abra a conta existente para conferir ou duplique a linha para salvá-la como uma nova conta.",
+    "refusedSummary": "{count, plural, one {# conta não foi salva nem lançada} other {# contas não foram salvas nem lançadas}}. O motivo aparece em cada linha; corrija e salve novamente.",
+    "defaultsFailed": "Não foi possível carregar os padrões do fornecedor. Escolha a conta contábil de cada conta."
+  },
+  "summary": {
+    "saved": "{count, plural, one {# conta salva como rascunho} other {# contas salvas como rascunho}}",
+    "posted": "{posted, plural, one {# conta lançada} other {# contas lançadas}}, {pending, number} aguardando aprovação"
+  },
+  "restore": {
+    "title": "Lote não salvo restaurado",
+    "body": "{count, plural, one {# conta não salva} other {# contas não salvas}} da sua última sessão {count, plural, one {foi restaurada} other {foram restauradas}}.",
+    "keep": "Manter",
+    "discard": "Descartar",
+    "discardConfirm": "Descartar as contas não salvas deste lote? Esta ação não pode ser desfeita.",
+    "storageFailed": "Este navegador não conseguiu guardar uma cópia do lote. Salve logo para não perder nenhuma conta."
+  },
+  "leave": {
+    "message": "Este lote tem contas não salvas. Elas ficam neste navegador e voltam quando você reabrir o lançamento em lote.",
+    "confirm": "Sair"
+  }
+}

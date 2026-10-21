@@ -31,6 +31,12 @@ type ConfirmOptions = {
   cancelLabel?: string
   /** `danger` = red primary button + warning icon (for destructive actions). */
   tone?: ConfirmTone
+  /**
+   * Which choice Enter takes. Warnings that guard against a costly mistake
+   * (saving a likely duplicate bill) default to `cancel`, so a reflexive
+   * Enter never confirms them.
+   */
+  defaultAction?: 'confirm' | 'cancel'
 }
 
 type Request = ConfirmOptions & { id: number; resolve: (ok: boolean) => void }
@@ -88,7 +94,7 @@ export function ConfirmRoot() {
       // Let focused buttons handle Enter through their native click. This
       // preserves an explicit Cancel activation instead of settling true from
       // this document-level listener before the button click can run.
-      if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) settle(true)
+      if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) settle(req?.defaultAction !== 'cancel')
     }
     document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
@@ -160,11 +166,11 @@ export function ConfirmRoot() {
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4 dark:border-slate-800 dark:bg-slate-900/60">
-              <Button variant="outline" onClick={() => settle(false)}>
+              <Button variant="outline" autoFocus={req.defaultAction === 'cancel'} onClick={() => settle(false)}>
                 {cancelLabel}
               </Button>
               <Button
-                autoFocus
+                autoFocus={req.defaultAction !== 'cancel'}
                 variant={danger ? 'destructive' : 'default'}
                 onClick={() => settle(true)}
               >

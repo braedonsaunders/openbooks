@@ -162,12 +162,19 @@ export const TENANT_TABLE_POLICIES = {
   "allocation_rules": "clone:catalog-uuid-rebase",
   "allocation_runs": "clone:catalog-uuid-rebase",
   "anomaly_baselines": "clone:catalog-uuid-rebase",
+  "ap_capture_autopost_policies": "clone:catalog-uuid-rebase",
   "ap_capture_corrections": "clone:catalog-uuid-rebase",
   "ap_capture_events": "clone:catalog-uuid-rebase",
   "ap_capture_fields": "clone:catalog-uuid-rebase",
   "ap_capture_items": "clone:catalog-uuid-rebase",
   "ap_capture_rules": "clone:catalog-uuid-rebase",
   "ap_capture_runs": "clone:catalog-uuid-rebase",
+  // Inbound mailboxes carry live webhook tokens (globally unique) and secrets
+  // sealed to the source organization; their message log is the source
+  // environment's delivery record. None crosses into a sandbox.
+  "ap_capture_inbound_messages": "skip:no-copy",
+  "ap_capture_mailbox_credentials": "skip:no-copy",
+  "ap_capture_mailboxes": "skip:no-copy",
   "api_key_events": "skip:no-copy",
   "api_keys": "skip:no-copy",
   "app_files": "clone:catalog-uuid-rebase",

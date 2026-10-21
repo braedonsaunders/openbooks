@@ -1,0 +1,102 @@
+{
+  "title": "Saisie de factures par lot",
+  "description": "Saisissez une pile de factures fournisseurs dans une seule grille, contrôlez-les par rapport aux totaux de contrôle et enregistrez-les ou comptabilisez-les ensemble.",
+  "back": "Factures fournisseurs",
+  "menuLabel": "Saisie par lot",
+  "helpLink": "Fonctionnement de la saisie par lot",
+  "noTax": "Aucune taxe",
+  "createVendor": "Créer le fournisseur « {name} »",
+  "createVendorFailed": "Le fournisseur n’a pas pu être créé.",
+  "keyboardHint": "Entrée ou Tab passe d’un champ à l’autre d’une facture, et Tab après le dernier champ commence la suivante. F8 copie le champ du dessus. Collez des lignes depuis un tableur, avec une ligne d’en-tête pour faire correspondre les colonnes par leur nom. Ctrl+S (⌘S) enregistre chaque facture comme brouillon.",
+  "keyboardHintPost": "Entrée ou Tab passe d’un champ à l’autre d’une facture, et Tab après le dernier champ commence la suivante. F8 copie le champ du dessus. Collez des lignes depuis un tableur, avec une ligne d’en-tête pour faire correspondre les colonnes par leur nom. Ctrl+S (⌘S) enregistre chaque facture comme brouillon ; Ctrl+Entrée (⌘Entrée) les comptabilise.",
+  "columns": {
+    "vendor": "Fournisseur",
+    "reference": "N° de réf. fournisseur",
+    "billDate": "Date de facture",
+    "dueDate": "Date d’échéance",
+    "dueDateHelp": "Laissez vide pour appliquer les conditions de paiement du fournisseur. La colonne d’état affiche la date qu’elles donnent.",
+    "account": "Compte",
+    "memo": "Mémo",
+    "amount": "Montant",
+    "tax": "Taxe",
+    "status": "État"
+  },
+  "control": {
+    "heading": "Totaux de contrôle",
+    "subsidiary": "Filiale",
+    "count": "Nombre de factures",
+    "total": "Total du lot",
+    "entered": "Saisi : {count, plural, one {# facture} other {# factures}} · {total}",
+    "countMatched": "Le nombre de factures concorde",
+    "countOff": "Écart sur le nombre de factures : {difference, number}",
+    "countInvalid": "Saisissez le nombre de factures sous forme de nombre entier",
+    "totalMatched": "Le total du lot concorde",
+    "totalOff": "Écart sur le total du lot : {difference}",
+    "totalInvalid": "Saisissez le total du lot sous forme de montant"
+  },
+  "actions": {
+    "saveAll": "Tout enregistrer comme brouillons",
+    "postAll": "Tout comptabiliser",
+    "clearFinished": "Retirer les lignes terminées ({count, number})",
+    "addBill": "Ajouter une facture",
+    "progress": "Enregistrement {done, number} sur {total, number}…"
+  },
+  "shortcuts": {
+    "saveAll": "Enregistrer toutes les factures comme brouillons",
+    "postAll": "Comptabiliser toutes les factures"
+  },
+  "status": {
+    "saving": "Enregistrement…",
+    "saved": "Enregistrée {number}",
+    "posted": "Comptabilisée {number}",
+    "pending": "{number} en attente d’approbation",
+    "termsDue": "Échéance le {date} selon les conditions",
+    "openExisting": "Ouvrir la facture existante"
+  },
+  "issues": {
+    "vendor": "Choisissez un fournisseur",
+    "billDate": "Saisissez la date de facture",
+    "amountMissing": "Saisissez le montant",
+    "amountInvalid": "Le montant n’est pas un nombre",
+    "amountNotPositive": "Saisissez un montant positif ; enregistrez une facture négative comme avoir fournisseur",
+    "account": "Choisissez un compte"
+  },
+  "duplicates": {
+    "badge": "Doublon possible",
+    "inBatch": "Même fournisseur et même n° de réf. que la ligne {rows}",
+    "onFile": "Correspond à {number} du {date}",
+    "title": "Doublons possibles",
+    "message": "{count, plural, one {# facture a} other {# factures ont}} le même fournisseur et le même n° de réf. qu’une autre facture de ce lot ou déjà enregistrée. Enregistrer quand même ?",
+    "row": "Ligne {row} : {vendor}, {reference}",
+    "confirm": "Enregistrer quand même"
+  },
+  "refusals": {
+    "nothingToSave": "Ce lot ne contient aucune facture non enregistrée.",
+    "rowsNeedAttention": "{count, plural, one {# facture est à corriger} other {# factures sont à corriger}} avant tout enregistrement. {first}",
+    "rowIssue": "Ligne {row} : {issue}.",
+    "controlInvalid": "Les totaux de contrôle sont illisibles. Saisissez le nombre de factures sous forme de nombre entier et le total du lot sous forme de montant, ou effacez-les.",
+    "controlCount": "Le lot contient {entered, plural, one {# facture} other {# factures}}, mais le nombre de contrôle est {control, number}. Retrouvez la facture manquante ou en trop, ou corrigez le nombre de contrôle.",
+    "controlTotal": "Les factures totalisent {entered}, soit {difference} de {direction, select, over {plus} other {moins}} que le total du lot. Corrigez les montants ou le total du lot.",
+    "saveFailed": "La facture n’a pas pu être enregistrée.",
+    "unavailable": "Le serveur est injoignable. Le lot est conservé ; enregistrez de nouveau pour réessayer, les factures déjà enregistrées ne seront pas créées deux fois.",
+    "conflict": "La facture de cette ligne a peut-être déjà été enregistrée avec d’autres informations. Ouvrez la facture existante pour la vérifier, ou dupliquez la ligne pour l’enregistrer comme nouvelle facture.",
+    "refusedSummary": "{count, plural, one {# facture n’a pas été enregistrée ni comptabilisée} other {# factures n’ont pas été enregistrées ni comptabilisées}}. Le motif est indiqué sur chaque ligne ; corrigez-le et enregistrez de nouveau.",
+    "defaultsFailed": "Les valeurs par défaut du fournisseur n’ont pas pu être chargées. Choisissez le compte de chaque facture."
+  },
+  "summary": {
+    "saved": "{count, plural, one {# facture enregistrée comme brouillon} other {# factures enregistrées comme brouillons}}",
+    "posted": "{posted, plural, one {# facture comptabilisée} other {# factures comptabilisées}}, {pending, number} en attente d’approbation"
+  },
+  "restore": {
+    "title": "Lot non enregistré restauré",
+    "body": "{count, plural, one {# facture non enregistrée} other {# factures non enregistrées}} de votre dernière session {count, plural, one {a été restaurée} other {ont été restaurées}}.",
+    "keep": "Conserver",
+    "discard": "Abandonner",
+    "discardConfirm": "Abandonner les factures non enregistrées de ce lot ? Cette action est irréversible.",
+    "storageFailed": "Ce navigateur n’a pas pu conserver une copie du lot. Enregistrez rapidement pour ne perdre aucune facture."
+  },
+  "leave": {
+    "message": "Ce lot contient des factures non enregistrées. Elles restent dans ce navigateur et réapparaissent quand vous rouvrez la saisie par lot.",
+    "confirm": "Quitter"
+  }
+}

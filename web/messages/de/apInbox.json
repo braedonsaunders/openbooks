@@ -1,0 +1,80 @@
+{
+  "tabs": {
+    "queue": "Erfassungswarteschlange",
+    "inbox": "Posteingangsaktivität"
+  },
+  "emailSource": "E-Mail",
+  "mailboxes": {
+    "title": "Rechnungen per E-Mail senden an",
+    "copyAddress": "Adresse {label} kopieren",
+    "copyWebhook": "Webhook-URL {label} kopieren",
+    "webhook": "Webhook-URL",
+    "copied": "In die Zwischenablage kopiert",
+    "copyFailed": "Kopieren nicht möglich. Markieren Sie den Text und kopieren Sie ihn manuell.",
+    "none": "Es ist noch keine Eingangsadresse aktiv.",
+    "manage": "Adressen verwalten"
+  },
+  "inbox": {
+    "columns": {
+      "received": "Empfangen",
+      "address": "Adresse",
+      "from": "Von",
+      "subject": "Betreff",
+      "attachments": "Anhänge",
+      "outcome": "Ergebnis",
+      "detail": "Details",
+      "capture": "Erfassung"
+    },
+    "outcomes": {
+      "received": "Wird verarbeitet",
+      "captured": "Erfasst",
+      "rejected_sender": "Absender nicht zulässig",
+      "no_attachments": "Keine Rechnung angehängt",
+      "duplicate": "Bereits erfasst",
+      "error": "Fehler"
+    },
+    "capturedCount": "{count, plural, one {# Erfassung erstellt} other {# Erfassungen erstellt}}",
+    "openCapture": "Erfassung öffnen",
+    "emptyTitle": "Noch keine eingehenden E-Mails",
+    "emptyDescription": "Nachrichten an die Kreditoren-Adressen dieses Unternehmens erscheinen hier, zusammen mit dem, was mit jeder einzelnen geschehen ist.",
+    "emptyNoMailbox": "Richten Sie unter Einrichtung → Fakturierung → Kreditoren-Eingangsadressen eine Eingangsadresse ein, um Rechnungen per E-Mail zu empfangen."
+  },
+  "trust": {
+    "trusted": "Vertrauenswürdig: {count, plural, one {# fehlerfreie Rechnung} other {# fehlerfreie Rechnungen}} in Folge",
+    "building": "{count, plural, =0 {Noch keine fehlerfreien Rechnungen} one {# fehlerfreie Rechnung in Folge} other {# fehlerfreie Rechnungen in Folge}} von {threshold}, die für Vertrauen erforderlich sind"
+  },
+  "autoPost": {
+    "posted": "Gemäß der Richtlinie für automatisches Buchen automatisch gebucht.",
+    "submitted": "Gemäß der Richtlinie für automatisches Buchen automatisch zur Genehmigung eingereicht.",
+    "refused": "Nicht automatisch gebucht: {message}",
+    "skipped": {
+      "policy_off": "Automatisches Buchen war beim Eingang dieser Rechnung deaktiviert.",
+      "not_a_bill": "Lieferantengutschriften werden nie automatisch gebucht.",
+      "needs_review": "Nicht automatisch gebucht: Ein Feld oder eine Position muss geprüft werden.",
+      "duplicate": "Nicht automatisch gebucht: Dies könnte ein Duplikat sein.",
+      "vendor_unmatched": "Nicht automatisch gebucht: Der Lieferant wurde nicht zugeordnet.",
+      "vendor_not_trusted": "Nicht automatisch gebucht: Der Lieferant hat sich noch kein Vertrauen erworben.",
+      "amount_unreadable": "Nicht automatisch gebucht: Der Gesamtbetrag konnte nicht gelesen werden.",
+      "over_limit": "Nicht automatisch gebucht: Der Gesamtbetrag überschreitet das Limit der Richtlinie.",
+      "currency_differs": "Nicht automatisch gebucht: Die Rechnungswährung weicht von der Währung des Richtlinienlimits ab.",
+      "actor_not_permitted": "Nicht automatisch gebucht: Der Inhaber der Adresse darf keine Rechnungen erstellen und buchen."
+    }
+  },
+  "keyboard": {
+    "listNext": "Nächste Erfassung in der Liste",
+    "listPrevious": "Vorherige Erfassung in der Liste",
+    "next": "Nächste Erfassung",
+    "previous": "Vorherige Erfassung",
+    "createDraft": "Entwurf erstellen und zur nächsten Erfassung wechseln",
+    "createAndPost": "Entwurf erstellen und buchen",
+    "createAndPostButton": "Erstellen und buchen",
+    "reject": "Erfassung ablehnen",
+    "rejectConfirm": "{name} ablehnen? Die Erfassung verlässt die Prüfwarteschlange.",
+    "posted": "Rechnung gebucht",
+    "submittedForApproval": "Entwurf erstellt und zur Genehmigung eingereicht",
+    "postRefused": "Der Entwurf wurde erstellt, aber nicht gebucht: {message}",
+    "openDraft": "Entwurf öffnen",
+    "allReviewed": "Keine weiteren Erfassungen zu prüfen",
+    "hint": "J / K: nächste oder vorherige Erfassung · Enter: nächstes Feld, das Aufmerksamkeit erfordert · ⌘/Ctrl+Enter: Entwurf erstellen · ⌘/Ctrl+Shift+Enter: erstellen und buchen · ?: alle Tastenkürzel"
+  }
+}

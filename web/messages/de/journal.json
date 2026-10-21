@@ -169,7 +169,19 @@
       "reversalStatus": "Automatische Stornierung: {status} · {date}",
       "retryReversals": "Fällige Stornierungen erneut ausführen",
       "viewReversal": "Stornierung anzeigen"
-    }
+    },
+    "saveAndNew": "Speichern und neu",
+    "savedNumbered": "{number} gespeichert",
+    "invalidAmounts": "Ein Betrag ist keine gültige Zahl. Korrigieren Sie den markierten Betrag und speichern Sie erneut.",
+    "postedAndNew": "In das Hauptbuch gebucht. Ein neues Journal mit demselben Datum ist bereit.",
+    "submitted": "Zur Genehmigung eingereicht statt gebucht: Ein Genehmigungsablauf regelt dieses Journal.",
+    "submittedAndNew": "Zur Genehmigung eingereicht statt gebucht: Ein Genehmigungsablauf regelt dieses Journal. Ein neues Journal mit demselben Datum ist bereit.",
+    "savedNotPosted": "Das Journal wurde als Entwurf gespeichert, aber nicht gebucht. Beheben Sie den angezeigten Grund und buchen Sie dann den Entwurf.",
+    "statisticalIncomplete": "Jede statistische Zeile benötigt ein Konto, eine Einheit und eine Menge ungleich null, bevor das Journal gebucht werden kann.",
+    "postNeedsAmounts": "Geben Sie vor dem Buchen die Soll- und Habenbeträge ein.",
+    "moreOptions": "Weitere Optionen",
+    "balanceLine": "Zeile ausgleichen",
+    "balanceLineHint": "Die verbleibende Differenz auf die zuletzt bearbeitete Zeile setzen"
   },
   "book": {
     "label": "Buch",

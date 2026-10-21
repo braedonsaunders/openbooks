@@ -5,10 +5,10 @@ import test from "node:test";
 import type { SessionUser } from "../../../../lib/auth";
 
 /**
- * Confirm-before-save duplicate probe: non-voided same-kind documents for
- * the same party, document date and total (plus the vendor reference for
- * bills). A warning source, never a refusal — the drawer saves anyway on
- * confirm. Only the session is stubbed; the handler and storage are real.
+ * Duplicate probe: vendor bills and credits match the same vendor and
+ * normalised reference whatever their date or amount; customer invoices
+ * match the same party, document date and total. A warning source, never a
+ * refusal. Only the session is stubbed; the handler and storage are real.
  */
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __duplicatesTestUser: state });
@@ -74,15 +74,16 @@ async function seedVoidedDocument(orgId: string, row: {
   partyId: string;
   date: string;
   total: string;
+  reference?: string | null;
 }): Promise<string> {
   const id = randomUUID();
   await withBypassContext(() => db.execute(sql`
     insert into documents
       (id, org_id, kind, status, document_number, document_date, party_id,
-       currency, subtotal, tax_total, total, voided_at, voided_by, void_reason)
+       currency, subtotal, tax_total, total, voided_at, voided_by, void_reason, reference_number)
     values (${id}, ${orgId}, ${row.kind}, 'voided', ${row.number}, ${row.date},
             ${row.partyId}, 'USD', ${row.total}, '0.00', ${row.total},
-            now(), ${row.partyId}, 'entered twice by mistake')`));
+            now(), ${row.partyId}, 'entered twice by mistake', ${row.reference ?? null})`));
   return id;
 }
 
@@ -98,7 +99,8 @@ test("an invoice triple match names the existing numbers, voided excluded", asyn
     const response = await withOrgContext(org.orgId, () =>
       GET(probe({ kind: "customer_invoice", partyId: org.customerId, documentDate: "2026-09-17", total: "3500.00" })));
     assert.equal(response.status, 200);
-    const body = (await response.json()) as { duplicates: { id: string; documentNumber: string }[] };
+    const body = (await response.json()) as { duplicates: { id: string; documentNumber: string; reason: string }[] };
+    assert.ok(body.duplicates.every((match) => match.reason === "party_date_total"));
     assert.deepEqual(
       body.duplicates.map((match) => match.documentNumber).sort(),
       ["INV-00001", "INV-00002"],
@@ -114,7 +116,7 @@ test("an invoice triple match names the existing numbers, voided excluded", asyn
   }
 });
 
-test("bills match on the vendor reference too", async () => {
+test("bills match on the vendor reference", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await seedRole(org.orgId, "ap_clerk", ["ap.read"]);
@@ -149,9 +151,102 @@ test("other kinds and malformed probes are refused", async () => {
     const wrongKind = await withOrgContext(org.orgId, () =>
       GET(probe({ kind: "journal", partyId: org.customerId, documentDate: "2026-09-17", total: "1.00" })));
     assert.equal(wrongKind.status, 400);
+    // An invoice is matched on date and total, so a probe without them is malformed.
+    const partial = await withOrgContext(org.orgId, () =>
+      GET(probe({ kind: "customer_invoice", partyId: org.customerId, referenceNumber: "PO-1" })));
+    assert.equal(partial.status, 400);
     const missing = await withOrgContext(org.orgId, () =>
       GET(probe({ kind: "customer_invoice", partyId: org.customerId, documentDate: "2026-09-17", total: "" })));
     assert.equal(missing.status, 400);
+  } finally {
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+interface Match {
+  id: string;
+  documentNumber: string;
+  documentDate: string;
+  total: string;
+  status: string;
+  referenceNumber: string | null;
+  reason: string;
+}
+
+test("a bill re-keyed with another amount or date still matches its vendor invoice number", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const other = await withBypassContext(() => createScratchOrg());
+  try {
+    await seedRole(org.orgId, "ap_clerk", ["ap.read"]);
+    const original = await seedDocument(org.orgId, {
+      kind: "vendor_bill", status: "approved", number: "BILL-00010", partyId: org.vendorId,
+      date: "2026-08-03", total: "1250.00", reference: "INV-0042",
+    });
+    await seedVoidedDocument(org.orgId, {
+      kind: "vendor_bill", number: "BILL-00011", partyId: org.vendorId, date: "2026-08-04", total: "1250.00", reference: "INV-0042",
+    });
+    // Another organization's bill with the same invoice number is invisible.
+    await seedDocument(other.orgId, {
+      kind: "vendor_bill", status: "approved", number: "BILL-00010", partyId: other.vendorId,
+      date: "2026-08-03", total: "1250.00", reference: "INV-0042",
+    });
+
+    // The live probe while typing: only kind, party and reference.
+    const live = await withOrgContext(org.orgId, () =>
+      GET(probe({ kind: "vendor_bill", partyId: org.vendorId, referenceNumber: "inv 0042" })));
+    assert.equal(live.status, 200);
+    const matches = ((await live.json()) as { duplicates: Match[] }).duplicates;
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0]!.id, original);
+    assert.equal(matches[0]!.reason, "reference");
+    assert.equal(matches[0]!.referenceNumber, "INV-0042");
+    assert.equal(matches[0]!.documentDate, "2026-08-03");
+    assert.equal(matches[0]!.status, "approved");
+    assert.match(matches[0]!.total, /^1250\.00*$/);
+
+    // The confirm-before-save probe with a different date and total.
+    const full = await withOrgContext(org.orgId, () =>
+      GET(probe({ kind: "vendor_bill", partyId: org.vendorId, documentDate: "2026-09-01", total: "1520.00", referenceNumber: "#INV0042" })));
+    assert.deepEqual(((await full.json()) as { duplicates: Match[] }).duplicates.map((match) => match.id), [original]);
+
+    // Editing the original never reports itself.
+    const editing = await withOrgContext(org.orgId, () =>
+      GET(probe({ kind: "vendor_bill", partyId: org.vendorId, referenceNumber: "INV-0042", excludeId: original })));
+    assert.deepEqual(((await editing.json()) as { duplicates: Match[] }).duplicates, []);
+
+    // Another organization's vendor is never reachable, even by its id.
+    const foreign = await withOrgContext(org.orgId, () =>
+      GET(probe({ kind: "vendor_bill", partyId: other.vendorId, referenceNumber: "INV-0042" })));
+    assert.deepEqual(((await foreign.json()) as { duplicates: Match[] }).duplicates, []);
+
+    // Punctuation alone identifies nothing.
+    const blank = await withOrgContext(org.orgId, () =>
+      GET(probe({ kind: "vendor_bill", partyId: org.vendorId, referenceNumber: "--" })));
+    assert.deepEqual(((await blank.json()) as { duplicates: Match[] }).duplicates, []);
+  } finally {
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(other.orgId));
+  }
+});
+
+test("vendor credits match their own kind by reference", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await seedRole(org.orgId, "ap_clerk", ["ap.read"]);
+    await seedDocument(org.orgId, {
+      kind: "vendor_bill", status: "approved", number: "BILL-00020", partyId: org.vendorId,
+      date: "2026-08-03", total: "300.00", reference: "CM-17",
+    });
+    const credit = await seedDocument(org.orgId, {
+      kind: "vendor_credit", status: "approved", number: "VC-00001", partyId: org.vendorId,
+      date: "2026-08-10", total: "300.00", reference: "CM-17",
+    });
+    const response = await withOrgContext(org.orgId, () =>
+      GET(probe({ kind: "vendor_credit", partyId: org.vendorId, referenceNumber: "cm17" })));
+    assert.equal(response.status, 200);
+    assert.deepEqual(((await response.json()) as { duplicates: Match[] }).duplicates.map((match) => match.id), [credit]);
   } finally {
     state.user = null;
     await withBypassContext(() => dropScratchOrg(org.orgId));

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DocumentDefaultsError, dueDateFromNetDays } from "./document-defaults.ts";
+import { DocumentDefaultsError, dueDateFromNetDays, rankPartyAccountUsage } from "./document-defaults.ts";
 
 test("net days count calendar days from the document date across month and year ends", () => {
   assert.equal(dueDateFromNetDays("2026-07-20", 0), "2026-07-20");
@@ -15,4 +15,30 @@ test("terms with negative or fractional net days refuse with the setup remedy", 
       error instanceof DocumentDefaultsError && /Payment terms/.test(error.message));
   }
   assert.throws(() => dueDateFromNetDays("2026-02-30", 15), DocumentDefaultsError);
+});
+
+const usage = (accountId: string, documentCount: number, lastDocumentDate: string, lastCreatedAt = "2026-01-01T00:00:00.000000") =>
+  ({ accountId, documentCount, lastDocumentDate, lastCreatedAt });
+
+test("party history proposes the account used on the most documents", () => {
+  assert.equal(rankPartyAccountUsage([]), null);
+  const top = rankPartyAccountUsage([
+    usage("b", 1, "2026-09-30"),
+    usage("a", 3, "2026-01-15"),
+    usage("c", 2, "2026-09-29"),
+  ]);
+  assert.equal(top?.accountId, "a");
+  assert.equal(top?.documentCount, 3);
+});
+
+test("equally used accounts rank by latest document date, then latest entry, then account id", () => {
+  assert.equal(rankPartyAccountUsage([usage("a", 2, "2026-08-01"), usage("b", 2, "2026-09-01")])?.accountId, "b");
+  assert.equal(rankPartyAccountUsage([
+    usage("a", 2, "2026-09-01", "2026-09-01T10:00:00.000000"),
+    usage("b", 2, "2026-09-01", "2026-09-01T09:59:59.999999"),
+  ])?.accountId, "a");
+  // A full tie is decided by the account id, so the proposal never depends on row order.
+  const tied = [usage("b", 2, "2026-09-01"), usage("a", 2, "2026-09-01")];
+  assert.equal(rankPartyAccountUsage(tied)?.accountId, "a");
+  assert.equal(rankPartyAccountUsage([...tied].reverse())?.accountId, "a");
 });

@@ -5,21 +5,29 @@
  * (vendor bills, invoices, journals, expense reports):
  *
  *  - spreadsheet keyboard model: Enter commits + moves down (appending a row
- *    at the bottom), Alt+↑/↓ moves the row, ⌘/Ctrl+D duplicates it,
- *    ⌘/Ctrl+Backspace deletes it, Tab walks cells naturally
+ *    at the bottom; with the personal "Enter moves to next field" preference
+ *    it walks across the line instead), Shift+Enter moves up, ↑/↓ move
+ *    between rows, Tab past the last cell of a filled last line starts a new
+ *    line, Alt+Enter / Alt+Shift+Enter insert a line below / above,
+ *    F8 or ⌘/Ctrl+' copies the field from the line above, Alt+↑/↓ moves the
+ *    row, ⌘/Ctrl+D duplicates it, ⌘/Ctrl+Backspace deletes it
+ *  - paste a block copied from a spreadsheet: rows and columns land from the
+ *    focused cell (or by matching a header row), lists resolve by name or
+ *    code, and anything that cannot be matched is flagged on its cell
+ *  - amount cells accept arithmetic (200+47.83) and optional auto decimal
  *  - per-row action button and right-click menu: insert above/below, duplicate, remove
  *  - amount cells retain ledger scale; decimal cells preserve commercial
  *    precision while hiding insignificant storage-scale zeroes
  *  - column model is data: text / amount / decimal / select / search-select / readonly
  *    — custom-field columns are just more columns
- *  - controlled component: rows in, rows out; parent owns persistence
- *    (autosave) and computed values (tax, totals) via readonly columns
+ *  - controlled component: rows in, rows out; parent owns persistence and
+ *    computed values (tax, totals) via readonly columns
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Copy, Lock, LockOpen, MoreHorizontal, Plus, RotateCcw, Split, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, ContextMenu, FieldLabel, SearchSelect, Select, cn, useContextMenu, type ContextMenuEntry, type SearchSelectScanResult } from '@openbooks/ui'
+import { Badge, Button, ContextMenu, FieldLabel, SearchSelect, Select, cn, matchTier, useContextMenu, type ContextMenuEntry, type SearchSelectScanResult } from '@openbooks/ui'
 import { cmp, normalizeMoney } from '@openbooks/engine/money/money'
 import {
   displayLineDecimal,
@@ -29,10 +37,15 @@ import {
 import type { DistributionMenuKey, GroupHeaderModel, RowDistributionChip } from './allocations/distribution-groups'
 import { useShortcuts } from './shortcuts/shortcut-provider'
 import { DateField, useTypedDateResolver } from './date-field'
+import { displayEnteredAmount, parsePastedAmount, resolveEnteredAmount } from '../lib/entry-amount'
+import { useEntryPreferences } from '../lib/entry-preferences-context'
 
 export interface LineGridOption {
   value: string
   label: string
+  /** Searchable codes or aliases (account number, vendor code) not shown in the label. */
+  keywords?: readonly string[]
+  hint?: string
 }
 
 export interface LineGridColumn<Row extends Record<string, unknown>> {
@@ -67,6 +80,13 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
    */
   optionsFor?: (row: Row, index: number) => LineGridOption[]
   placeholder?: string
+  /** A row-specific placeholder (a due date the terms would derive), falling back to `placeholder`. */
+  placeholderFor?: (row: Row, index: number) => string | undefined
+  /** `search-select`: remember choices under this key and list them first. */
+  recentKey?: string
+  /** `search-select`: inline creation from the typed text (see SearchSelect `onCreate`). */
+  onCreate?: (query: string) => Promise<{ value: string; label: string } | null>
+  createLabel?: (query: string) => string
   required?: boolean
   /**
    * Per-row edit gate for editable cells (line warehouse pickers): when
@@ -98,11 +118,6 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
    * override (reset to computed).
    */
   onTaxChange?: (index: number, next: { taxAmount: string; overridden: boolean }) => void
-}
-
-function normalizeAmount(v: string): string {
-  if (v.trim() === '') return v
-  try { return normalizeMoney(v) } catch { return v }
 }
 
 function invalidAmount(value: unknown): boolean {
@@ -186,6 +201,97 @@ function DateCell<Row extends Record<string, unknown>>({
       onPendingTextChange={setPending}
       onChange={onChange}
     />
+  )
+}
+
+/**
+ * A money cell. Shows the stored amount at the currency's precision, takes
+ * arithmetic and (optionally) auto-decimal entry, and publishes the resolved
+ * amount while typing so totals follow along. Text that is not an amount is
+ * kept verbatim and flagged, so the save refuses it instead of booking a
+ * different figure.
+ */
+function AmountCell<Row extends Record<string, unknown>>({
+  value,
+  placeholder,
+  inputBase,
+  onChange,
+  rowKey,
+  colKey,
+  registerDraft,
+  ariaLabelledBy,
+  autoDecimal,
+  minorUnits,
+  flagged,
+}: {
+  value: unknown
+  placeholder?: string
+  inputBase: string
+  onChange: (value: string) => void
+  rowKey: string
+  colKey: string
+  registerDraft: (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => void
+  ariaLabelledBy: string
+  autoDecimal: boolean
+  minorUnits: number
+  flagged?: string
+}) {
+  const t = useTranslations('ui.lineGrid')
+  const [draft, setDraft] = useState<string | null>(null)
+  const resolve = useCallback((text: string) => {
+    const resolved = resolveEnteredAmount(text, { autoDecimal, minorUnits })
+    return resolved.kind === 'amount' ? resolved.value : resolved.kind === 'empty' ? '' : text
+  }, [autoDecimal, minorUnits])
+  const shown = draft ?? (invalidAmount(value) ? String(value ?? '') : displayEnteredAmount(value, minorUnits))
+  const preview = draft !== null ? resolveEnteredAmount(draft, { autoDecimal, minorUnits }) : null
+  const invalid = preview ? preview.kind === 'invalid' : invalidAmount(value)
+
+  useEffect(() => {
+    if (draft === null) {
+      registerDraft(rowKey, colKey, null)
+      return
+    }
+    const committed = resolve(draft)
+    registerDraft(rowKey, colKey, (row) => applyRowFields(row, { [colKey]: committed }))
+    return () => {
+      registerDraft(rowKey, colKey, null)
+    }
+  }, [draft, rowKey, colKey, registerDraft, resolve])
+
+  return (
+    <div className="relative w-full">
+      <input
+        inputMode="decimal"
+        aria-labelledby={ariaLabelledBy}
+        value={shown}
+        placeholder={placeholder ?? '0.00'}
+        aria-invalid={invalid || Boolean(flagged) || undefined}
+        title={flagged ? t('paste.unmatchedCell', { value: flagged }) : undefined}
+        onFocus={(event) => {
+          setDraft(event.currentTarget.value)
+          // Typing replaces the amount rather than appending to it.
+          event.currentTarget.select()
+        }}
+        onChange={(event) => {
+          setDraft(event.target.value)
+          onChange(resolve(event.target.value))
+        }}
+        onBlur={(event) => {
+          setDraft(null)
+          onChange(resolve(event.target.value))
+        }}
+        className={cn(
+          inputBase,
+          'text-right tabular-nums',
+          (invalid || flagged) && 'text-red-600 ring-1 ring-red-400/70 focus:ring-red-500/60 dark:text-red-400',
+        )}
+      />
+      {preview?.kind === 'amount' && preview.computed ? (
+        <span className="pointer-events-none absolute -bottom-3.5 right-1 rounded bg-slate-800 px-1 text-[10px] leading-4 text-white tabular-nums shadow dark:bg-slate-200 dark:text-slate-900">
+          = {displayEnteredAmount(preview.value, minorUnits)}
+        </span>
+      ) : null}
+    </div>
   )
 }
 
@@ -298,6 +404,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   cloneRow,
   fixedRows = false,
   hideRemove = false,
+  minorUnits = 2,
 }: {
   columns: LineGridColumn<Row>[]
   rows: Row[]
@@ -348,8 +455,16 @@ export function LineGrid<Row extends Record<string, unknown>>({
    * also mint a fresh identity here.
    */
   cloneRow?: (row: Row) => Row
+  /** Decimal places of the document currency, for amount display and auto decimal. */
+  minorUnits?: number
 }) {
   const t = useTranslations('ui.lineGrid')
+  const { preferences } = useEntryPreferences()
+  const resolveTypedDate = useTypedDateResolver()
+  // Pasted values that matched no choice or did not read as a number, by
+  // row identity then column. A flagged cell shows what was pasted until the
+  // operator edits it.
+  const [flags, setFlags] = useState<Map<string, Map<string, string>>>(() => new Map())
   const tShortcuts = useTranslations('shell.shortcuts.commands')
   const tEntry = useTranslations('allocations')
   const tCommon = useTranslations('common')
@@ -418,14 +533,26 @@ export function LineGrid<Row extends Record<string, unknown>>({
     [],
   )
 
+  const clearFlag = useCallback((rowKey: string, key: string) => {
+    setFlags((current) => {
+      if (!current.get(rowKey)?.has(key)) return current
+      const next = new Map(current)
+      const cols = new Map(next.get(rowKey))
+      cols.delete(key)
+      if (cols.size === 0) next.delete(rowKey)
+      else next.set(rowKey, cols)
+      return next
+    })
+  }, [])
   const commitCell = useCallback(
     (rowKey: string, key: string, value: unknown) => {
       const current = rowsRef.current
       const index = current.findIndex((row, i) => resolveKey(row, i) === rowKey)
       if (index === -1) return
+      clearFlag(rowKey, key)
       onRowsChange(current.map((r, j) => (j === index ? applyRowFields(r, { [key]: value }) : r)))
     },
-    [resolveKey, onRowsChange],
+    [resolveKey, onRowsChange, clearFlag],
   )
   const commitRowPatch = useCallback(
     (rowKey: string, patch: Partial<Row>) => {
@@ -535,30 +662,111 @@ export function LineGrid<Row extends Record<string, unknown>>({
   }
 
   const focusedCol = useRef(0)
+  const cellControl = (row: number, col: number) => containerRef.current?.querySelector<HTMLElement>(
+    `[data-lg-row="${row}"][data-lg-col="${col}"] input, [data-lg-row="${row}"][data-lg-col="${col}"] button, [data-lg-row="${row}"][data-lg-col="${col}"] select`,
+  ) ?? null
   function focusCell(row: number, col: number) {
     requestAnimationFrame(() => {
-      const el = containerRef.current?.querySelector<HTMLElement>(
-        `[data-lg-row="${row}"][data-lg-col="${col}"] input, [data-lg-row="${row}"][data-lg-col="${col}"] button, [data-lg-row="${row}"][data-lg-col="${col}"] select`,
-      )
+      const el = cellControl(row, col)
       el?.focus()
+      if (el instanceof HTMLInputElement) el.select()
     })
+  }
+  /** The first (or last) column of a row that has a control to focus. */
+  function edgeEditableColumn(row: number, from: 'start' | 'end'): number {
+    const order = columns.map((_c, index) => index)
+    if (from === 'end') order.reverse()
+    return order.find((index) => cellControl(row, index) !== null) ?? 0
+  }
+  function nextEditableColumn(row: number, col: number): number | null {
+    for (let index = col + 1; index < columns.length; index += 1) if (cellControl(row, index)) return index
+    return null
+  }
+  /** Whether a line holds anything the operator typed or chose. */
+  function rowHasContent(row: Row | undefined): boolean {
+    if (!row) return false
+    return columns.some((column) => {
+      if (column.type === 'readonly' || column.type === 'tax') return false
+      const value = row[column.key]
+      if (value == null || value === '' || value === column.secondaryDefaultValue) return false
+      if (column.type === 'amount' || column.type === 'decimal') {
+        try { return cmp(normalizeMoney(String(value)), '0') !== 0 } catch { return true }
+      }
+      return true
+    })
+  }
+  /** Move to the next line's first field, starting one when this is the last line. */
+  function advanceToNextLine(i: number) {
+    if (i === rowsRef.current.length - 1) {
+      if (fixedRows) return
+      onRowsChange([...takeCommittedRows(), emptyRow()])
+      requestAnimationFrame(() => focusCell(i + 1, edgeEditableColumn(i + 1, 'start')))
+      return
+    }
+    focusCell(i + 1, edgeEditableColumn(i + 1, 'start'))
+  }
+  function copyFromAbove(i: number, colIndex: number) {
+    const column = columns[colIndex]
+    const above = rowsRef.current[i - 1]
+    const row = rowsRef.current[i]
+    if (!column || !above || !row || column.type === 'readonly') return
+    if (column.type === 'tax') {
+      column.onTaxChange?.(i, { taxAmount: String(above.taxAmount ?? ''), overridden: above.taxOverridden === true })
+      return
+    }
+    commitCell(resolveKey(row, i), column.key, above[column.key] ?? '')
+    focusCell(i, colIndex)
   }
 
   function handleKeyDown(e: React.KeyboardEvent, i: number, colIndex: number) {
     focusedCol.current = colIndex
     const mod = e.metaKey || e.ctrlKey
-    if (e.key === 'Enter' && !e.shiftKey && !mod) {
-      // let selects handle their own Enter (option commit)
-      const tag = (e.target as HTMLElement).tagName
-      const isOpenListbox = (e.target as HTMLElement).getAttribute('aria-expanded') === 'true'
-      if (isOpenListbox) return
+    const target = e.target as HTMLElement
+    // A key an open list consumed never reaches here; this guards the rest.
+    if (target.getAttribute('aria-expanded') === 'true') return
+    if (e.key === 'Enter' && e.altKey && !mod) {
       e.preventDefault()
-      if (i === rowsRef.current.length - 1) {
-        onRowsChange([...takeCommittedRows(), emptyRow()])
-        focusCell(i + 1, tag === 'SELECT' ? colIndex : colIndex)
-      } else {
-        focusCell(i + 1, colIndex)
+      if (!fixedRows) insertRow(e.shiftKey ? i : i + 1)
+      return
+    }
+    if (e.key === 'Enter' && !mod) {
+      e.preventDefault()
+      if (e.shiftKey) {
+        if (i > 0) focusCell(i - 1, colIndex)
+        return
       }
+      if (preferences.enterMovesToNextField) {
+        const next = nextEditableColumn(i, colIndex)
+        if (next !== null) focusCell(i, next)
+        else advanceToNextLine(i)
+        return
+      }
+      if (i === rowsRef.current.length - 1) {
+        if (fixedRows) return
+        onRowsChange([...takeCommittedRows(), emptyRow()])
+      }
+      focusCell(i + 1, colIndex)
+      return
+    }
+    if (!e.altKey && !mod && !e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      const to = e.key === 'ArrowDown' ? i + 1 : i - 1
+      if (to < 0 || to >= rowsRef.current.length) return
+      e.preventDefault()
+      focusCell(to, colIndex)
+      return
+    }
+    if (e.key === 'Tab' && !e.shiftKey && !mod && !e.altKey) {
+      // Tab past the last cell of a filled last line starts the next line
+      // (spreadsheet entry); from an empty last line Tab leaves the grid.
+      if (i === rowsRef.current.length - 1 && colIndex >= edgeEditableColumn(i, 'end') && !fixedRows && rowHasContent(rowsRef.current[i])) {
+        e.preventDefault()
+        advanceToNextLine(i)
+      }
+      return
+    }
+    if (e.key === 'F8' || (mod && e.key === "'")) {
+      e.preventDefault()
+      copyFromAbove(i, colIndex)
       return
     }
     if (e.altKey && e.key === 'ArrowUp') {
@@ -581,6 +789,114 @@ export function LineGrid<Row extends Record<string, unknown>>({
       removeRow(i)
       focusCell(Math.max(0, i - 1), colIndex)
     }
+  }
+
+  // -- spreadsheet paste ----------------------------------------------------
+  const [pasteNotice, setPasteNotice] = useState<string | null>(null)
+  function resolveChoice(column: LineGridColumn<Row>, row: Row, index: number, text: string): string | null {
+    const choices = column.optionsFor?.(row, index) ?? column.options ?? []
+    const wanted = text.trim()
+    if (!wanted) return ''
+    const exact = choices.find((option) => option.value === wanted || option.label.trim().toLowerCase() === wanted.toLowerCase())
+    if (exact) return exact.value
+    // The strongest unique match: an exact code, a label or code prefix.
+    let best: { tier: number; values: string[] } = { tier: Number.POSITIVE_INFINITY, values: [] }
+    for (const option of choices) {
+      const tier = matchTier(option, wanted)
+      if (tier === null || tier > 2) continue
+      if (tier < best.tier) best = { tier, values: [option.value] }
+      else if (tier === best.tier) best.values.push(option.value)
+    }
+    return best.values.length === 1 ? best.values[0]! : null
+  }
+  function pastedCellValue(column: LineGridColumn<Row>, row: Row, index: number, text: string): { ok: true; value: unknown } | { ok: false } {
+    const raw = text.trim()
+    switch (column.type) {
+      case 'amount': {
+        if (raw === '') return { ok: true, value: '' }
+        const amount = parsePastedAmount(raw)
+        return amount === null ? { ok: false } : { ok: true, value: amount }
+      }
+      case 'decimal': {
+        if (raw === '') return { ok: true, value: '' }
+        const amount = parsePastedAmount(raw)
+        const normalized = amount === null ? null : normalizeLineDecimal(amount, column.decimalScale ?? 8)
+        return normalized === null ? { ok: false } : { ok: true, value: normalized }
+      }
+      case 'date': {
+        if (raw === '') return { ok: true, value: '' }
+        const iso = resolveTypedDate(raw)
+        return iso ? { ok: true, value: iso } : { ok: false }
+      }
+      case 'select':
+      case 'search-select': {
+        const value = resolveChoice(column, row, index, raw)
+        return value === null ? { ok: false } : { ok: true, value }
+      }
+      case 'text':
+        return { ok: true, value: text }
+      default:
+        return { ok: false }
+    }
+  }
+  function handlePaste(event: React.ClipboardEvent) {
+    if (readOnly) return
+    const cell = (event.target as HTMLElement).closest<HTMLElement>('[data-lg-row][data-lg-col]')
+    if (!cell) return
+    const text = event.clipboardData.getData('text/plain')
+    const startRow = Number(cell.dataset.lgRow)
+    const startCol = Number(cell.dataset.lgCol)
+    const lines = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '').split('\n').slice(0, 500)
+    const isBlock = lines.length > 1 || lines[0]!.includes('\t')
+    const target = event.target as HTMLElement
+    // A single value into a text box pastes natively; into a list it resolves.
+    if (!isBlock && target.tagName === 'INPUT') return
+    event.preventDefault()
+    const grid = lines.map((line) => line.split('\t'))
+    const pastable = columns.map((column, index) => ({ column, index })).filter(({ column }) => column.type !== 'readonly' && column.type !== 'tax')
+    // A header row naming the grid's columns maps by name, in any order.
+    const header = grid[0]!.map((value) => value.trim().toLowerCase())
+    const byHeader = header.map((name) => pastable.find(({ column }) => column.label.trim().toLowerCase() === name || column.key.toLowerCase() === name)?.index ?? -1)
+    const headerMatches = byHeader.filter((index) => index !== -1).length
+    const useHeader = grid.length > 1 && headerMatches >= Math.min(2, header.length) && headerMatches > 0
+    const body = useHeader ? grid.slice(1) : grid
+    const firstPastable = pastable.findIndex(({ index }) => index >= startCol)
+    const mapping = useHeader
+      ? byHeader
+      : grid[0]!.map((_value, offset) => pastable[(firstPastable === -1 ? pastable.length : firstPastable) + offset]?.index ?? -1)
+    const next = [...takeCommittedRows()]
+    const nextFlags = new Map(flags)
+    let unmatched = 0
+    body.forEach((cells, offset) => {
+      const rowIndex = startRow + offset
+      if (rowIndex >= next.length) {
+        if (fixedRows) return
+        next.push(emptyRow())
+      }
+      let row = next[rowIndex]!
+      const rowKey = resolveKey(row, rowIndex)
+      cells.forEach((raw, cellOffset) => {
+        const colIndex = mapping[cellOffset] ?? -1
+        const column = colIndex === -1 ? undefined : columns[colIndex]
+        if (!column) return
+        if (column.isCellEditable && !column.isCellEditable(row, rowIndex)) return
+        const resolved = pastedCellValue(column, row, rowIndex, raw)
+        const cols = new Map(nextFlags.get(rowKey))
+        if (resolved.ok) {
+          row = applyRowFields(row, { [column.key]: resolved.value })
+          cols.delete(column.key)
+        } else {
+          unmatched += 1
+          cols.set(column.key, raw.trim())
+        }
+        if (cols.size === 0) nextFlags.delete(rowKey)
+        else nextFlags.set(rowKey, cols)
+      })
+      next[rowIndex] = row
+    })
+    setFlags(nextFlags)
+    onRowsChange(next)
+    setPasteNotice(unmatched > 0 ? t('paste.unmatched', { count: unmatched }) : t('paste.done', { count: body.length }))
   }
 
   const headersByIndex = useMemo(() => {
@@ -643,6 +959,10 @@ export function LineGrid<Row extends Record<string, unknown>>({
     { key: 'insert-above', label: t('insertAbove'), icon: ArrowUp, onSelect: () => insertRow(menuIndex) },
     { key: 'insert-below', label: t('insertBelow'), icon: ArrowDown, onSelect: () => insertRow(menuIndex + 1) },
     { key: 'duplicate', label: tCommon('actions.duplicate'), icon: Copy, onSelect: () => duplicateRow(menuIndex) },
+    // The column toggle stays off the Tab path; the line menu reaches it from the keyboard.
+    ...(allColumns.some((column) => column.secondary)
+      ? [{ key: 'details', label: showDetails ? t('fewerColumns') : t('moreColumns'), onSelect: () => setShowDetails((value) => !value) }]
+      : []),
     ...(distMenuItems.length > 0 ? [{ key: 'distribution-separator', separator: true } as const, ...distMenuItems] : []),
     ...(!hideRemove ? [
       { key: 'remove-separator', separator: true } as const,
@@ -659,7 +979,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
     <div ref={rootRef}>
       {allColumns.some((column) => column.secondary) && !readOnly ? (
         <div className="mb-2 flex justify-end">
-          <Button type="button" variant="outline" size="sm" aria-pressed={showDetails} onClick={() => setShowDetails((value) => !value)}>
+          <Button type="button" variant="outline" size="sm" tabIndex={-1} aria-pressed={showDetails} onClick={() => setShowDetails((value) => !value)}>
             {tCommon('auditTrail.tabs.details')}
           </Button>
         </div>
@@ -671,8 +991,15 @@ export function LineGrid<Row extends Record<string, unknown>>({
           </Button>
         </div>
       ) : null}
+      {pasteNotice ? (
+        <div role="status" className="mb-2 flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+          <span>{pasteNotice}</span>
+          <button type="button" className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.close')} onClick={() => setPasteNotice(null)}>×</button>
+        </div>
+      ) : null}
       <div
         ref={containerRef}
+        onPaste={readOnly ? undefined : handlePaste}
         className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
       >
         <div role="grid" className="grid min-w-fit" style={{ gridTemplateColumns: template }}>
@@ -771,6 +1098,9 @@ export function LineGrid<Row extends Record<string, unknown>>({
               commitTax={commitTax}
               registerDraft={registerDraft}
               handleKeyDown={handleKeyDown}
+              flags={flags.get(rowKeys[i]!)}
+              autoDecimal={preferences.autoDecimal}
+              minorUnits={minorUnits}
               menuOpen={rowMenu.open && menuIndex === i}
               onOpenMenu={(anchor) => openRowMenu(anchor, rowKeys[i]!)}
               formatAmount={formatAmount}
@@ -807,7 +1137,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
       </div>
       {!readOnly && !fixedRows && !hideRemove ? (
         <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
-          {t('keyboardHint')}
+          {preferences.enterMovesToNextField ? t('keyboardHintEnterAdvances') : t('keyboardHint')}
         </p>
       ) : null}
     </div>
@@ -946,6 +1276,9 @@ function RowCells<Row extends Record<string, unknown>>({
   commitTax,
   registerDraft,
   handleKeyDown,
+  flags,
+  autoDecimal,
+  minorUnits,
   menuOpen,
   onOpenMenu,
   formatAmount,
@@ -970,6 +1303,10 @@ function RowCells<Row extends Record<string, unknown>>({
   commitTax: (rowKey: string, column: LineGridColumn<Row>, next: { taxAmount: string; overridden: boolean }) => void
   registerDraft: (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => void
   handleKeyDown: (e: React.KeyboardEvent, i: number, col: number) => void
+  /** Pasted values on this row that matched nothing, by column key. */
+  flags?: ReadonlyMap<string, string>
+  autoDecimal: boolean
+  minorUnits: number
   menuOpen: boolean
   onOpenMenu: (anchor: HTMLElement) => void
   formatAmount?: (value: string) => React.ReactNode
@@ -1001,6 +1338,10 @@ function RowCells<Row extends Record<string, unknown>>({
           <span id={rowLabelId} className="sr-only">{t('lineActionsAria', { number: i + 1 })}</span>
           <button
             type="button"
+            // Line actions stay off the Tab path (one stop per line would
+            // double the keystrokes between lines); Shift+F10 or the context
+            // menu key opens the same menu from any cell.
+            tabIndex={-1}
             aria-label={t('lineActionsAria', { number: i + 1 })}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
@@ -1070,13 +1411,15 @@ function RowCells<Row extends Record<string, unknown>>({
             </div>
           )
         }
+        const flagged = flags?.get(c.key)
         return (
             <div
               key={c.key}
               data-lg-row={i}
               data-lg-col={colIndex}
               role="gridcell"
-            className={cn(cellBase, indented && colIndex === 0 && 'pl-6')}
+            title={flagged !== undefined && c.type !== 'amount' ? t('paste.unmatchedCell', { value: flagged }) : undefined}
+            className={cn(cellBase, indented && colIndex === 0 && 'pl-6', flagged !== undefined && c.type !== 'amount' && 'bg-red-50 ring-1 ring-inset ring-red-300 dark:bg-red-950/30 dark:ring-red-800')}
             onKeyDown={(e) => handleKeyDown(e, i, colIndex)}
           >
             {c.type === 'search-select' ? (
@@ -1090,6 +1433,11 @@ function RowCells<Row extends Record<string, unknown>>({
                   else commitCell(rowKey, c.key, v ?? '')
                 }}
                 searchable={c.scanResolver ? true : undefined}
+                advanceOnSelect
+                arrowKeysOpen={false}
+                recentKey={c.recentKey}
+                onCreate={c.onCreate}
+                createLabel={c.createLabel}
                 scanResolver={c.scanResolver ? async (scanned) => {
                   const result = await c.scanResolver!(scanned, row, i)
                   if (!result.ok) return result
@@ -1104,7 +1452,7 @@ function RowCells<Row extends Record<string, unknown>>({
             ) : c.type === 'date' ? (
               <DateCell<Row>
                 value={typeof value === 'string' ? value : ''}
-                placeholder={c.placeholder}
+                placeholder={c.placeholderFor?.(row, i) ?? c.placeholder}
                 onChange={(next) => commitCell(rowKey, c.key, next)}
                 rowKey={rowKey}
                 colKey={c.key}
@@ -1114,6 +1462,8 @@ function RowCells<Row extends Record<string, unknown>>({
             ) : c.type === 'select' ? (
               <Select
                 aria-labelledby={ariaLabelledBy}
+                advanceOnSelect
+                arrowKeysOpen={false}
                 value={(value as string) ?? ''}
                 onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
                 className="w-full border-0 bg-transparent shadow-none"
@@ -1125,22 +1475,18 @@ function RowCells<Row extends Record<string, unknown>>({
                 ))}
               </Select>
             ) : c.type === 'amount' ? (
-              <input
-                inputMode="decimal"
-                aria-labelledby={ariaLabelledBy}
-                value={(value as string) ?? ''}
-                placeholder={c.placeholder ?? '0.00'}
-                aria-invalid={
-                  invalidAmount(value) || undefined
-                }
-                onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
-                onBlur={(e) => commitCell(rowKey, c.key, normalizeAmount(e.target.value))}
-                className={cn(
-                  inputBase,
-                  'text-right tabular-nums',
-                  invalidAmount(value) &&
-                    'text-red-600 focus:ring-red-500/60 dark:text-red-400',
-                )}
+              <AmountCell<Row>
+                value={value}
+                placeholder={c.placeholderFor?.(row, i) ?? c.placeholder}
+                inputBase={inputBase}
+                onChange={(next) => commitCell(rowKey, c.key, next)}
+                rowKey={rowKey}
+                colKey={c.key}
+                registerDraft={registerDraft}
+                ariaLabelledBy={ariaLabelledBy}
+                autoDecimal={autoDecimal}
+                minorUnits={minorUnits}
+                flagged={flagged}
               />
             ) : c.type === 'decimal' ? (
               <DecimalCell<Row>
@@ -1167,7 +1513,7 @@ function RowCells<Row extends Record<string, unknown>>({
               <input
                 value={(value as string) ?? ''}
                 aria-labelledby={ariaLabelledBy}
-                placeholder={c.placeholder}
+                placeholder={c.placeholderFor?.(row, i) ?? c.placeholder}
                 onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
                 className={inputBase}
               />

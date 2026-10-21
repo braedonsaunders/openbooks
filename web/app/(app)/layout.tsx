@@ -24,6 +24,7 @@ import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { BusinessDateProvider } from '../../components/business-date-provider'
 import { MoneyProvider } from '../../components/money-provider'
 import { OnboardingWizard } from '../../components/onboarding-wizard'
+import { loadEntryPreferences } from '../../lib/entry-preferences-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,10 +34,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const allowed = (permission: string | undefined) => permission === undefined || can(authz, permission)
   // The shell's sources are independent: read them together so the shell waits
   // for the slowest one rather than their sum.
-  const [localePreference, navMode, navModePreference, environments, org, today, featureState, feedbackConfigured, jar, groups, localNavigation] = await Promise.all([
+  const [localePreference, navMode, navModePreference, entryPreferences, environments, org, today, featureState, feedbackConfigured, jar, groups, localNavigation] = await Promise.all([
     userLocalePreference(),
     resolveNavMode(authz.user),
     userNavModePreference(authz.user),
+    loadEntryPreferences(authz.user),
     shellEnvironments(authz),
     orgInfo(authz.user.orgId),
     businessToday(authz.user.orgId),
@@ -95,6 +97,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             roles: authz.user.roles,
             localePreference,
             navModePreference,
+            entryPreferences,
           }}
           environments={environments}
           groups={groups}

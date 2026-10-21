@@ -21,6 +21,7 @@ import {
   UserRound,
   UsersRound,
   WalletCards,
+  Rows3,
 } from 'lucide-react'
 import { Popover, cn, queryDrawerRouteGuard, useMenuTrigger } from '@openbooks/ui'
 import { toast } from 'sonner'
@@ -53,6 +54,7 @@ type CreateKey =
   | 'salesOrder'
   | 'customerPayment'
   | 'bill'
+  | 'billBatch'
   | 'vendorCredit'
   | 'purchaseOrder'
   | 'vendorPayment'
@@ -96,10 +98,13 @@ const ACTIONS: CreateAction[] = [
   { key: 'salesOrder', group: 'sales', enabled: (p) => p.accountsReceivable && p.orders, icon: Send, endpoint: '/api/sales-orders/draft', destination: (id) => `/sales-orders?order=${id}&mode=edit` },
   { key: 'customerPayment', group: 'sales', enabled: (p) => p.customerPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'customer_payment' }, destination: (id) => `/receipts?payment=${id}&mode=edit` },
   { key: 'bill', group: 'purchases', enabled: (p) => p.accountsPayable, icon: Receipt, directHref: documentCreateHref('/ap/bills', 'vendor_bill') },
+  { key: 'billBatch', group: 'purchases', enabled: (p) => p.accountsPayable, icon: Rows3, directHref: '/ap/bills/batch' },
   { key: 'vendorCredit', group: 'purchases', enabled: (p) => p.accountsPayable, icon: FileMinus2, directHref: documentCreateHref('/ap/bills', 'vendor_credit') },
   { key: 'purchaseOrder', group: 'purchases', enabled: (p) => p.accountsPayable && p.orders, icon: ShoppingCart, endpoint: '/api/purchase-orders/draft', destination: (id) => `/purchase-orders?order=${id}&mode=edit` },
   { key: 'vendorPayment', group: 'purchases', enabled: (p) => p.vendorPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'vendor_payment' }, destination: (id) => `/payments?payment=${id}&mode=edit` },
-  { key: 'journal', group: 'accounting', enabled: (p) => p.journal, icon: ScrollText, endpoint: '/api/journals/draft', destination: (id) => `/journal?entry=${id}&mode=edit` },
+  // Manual journals open the unsaved create form: no draft row and no JE
+  // number exist until the operator's first Save.
+  { key: 'journal', group: 'accounting', enabled: (p) => p.journal, icon: ScrollText, directHref: '/journal?entryNew=1&mode=edit' },
   { key: 'expense', group: 'accounting', enabled: (p) => p.expenses, icon: Receipt, directHref: '/expenses/reports?expense=new&mode=edit' },
   { key: 'cardCharge', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, directHref: documentCreateHref('/banking/transactions', 'card_charge') },
   { key: 'cardRefund', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, directHref: documentCreateHref('/banking/transactions', 'card_refund') },

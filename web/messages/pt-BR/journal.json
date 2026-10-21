@@ -169,7 +169,19 @@
       "reversalStatus": "Reversão automática: {status} · {date}",
       "retryReversals": "Repetir reversões vencidas",
       "viewReversal": "Ver reversão"
-    }
+    },
+    "saveAndNew": "Salvar e novo",
+    "savedNumbered": "{number} salvo",
+    "invalidAmounts": "Um valor não é um número válido. Corrija o valor destacado e salve novamente.",
+    "postedAndNew": "Lançado no razão. Um novo lançamento está pronto com a mesma data.",
+    "submitted": "Enviado para aprovação em vez de lançado: um fluxo de aprovação rege este lançamento.",
+    "submittedAndNew": "Enviado para aprovação em vez de lançado: um fluxo de aprovação rege este lançamento. Um novo lançamento está pronto com a mesma data.",
+    "savedNotPosted": "O lançamento foi salvo como rascunho, mas não foi lançado. Resolva o motivo indicado e depois lance o rascunho.",
+    "statisticalIncomplete": "Cada linha estatística precisa de uma conta, uma unidade e uma quantidade diferente de zero antes que o lançamento possa ser lançado.",
+    "postNeedsAmounts": "Informe os valores de débito e crédito antes de lançar.",
+    "moreOptions": "Mais opções",
+    "balanceLine": "Balancear linha",
+    "balanceLineHint": "Colocar a diferença restante na última linha em que você trabalhou"
   },
   "book": {
     "label": "Livro contábil",

@@ -51,7 +51,9 @@
     "saveState": {
       "saved": "Todos los cambios guardados",
       "error": "Error al guardar — corrija y reintente",
-      "dirty": "Cambios sin guardar…"
+      "dirty": "Cambios sin guardar…",
+      "unavailable": "Falló el servidor o la conexión — datos conservados, reintente",
+      "unavailableDetail": "El servidor o la conexión falló antes de confirmar el guardado. Sus datos siguen aquí — reintente el guardado."
     },
     "deleteTitle": "¿Eliminar este documento?",
     "deleteDraftBody": "Esto elimina permanentemente el borrador. No se puede deshacer.",

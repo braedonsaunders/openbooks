@@ -636,7 +636,9 @@
     "saveState": {
       "saved": "Alle Änderungen gespeichert",
       "error": "Speichern fehlgeschlagen — beheben und erneut versuchen",
-      "dirty": "Nicht gespeicherte Änderungen…"
+      "dirty": "Nicht gespeicherte Änderungen…",
+      "unavailable": "Server oder Verbindung fehlgeschlagen — Eingaben bleiben, erneut versuchen",
+      "unavailableDetail": "Der Server oder die Verbindung ist ausgefallen, bevor das Speichern bestätigt wurde. Ihre Eingaben bleiben erhalten — versuchen Sie das Speichern erneut."
     },
     "deleteTitle": "Dieses Dokument löschen?",
     "deleteDraftBody": "Dadurch wird der Entwurf endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.",

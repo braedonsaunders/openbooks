@@ -17,7 +17,7 @@ import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { featureEnabled, isFeatureEnabled, resolvedFeatureState } from '../../../../lib/features'
 import type { DocumentDrawer } from '../../../../components/document-drawer'
 import type { AppliedPayment } from '../../../../components/applied-payments-panel'
-import { readProviderTransactionsForDocument } from '@openbooks/engine/tax'
+import { nativeGoodsTaxAvailable, readProviderTransactionsForDocument } from '@openbooks/engine/tax'
 import type { TaxProviderChipRow } from '../../../../components/tax-provider-chip'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../../lib/tax-filing-permission'
 import { DISPLAY_DOCUMENT_NUMBER_EXPR } from '../../../../lib/customization/list-query'
@@ -88,6 +88,8 @@ export interface ArInvoicesDrawer {
   /** Receive payment for this posted invoice (party + invoice preselected). */
   settlementHref: string | null
   promotionsEnabled: boolean
+  /** Canadian goods tax can be computed natively for this organization. */
+  nativeGoodsTaxAvailable: boolean
   /** Provider commit rows for a posted sales document; null while the
    *  document is a draft or has nothing to commit to. */
   taxProvider: { documentNumber: string; provider: string; rows: TaxProviderChipRow[]; canRetry: boolean } | null
@@ -331,6 +333,7 @@ export async function loadArInvoices(
             ap: false,
           }),
           promotionsEnabled: featureEnabled(featureState, 'promotions'),
+          nativeGoodsTaxAvailable: drawerKind === 'customer_invoice' ? await nativeGoodsTaxAvailable(authz.user.orgId) : false,
           config: DOC_KINDS[drawerKind]!,
           initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',
           parties: pickers[0],

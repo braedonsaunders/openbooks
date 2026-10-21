@@ -169,7 +169,19 @@
       "reversalStatus": "Reversión automática: {status} · {date}",
       "retryReversals": "Reintentar reversiones vencidas",
       "viewReversal": "Ver reversión"
-    }
+    },
+    "saveAndNew": "Guardar y nuevo",
+    "savedNumbered": "{number} guardado",
+    "invalidAmounts": "Un importe no es un número válido. Corrija el importe resaltado y vuelva a guardar.",
+    "postedAndNew": "Contabilizado en el libro mayor. Hay un nuevo asiento listo con la misma fecha.",
+    "submitted": "Enviado para aprobación en lugar de contabilizado: un flujo de aprobación rige este asiento.",
+    "submittedAndNew": "Enviado para aprobación en lugar de contabilizado: un flujo de aprobación rige este asiento. Hay un nuevo asiento listo con la misma fecha.",
+    "savedNotPosted": "El asiento se guardó como borrador, pero no se contabilizó. Resuelva el motivo indicado y luego contabilice el borrador.",
+    "statisticalIncomplete": "Cada línea estadística necesita una cuenta, una unidad y una cantidad distinta de cero antes de poder contabilizar el asiento.",
+    "postNeedsAmounts": "Introduzca los importes del debe y del haber antes de contabilizar.",
+    "moreOptions": "Más opciones",
+    "balanceLine": "Cuadrar línea",
+    "balanceLineHint": "Llevar la diferencia restante a la última línea en la que trabajó"
   },
   "book": {
     "label": "Libro contable",

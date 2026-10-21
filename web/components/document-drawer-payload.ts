@@ -15,13 +15,13 @@ import {
   savePayloadFingerprint,
   type CurrencyMismatchedAccount,
 } from './document-drawer-save'
-import type { DocumentDrawerPickersScope } from './document-drawer-pickers'
+import type { DocumentDrawerEntryScope } from './document-drawer-entry'
 
 /**
  * The save payload, unsaved-edit tracking against the persisted snapshot,
  * form rehydration, and the up-front settlement-currency proof.
  */
-export function useDocumentDrawerPayload(scope: DocumentDrawerPickersScope) {
+export function useDocumentDrawerPayload(scope: DocumentDrawerEntryScope) {
   const {
     doc,
     payload,
@@ -376,4 +376,4 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerPickersScope) {
   }
 }
 
-export type DocumentDrawerPayloadScope = DocumentDrawerPickersScope & ReturnType<typeof useDocumentDrawerPayload>
+export type DocumentDrawerPayloadScope = DocumentDrawerEntryScope & ReturnType<typeof useDocumentDrawerPayload>

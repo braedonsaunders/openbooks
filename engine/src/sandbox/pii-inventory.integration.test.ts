@@ -426,6 +426,9 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "allocation_runs.trigger_kind",
   "anomaly_baselines.cohort_key",
   "anomaly_baselines.metric",
+  // Auto-post policy versions: an ISO currency code and the administrator's stated reason for the version.
+  "ap_capture_autopost_policies.max_amount_currency",
+  "ap_capture_autopost_policies.reason",
   "ap_capture_corrections.after_value",
   "ap_capture_corrections.before_value",
   "ap_capture_corrections.field_key",

@@ -26,6 +26,8 @@ import { ReportReloadIndicator } from './navigation-provider'
 import { AppLauncherLink, HeaderNavLink } from './header-nav-link'
 import { ShortcutProvider } from './shortcuts/shortcut-provider'
 import { GlobalShortcuts } from './shortcuts/global-shortcuts'
+import { EntryPreferencesProvider } from '../lib/entry-preferences-context'
+import type { EntryPreferences } from '../lib/entry-preferences'
 
 export function AppShell({
   account,
@@ -48,6 +50,8 @@ export function AppShell({
     roles: ReadonlyArray<{ key: string; name: string }>
     localePreference: Locale | null
     navModePreference: NavMode | null
+    /** Personal data-entry preferences every form reads. */
+    entryPreferences: EntryPreferences
   }
   /** Production org + its sandboxes, for the environment switcher. */
   environments: WorkspaceEnvironments
@@ -80,6 +84,7 @@ export function AppShell({
     }))
     .filter((group) => group.items.length > 0)
   return (
+    <EntryPreferencesProvider initial={account.entryPreferences}>
     <ShortcutProvider>
     <GlobalShortcuts permissions={createPermissions} groups={groups} />
     <div className="flex h-screen overflow-hidden">
@@ -96,11 +101,11 @@ export function AppShell({
                 <BrandHomeLink className="hidden lg:inline-flex" />
                 <TopNav groups={navigationGroups} />
                 <div className="flex-1 lg:hidden" />
-                <GlobalSearch className="hidden w-52 shrink-0 lg:block xl:w-64" navGroups={groups} recentScope={searchScope} />
+                <GlobalSearch className="hidden w-52 shrink-0 lg:block xl:w-64" navGroups={groups} recentScope={searchScope} createPermissions={createPermissions} />
                 <TopbarSearchToggle navGroups={groups} recentScope={searchScope} />
               </>
             ) : (
-              <GlobalSearch className="mx-auto w-full max-w-lg flex-1" navGroups={groups} recentScope={searchScope} />
+              <GlobalSearch className="mx-auto w-full max-w-lg flex-1" navGroups={groups} recentScope={searchScope} createPermissions={createPermissions} />
             )}
             <div className="flex shrink-0 items-center gap-1">
               {docsItem ? <HeaderNavLink item={docsItem} /> : null}
@@ -136,5 +141,6 @@ export function AppShell({
       </MobileNavProvider>
     </div>
     </ShortcutProvider>
+    </EntryPreferencesProvider>
   )
 }

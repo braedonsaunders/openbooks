@@ -1,31 +1,10 @@
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { createHash } from 'node:crypto'
-import { basename } from 'node:path'
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { enqueueApCapture } from '@openbooks/jobs'
-import { db } from '@openbooks/engine/platform/db'
-import { extractNativeInvoice } from '@openbooks/engine/payables/einvoice'
-import { orgFeatureEnabled } from '@openbooks/engine/organization/features'
-import { captureContentMatchesMime } from '@openbooks/engine/payables/ap-capture'
-import { EInvoiceParseError } from '@openbooks/engine/einvoice/parse'
-import { getDocumentCaptureRuntimeConfig, type DocumentCaptureRuntimeConfig } from '@openbooks/engine/payables/ap-capture-config'
-import { assertLlmReadable, LlmCaptureError } from '@openbooks/engine/payables/document-capture-llm'
 import '../../../lib/authz';
-import { createFile, deleteFile, ensureApCaptureRoot } from '../../../lib/file-cabinet'
-import { enqueueStorageCleanupStandalone, fileCabinetObjectKey } from '../../../lib/file-storage'
+import { ingestCaptureFiles } from './ingest'
 
 export const runtime = 'nodejs'
-
-const MAX_FILES = 50
-const MAX_BYTES = 20 * 1024 * 1024
-const MAX_BATCH_BYTES = 100 * 1024 * 1024
-const ALLOWED = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/tiff', 'application/xml', 'text/xml'])
-
-function safeFilename(value: string): string {
-  return basename(value).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 240) || 'document'
-}
 
 export const POST = defineRoute({
   permission: 'ap.create',
@@ -33,148 +12,22 @@ export const POST = defineRoute({
   handler: async ({ request: request, authz: gate }) => {
     const form = await request.formData()
     const files = form.getAll('files').filter((value): value is File => value instanceof File)
-    if (files.length === 0) return NextResponse.json({ error: 'no_files' }, { status: 400 })
-    if (files.length > MAX_FILES) return NextResponse.json({ error: 'too_many_files', limit: MAX_FILES }, { status: 422 })
-    const prepared: Array<{ file: File; bytes: Buffer; filename: string; hash: string; native: boolean }> = []
-    let batchBytes = 0
-    for (const file of files) {
-      if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'unsupported_type', filename: file.name }, { status: 422 })
-      if (file.size <= 0 || file.size > MAX_BYTES) return NextResponse.json({ error: 'invalid_size', filename: file.name }, { status: 422 })
-      batchBytes += file.size
-      if (batchBytes > MAX_BATCH_BYTES) return NextResponse.json({ error: 'batch_too_large' }, { status: 422 })
-      const bytes = Buffer.from(await file.arrayBuffer())
-      if (!captureContentMatchesMime(bytes, file.type)) return NextResponse.json({ error: 'content_type_mismatch', filename: file.name }, { status: 422 })
-      const nativeEnabled = await orgFeatureEnabled(gate.user.orgId, 'einvoicing');
-      if (!nativeEnabled && (file.type === 'application/xml' || file.type === 'text/xml')) return NextResponse.json({ error: 'Enable E-invoicing in Company Settings → Features to receive XML invoices.' }, { status: 422 });
-      let native = false;
-      try { native = nativeEnabled && (await extractNativeInvoice(bytes, file.type)) !== null; }
-      catch (error) {
-        // Parse refusals name the defect at 422; a decoder or PDF failure
-        // is unexpected and answers through the shared mapping.
-        if (error instanceof EInvoiceParseError) return apiErrorResponse(error, { safeStatus: 422 });
-        return apiErrorResponse(error);
+    const intake = await ingestCaptureFiles({
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      source: 'upload',
+      files: await Promise.all(files.map(async (file) => ({
+        filename: file.name,
+        contentType: file.type,
+        bytes: Buffer.from(await file.arrayBuffer()),
+      }))),
+    })
+    if (!intake.ok) {
+      if ('thrown' in intake) {
+        return intake.safeStatus ? apiErrorResponse(intake.thrown, { safeStatus: intake.safeStatus }) : apiErrorResponse(intake.thrown)
       }
-      prepared.push({ file, bytes, filename: safeFilename(file.name), hash: createHash('sha256').update(bytes).digest('hex'), native })
+      return NextResponse.json(intake.body, { status: intake.status })
     }
-    if (prepared.some(upload => !upload.native)) {
-      let captureConfig: DocumentCaptureRuntimeConfig | null;
-      try { captureConfig = await getDocumentCaptureRuntimeConfig(gate.user.orgId); }
-      catch (error) {
-        // Endpoint misconfiguration is typed 422 at its origin with its
-        // remedy; collapsing it into capture_not_configured sent operators
-        // to reconfigure a correctly configured endpoint. Anything else is
-        // unexpected: the shared mapping logs it and answers 500.
-        return apiErrorResponse(error);
-      }
-      if (!captureConfig) return NextResponse.json({ error: 'capture_not_configured' }, { status: 409 });
-      if (captureConfig.provider === 'llm_vision') {
-        // The AI model provider reads only the formats its API accepts;
-        // refuse the others before anything is stored or queued.
-        for (const upload of prepared.filter((entry) => !entry.native)) {
-          try {
-            assertLlmReadable(captureConfig.llm.provider, upload.file.type);
-          } catch (error) {
-            if (error instanceof LlmCaptureError) {
-              return NextResponse.json({ error: `${upload.filename}: ${error.message}`, code: error.code, filename: upload.filename }, { status: 422 });
-            }
-            throw error;
-          }
-        }
-      }
-    }
-    const folderId = await ensureApCaptureRoot(gate.user.orgId, gate.user.id)
-    const created: string[] = []
-    const results: Array<{ filename: string; id?: string; status: 'uploaded' | 'failed'; error?: string }> = []
-    for (const upload of prepared) {
-      let storedId: string | null = null
-      let captureItemId: string | null = null
-      try {
-        const stored = await createFile({
-          orgId: gate.user.orgId,
-          folderId,
-          filename: upload.filename,
-          contentType: upload.file.type,
-          bytes: upload.bytes,
-          createdBy: gate.user.id,
-        })
-        storedId = stored.id
-        captureItemId = await db.transaction(async (tx) => {
-          const inserted = (await tx.execute<{ id: string }>(sql`
-            insert into ap_capture_items (org_id, file_id, status, source, original_filename,
-                                          content_hash, created_by, updated_by)
-            values (${gate.user.orgId}, ${stored.id}, 'queued', 'upload', ${upload.filename},
-                    ${upload.hash}, ${gate.user.id}, ${gate.user.id})
-            returning id
-          `, 'objects'))
-          const id = inserted[0]!.id
-          await tx.execute(sql`
-            insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
-            values (${gate.user.orgId}, ${id}, 'uploaded',
-                    ${JSON.stringify({ filename: upload.filename, sizeBytes: upload.bytes.length })}::jsonb,
-                    ${gate.user.id})
-          `)
-          return id
-        })
-        created.push(captureItemId!)
-      } catch {
-        // deleteFile only marks the file inactive, so
-        // the committed S3 blobs would strand. Record durable cleanup intents
-        // for every staged version, then keep the existing failure handling.
-        if (storedId) {
-          try {
-            const staged = await db.execute<{ id: string }>(sql`
-              select fv.id from file_versions fv
-              join files fi on fi.id = fv.file_id and fi.org_id = ${gate.user.orgId}
-              where fv.file_id = ${storedId} and fv.storage_kind = 's3'
-            `, 'objects')
-            for (const version of staged) {
-              await enqueueStorageCleanupStandalone({
-                orgId: gate.user.orgId,
-                objectKey: fileCabinetObjectKey(version.id),
-                ownerKind: 'file_version',
-                ownerId: storedId,
-              })
-            }
-          } catch {
-            // Intent recording is best-effort on this path; the upload_failed
-            // result below is the evidence that must survive.
-          }
-          await deleteFile(gate.user.orgId, storedId).catch(() => false)
-        }
-        results.push({ filename: upload.filename, status: 'failed', error: 'upload_failed' })
-        continue
-      }
-      const committedId = captureItemId!
-      try {
-        // Capture the uploader's scope in the job: the worker acts as this
-        // actor when it auto-materializes, and must not inherit an
-        // unrestricted default there.
-        await enqueueApCapture({
-          orgId: gate.user.orgId,
-          captureItemId: committedId,
-          actorId: gate.user.id,
-          allowedSubsidiaryIds: gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds],
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message.slice(0, 300) : 'queue_unavailable'
-        try {
-          await db.execute(sql`
-            update ap_capture_items set status = 'failed', last_error = ${message}, updated_at = now()
-             where id = ${committedId} and org_id = ${gate.user.orgId}
-          `)
-          results.push({ filename: upload.filename, id: committedId, status: 'failed', error: 'processing_failed' })
-        } catch {
-          // The item is committed and its id must remain observable even when
-          // recording the queue refusal also fails; reporting this file as a
-          // plain request failure would make a client retry create a duplicate.
-          results.push({ filename: upload.filename, id: committedId, status: 'failed', error: 'processing_failed' })
-        }
-        continue
-      }
-      results.push({ filename: upload.filename, id: committedId, status: 'uploaded' })
-    }
-    const failed = results.some((result) => result.status === 'failed')
-    return NextResponse.json({ ids: created, results }, { status: failed ? 207 : 201 })
-
-  },
-})
+    const failed = intake.results.some((result) => result.status === 'failed')
+    return NextResponse.json({ ids: intake.ids, results: intake.results }, { status: failed ? 207 : 201 })

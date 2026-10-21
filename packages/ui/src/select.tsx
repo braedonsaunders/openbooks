@@ -28,6 +28,10 @@ export type SelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
   searchable?: boolean
   /** Extra classes for the trigger button (the visible control). */
   triggerClassName?: string
+  /** Data-entry forms: a keyboard choice moves focus to the next field (see SearchSelect). */
+  advanceOnSelect?: boolean
+  /** ↑/↓ open the closed list; grids turn this off so arrows move between rows. */
+  arrowKeysOpen?: boolean
 }
 
 function textOf(node: React.ReactNode): string {
@@ -118,6 +122,8 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
     id,
     'aria-label': ariaLabel,
     'aria-labelledby': ariaLabelledBy,
+    advanceOnSelect,
+    arrowKeysOpen,
     ...rest
   },
   ref,
@@ -201,6 +207,8 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
         searchable={searchable}
         invalid={isInvalid}
         triggerClassName={cn(className, triggerClassName)}
+        advanceOnSelect={advanceOnSelect}
+        arrowKeysOpen={arrowKeysOpen}
       />
     </span>
   )

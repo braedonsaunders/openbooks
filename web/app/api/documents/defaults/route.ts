@@ -8,6 +8,8 @@ import { db } from '@openbooks/engine/platform/db'
 import {
   DocumentDefaultsError,
   resolveDocumentLineDefaults,
+  resolvePartyLineDefault,
+  resolveRecentPartyDocument,
   resolveTermsDueDate,
 } from '@openbooks/engine/ledger/document-defaults'
 import { guardPermission } from '../../../../lib/authz'
@@ -19,6 +21,7 @@ const DefaultsQuerySchema = z.object({
   partyId: uuidString().optional(),
   documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   itemIds: z.array(uuidString()).max(200),
+  include: z.array(z.enum(['party'])).max(1),
 })
 
 export const runtime = 'nodejs'
@@ -28,6 +31,11 @@ export const runtime = 'nodejs'
  * the due date the party's payment terms imply (`documentDate` + `partyId`),
  * and each `itemId`'s account and tax code. Read-only — the same resolver the
  * create path applies — so the drawer shows exactly what the server derives.
+ *
+ * `include=party` adds `party` (null without a `partyId`): the account and tax
+ * code an item-less line takes for that party (its default, else its own
+ * history as of `documentDate`), and its most recent document of the kind for
+ * recall. Both stay inside the caller's subsidiary scope.
  */
 export const GET = defineRoute({
   public: 'session',
@@ -38,23 +46,33 @@ export const GET = defineRoute({
       partyId: params.get('partyId') || undefined,
       documentDate: params.get('documentDate') || undefined,
       itemIds: params.getAll('itemId'),
+      include: params.getAll('include'),
     })
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Name a document kind, and use a valid party, document date (YYYY-MM-DD) and item ids' }, { status: 400 })
+      return NextResponse.json({ error: 'Name a document kind, and use a valid party, document date (YYYY-MM-DD), item ids and include=party' }, { status: 400 })
     }
     const query = parsed.data
     const gate = await guardPermission(documentEditPermission(query.kind))
     if (gate instanceof NextResponse) return gate
     const orgId = gate.user.orgId
     if (!(await isDocKindEnabled(orgId, query.kind))) return notFound('record')
+    const partyId = query.partyId
+    const scope = gate.allowedSubsidiaryIds
+    const includeParty = query.include.includes('party')
     try {
-      const [terms, lines] = await Promise.all([
+      const [terms, lines, party] = await Promise.all([
         query.documentDate
-          ? resolveTermsDueDate(db, orgId, { kind: query.kind, partyId: query.partyId, documentDate: query.documentDate })
+          ? resolveTermsDueDate(db, orgId, { kind: query.kind, partyId, documentDate: query.documentDate })
           : Promise.resolve(null),
-        resolveDocumentLineDefaults(db, orgId, { kind: query.kind, partyId: query.partyId, itemIds: query.itemIds }),
+        resolveDocumentLineDefaults(db, orgId, { kind: query.kind, partyId, itemIds: query.itemIds }),
+        includeParty && partyId
+          ? Promise.all([
+              resolvePartyLineDefault(db, orgId, { kind: query.kind, partyId, asOfDate: query.documentDate, allowedSubsidiaryIds: scope }),
+              resolveRecentPartyDocument(db, orgId, { kind: query.kind, partyId, allowedSubsidiaryIds: scope }),
+            ]).then(([line, recent]) => ({ line, recent }))
+          : Promise.resolve(null),
       ])
-      return NextResponse.json({ terms, lines })
+      return NextResponse.json(includeParty ? { terms, lines, party } : { terms, lines })
     } catch (error) {
       if (error instanceof DocumentDefaultsError) return apiErrorResponse(error)
       throw error

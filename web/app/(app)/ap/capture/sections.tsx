@@ -1,11 +1,11 @@
 'use client'
 
 import { PagedTable } from '../../../../components/paged-table'
-import { useState } from 'react'
+import { useRef, useState, type RefObject } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { FileSearch, Loader2 } from 'lucide-react'
+import { Copy, FileSearch, Loader2, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, EmptyState } from '@openbooks/ui'
 import { mergeHref } from '../../../../lib/list-params'
@@ -16,6 +16,7 @@ import {
   reconcileBulkResults,
 } from '../../../../lib/api-error'
 import { CaptureUploadButton } from './CaptureUploadButton'
+import { useShortcuts } from '../../../../components/shortcuts/shortcut-provider'
 
 export type CaptureListRow = {
   id: string
@@ -32,6 +33,79 @@ export type CaptureListRow = {
   validationIssues: Array<{ severity?: string }>
   documentId: string | null
   receivedAt: string
+  source?: string
+}
+
+/** An active inbound address shown above the queue, with what to copy. */
+export type CaptureMailbox = {
+  id: string
+  label: string
+  entity: string
+  emailAddress: string | null
+  webhookUrl: string
+}
+
+/**
+ * The addresses bills can be emailed to, one line each, with copy buttons:
+ * the forwarding address for vendors and the webhook URL for the email
+ * provider. Shown above the queue so a clerk can hand an address out without
+ * leaving the page.
+ */
+function MailboxStrip({ mailboxes, manageHref }: { mailboxes: CaptureMailbox[]; manageHref: string | null }) {
+  const t = useTranslations('apInbox.mailboxes')
+  if (mailboxes.length === 0 && !manageHref) return null
+  async function copy(value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success(t('copied'))
+    } catch {
+      toast.error(t('copyFailed'))
+    }
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900/60">
+      <span className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-200"><Mail size={14} />{t('title')}</span>
+      {mailboxes.map((mailbox) => (
+        <span key={mailbox.id} className="flex items-center gap-1.5">
+          <span className="text-slate-500 dark:text-slate-400">{mailbox.label} · {mailbox.entity}</span>
+          {mailbox.emailAddress ? (
+            <>
+              <span className="font-mono text-xs">{mailbox.emailAddress}</span>
+              <Button size="icon" variant="ghost" className="h-6 w-6" aria-label={t('copyAddress', { label: mailbox.label })} title={t('copyAddress', { label: mailbox.label })} onClick={() => void copy(mailbox.emailAddress!)}>
+                <Copy size={12} />
+              </Button>
+            </>
+          ) : null}
+          <Button size="sm" variant="ghost" className="h-6 px-1.5 text-xs" aria-label={t('copyWebhook', { label: mailbox.label })} onClick={() => void copy(mailbox.webhookUrl)}>
+            <Copy size={12} />{t('webhook')}
+          </Button>
+        </span>
+      ))}
+      {mailboxes.length === 0 ? <span className="text-slate-500 dark:text-slate-400">{t('none')}</span> : null}
+      {manageHref ? <Link href={manageHref as never} className="ml-auto text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{t('manage')}</Link> : null}
+    </div>
+  )
+}
+
+/**
+ * J / K move the keyboard cursor through the queue's document links in list
+ * order; Enter on the focused link opens its review drawer. While the drawer
+ * is open its own J / K take over (form scope wins over page scope).
+ */
+function useRowCursor(container: RefObject<HTMLDivElement | null>) {
+  const t = useTranslations('apInbox.keyboard')
+  function move(step: 1 | -1) {
+    const links = [...(container.current?.querySelectorAll<HTMLAnchorElement>('[data-capture-row-link]') ?? [])]
+    if (!links.length) return
+    const current = links.findIndex((link) => link === document.activeElement)
+    const next = current < 0 ? (step === 1 ? 0 : links.length - 1) : Math.min(links.length - 1, Math.max(0, current + step))
+    links[next]!.focus()
+    links[next]!.scrollIntoView?.({ block: 'nearest' })
+  }
+  useShortcuts([
+    { id: 'apCaptureListNext', label: () => t('listNext'), binding: { character: 'j' }, scope: 'page', container: () => container.current, run: () => move(1) },
+    { id: 'apCaptureListPrevious', label: () => t('listPrevious'), binding: { character: 'k' }, scope: 'page', container: () => container.current, run: () => move(-1) },
+  ])
 }
 
 const VARIANT: Record<string, 'success' | 'warning' | 'destructive' | 'outline' | 'secondary'> = {
@@ -43,6 +117,8 @@ const VARIANT: Record<string, 'success' | 'warning' | 'destructive' | 'outline' 
  * bulk results and their named refusals remain visible beside the controls. */
 export function CaptureList({
   rows,
+  mailboxes = [],
+  manageMailboxesHref = null,
   currentParams,
   canCreate,
   uploadDisabled,
@@ -50,6 +126,8 @@ export function CaptureList({
   dir,
 }: {
   rows: CaptureListRow[]
+  mailboxes?: CaptureMailbox[]
+  manageMailboxesHref?: string | null
   currentParams: Record<string, string | string[] | undefined>
   canCreate: boolean
   uploadDisabled: boolean
@@ -57,6 +135,9 @@ export function CaptureList({
   dir: 'asc' | 'desc'
 }) {
   const t = useTranslations('ap.capture')
+  const tInbox = useTranslations('apInbox')
+  const listRef = useRef<HTMLDivElement | null>(null)
+  useRowCursor(listRef)
   const locale = useLocale()
   const router = useRouter()
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -157,20 +238,24 @@ export function CaptureList({
   // hear the grant instead of an action they cannot take.
   if (!rows.length) {
     return (
-      <EmptyState
-        icon={<FileSearch />}
-        title={t('emptyTitle')}
-        description={
-          canCreate ? t('emptyDescription') : t('emptyDescriptionNoGrant')
-        }
-        action={
-          canCreate && !uploadDisabled ? <CaptureUploadButton /> : undefined
-        }
-      />
+      <div className="space-y-2">
+        <MailboxStrip mailboxes={mailboxes} manageHref={manageMailboxesHref} />
+        <EmptyState
+          icon={<FileSearch />}
+          title={t('emptyTitle')}
+          description={
+            canCreate ? t('emptyDescription') : t('emptyDescriptionNoGrant')
+          }
+          action={
+            canCreate && !uploadDisabled ? <CaptureUploadButton /> : undefined
+          }
+        />
+      </div>
     )
   }
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" ref={listRef}>
+      <MailboxStrip mailboxes={mailboxes} manageHref={manageMailboxesHref} />
       {canCreate ? (
         <div className="flex min-h-9 flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
@@ -309,7 +394,8 @@ export function CaptureList({
                   href={mergeHref('/ap/capture', currentParams, {
                     capture: row.id,
                   })}
-                  className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                  data-capture-row-link=""
+                  className="rounded font-medium text-teal-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 dark:text-teal-300"
                 >
                   {row.filename}
                 </Link>
@@ -317,6 +403,7 @@ export function CaptureList({
                   {row.documentKind === 'vendor_credit'
                     ? t('credit')
                     : t('bill')}
+                  {row.source === 'email' ? ` · ${tInbox('emailSource')}` : null}
                 </div>
               </>
             ),

@@ -11,6 +11,7 @@ import {
   type ShortcutCommand,
 } from './shortcut-keys'
 import { ShortcutHelpSheet } from './shortcut-help-sheet'
+import { openFocusedFieldHelp } from './field-help'
 
 interface ShortcutEntry {
   order: number
@@ -85,14 +86,14 @@ export function ShortcutProvider({ children }: { children: ReactNode }) {
 
   return (
     <ShortcutContext.Provider value={registry}>
-      <HelpShortcut label={t('commands.help')} onOpen={openHelp} />
+      <HelpShortcut label={t('commands.help')} fieldHelpLabel={t('commands.fieldHelp')} onOpen={openHelp} />
       {children}
       <ShortcutHelpSheet open={help !== null} commands={help?.commands ?? []} apple={apple} onClose={() => setHelp(null)} />
     </ShortcutContext.Provider>
   )
 }
 
-function HelpShortcut({ label, onOpen }: { label: string; onOpen: (target: Element | null) => void }) {
+function HelpShortcut({ label, fieldHelpLabel, onOpen }: { label: string; fieldHelpLabel: string; onOpen: (target: Element | null) => void }) {
   useShortcuts([
     {
       id: 'help',
@@ -100,6 +101,17 @@ function HelpShortcut({ label, onOpen }: { label: string; onOpen: (target: Eleme
       binding: { character: '?' },
       scope: 'global',
       run: () => onOpen(document.activeElement),
+    },
+    {
+      id: 'fieldHelp',
+      label: fieldHelpLabel,
+      binding: { modifier: 'none', code: 'F1' },
+      scope: 'global',
+      allowInEditable: true,
+      // A field without help falls back to the shortcut sheet, so F1 always answers.
+      run: () => {
+        if (!openFocusedFieldHelp(document.activeElement)) onOpen(document.activeElement)
+      },
     },
   ])
   return null

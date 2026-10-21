@@ -9,6 +9,7 @@ import { customFieldColumns } from './custom-field-inputs'
 import { displayLineDecimal } from '../lib/line-grid-decimal'
 import type { LineRow } from './document-drawer-types'
 import type { DocumentDrawerCommandsScope } from './document-drawer-commands'
+import { ENTRY_SECONDARY_LINE_KEYS } from './document-drawer-entry'
 
 /** Line grid columns: the built-in fallback set and the form-layout set. */
 export function useDocumentDrawerColumns(scope: DocumentDrawerCommandsScope) {
@@ -112,7 +113,7 @@ export function useDocumentDrawerColumns(scope: DocumentDrawerCommandsScope) {
         width: 'minmax(200px,2fr)',
         type: 'search-select',
         required: true,
-        options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
+        options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim(), keywords: a.number ? [a.number] : undefined })),
         placeholder: t('drawer.accountPlaceholder'),
       },
       { key: 'description', label: tCommon('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
@@ -221,12 +222,12 @@ export function useDocumentDrawerColumns(scope: DocumentDrawerCommandsScope) {
     const builtIn: Record<string, Omit<LineGridColumn<LineRow>, 'label'>> = {
       account_id: {
         key: 'accountId', width: 'minmax(200px,2fr)', type: 'search-select', required: true,
-        options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() })),
+        options: accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim(), keywords: a.number ? [a.number] : undefined })),
         placeholder: t('drawer.accountPlaceholder'),
       },
       item_id: {
         key: 'itemId', width: 'minmax(150px,1.4fr)', type: 'search-select',
-        options: (items ?? []).map((it) => ({ value: it.id, label: `${it.code ? it.code + ' ' : ''}${it.name ?? ''}`.trim() })), placeholder: '—',
+        options: (items ?? []).map((it) => ({ value: it.id, label: `${it.code ? it.code + ' ' : ''}${it.name ?? ''}`.trim(), keywords: it.code ? [it.code] : undefined })), placeholder: '—',
       },
       description: { key: 'description', width: 'minmax(160px,1.6fr)', type: 'text' },
       quantity: { key: 'quantity', width: '90px', type: 'decimal', decimalScale: 8, align: 'right' },
@@ -316,10 +317,17 @@ export function useDocumentDrawerColumns(scope: DocumentDrawerCommandsScope) {
         const base = builtIn[p.key]
         if (!base) return null
         const meta = recordType ? lineFieldMeta(recordType, p.key) : undefined
+        // A form that does not say otherwise keeps the line to what most
+        // entries need (account, description, amount, tax): quantities,
+        // pricing and dimensions open with Details or as soon as a line uses
+        // them, so Tab goes from the account to the amount directly.
+        const entrySecondary = ENTRY_SECONDARY_LINE_KEYS.has(p.key)
+          || (p.key === 'item_id' && (items ?? []).length === 0)
+          || ((p.key === 'tax_code_id' || p.key === 'tax_amount') && taxProfiles.length === 0)
         return {
           ...base,
           width: p.width ?? base.width,
-          secondary: p.secondary,
+          secondary: p.secondary ?? entrySecondary,
           required: meta?.required ?? (base as { required?: boolean }).required,
           label: p.labelOverride?.trim() ? p.labelOverride.trim() : (defLabel[p.key] ?? p.key),
         }

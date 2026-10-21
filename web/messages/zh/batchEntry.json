@@ -1,0 +1,102 @@
+{
+  "title": "批量录入账单",
+  "description": "在一个表格中录入一叠供应商账单，与控制总数核对，然后一并保存或过账。",
+  "back": "应付账单",
+  "menuLabel": "批量录入",
+  "helpLink": "批量录入的使用方法",
+  "noTax": "不含税",
+  "createVendor": "创建供应商“{name}”",
+  "createVendorFailed": "无法创建供应商。",
+  "keyboardHint": "按 Enter 或 Tab 在账单的字段间移动，在最后一个字段后按 Tab 开始下一张账单。F8 复制上一行的字段。可从电子表格粘贴多行，带标题行时按列名匹配。Ctrl+S（⌘S）将每张账单保存为草稿。",
+  "keyboardHintPost": "按 Enter 或 Tab 在账单的字段间移动，在最后一个字段后按 Tab 开始下一张账单。F8 复制上一行的字段。可从电子表格粘贴多行，带标题行时按列名匹配。Ctrl+S（⌘S）将每张账单保存为草稿；Ctrl+Enter（⌘Enter）将其过账。",
+  "columns": {
+    "vendor": "供应商",
+    "reference": "供应商参考号",
+    "billDate": "账单日期",
+    "dueDate": "到期日",
+    "dueDateHelp": "留空则按供应商的付款条件计算。状态列会显示由付款条件得出的日期。",
+    "account": "科目",
+    "memo": "备注",
+    "amount": "金额",
+    "tax": "税",
+    "status": "状态"
+  },
+  "control": {
+    "heading": "控制总数",
+    "subsidiary": "子公司",
+    "count": "账单张数",
+    "total": "批次合计",
+    "entered": "已录入：{count} 张账单 · {total}",
+    "countMatched": "账单张数相符",
+    "countOff": "账单张数相差 {difference, number}",
+    "countInvalid": "请以整数输入账单张数",
+    "totalMatched": "批次合计相符",
+    "totalOff": "批次合计相差 {difference}",
+    "totalInvalid": "请以金额格式输入批次合计"
+  },
+  "actions": {
+    "saveAll": "全部保存为草稿",
+    "postAll": "全部过账",
+    "clearFinished": "清除已完成的行（{count, number}）",
+    "addBill": "添加账单",
+    "progress": "正在保存第 {done, number} / {total, number} 张…"
+  },
+  "shortcuts": {
+    "saveAll": "将所有账单保存为草稿",
+    "postAll": "将所有账单过账"
+  },
+  "status": {
+    "saving": "正在保存…",
+    "saved": "已保存 {number}",
+    "posted": "已过账 {number}",
+    "pending": "{number} 待审批",
+    "termsDue": "按付款条件于 {date} 到期",
+    "openExisting": "打开已有账单"
+  },
+  "issues": {
+    "vendor": "请选择供应商",
+    "billDate": "请输入账单日期",
+    "amountMissing": "请输入金额",
+    "amountInvalid": "金额不是有效数字",
+    "amountNotPositive": "请输入正数金额；负数账单请记为供应商贷项",
+    "account": "请选择科目"
+  },
+  "duplicates": {
+    "badge": "可能重复",
+    "inBatch": "与第 {rows} 行的供应商和参考号相同",
+    "onFile": "与 {date} 的 {number} 相符",
+    "title": "可能重复的账单",
+    "message": "有 {count} 张账单与本批次中或已登记的其他账单供应商和参考号相同。仍要保存吗？",
+    "row": "第 {row} 行：{vendor}，{reference}",
+    "confirm": "仍然保存"
+  },
+  "refusals": {
+    "nothingToSave": "此批次中没有未保存的账单。",
+    "rowsNeedAttention": "有 {count} 张账单需要修正后才能保存。{first}",
+    "rowIssue": "第 {row} 行：{issue}。",
+    "controlInvalid": "无法读取控制总数。请以整数输入账单张数、以金额格式输入批次合计，或将其清空。",
+    "controlCount": "此批次有 {entered} 张账单，但控制张数为 {control, number}。请找出缺少或多出的账单，或更正控制张数。",
+    "controlTotal": "账单合计为 {entered}，比批次合计{direction, select, over {多} other {少}} {difference}。请更正金额或批次合计。",
+    "saveFailed": "无法保存账单。",
+    "unavailable": "无法连接服务器。批次已保留；请再次保存以重试，已保存的账单不会重复创建。",
+    "conflict": "此行的账单可能已以不同内容保存过。请打开已有账单核对，或复制此行另存为新账单。",
+    "refusedSummary": "有 {count} 张账单未能保存或过账。原因显示在各行中；请修正后再次保存。",
+    "defaultsFailed": "无法加载供应商默认值。请为每张账单选择科目。"
+  },
+  "summary": {
+    "saved": "已将 {count} 张账单保存为草稿",
+    "posted": "已过账 {posted} 张账单，{pending, number} 张待审批"
+  },
+  "restore": {
+    "title": "已恢复未保存的批次",
+    "body": "已恢复上次会话中 {count} 张未保存的账单。",
+    "keep": "保留",
+    "discard": "放弃",
+    "discardConfirm": "要放弃此批次中未保存的账单吗？此操作无法撤销。",
+    "storageFailed": "此浏览器无法保留批次副本。请尽快保存，以免丢失账单。"
+  },
+  "leave": {
+    "message": "此批次中有未保存的账单。它们会保留在此浏览器中，重新打开批量录入时会恢复。",
+    "confirm": "离开"
+  }
+}

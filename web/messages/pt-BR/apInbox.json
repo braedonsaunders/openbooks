@@ -1,0 +1,80 @@
+{
+  "tabs": {
+    "queue": "Fila de captura",
+    "inbox": "Atividade da caixa de entrada"
+  },
+  "emailSource": "E-mail",
+  "mailboxes": {
+    "title": "Enviar faturas por e-mail para",
+    "copyAddress": "Copiar o endereço {label}",
+    "copyWebhook": "Copiar a URL do webhook {label}",
+    "webhook": "URL do webhook",
+    "copied": "Copiado para a área de transferência",
+    "copyFailed": "Não foi possível copiar. Selecione o texto e copie manualmente.",
+    "none": "Nenhum endereço de recebimento está ativo ainda.",
+    "manage": "Gerenciar endereços"
+  },
+  "inbox": {
+    "columns": {
+      "received": "Recebido",
+      "address": "Endereço",
+      "from": "De",
+      "subject": "Assunto",
+      "attachments": "Anexos",
+      "outcome": "Resultado",
+      "detail": "Detalhe",
+      "capture": "Captura"
+    },
+    "outcomes": {
+      "received": "Processando",
+      "captured": "Capturado",
+      "rejected_sender": "Remetente não permitido",
+      "no_attachments": "Nenhuma fatura anexada",
+      "duplicate": "Já capturado",
+      "error": "Erro"
+    },
+    "capturedCount": "{count, plural, one {# captura criada} other {# capturas criadas}}",
+    "openCapture": "Abrir captura",
+    "emptyTitle": "Nenhum e-mail recebido ainda",
+    "emptyDescription": "As mensagens enviadas aos endereços de contas a pagar desta empresa aparecem aqui com o que aconteceu com cada uma.",
+    "emptyNoMailbox": "Configure um endereço de recebimento em Configuração → Faturamento → Endereços de recebimento de contas a pagar para receber faturas por e-mail."
+  },
+  "trust": {
+    "trusted": "Confiável: {count, plural, one {# fatura seguida sem correções} other {# faturas seguidas sem correções}}",
+    "building": "{count, plural, =0 {Nenhuma fatura sem correções ainda} one {# fatura sem correções seguida} other {# faturas sem correções seguidas}} de {threshold} necessárias para obter confiança"
+  },
+  "autoPost": {
+    "posted": "Lançada automaticamente conforme a política de lançamento automático.",
+    "submitted": "Enviada automaticamente para aprovação conforme a política de lançamento automático.",
+    "refused": "Não lançada automaticamente: {message}",
+    "skipped": {
+      "policy_off": "O lançamento automático estava desativado quando esta fatura chegou.",
+      "not_a_bill": "Créditos de fornecedor nunca são lançados automaticamente.",
+      "needs_review": "Não lançada automaticamente: um campo ou uma linha precisa de revisão.",
+      "duplicate": "Não lançada automaticamente: pode ser uma duplicata.",
+      "vendor_unmatched": "Não lançada automaticamente: o fornecedor não foi identificado.",
+      "vendor_not_trusted": "Não lançada automaticamente: o fornecedor ainda não conquistou confiança.",
+      "amount_unreadable": "Não lançada automaticamente: não foi possível ler o total.",
+      "over_limit": "Não lançada automaticamente: o total excede o limite da política.",
+      "currency_differs": "Não lançada automaticamente: a moeda da fatura é diferente da moeda do limite da política.",
+      "actor_not_permitted": "Não lançada automaticamente: o proprietário do endereço não tem permissão para criar e lançar faturas."
+    }
+  },
+  "keyboard": {
+    "listNext": "Próxima captura da lista",
+    "listPrevious": "Captura anterior da lista",
+    "next": "Próxima captura",
+    "previous": "Captura anterior",
+    "createDraft": "Criar rascunho e ir para a próxima captura",
+    "createAndPost": "Criar rascunho e lançar",
+    "createAndPostButton": "Criar e lançar",
+    "reject": "Rejeitar captura",
+    "rejectConfirm": "Rejeitar {name}? Ela sairá da fila de revisão.",
+    "posted": "Fatura lançada",
+    "submittedForApproval": "Rascunho criado e enviado para aprovação",
+    "postRefused": "O rascunho foi criado, mas não foi lançado: {message}",
+    "openDraft": "Abrir rascunho",
+    "allReviewed": "Nenhuma outra captura precisa de revisão",
+    "hint": "J / K: captura seguinte ou anterior · Enter: próximo campo que requer atenção · ⌘/Ctrl+Enter: criar rascunho · ⌘/Ctrl+Shift+Enter: criar e lançar · ?: todos os atalhos"
+  }
+}

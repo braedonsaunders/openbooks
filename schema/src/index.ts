@@ -148,3 +148,4 @@ export * from "./payroll-us-filing-account-employer-lineage";
 export * from "./equity";
 export * from "./pos";
 export * from "./expense-receipt-captures";
+export * from "./ap-capture-inbound";

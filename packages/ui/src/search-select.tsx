@@ -12,12 +12,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Camera, Check, ChevronDown, ScanLine, Search, X } from 'lucide-react'
+import { Camera, Check, ChevronDown, Loader2, Plus, ScanLine, Search, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { cn } from './utils'
 import { anchoredMenuPosition } from './anchored-menu-position'
 import { useHydrated } from './use-hydrated'
 import { useMediaQuery } from './use-media-query'
+import { hasExactMatch, rankOptions, readRecentChoices, rememberRecentChoice } from './search-select-ranking'
+import { focusAdjacentField } from './focus-navigation'
 
 export type SelectOption = {
   value: string
@@ -27,7 +29,18 @@ export type SelectOption = {
   disabled?: boolean
   /** Group header label (from <optgroup>); options sharing a group are batched. */
   group?: string
+  /**
+   * Extra searchable text that is not displayed, such as a vendor code or an
+   * account number shown separately. A keyword match ranks just below a
+   * label prefix, so typing a code finds its record immediately.
+   */
+  keywords?: readonly string[]
 }
+
+/** Sentinel value for the inline "Create …" row; never a real option value. */
+const CREATE_VALUE = '\u0000create'
+/** Keys a picker never treats as typed text. */
+const NON_TEXT_KEYS = new Set([' ', 'Enter', 'Tab', 'Escape'])
 
 export type SearchSelectScanResult =
   | { ok: true; value: string; label?: string; unit?: string | null }
@@ -62,6 +75,13 @@ export function SearchSelect({
   invalid = false,
   id,
   scanResolver,
+  advanceOnSelect = false,
+  recentKey,
+  onCreate,
+  createLabel,
+  autoFocus,
+  'data-autofocus': dataAutofocus,
+  arrowKeysOpen = true,
 }: {
   value: string
   onChange: (value: string, scan?: Extract<SearchSelectScanResult, { ok: true }>) => void
@@ -98,6 +118,33 @@ export function SearchSelect({
   id?: string
   /** Exact keyboard-wedge or camera scan resolver. Omitted when scanning is gated off. */
   scanResolver?: (value: string) => Promise<SearchSelectScanResult>
+  /**
+   * Data-entry forms: a keyboard choice (Enter or Tab) moves focus on to the
+   * next field instead of returning it to this control, so a clerk types
+   * "sta⏎" and is already in the next field.
+   */
+  advanceOnSelect?: boolean
+  /**
+   * Remember choices under this key (per browser) and list them first when
+   * the menu opens. Use one key per kind of record, e.g. "vendor".
+   */
+  recentKey?: string
+  /**
+   * Inline creation: offered as the last row whenever the typed text matches
+   * no option exactly. Resolve to the new value (the caller adds it to
+   * `options`), or null when creation was cancelled or refused.
+   */
+  onCreate?: (query: string) => Promise<{ value: string; label: string } | null>
+  /** Label for the create row, e.g. q => `Create vendor "${q}"`. */
+  createLabel?: (query: string) => string
+  autoFocus?: boolean
+  /** Marks the control as the form's first field for drawer initial focus. */
+  'data-autofocus'?: boolean | string
+  /**
+   * ↑/↓ and Alt+↓ open the closed menu. Grids turn this off so the arrows
+   * move and reorder rows; F4, Enter, Space or typing still open it.
+   */
+  arrowKeysOpen?: boolean
 }) {
   const t = useTranslations('ui.select')
   const tCommon = useTranslations('common')
@@ -123,7 +170,22 @@ export function SearchSelect({
   const [scanMessage, setScanMessage] = useState<string | null>(null)
   const [scanFailed, setScanFailed] = useState(false)
   const [cameraActive, setCameraActive] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  // A record created inline is displayed by its own label until the caller's
+  // options catch up, so the trigger never flashes the placeholder.
+  const [createdOption, setCreatedOption] = useState<SelectOption | null>(null)
+  const [recent, setRecent] = useState<string[]>([])
+  // The inline "Create …" row is never the default: a typo followed by
+  // Enter must not create a record. Arrowing (or pointing) onto the row
+  // arms it, and only then does Enter create.
+  const [createArmed, setCreateArmed] = useState(false)
   const scanBuffer = useRef({ value: '', at: 0 })
+  // Type-to-select on menus without a search box (≤7 options).
+  const typeahead = useRef({ text: '', at: 0 })
+  // Where focus goes once the menu closes: back to the trigger, onward to the
+  // next field, or nowhere (a click elsewhere already moved it).
+  const closeFocus = useRef<'trigger' | 'next' | 'previous' | 'none'>('trigger')
   const videoRef = useRef<HTMLVideoElement>(null)
   const cameraAvailable = mounted && typeof window !== 'undefined' && Boolean((window as BarcodeDetectorWindow).BarcodeDetector)
   // Native modal dialogs make the rest of the document inert. Keep a menu
@@ -136,7 +198,7 @@ export function SearchSelect({
     () => (clearable ? [{ value: '', label: emptyLabel ?? noneLabel }, ...options] : options),
     [clearable, emptyLabel, noneLabel, options],
   )
-  const selected = options.find((o) => o.value === value)
+  const selected = options.find((o) => o.value === value) ?? (createdOption?.value === value && value !== '' ? createdOption : undefined)
   const showEmpty = clearable && value === '' && !!emptyLabel
   const display = selected?.label ?? (showEmpty ? emptyLabel : resolvedPlaceholder)
   const isPlaceholder = !selected && !showEmpty
@@ -155,6 +217,7 @@ export function SearchSelect({
       setQuery('')
       onSearchChange?.('')
       onChange(result.value, result)
+      closeFocus.current = 'trigger'
       setOpen(false)
       return
     }
@@ -171,8 +234,9 @@ export function SearchSelect({
     setScanFailed(true)
   }, [allOptions, disabled, onChange, onSearchChange, scanResolver, t])
 
-  const scannerKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
-    if (!scanResolver || disabled || event.altKey || event.ctrlKey || event.metaKey) return
+  /** Returns true when the key completed a keyboard-wedge scan. */
+  const scannerKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>): boolean => {
+    if (!scanResolver || disabled || event.altKey || event.ctrlKey || event.metaKey) return false
     const now = Date.now()
     if (event.key === 'Enter') {
       const { value, at } = scanBuffer.current
@@ -181,8 +245,9 @@ export function SearchSelect({
         event.preventDefault()
         event.stopPropagation()
         void resolveTypedScan(value)
+        return true
       }
-      return
+      return false
     }
     if (event.key.length === 1) {
       const prior = scanBuffer.current
@@ -193,6 +258,7 @@ export function SearchSelect({
     } else if (event.key !== 'Shift') {
       scanBuffer.current = { value: '', at: 0 }
     }
+    return false
   }, [disabled, resolveTypedScan, scanResolver])
 
   const scanWithCamera = useCallback(async () => {
@@ -234,7 +300,7 @@ export function SearchSelect({
     }
   }, [resolveTypedScan, t])
 
-  const showSearch = searchable ?? (Boolean(scanResolver) || allOptions.length > 7 || allOptions.some((o) => o.group))
+  const showSearch = searchable ?? (Boolean(scanResolver) || Boolean(onCreate) || allOptions.length > 7 || allOptions.some((o) => o.group))
   const place = useCallback(() => {
     const anchor = triggerRef.current?.getBoundingClientRect()
     if (!anchor) return
@@ -249,15 +315,28 @@ export function SearchSelect({
     setPos(previous => previous && Object.keys(next).every(key => next[key as keyof typeof next] === previous[key as keyof typeof next]) ? previous : next)
   }, [showSearch])
 
-
-  const filtered = useMemo(() => {
-    if (remote) return allOptions
-    const q = query.trim().toLowerCase()
-    if (!q) return allOptions
-    return allOptions.filter(
-      (o) => o.label.toLowerCase().includes(q) || o.group?.toLowerCase().includes(q),
-    )
-  }, [allOptions, query, remote])
+  const trimmedQuery = query.trim()
+  const canCreate = Boolean(onCreate) && trimmedQuery !== '' && !remote && !hasExactMatch(allOptions, trimmedQuery)
+  // Strongest matches first; with nothing typed, recently chosen records
+  // lead under their own heading and the full list follows.
+  const filtered = useMemo<SelectOption[]>(() => {
+    let list: SelectOption[]
+    if (remote) list = allOptions
+    else if (trimmedQuery) list = rankOptions(allOptions, trimmedQuery, recent)
+    else if (recent.length > 0 && !allOptions.some((o) => o.group)) {
+      const byValue = new Map(allOptions.map((o) => [o.value, o]))
+      const lead = recent.map((v) => byValue.get(v)).filter((o): o is SelectOption => Boolean(o) && !o!.disabled && o!.value !== '')
+      if (lead.length === 0) list = allOptions
+      else {
+        const leadValues = new Set(lead.map((o) => o.value))
+        list = [
+          ...lead.map((o) => ({ ...o, group: t('recent') })),
+          ...allOptions.filter((o) => !leadValues.has(o.value)).map((o) => ({ ...o, group: t('allOptions') })),
+        ]
+      }
+    } else list = allOptions
+    return canCreate ? [...list, { value: CREATE_VALUE, label: createLabel?.(trimmedQuery) ?? t('create', { query: trimmedQuery }) }] : list
+  }, [allOptions, canCreate, createLabel, recent, remote, t, trimmedQuery])
 
   function firstEnabled(items: SelectOption[], start: number) {
     if (start >= 0 && start < items.length && !items[start]?.disabled) return start
@@ -265,26 +344,103 @@ export function SearchSelect({
     return fwd === -1 ? 0 : fwd
   }
 
-  function openMenu() {
+  function openMenu(initialQuery = '') {
     if (disabled) return
     setPortalHost(wrapRef.current?.closest('dialog[open]') ?? document.body)
-    setQuery('')
+    const nextRecent = readRecentChoices(recentKey)
+    setRecent(nextRecent)
+    setQuery(initialQuery)
     setScanMessage(null)
     setScanFailed(false)
-    onSearchChange?.('')
-    setHighlight(
-      firstEnabled(
-        allOptions,
-        allOptions.findIndex((o) => o.value === value),
-      ),
-    )
+    setCreateError(null)
+    setCreateArmed(false)
+    onSearchChange?.(initialQuery)
+    closeFocus.current = 'trigger'
+    if (initialQuery) setHighlight(0)
+    else {
+      // The recent heading leads with the current value's neighbours; land
+      // on the selected value when it is listed, else the first choice.
+      setHighlight(firstEnabled(allOptions, allOptions.findIndex((o) => o.value === value)))
+    }
     place()
     setOpen(true)
-    setTimeout(() => searchRef.current?.focus(), 60)
   }
-  function choose(v: string) {
-    onChange(v)
+
+  // The search box takes focus in the same commit the menu opens, so keys
+  // typed in quick succession after the first (a fast typist, a scanner)
+  // land in it instead of being lost on the trigger.
+  const searchFocused = useRef(false)
+  useLayoutEffect(() => {
+    if (!open) {
+      searchFocused.current = false
+      return
+    }
+    const input = searchRef.current
+    if (!input || searchFocused.current) return
+    searchFocused.current = true
+    input.focus()
+    const end = input.value.length
+    input.setSelectionRange?.(end, end)
+  }, [open, isDesktop, pos])
+
+  // After the menu closes, put focus where the closing gesture asked for it.
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true
+      return
+    }
+    if (!wasOpen.current) return
+    wasOpen.current = false
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const target = closeFocus.current
+    closeFocus.current = 'trigger'
+    if (target === 'none') return
+    const active = document.activeElement
+    // Only reclaim focus that the closing menu stranded (the unmounted search
+    // box leaves it on <body>) or still holds; a click on another control
+    // keeps its focus.
+    const stranded = !active || active === document.body || active === trigger || (dropRef.current?.contains(active) ?? false)
+    if (!stranded) return
+    if (target === 'trigger') trigger.focus()
+    else if (!focusAdjacentField(trigger, target === 'next' ? 1 : -1)) trigger.focus()
+  }, [open])
+
+  function close(focus: 'trigger' | 'next' | 'previous' | 'none' = 'trigger') {
+    closeFocus.current = focus
     setOpen(false)
+  }
+
+  async function createFromQuery(focus: 'trigger' | 'next' | 'previous') {
+    if (!onCreate || creating) return
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const created = await onCreate(trimmedQuery)
+      if (!created) {
+        searchRef.current?.focus()
+        return
+      }
+      setCreatedOption({ value: created.value, label: created.label })
+      setRecent(rememberRecentChoice(recentKey, created.value))
+      onChange(created.value)
+      close(focus)
+    } catch (error) {
+      setCreateError(error instanceof Error && error.message ? error.message : t('createFailed'))
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  function choose(v: string, focus: 'trigger' | 'next' | 'previous' = 'trigger') {
+    if (v === CREATE_VALUE) {
+      void createFromQuery(focus)
+      return
+    }
+    if (v !== '') setRecent(rememberRecentChoice(recentKey, v))
+    onChange(v)
+    close(focus)
   }
 
   // Click-outside (desktop) — the dropdown is portaled, so check it too.
@@ -293,7 +449,7 @@ export function SearchSelect({
     function onDoc(e: MouseEvent) {
       const t = e.target as Node
       if (wrapRef.current?.contains(t) || dropRef.current?.contains(t)) return
-      setOpen(false)
+      close('none')
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
@@ -315,58 +471,181 @@ export function SearchSelect({
     }
   }, [open, isDesktop, place, filtered])
 
-  // Keyboard nav + scroll-lock on the mobile sheet.
+  // Keep the highlighted row in view as the keyboard moves through a long list.
   useEffect(() => {
     if (!open) return
-    const nextEnabled = (from: number, dir: 1 | -1) => {
-      let index = from
-      while (true) {
-        index += dir
-        if (index < 0 || index >= filtered.length) return from
-        if (!filtered[index]?.disabled) return index
-      }
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-      else if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setHighlight((h) => nextEnabled(h, 1))
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setHighlight((h) => nextEnabled(h, -1))
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        const o = filtered[highlight]
-        if (o && !o.disabled) {
-          onChange(o.value)
-          setOpen(false)
-        }
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    let restore: (() => void) | undefined
-    if (!isDesktop) {
-      const prev = document.body.style.overflow
-      document.body.style.overflow = 'hidden'
-      restore = () => {
-        document.body.style.overflow = prev
-      }
-    }
+    const row = listRef.current?.querySelector<HTMLElement>(`[data-option-index="${highlight}"]`)
+    row?.scrollIntoView?.({ block: 'nearest' })
+  }, [highlight, open])
+
+  // Scroll lock on the mobile sheet.
+  useEffect(() => {
+    if (!open || isDesktop) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     return () => {
-      document.removeEventListener('keydown', onKey)
-      restore?.()
+      document.body.style.overflow = prev
     }
-  }, [filtered, highlight, isDesktop, onChange, open])
+  }, [isDesktop, open])
+
+  const nextEnabled = (from: number, dir: 1 | -1) => {
+    let index = from
+    while (true) {
+      index += dir
+      if (index < 0 || index >= filtered.length) return from
+      if (!filtered[index]?.disabled) return index
+    }
+  }
+
+  /**
+   * Menu keys, handled where focus actually is (the search box, or the
+   * trigger for short lists without one). Every key the menu consumes stops
+   * here, so an enclosing grid or form never also acts on it — Enter picks
+   * the option and nothing else.
+   */
+  function menuKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (scannerKeyDown(event)) return
+    const consume = () => {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    switch (event.key) {
+      case 'Escape':
+        consume()
+        close('trigger')
+        return
+      case 'ArrowDown': {
+        consume()
+        if (!createArmed && filtered[highlight]?.value === CREATE_VALUE) {
+          setCreateArmed(true)
+          return
+        }
+        const next = nextEnabled(highlight, 1)
+        setCreateArmed(filtered[next]?.value === CREATE_VALUE)
+        setHighlight(next)
+        return
+      }
+      case 'ArrowUp': {
+        consume()
+        const next = nextEnabled(highlight, -1)
+        setCreateArmed(filtered[next]?.value === CREATE_VALUE)
+        setHighlight(next)
+        return
+      }
+      case 'PageDown':
+        consume()
+        setHighlight((h) => Math.min(filtered.length - 1, h + 8))
+        return
+      case 'PageUp':
+        consume()
+        setHighlight((h) => Math.max(0, h - 8))
+        return
+      case 'Enter': {
+        // ⌘/Ctrl+Enter belongs to the form (save, post): close the list
+        // without choosing and let the command run.
+        if (event.metaKey || event.ctrlKey) {
+          close('trigger')
+          return
+        }
+        consume()
+        const o = filtered[highlight]
+        if (!o || o.disabled) return
+        if (o.value === CREATE_VALUE && !createArmed) return
+        choose(o.value, advanceOnSelect ? 'next' : 'trigger')
+        return
+      }
+      case 'Tab': {
+        // Tab accepts what the clerk narrowed to (QuickBooks/Xero behaviour)
+        // and moves on; with nothing typed it just leaves, keeping the value.
+        consume()
+        const direction = event.shiftKey ? 'previous' : 'next'
+        const o = filtered[highlight]
+        if (trimmedQuery && o && !o.disabled && (o.value !== CREATE_VALUE)) choose(o.value, direction)
+        else close(direction)
+        return
+      }
+      default:
+        break
+    }
+    // Short lists have no search box: printable keys jump to the first
+    // option whose label starts with what was typed in quick succession.
+    if (!showSearch && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey && event.key !== ' ') {
+      consume()
+      const now = Date.now()
+      const text = now - typeahead.current.at < 800 ? typeahead.current.text + event.key.toLowerCase() : event.key.toLowerCase()
+      typeahead.current = { text, at: now }
+      const match = filtered.findIndex((o) => !o.disabled && o.label.toLowerCase().startsWith(text))
+      if (match !== -1) setHighlight(match)
+    }
+  }
+
+  /** Keys on the closed trigger: typing opens the menu already searching. */
+  function triggerKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (open) {
+      if (!showSearch || !searchRef.current) {
+        menuKeyDown(event)
+        return
+      }
+      // Characters typed after the menu opened but before the search box
+      // received focus still belong to the search.
+      if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        scannerKeyDown(event)
+        event.preventDefault()
+        setQuery((current) => current + event.key)
+        onSearchChange?.(query + event.key)
+        setHighlight(0)
+        return
+      }
+      menuKeyDown(event)
+      return
+    }
+    scannerKeyDown(event)
+    if (disabled || event.ctrlKey || event.metaKey) return
+    // Inside a grid the arrows (with or without Alt) belong to the grid:
+    // moving between rows and reordering them. F4 still opens the list there.
+    if ((arrowKeysOpen && (event.key === 'ArrowDown' || (!event.altKey && event.key === 'ArrowUp'))) || event.key === 'F4') {
+      event.preventDefault()
+      event.stopPropagation()
+      openMenu()
+      return
+    }
+    if (event.key === 'Enter') {
+      // Enter opens the list, never the enclosing form's or grid's Enter.
+      event.preventDefault()
+      event.stopPropagation()
+      openMenu()
+      return
+    }
+    if ((event.key === 'Delete' || event.key === 'Backspace') && clearable && value !== '') {
+      event.preventDefault()
+      event.stopPropagation()
+      onChange('')
+      return
+    }
+    if (event.key.length === 1 && !event.altKey && !NON_TEXT_KEYS.has(event.key)) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (showSearch) openMenu(event.key)
+      else {
+        openMenu()
+        const text = event.key.toLowerCase()
+        typeahead.current = { text, at: Date.now() }
+        const match = allOptions.findIndex((o) => !o.disabled && o.label.toLowerCase().startsWith(text))
+        if (match !== -1) setHighlight(match)
+      }
+    }
+  }
 
   const optionList = (
     <>
       <ul role="listbox" className="py-1">
         {filtered.map((o, i) => {
-          const active = o.value === value
+          const isCreate = o.value === CREATE_VALUE
+          const active = !isCreate && o.value === value
           const prevGroup = i > 0 ? filtered[i - 1]?.group : undefined
           const header = o.group && o.group !== prevGroup ? o.group : null
           return (
-            <li key={o.value || `__opt-${i}`} role="presentation">
+            <li key={`${o.group ?? ''}\u0000${o.value || `__opt-${i}`}`} role="presentation">
               {header ? (
                 <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase lg:px-3 dark:text-slate-500">
                   {header}
@@ -375,23 +654,32 @@ export function SearchSelect({
               <button
                 type="button"
                 role="option"
+                tabIndex={-1}
+                data-option-index={i}
                 aria-selected={active}
-                disabled={o.disabled}
-                onMouseEnter={() => !o.disabled && setHighlight(i)}
+                disabled={o.disabled || (isCreate && creating)}
+                onMouseEnter={() => {
+                  if (o.disabled) return
+                  setHighlight(i)
+                  setCreateArmed(isCreate)
+                }}
+                onMouseDown={(event) => event.preventDefault()}
                 onClick={() => !o.disabled && choose(o.value)}
                 className={cn(
                   'flex h-12 w-full items-center gap-2.5 px-4 text-left text-[15px] transition-colors lg:h-9 lg:px-3 lg:text-sm',
+                  isCreate && 'border-t border-slate-100 text-teal-700 dark:border-slate-800 dark:text-teal-300',
                   o.disabled
                     ? 'cursor-not-allowed text-slate-300 dark:text-slate-600'
-                    : i === highlight
+                    : i === highlight && (!isCreate || createArmed)
                       ? 'bg-teal-50 dark:bg-teal-950/50'
                       : 'active:bg-slate-100 dark:active:bg-slate-700',
-                  !o.disabled &&
+                  !o.disabled && !isCreate &&
                     (active
                       ? 'font-medium text-teal-900 dark:text-teal-300'
                       : 'text-slate-700 dark:text-slate-200'),
                 )}
               >
+                {isCreate ? (creating ? <Loader2 size={15} className="shrink-0 animate-spin" /> : <Plus size={15} className="shrink-0" />) : null}
                 <span className="min-w-0 flex-1 truncate">
                   {o.label}
                   {o.hint ? (
@@ -414,17 +702,17 @@ export function SearchSelect({
           {t('noMatches')}
         </div>
       ) : null}
-      {loading || statusMessage || scanMessage ? (
+      {loading || statusMessage || scanMessage || createError ? (
         <div
-          role={scanFailed || statusTone === 'error' ? 'alert' : 'status'}
+          role={scanFailed || createError || statusTone === 'error' ? 'alert' : 'status'}
           className={cn(
             'border-t border-slate-100 px-3 py-2 text-xs dark:border-slate-800',
-            scanFailed || statusTone === 'error'
+            scanFailed || createError || statusTone === 'error'
               ? 'text-red-600 dark:text-red-400'
               : 'text-slate-500 dark:text-slate-400',
           )}
         >
-          {loading ? t('searching') : scanMessage ?? statusMessage}
+          {loading ? t('searching') : createError ?? scanMessage ?? statusMessage}
         </div>
       ) : null}
     </>
@@ -440,16 +728,21 @@ export function SearchSelect({
         <input
           ref={searchRef}
           value={query}
-          onKeyDown={scannerKeyDown}
+          onKeyDown={menuKeyDown}
           onChange={(e) => {
             const next = e.target.value
             setQuery(next)
             onSearchChange?.(next)
             setHighlight(0)
+            setCreateArmed(false)
+            setCreateError(null)
           }}
           placeholder={resolvedSearchPlaceholder}
           aria-label={resolvedSearchPlaceholder}
           aria-busy={loading || undefined}
+          aria-autocomplete="list"
+          autoComplete="off"
+          spellCheck={false}
           className={cn(
             'w-full rounded-lg border border-slate-200 bg-slate-50 pr-3 pl-9 transition outline-none focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20 dark:border-slate-800 dark:bg-slate-900 dark:focus:bg-slate-900',
             // 16px below sm — anything smaller makes iOS Safari zoom on focus.
@@ -460,6 +753,7 @@ export function SearchSelect({
       {scanResolver ? (
         <button
           type="button"
+          tabIndex={-1}
           aria-label={t('scan')}
           title={t('scan')}
           onClick={() => { searchRef.current?.focus(); setScanMessage(null); setScanFailed(false) }}
@@ -471,6 +765,7 @@ export function SearchSelect({
       {scanResolver && cameraAvailable ? (
         <button
           type="button"
+          tabIndex={-1}
           aria-label={t('scanCamera')}
           title={t('scanCamera')}
           disabled={cameraActive}
@@ -492,8 +787,10 @@ export function SearchSelect({
         ref={triggerRef}
         type="button"
         id={id}
-        onKeyDown={scannerKeyDown}
-        onClick={() => (open ? setOpen(false) : openMenu())}
+        autoFocus={autoFocus}
+        data-autofocus={dataAutofocus ? '' : undefined}
+        onKeyDown={triggerKeyDown}
+        onClick={() => (open ? close('trigger') : openMenu())}
         disabled={disabled}
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
@@ -557,7 +854,7 @@ export function SearchSelect({
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.15 }}
                     className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
-                    onClick={() => setOpen(false)}
+                    onClick={() => close('none')}
                   />
                   <motion.div
                     initial={{ y: '100%' }}
@@ -565,6 +862,7 @@ export function SearchSelect({
                     exit={{ y: '100%' }}
                     transition={{ type: 'spring', damping: 34, stiffness: 340, mass: 0.8 }}
                     className="absolute inset-x-0 bottom-0 flex max-h-[82vh] flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+                    onKeyDown={showSearch ? undefined : menuKeyDown}
                   >
                     <div className="flex items-center justify-center pt-2.5">
                       <span className="h-1.5 w-10 rounded-full bg-slate-300" />
@@ -575,7 +873,7 @@ export function SearchSelect({
                       </span>
                       <button
                         type="button"
-                        onClick={() => setOpen(false)}
+                        onClick={() => close('none')}
                         aria-label={tCommon('actions.close')}
                         className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                       >
@@ -583,7 +881,7 @@ export function SearchSelect({
                       </button>
                     </div>
                     {showSearch ? searchBox(true) : null}
-                    <div className="mt-1 min-h-0 flex-1 overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                    <div ref={listRef} className="mt-1 min-h-0 flex-1 overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                       {optionList}
                     </div>
                   </motion.div>

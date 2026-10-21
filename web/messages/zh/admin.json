@@ -4016,6 +4016,14 @@
         "title": "服务派工策略",
         "singularTitle": "服务派工策略版本",
         "description": "客户通知、按优先级的响应目标以及协议提前生成上门的范围，自某一日期起生效。"
+      },
+      "ap-capture-mailboxes": {
+        "title": "应付接收地址",
+        "description": "将通过电子邮件收到的账单转为某一法律实体采集记录的电子邮件地址。"
+      },
+      "ap-capture-autopost-policies": {
+        "title": "账单自动过账策略",
+        "description": "对近期账单均未经修改即被接受并过账的供应商，自动过账其采集的账单。"
       }
     },
     "fields": {
@@ -7989,6 +7997,42 @@
       "defaultVisitMinutes": "默认上门时长（分钟）",
       "agreementHorizonDays": "协议生成范围（天）",
       "agreementHorizonDaysHelp": "周期性协议提前生成上门的天数。"
+    },
+    "apCapture": {
+      "mailboxHelp": "将您的电子邮件服务商的入站 Webhook 指向此地址的 Webhook 地址。每个 PDF、图片或 XML 附件都会成为所选法律实体的一条采集记录。",
+      "policyHelp": "当供应商最近采集的每张账单均未经任何更正即被接受并随后过账，且没有任何一张被作废时，该供应商即获得信任。任何一次编辑或作废都会中断连续记录。审批 Flows 仍然适用，期间锁定或过账被拒时账单将保留为草稿。",
+      "providers": {
+        "postmark": "Postmark",
+        "mailgun": "Mailgun",
+        "sendgrid": "SendGrid",
+        "generic": "通用 JSON"
+      },
+      "fields": {
+        "label": "名称",
+        "emailAddress": "转发地址",
+        "provider": "电子邮件服务商",
+        "token": "Webhook 令牌",
+        "allowedSenders": "允许的发件人",
+        "signingSecret": "签名密钥",
+        "clearSigningSecret": "移除签名密钥",
+        "rotateToken": "签发新的 Webhook 地址",
+        "enabled": "已启用自动过账",
+        "cleanStreak": "所需无修改账单数",
+        "maxAmount": "每张账单最高金额",
+        "maxAmountCurrency": "最高金额币种"
+      },
+      "help": {
+        "subsidiaryId": "此地址收到的账单记入此法律实体。之后无法更改。",
+        "emailAddress": "供应商在您的电子邮件服务商处发送账单的目标地址。显示在采集页面上，并附有复制按钮。",
+        "provider": "Postmark、Mailgun 和 SendGrid 使用各自的格式发送；通用 JSON 接受文档中说明的 JSON 格式。",
+        "allowedSenders": "精确地址（ap@vendor.com）或整个域名（@vendor.com）。留空则接受任何发件人。",
+        "signingSecret": "Mailgun：Webhook 签名密钥。Postmark 和 SendGrid：Webhook 地址凭据中的密码。通用 JSON：用于 X-OpenBooks-Signature 的 HMAC 密钥。留空则保留已存储的密钥。",
+        "clearSigningSecret": "之后仅通过 Webhook 令牌验证投递。",
+        "rotateToken": "当前 Webhook 地址将立即失效。请在您的电子邮件服务商处更新为新地址。",
+        "enabled": "默认关闭。关闭时，每条采集都需等待审阅。",
+        "cleanStreak": "在该供应商的账单自动过账之前，需连续采集并均未经修改即被接受和过账的账单数量（2 至 20）。",
+        "maxAmount": "总额超过此金额的账单需等待审阅。其他币种的账单始终需要等待审阅。"
+      }
     }
   },
   "flows": {

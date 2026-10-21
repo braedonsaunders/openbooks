@@ -77,8 +77,10 @@ const REV0 = "2026-09-17T12:00:00.000000Z";
 const REV1 = "2026-09-17T12:00:01.000000Z";
 
 function buttonsNamed(name: string): HTMLButtonElement[] {
+  // A drawer that can also post labels its draft save "Save draft".
+  const names = name === "Save" ? ["Save", "Save draft"] : [name];
   return [...document.querySelectorAll("button")].filter(
-    (b) => b.textContent?.trim() === name,
+    (b) => names.includes(b.textContent?.trim() ?? ""),
   ) as HTMLButtonElement[];
 }
 

@@ -1,0 +1,102 @@
+{
+  "title": "Batch bill entry",
+  "description": "Key a stack of vendor bills on one grid, check them against control totals, and save or post them together.",
+  "back": "Bills",
+  "menuLabel": "Batch entry",
+  "helpLink": "How batch entry works",
+  "noTax": "No tax",
+  "createVendor": "Create vendor “{name}”",
+  "createVendorFailed": "The vendor could not be created.",
+  "keyboardHint": "Enter or Tab moves through a bill, and Tab past the last field starts the next one. F8 copies the field above. Paste rows from a spreadsheet, with a header row to match columns by name. Ctrl+S (⌘S) saves every bill as a draft.",
+  "keyboardHintPost": "Enter or Tab moves through a bill, and Tab past the last field starts the next one. F8 copies the field above. Paste rows from a spreadsheet, with a header row to match columns by name. Ctrl+S (⌘S) saves every bill as a draft; Ctrl+Enter (⌘Enter) posts them.",
+  "columns": {
+    "vendor": "Vendor",
+    "reference": "Vendor ref #",
+    "billDate": "Bill date",
+    "dueDate": "Due date",
+    "dueDateHelp": "Leave blank to use the vendor's payment terms. The status column shows the date the terms give.",
+    "account": "Account",
+    "memo": "Memo",
+    "amount": "Amount",
+    "tax": "Tax",
+    "status": "Status"
+  },
+  "control": {
+    "heading": "Control totals",
+    "subsidiary": "Subsidiary",
+    "count": "Number of bills",
+    "total": "Batch total",
+    "entered": "Entered: {count, plural, one {# bill} other {# bills}} · {total}",
+    "countMatched": "Bill count matches",
+    "countOff": "Bill count off by {difference, number}",
+    "countInvalid": "Enter the number of bills as a whole number",
+    "totalMatched": "Batch total matches",
+    "totalOff": "Batch total off by {difference}",
+    "totalInvalid": "Enter the batch total as an amount"
+  },
+  "actions": {
+    "saveAll": "Save all as drafts",
+    "postAll": "Post all",
+    "clearFinished": "Clear finished rows ({count, number})",
+    "addBill": "Add bill",
+    "progress": "Saving {done, number} of {total, number}…"
+  },
+  "shortcuts": {
+    "saveAll": "Save all bills as drafts",
+    "postAll": "Post all bills"
+  },
+  "status": {
+    "saving": "Saving…",
+    "saved": "Saved {number}",
+    "posted": "Posted {number}",
+    "pending": "{number} awaiting approval",
+    "termsDue": "Due {date} by terms",
+    "openExisting": "Open the existing bill"
+  },
+  "issues": {
+    "vendor": "Choose a vendor",
+    "billDate": "Enter the bill date",
+    "amountMissing": "Enter the amount",
+    "amountInvalid": "The amount is not a number",
+    "amountNotPositive": "Enter a positive amount; record a negative bill as a vendor credit",
+    "account": "Choose an account"
+  },
+  "duplicates": {
+    "badge": "Possible duplicate",
+    "inBatch": "Same vendor and vendor ref # as row {rows}",
+    "onFile": "Matches {number} dated {date}",
+    "title": "Possible duplicate bills",
+    "message": "{count, plural, one {# bill has} other {# bills have}} the same vendor and vendor ref # as another bill in this batch or already on file. Save anyway?",
+    "row": "Row {row}: {vendor}, {reference}",
+    "confirm": "Save anyway"
+  },
+  "refusals": {
+    "nothingToSave": "There are no unsaved bills in this batch.",
+    "rowsNeedAttention": "{count, plural, one {# bill needs} other {# bills need}} attention before anything is saved. {first}",
+    "rowIssue": "Row {row}: {issue}.",
+    "controlInvalid": "The control totals cannot be read. Enter the number of bills as a whole number and the batch total as an amount, or clear them.",
+    "controlCount": "The batch has {entered, plural, one {# bill} other {# bills}} but the control count is {control, number}. Find the missing or extra bill, or correct the control count.",
+    "controlTotal": "The bills total {entered}, which is {difference} {direction, select, over {more} other {less}} than the batch total. Correct the amounts or the batch total.",
+    "saveFailed": "The bill could not be saved.",
+    "unavailable": "The server could not be reached. The batch is kept; save again to retry, and bills already saved are not created twice.",
+    "conflict": "This row's bill may already have been saved with different details. Open the existing bill to check it, or duplicate the row to save it as a new bill.",
+    "refusedSummary": "{count, plural, one {# bill was not saved or posted} other {# bills were not saved or posted}}. The reason is shown on each row; correct it and save again.",
+    "defaultsFailed": "Vendor defaults could not be loaded. Choose the account on each bill."
+  },
+  "summary": {
+    "saved": "{count, plural, one {# bill saved as a draft} other {# bills saved as drafts}}",
+    "posted": "{posted, plural, one {# bill posted} other {# bills posted}}, {pending, number} awaiting approval"
+  },
+  "restore": {
+    "title": "Unsaved batch restored",
+    "body": "{count, plural, one {# unsaved bill} other {# unsaved bills}} from your last session {count, plural, one {was} other {were}} restored.",
+    "keep": "Keep",
+    "discard": "Discard",
+    "discardConfirm": "Discard the unsaved bills in this batch? This cannot be undone.",
+    "storageFailed": "This browser could not keep a copy of the batch. Save soon so no bills are lost."
+  },
+  "leave": {
+    "message": "This batch has bills that are not saved. They stay in this browser and come back when you reopen batch entry.",
+    "confirm": "Leave"
+  }
+}

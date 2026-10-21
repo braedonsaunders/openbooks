@@ -30,14 +30,18 @@ import type { DocumentDrawerPayloadScope } from './document-drawer-payload'
  */
 /**
  * Where a successful save lands: the saved record in view mode, a fresh
- * create form for the same kind, or the list the drawer opened from.
+ * create form for the same kind, or the list the drawer opened from. `post`
+ * and `postNew` continue the saved draft through submit and post (each with
+ * its own permission and refusals); an approval Flow that gates the record
+ * leaves it pending approval, exactly as Submit would.
  */
-export type DocumentSaveThen = 'view' | 'new' | 'close'
+export type DocumentSaveThen = 'view' | 'new' | 'close' | 'post' | 'postNew'
 
 export function buildDocumentDrawerCommands(
   scope: DocumentDrawerPayloadScope,
   { startFresh }: { startFresh?: () => void } = {},
 ) {
+  const tEntry = scope.tEntry
   const {
     isCreate,
     canCreate,
@@ -81,6 +85,11 @@ export function buildDocumentDrawerCommands(
     setPostWarnings,
     setMatchRefused,
     recordType,
+    canPost,
+    stashCarry,
+    controlMismatch,
+    controlDifference,
+    controlInvalid,
   } = scope
 
   // Confirm-before-save duplicate warning for new invoices and bills: a
@@ -101,7 +110,7 @@ export function buildDocumentDrawerCommands(
     if (config.kind === 'vendor_bill' && referenceNumber.trim()) {
       query.set('referenceNumber', referenceNumber.trim())
     }
-    let duplicates: { id: string; documentNumber: string }[] = []
+    let duplicates: { id: string; documentNumber: string; reason?: string }[] = []
     try {
       const response = await fetch(`/api/documents/duplicates?${query.toString()}`)
       if (!response.ok) return true
@@ -127,6 +136,8 @@ export function buildDocumentDrawerCommands(
         </>
       ),
       confirmLabel: t('drawer.duplicateConfirm'),
+      // A reflexive Enter must not book a second copy of a bill.
+      defaultAction: 'cancel',
     })
   }
 
@@ -198,6 +209,19 @@ export function buildDocumentDrawerCommands(
     // server names the line and refuses. Refuse up front with the grid
     // line named and keep every entered row in place — dropping the row
     // here used to book a total the operator never reviewed.
+    // A control total keyed from the vendor's document must equal the lines
+    // before anything saves; the difference is named so the clerk knows
+    // which way the lines are off.
+    if (controlInvalid) {
+      refuse(tEntry('controlTotal.invalid'), t('toasts.actionFailed'))
+      setSaveState('error')
+      return { outcome: 'aborted' as const }
+    }
+    if (controlMismatch && controlDifference !== null) {
+      refuse(tEntry('controlTotal.mismatch', { difference: money(controlDifference, { currency: doc.currency }) }), t('toasts.actionFailed'))
+      setSaveState('error')
+      return { outcome: 'aborted' as const }
+    }
     const missingAccount = findMissingAccountLine(rows)
     if (missingAccount) {
       refuse(t('drawer.lineMissingAccount', { line: missingAccount.lineNumber }), t('toasts.actionFailed'))
@@ -241,7 +265,8 @@ export function buildDocumentDrawerCommands(
    * remounts to drop the saved entries and the spent idempotency key.
    */
   function landAfterSave(then: DocumentSaveThen, recordHref: string) {
-    if (then === 'new' && freshFormHref) {
+    if ((then === 'new' || then === 'postNew') && freshFormHref) {
+      stashCarry()
       router.push(freshFormHref)
       if (isCreate) startFresh?.()
     } else if (then === 'close') {
@@ -250,6 +275,36 @@ export function buildDocumentDrawerCommands(
       router.push(recordHref)
     }
     router.refresh()
+  }
+
+  /**
+   * Continue a just-saved draft through submit and post. Each step runs the
+   * same command (and permission) as the record's own buttons. Returns where
+   * to land: a refusal keeps the clerk on the saved record with the reason
+   * pinned, so nothing is lost and nothing is silently skipped.
+   */
+  async function submitAndPostSaved(documentId: string, documentNumber: string): Promise<'posted' | 'pending' | 'refused'> {
+    const call = (action: 'submit' | 'post') => fetchAppAction('/api/documents/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, documentId }),
+    }, { fallback: t('toasts.actionFailed') })
+    const submitted = await call('submit')
+    if (!submitted.ok) {
+      refuse(submitted.error.serverMessage, t('toasts.actionFailed'))
+      return 'refused'
+    }
+    if ((submitted.data as { pendingApproval?: unknown } | null)?.pendingApproval === true) {
+      toast.success(tEntry('postAfterSave.pending', { number: documentNumber }))
+      return 'pending'
+    }
+    const posted = await call('post')
+    if (!posted.ok) {
+      refuse(posted.error.serverMessage, t('toasts.actionFailed'))
+      return 'refused'
+    }
+    toast.success(tEntry('postAfterSave.posted', { number: documentNumber }))
+    return 'posted'
   }
 
   const save = runExclusive(async (then: DocumentSaveThen = 'view') => {
@@ -293,11 +348,16 @@ export function buildDocumentDrawerCommands(
           fallbackMessage: t('toasts.actionFailed'),
           onOk: (payload) => {
             const saved = (payload as DocPayload).doc
+            const recordHref = `${basePath}?doc=${String(saved.id)}`
+            if (then === 'post' || then === 'postNew') {
+              postSavedThenLand(String(saved.id), String(saved.document_number ?? ''), then, recordHref)
+              return
+            }
             toast.success(t('toasts.saved', { documentNumber: String(saved.document_number ?? '') }))
             // Land on the persisted record in view mode: the changed drawer
             // id remounts clean, so Submit/Post is available at once instead
             // of needing a second save to leave the editing caption behind.
-            landAfterSave(then, `${basePath}?doc=${String(saved.id)}`)
+            landAfterSave(then, recordHref)
           },
           onRefused: (error) => {
             setSaveState(error.serverMessage === unavailableCopy ? 'unavailable' : 'error')
@@ -358,11 +418,16 @@ export function buildDocumentDrawerCommands(
           setSaveState('saved')
           setDirty(false)
           setMode('view')
+          const recordHref = hrefForDocument(String(data.doc.id), searchParams.get('form') ?? undefined)
+          if ((then === 'post' || then === 'postNew') && data.doc.status === 'draft') {
+            postSavedThenLand(String(data.doc.id), String(data.doc.document_number ?? ''), then, recordHref)
+            return
+          }
           toast.success(t('toasts.saved', { documentNumber: String(data.doc.document_number ?? '') }))
           // The save consumes the explicit edit request: landing on the
           // mode-less record URL keeps a later reload in view mode instead
           // of resurrecting the editing caption with nothing to save.
-          landAfterSave(then, hrefForDocument(String(data.doc.id), searchParams.get('form') ?? undefined))
+          landAfterSave(then === 'post' ? 'view' : then === 'postNew' ? 'new' : then, recordHref)
         },
         onRefused: (error) => {
           // A save refusal stays on the record, not only in a toast:
@@ -374,6 +439,22 @@ export function buildDocumentDrawerCommands(
       },
     )
   })
+
+  /** After a save that asked to post: run the lifecycle, then land. */
+  function postSavedThenLand(documentId: string, documentNumber: string, then: 'post' | 'postNew', recordHref: string) {
+    void submitAndPostSaved(documentId, documentNumber).then((outcome) => {
+      // A refused post stays on the saved draft so the pinned reason is read.
+      if (outcome === 'refused') {
+        router.push(recordHref)
+        router.refresh()
+        return
+      }
+      landAfterSave(then === 'postNew' ? 'new' : 'view', recordHref)
+    })
+  }
+
+  /** Posting from the drawer is offered where the record could be posted directly after saving. */
+  const canSaveAndPost = canPost && config.kind !== 'project_charge' && config.directPost !== true
 
   // A dirty editor never closes silently: the X button (via beforeClose) and
   // Cancel both ask first, so typed work survives a stray click.
@@ -643,6 +724,7 @@ export function buildDocumentDrawerCommands(
 
   return {
     save,
+    canSaveAndPost,
     freshFormHref,
     confirmDiscard,
     cancelWithConfirm,

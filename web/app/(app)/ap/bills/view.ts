@@ -103,7 +103,7 @@ export interface ApBillsData {
   /** Loader-resolved post capability, threaded into the row actions so a
    *  preparer never sees an enabled Post (the drawer reads the same value). */
   canPost: boolean
-  newItems: { kind: string; label: string }[]
+  newItems: { kind: string; label: string; href?: string }[]
   newBasePath: string
   newTriggerLabel: string
   drawerOpen: boolean
@@ -128,9 +128,12 @@ export async function loadApBills(
   // ?doc= must never bind to a uuid column and render a 500.
   const docId = rawDocId === 'new' || (typeof rawDocId === 'string' && isUuid(rawDocId)) ? rawDocId : undefined
 
+  const tBatch = await getTranslations('batchEntry')
   const newItems = [
     { kind: 'vendor_bill', label: t('actions.newBill') },
     { kind: 'vendor_credit', label: t('actions.newCredit') ?? t('actions.newBill') },
+    // Many bills keyed on one grid, saved through the same create path.
+    { kind: 'vendor_bill', label: tBatch('menuLabel'), href: '/ap/bills/batch' },
   ]
 
   // Drawer + form layout resolve only when a flyout is open.

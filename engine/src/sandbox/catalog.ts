@@ -99,6 +99,8 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
  * logs (would carry production PII/history), and the org row itself (created
  * explicitly by the clone). */
 export const EXCLUDE = new Set([
+  // AP inbound mailboxes: live webhook tokens, sealed provider secrets and the delivery log stay with their source.
+  "ap_capture_mailboxes", "ap_capture_mailbox_credentials", "ap_capture_inbound_messages",
   // Exactly-once API responses and request identities never cross environment boundaries.
   "application_idempotency_keys",
   // Scheduled source instructions and reminder-producing policies are environment-specific.

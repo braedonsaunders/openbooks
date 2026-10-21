@@ -646,7 +646,9 @@
     "saveState": {
       "saved": "All changes saved",
       "error": "Save failed — fix and retry",
-      "dirty": "Unsaved changes…"
+      "dirty": "Unsaved changes…",
+      "unavailable": "Server or connection failed — entries kept, retry",
+      "unavailableDetail": "The server or connection failed before the save was confirmed. Your entries are still here — retry the save."
     },
     "deleteTitle": "Delete this document?",
     "deleteDraftBody": "This permanently deletes the draft. This cannot be undone.",

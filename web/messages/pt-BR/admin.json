@@ -4016,6 +4016,14 @@
         "title": "Política de despacho de serviço",
         "singularTitle": "Versão da política de despacho",
         "description": "Avisos ao cliente, metas de resposta por prioridade e horizonte de geração de visitas dos contratos, vigente a partir de uma data."
+      },
+      "ap-capture-mailboxes": {
+        "title": "Endereços de recebimento de contas a pagar",
+        "description": "Endereços de e-mail que transformam faturas recebidas por e-mail em capturas para uma entidade jurídica."
+      },
+      "ap-capture-autopost-policies": {
+        "title": "Política de lançamento automático de faturas",
+        "description": "Lançar automaticamente faturas capturadas de fornecedores cujas faturas recentes foram aceitas sem alterações e lançadas."
       }
     },
     "fields": {
@@ -7989,6 +7997,42 @@
       "defaultVisitMinutes": "Duração padrão da visita (minutos)",
       "agreementHorizonDays": "Horizonte dos contratos (dias)",
       "agreementHorizonDaysHelp": "Com quanta antecedência os contratos recorrentes geram suas visitas."
+    },
+    "apCapture": {
+      "mailboxHelp": "Aponte o webhook de entrada do seu provedor de e-mail para a URL do webhook deste endereço. Cada anexo PDF, de imagem ou XML se torna uma captura para a entidade jurídica escolhida.",
+      "policyHelp": "Um fornecedor conquista confiança quando cada uma das suas faturas capturadas mais recentes foi aceita sem nenhuma correção e depois lançada, sem nenhuma estornada. Uma única edição ou estorno encerra a sequência. Os Flows de aprovação continuam se aplicando, e bloqueios de período ou recusas de lançamento mantêm a fatura como rascunho.",
+      "providers": {
+        "postmark": "Postmark",
+        "mailgun": "Mailgun",
+        "sendgrid": "SendGrid",
+        "generic": "JSON genérico"
+      },
+      "fields": {
+        "label": "Nome",
+        "emailAddress": "Endereço de encaminhamento",
+        "provider": "Provedor de e-mail",
+        "token": "Token do webhook",
+        "allowedSenders": "Remetentes permitidos",
+        "signingSecret": "Segredo de assinatura",
+        "clearSigningSecret": "Remover o segredo de assinatura",
+        "rotateToken": "Emitir uma nova URL de webhook",
+        "enabled": "Lançamento automático ativado",
+        "cleanStreak": "Faturas sem correções exigidas",
+        "maxAmount": "Valor máximo por fatura",
+        "maxAmountCurrency": "Moeda do valor máximo"
+      },
+      "help": {
+        "subsidiaryId": "As faturas recebidas neste endereço são registradas nesta entidade jurídica. Isso não pode ser alterado depois.",
+        "emailAddress": "O endereço no seu provedor de e-mail para o qual os fornecedores enviam faturas. Exibido na página de captura com um botão de copiar.",
+        "provider": "Postmark, Mailgun e SendGrid enviam seus próprios formatos; JSON genérico aceita o formato JSON documentado.",
+        "allowedSenders": "Endereços exatos (ap@vendor.com) ou domínios inteiros (@vendor.com). Deixe em branco para aceitar qualquer remetente.",
+        "signingSecret": "Mailgun: a chave de assinatura do webhook. Postmark e SendGrid: a senha nas credenciais da URL do webhook. JSON genérico: a chave HMAC para X-OpenBooks-Signature. Deixe em branco para manter o segredo armazenado.",
+        "clearSigningSecret": "As entregas passam a ser autenticadas apenas pelo token do webhook.",
+        "rotateToken": "A URL atual do webhook para de funcionar imediatamente. Atualize seu provedor de e-mail com a nova.",
+        "enabled": "Desativado por padrão. Quando desativado, toda captura aguarda revisão.",
+        "cleanStreak": "Faturas capturadas consecutivas do fornecedor, cada uma aceita sem alterações e lançada, antes que suas faturas sejam lançadas automaticamente (2 a 20).",
+        "maxAmount": "Faturas com total acima deste valor aguardam revisão. Uma fatura em outra moeda sempre aguarda revisão."
+      }
     }
   },
   "flows": {

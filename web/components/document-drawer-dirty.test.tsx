@@ -141,8 +141,10 @@ async function mountDraftInvoice(initialMode?: 'view' | 'edit') {
 }
 
 function buttonsNamed(name: string): HTMLButtonElement[] {
+  // A drawer that can also post labels its draft save "Save draft".
+  const names = name === "Save" ? ["Save", "Save draft"] : [name];
   return [...document.querySelectorAll("button")].filter(
-    (b) => b.textContent?.trim() === name,
+    (b) => names.includes(b.textContent?.trim() ?? ""),
   ) as HTMLButtonElement[];
 }
 

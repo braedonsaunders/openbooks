@@ -6,6 +6,7 @@ import { useDocumentDrawerScope } from './document-drawer-scope'
 import { useDocumentDrawerDefaults } from './document-drawer-defaults'
 import { useDocumentDrawerDistribution } from './document-drawer-distribution'
 import { useDocumentDrawerPickers } from './document-drawer-pickers'
+import { useDocumentDrawerEntry } from './document-drawer-entry'
 import { useDocumentDrawerPayload } from './document-drawer-payload'
 import { buildDocumentDrawerCommands } from './document-drawer-commands'
 import { useDocumentDrawerColumns } from './document-drawer-columns'
@@ -77,7 +78,8 @@ function DocumentDrawerForm({ drawerProps: props, startFresh }: { drawerProps: D
   const withDefaults = { ...scope, ...useDocumentDrawerDefaults(scope) }
   const withDistribution = { ...withDefaults, ...useDocumentDrawerDistribution(withDefaults) }
   const withPickers = { ...withDistribution, ...useDocumentDrawerPickers(withDistribution) }
-  const withPayload = { ...withPickers, ...useDocumentDrawerPayload(withPickers) }
+  const withEntry = { ...withPickers, ...useDocumentDrawerEntry(withPickers) }
+  const withPayload = { ...withEntry, ...useDocumentDrawerPayload(withEntry) }
   const withCommands = { ...withPayload, ...buildDocumentDrawerCommands(withPayload, { startFresh }) }
   const withColumns = { ...withCommands, ...useDocumentDrawerColumns(withCommands) }
   const drawer = { ...withColumns, ...useDocumentDrawerHeader(withColumns) }

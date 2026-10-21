@@ -8,6 +8,10 @@ import { withOrgContext } from "../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { db } from "../platform/db.ts";
 import { processCaptureItem } from "../payables/ap-capture-service.ts";
+import { registerCaptureBillPoster } from "../payables/ap-capture-autopost.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
+import { controlDeps } from "../ledger/document-service.ts";
 
 /**
  * Resolve the job's subsidiary scope: the enqueue-time capture when present,
@@ -27,6 +31,14 @@ async function scopeForCaptureJob(
 }
 
 export function createApCaptureWorker(): Worker<ApCaptureJobData> {
+  // Earned auto-post books through the ledger's own posting command, with the
+  // policy named as the audit source; effects run after the commit as for
+  // every other automated post.
+  registerCaptureBillPoster({
+    post: async ({ orgId, documentId, actorId }) =>
+      postDocument(documentId, await controlDeps(orgId), { deferEffects: true, audit: { actorId, source: "automation" } }),
+    afterCommit: (documentId) => runPostDocumentEffects(documentId, "draft"),
+  });
   return new Worker<ApCaptureJobData>(
     AP_CAPTURE_QUEUE,
     async (job) => {

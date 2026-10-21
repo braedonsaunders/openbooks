@@ -8,7 +8,7 @@ import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFro
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { isDocumentRevisionToken } from '@/lib/api/registry-data'
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type FocusEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { formatCivilDate } from '../../../lib/format'
@@ -54,6 +54,7 @@ import {
   type HeaderFieldPlacement,
 } from '@openbooks/customization'
 import { DateField } from '@/components/date-field'
+import { FormShortcuts } from '@/components/shortcuts/form-shortcuts'
 type Opt = {
   id: string
   display_name?: string
@@ -65,6 +66,8 @@ interface SubsidiaryOpt {
   name: string
   /** Root = 0; used to indent the picker like a tree. */
   depth: number
+  /** The entity's functional currency; a journal in any other currency is foreign. */
+  baseCurrency?: string
 }
 interface SegmentOpt {
   key: string
@@ -82,7 +85,14 @@ interface LineRow extends Record<string, unknown> {
   subsidiaryId: string
   debit: string
   credit: string
+  /** Side the drawer filled with a suggested balancing amount, while untouched. */
+  autoBalance?: AmountSide
+  /** The suggested amount; any edit to that side makes it the operator's own value. */
+  autoBalanceValue?: string
 }
+type AmountSide = 'debit' | 'credit'
+/** Where the operator lands after a successful save. */
+type SaveThen = 'view' | 'new' | 'close'
 interface JournalPayload {
   doc: Record<string, unknown>
   lines: Record<string, unknown>[]
@@ -247,6 +257,152 @@ export function findMissingJournalAccountLine(
   return null
 }
 
+type BalanceableRow = Record<string, unknown> & { autoBalance?: AmountSide; autoBalanceValue?: string }
+
+function blankAmount(value: unknown): boolean {
+  return value == null || (typeof value === 'string' && value.trim() === '')
+}
+
+/** Two amount texts name the same exact figure ("100.00" and "100.0000" do). */
+function sameAmount(a: unknown, b: unknown): boolean {
+  if (blankAmount(a) || blankAmount(b)) return blankAmount(a) && blankAmount(b)
+  const left = journalAmountUnits(a)
+  return left !== null && left === journalAmountUnits(b)
+}
+
+/** An amount as an operator would type it: ledger-scale zeroes past the cents dropped. */
+function entryText(amount: string): string {
+  const match = /^(-?\d+)\.(\d{2})(\d*)$/.exec(amount)
+  if (!match) return amount
+  const extra = match[3]!.replace(/0+$/, '')
+  return `${match[1]}.${match[2]}${extra}`
+}
+
+/** The row still holds the balancing amount the drawer suggested on `side`. */
+function holdsSuggestion(row: BalanceableRow, side: AmountSide): boolean {
+  return row.autoBalance === side && row.autoBalanceValue != null && sameAmount(row[side], row.autoBalanceValue)
+}
+
+/** True while the row's amount is still the balancing amount the drawer suggested and nobody edited it. */
+export function isUntouchedBalanceSuggestion(row: BalanceableRow): boolean {
+  const side = row.autoBalance
+  if (side !== 'debit' && side !== 'credit') return false
+  if (!holdsSuggestion(row, side)) return false
+  const other: AmountSide = side === 'debit' ? 'credit' : 'debit'
+  return blankAmount(row[other])
+}
+
+/**
+ * The amount and side that bring the entry level once placed on row
+ * `index`, computed from every other row in exact numeric(19,4) units. Null
+ * when the other rows already balance or any of them carries an amount that
+ * does not parse: a suggestion is never derived from unreadable input.
+ */
+export function balancingLeg(
+  rows: readonly Record<string, unknown>[],
+  index: number,
+): { side: AmountSide; amount: string } | null {
+  let total = 0n
+  for (let i = 0; i < rows.length; i++) {
+    if (i === index) continue
+    const signed = journalLineUnits(rows[i]!.debit, rows[i]!.credit)
+    if (signed === null) return null
+    total += signed
+  }
+  if (total === 0n) return null
+  return total > 0n
+    ? { side: 'credit', amount: formatJournalAmount(total) }
+    : { side: 'debit', amount: formatJournalAmount(-total) }
+}
+
+/**
+ * Pre-enter the balancing amount on a line without amounts. A row whose
+ * debit and credit are both empty (its account and description may already
+ * be chosen) or that still holds an untouched suggestion is filled, so an
+ * amount the operator typed is never replaced.
+ * The suggestion is an ordinary amount: it posts like a typed one, and
+ * editing it makes it the operator's own. Returns `rows` unchanged when
+ * there is nothing to suggest.
+ */
+export function suggestBalancingLine<Row extends BalanceableRow>(rows: Row[], index: number): Row[] {
+  const row = rows[index]
+  if (!row) return rows
+  const untouched = isUntouchedBalanceSuggestion(row)
+  if (!untouched && !(blankAmount(row.debit) && blankAmount(row.credit))) return rows
+  const leg = balancingLeg(rows, index)
+  if (!leg) {
+    if (!untouched) return rows
+    // The rest of the entry balances now: a stale suggestion would unbalance it.
+    return rows.map((r, i) => (i === index ? { ...r, debit: '', credit: '', autoBalance: undefined, autoBalanceValue: undefined } : r))
+  }
+  if (untouched && row.autoBalance === leg.side && sameAmount(row[leg.side], leg.amount)) return rows
+  return rows.map((r, i) =>
+    i === index
+      ? {
+          ...r,
+          debit: leg.side === 'debit' ? leg.amount : '',
+          credit: leg.side === 'credit' ? leg.amount : '',
+          autoBalance: leg.side,
+          autoBalanceValue: leg.amount,
+        }
+      : r,
+  )
+}
+
+/**
+ * The explicit Balance action: put the remaining difference on row `index`,
+ * replacing that row's own amount. Clears the row's amount when the other
+ * rows already balance; leaves the rows unchanged when any other amount is
+ * unreadable.
+ */
+export function balanceLineAt<Row extends BalanceableRow>(rows: Row[], index: number): Row[] {
+  const row = rows[index]
+  if (!row) return rows
+  for (let i = 0; i < rows.length; i++) {
+    if (i !== index && journalLineUnits(rows[i]!.debit, rows[i]!.credit) === null) return rows
+  }
+  const leg = balancingLeg(rows, index)
+  return rows.map((r, i) =>
+    i === index
+      ? {
+          ...r,
+          debit: leg?.side === 'debit' ? leg.amount : '',
+          credit: leg?.side === 'credit' ? leg.amount : '',
+          autoBalance: undefined,
+          autoBalanceValue: undefined,
+        }
+      : r,
+  )
+}
+
+/**
+ * Whether the optional header settings hold anything but their defaults:
+ * the "More options" disclosure opens for these so a stored value is never
+ * hidden behind a closed section.
+ */
+export function journalOptionsAreNonDefault(input: {
+  journalMode: string
+  currency: string
+  defaultCurrency: string | null
+  fxRate: string
+  reverseOn: string
+  partyId: string
+  accountingBookId: string
+}): boolean {
+  if (input.journalMode !== 'monetary') return true
+  if (input.currency.trim() !== '' && input.defaultCurrency && input.currency.trim().toUpperCase() !== input.defaultCurrency.toUpperCase()) return true
+  const rate = input.fxRate.trim()
+  if (rate !== '' && !/^\+?0*1(\.0*)?$/.test(rate)) return true
+  return input.reverseOn !== '' || input.partyId !== '' || input.accountingBookId !== ''
+}
+
+/** The unsaved-create URL for a fresh journal, carrying the entry date forward when one is set. */
+export function freshJournalHref(returnHref: string, entryDate: string): string {
+  const separator = returnHref.includes('?') ? '&' : '?'
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(entryDate) ? `&entryDate=${entryDate}` : ''
+  return `${returnHref}${separator}entryNew=1&mode=edit${date}`
+}
+
 /** Line text columns are uuids/text-or-null. */
 function lineText(v: unknown): string {
   return typeof v === 'string' ? v : v == null ? '' : String(v)
@@ -326,9 +482,28 @@ export async function saveJournalDraft(input: JournalDraftSaveInput): Promise<Fe
   return { status: 'saved', saved: outcome.data as JournalPayload, revision: outcome.revision }
 }
 
-/** Each journal owns its editor state and revision baseline. */
-export function JournalDrawer(props: Parameters<typeof JournalDrawerBody>[0]) {
-  return <JournalDrawerBody key={`${props.ledgerSnapshot ? 'ledger' : 'document'}:${String(props.journal.doc.id)}`} {...props} />
+type JournalDrawerProps = Omit<Parameters<typeof JournalDrawerBody>[0], 'onStartFresh'>
+
+/**
+ * Each journal owns its editor state and revision baseline. An unsaved
+ * create that saves (or posts) and starts the next journal keeps the same
+ * URL shape, so the editor remounts here with a fresh idempotency key, blank
+ * lines and the entry date carried forward.
+ */
+export function JournalDrawer(props: JournalDrawerProps) {
+  const [fresh, setFresh] = useState<{ generation: number; date: string } | null>(null)
+  if (fresh && !props.createMode) setFresh(null)
+  const journal = fresh && props.createMode
+    ? { ...props.journal, doc: { ...props.journal.doc, document_date: fresh.date || props.journal.doc.document_date } }
+    : props.journal
+  return (
+    <JournalDrawerBody
+      key={`${props.ledgerSnapshot ? 'ledger' : 'document'}:${String(props.journal.doc.id)}:${fresh?.generation ?? 0}`}
+      {...props}
+      journal={journal}
+      onStartFresh={(date) => setFresh((current) => ({ generation: (current?.generation ?? 0) + 1, date }))}
+    />
+  )
 }
 
 function JournalDrawerBody({
@@ -357,6 +532,8 @@ function JournalDrawerBody({
   canPost,
   historicalTranslationSources,
   closeHref,
+  canCreate = false,
+  onStartFresh,
 }: {
   journal: JournalPayload
   initialMode?: DrawerMode
@@ -401,13 +578,21 @@ function JournalDrawerBody({
   /** List return URL — Cancel/close land here, and a successful Save opens
    *  the created journal over it. */
   closeHref?: string
+  /**
+   * The viewer may open a new unsaved journal (gl.post with at least one
+   * subsidiary in scope). Save & new and Post & new are offered only then.
+   */
+  canCreate?: boolean
+  /** Restart an unsaved create in place, keeping the given entry date. */
+  onStartFresh: (entryDate: string) => void
 }) {
-  const { money } = useMoney()
+  const { money, currency: orgCurrency } = useMoney()
   const t = useTranslations('journal.drawer')
   const tHistorical = useTranslations('journal.historicalTranslation')
   const tNew = useTranslations('journal.newButton')
   const tAmortization = useTranslations('amortization.billLine')
   const tc = useTranslations('common')
+  const tEntry = useTranslations('entry')
   const locale = useLocale()
   const router = useRouter()
   const propsDoc = asJournalDoc(journal.doc)
@@ -439,6 +624,11 @@ function JournalDrawerBody({
   const editable = mode === 'edit' && canEditStatus
   const returnHref = closeHref ?? '/journal'
   const requestIdRef = useRef<string | null>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+  /** The grid line the operator last worked in: the target of the Balance action. */
+  const focusedRowRef = useRef<number | null>(null)
+  /** A suggestion being entered through the focused amount cell. */
+  const pendingSuggestion = useRef<{ index: number; side: AmountSide; row: LineRow } | null>(null)
 
   const [journalMode, setJournalMode] = useState<string>(String(doc.journal_mode ?? 'monetary'))
   const [currency, setCurrency] = useState<string>(doc.currency)
@@ -460,7 +650,7 @@ function JournalDrawerBody({
   // Saves, posts, deletes and voids run on the shared action path: a
   // refusal pins until the next action AND toasts,
   // and busy always releases through the package's finally.
-  const { busy, refusal, execute, clearRefusal, refuse } = useAppAction()
+  const { busy, refusal, execute, clearRefusal, refuse, runExclusive } = useAppAction()
   // A posted-with-warnings post pins here: the entry IS posted,
   // but its party-less control legs sit outside every subledger, so the
   // drawer keeps saying so until the next action (same rule as refusals).
@@ -479,17 +669,38 @@ function JournalDrawerBody({
   const subsidiaryName = (id: unknown): string =>
     id ? ((subsidiaries ?? []).find((s) => s.id === id)?.name ?? '—') : rootSubsidiaryName
 
-  /** Each row carries exactly one side: entering one clears the other. */
+  /**
+   * Each row carries exactly one side: entering one clears the other. An
+   * edited suggestion becomes the operator's own amount. A blank line the
+   * grid appends (Enter on the last line, Add line) arrives pre-entered with
+   * the amount that balances the entry, so a two-line journal is one
+   * account pick and Enter away from level.
+   */
   function handleRowsChange(next: LineRow[]) {
-    setRows(
-      next.map((r, i) => {
-        const prev = rows[i]
-        if (!prev) return r
-        if (r.debit !== prev.debit && r.debit !== '') return { ...r, credit: '' }
-        if (r.credit !== prev.credit && r.credit !== '') return { ...r, debit: '' }
-        return r
-      }),
-    )
+    const previous = new Set(rows)
+    // The appended line is the one new, entirely blank row (rows the grid
+    // re-created to fold in a pending edit carry that edit).
+    const appended = next.length === rows.length + 1
+      ? next.flatMap((row, index) => (!previous.has(row) && isBlankJournalLine(row) && blankAmount(row.debit) && blankAmount(row.credit) ? [index] : []))
+      : []
+    const entering = pendingSuggestion.current
+    let settled = next.map((r, i) => {
+      // The drawer's own suggestion arriving through the focused cell keeps
+      // its suggestion marker.
+      if (entering && entering.index === i && sameAmount(r[entering.side], entering.row[entering.side])) return entering.row
+      const prev = rows[i]
+      let row = r
+      if (prev) {
+        if (r.debit !== prev.debit && r.debit !== '') row = { ...r, credit: '' }
+        else if (r.credit !== prev.credit && r.credit !== '') row = { ...r, debit: '' }
+      }
+      if (row.autoBalance && !holdsSuggestion(row, row.autoBalance)) {
+        row = { ...row, autoBalance: undefined, autoBalanceValue: undefined }
+      }
+      return row
+    })
+    if (appended.length === 1 && !statistical && !ledgerSnapshot) settled = suggestBalancingLine(settled, appended[0]!)
+    setRows(settled)
   }
 
   // Exact bigint totals at 4dp scale. Unparseable input fails closed: it never
@@ -737,9 +948,33 @@ function JournalDrawerBody({
     return true
   }
 
-  async function saveNew() {
+  // Unparseable amounts never reach the payload builder as a smaller
+  // journal: Save refuses while any amount is unreadable, whichever path
+  // (button or keyboard) asked for it.
+  const refuseInvalidAmounts = (): boolean => {
+    if (!hasInvalidAmounts) return false
+    refuse(t('invalidAmounts'), t('postFailed'))
+    setSaveState('error')
+    return true
+  }
+
+  /** Open the next unsaved journal on the same entry date. */
+  function startNextJournal(entryDate: string) {
+    const href = freshJournalHref(returnHref, entryDate)
+    if (createMode) {
+      // Same URL shape: remount the editor in place instead of relying on
+      // a navigation that would keep this session's state and key.
+      onStartFresh(entryDate)
+      router.replace(href as never)
+    } else {
+      router.push(href as never)
+    }
+  }
+
+  async function saveNew(then: SaveThen) {
     if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
-    if (refuseMissingAccount()) return
+    if (refuseMissingAccount() || refuseInvalidAmounts()) return
+    const entryDate = documentDate
     setSaveState('saving')
     const ok = await execute(
       async () => {
@@ -761,11 +996,18 @@ function JournalDrawerBody({
       {
         fallbackMessage: t('postFailed'),
         onOk: (data) => {
-          const createdId = (data as { doc: { id: string } }).doc.id
+          const created = (data as { doc: { id: string; document_number?: unknown } }).doc
           setSaveState('saved')
           setDirty(false)
-          const separator = returnHref.includes('?') ? '&' : '?'
-          router.replace(`${returnHref}${separator}entry=${createdId}` as never)
+          if (then === 'new' || then === 'close') {
+            // The created journal is not on screen: name it.
+            toast.success(t('savedNumbered', { number: typeof created.document_number === 'string' ? created.document_number : '' }))
+            if (then === 'new') startNextJournal(entryDate)
+            else router.push(returnHref as never)
+          } else {
+            const separator = returnHref.includes('?') ? '&' : '?'
+            router.replace(`${returnHref}${separator}entry=${created.id}` as never)
+          }
           router.refresh()
         },
         onRefused: () => {
@@ -778,12 +1020,18 @@ function JournalDrawerBody({
     if (ok) router.refresh()
   }
 
-  async function save() {
+  /**
+   * Explicit save. `then` names where the operator goes next: stay on the
+   * saved journal, open a fresh one on the same date, or close the drawer.
+   * Guarded against re-entry so a held shortcut cannot send the write twice.
+   */
+  const save = runExclusive(async (then: SaveThen = 'view') => {
     if (createMode) {
-      await saveNew()
+      await saveNew(then)
       return
     }
-    if (refuseMissingAccount()) return
+    if (refuseMissingAccount() || refuseInvalidAmounts()) return
+    const entryDate = documentDate
     setSaveState('saving')
     if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
     const revision = documentRevisionRef.current
@@ -828,6 +1076,8 @@ function JournalDrawerBody({
           setSaveState('saved')
           setDirty(false)
           setMode('view')
+          if (then === 'new') startNextJournal(entryDate)
+          else if (then === 'close') router.push(returnHref as never)
         },
         onRefused: () => {
           setSaveState('error')
@@ -835,7 +1085,7 @@ function JournalDrawerBody({
       },
     )
     if (ok) router.refresh()
-  }
+  })
 
   function cancel() {
     // Unsaved-create Cancel writes nothing: there is no persisted row to
@@ -852,6 +1102,88 @@ function JournalDrawerBody({
     setMode('view')
   }
 
+  /** The post action's answer: approval routing plus any posted-with-warnings advisories. */
+  type PostResponse = {
+    pendingApproval?: boolean
+    warnings?: (
+      | { code: 'partyless_control_lines'; accounts: { accountNumber: string | null; accountName: string }[] }
+      | {
+          code: 'budgetary_control_advisory'
+          overages: {
+            scenarioName: string
+            accountNumber: string
+            accountName: string
+            fundCode: string
+            fundName: string
+            subsidiaryName: string
+            departmentName: string | null
+            projectName: string | null
+            locationName: string | null
+            className: string | null
+            extraDims: Record<string, unknown>
+            available: string
+            amountOver: string
+          }[]
+        }
+      | { code: string }
+    )[]
+  }
+
+  /** Operator copy for every advisory a successful post reported. */
+  function postWarningMessages(posted: PostResponse): string[] {
+    const pinned: string[] = []
+    const partyless = (posted.warnings ?? []).find((w) => w.code === 'partyless_control_lines')
+    if (partyless && 'accounts' in partyless && partyless.accounts.length > 0) {
+      pinned.push(
+        t('partylessControlWarning', {
+          accounts: partyless.accounts.map((a) => `${a.accountNumber ?? ''} ${a.accountName}`.trim()).join(', '),
+        }),
+      )
+    }
+    // Advisory budgetary-control overages post legitimately: the entry
+    // IS posted, and each overage pins here with its remedy instead of
+    // accepting the journal silently. Hard control still refuses
+    // pre-commit and never reaches this response.
+    const advisory = (posted.warnings ?? []).find((w) => w.code === 'budgetary_control_advisory')
+    if (advisory && 'overages' in advisory) {
+      for (const overage of advisory.overages) {
+        // Every applicable named dimension stays visible: names that
+        // do not apply are omitted rather than rendered blank.
+        const dimensionNames = [
+          overage.departmentName,
+          overage.projectName,
+          overage.locationName,
+          overage.className,
+          ...Object.keys(overage.extraDims ?? {})
+            .filter((key) => key !== 'fund' && ['string', 'number', 'boolean'].includes(typeof (overage.extraDims as Record<string, unknown>)[key]))
+            .sort()
+            .map((key) => `${key}: ${String((overage.extraDims as Record<string, unknown>)[key])}`),
+        ].filter((name): name is string => !!name)
+        pinned.push(
+          `${t('budgetaryControlWarning', {
+            scenario: overage.scenarioName,
+            account: `${overage.accountNumber} ${overage.accountName}`.trim(),
+            fund: `${overage.fundCode} ${overage.fundName}`.trim(),
+            subsidiary: overage.subsidiaryName,
+            dimensions: dimensionNames.length > 0 ? ` (${dimensionNames.join(' · ')})` : '',
+            available: overage.available,
+            amountOver: overage.amountOver,
+          })} ${t('budgetaryControlRemedy')}`,
+        )
+      }
+    }
+    return pinned
+  }
+
+  /** The one post request: the journal action route with the exact revision fence. */
+  function requestPost(documentId: string, expectedUpdatedAt: string) {
+    return fetchAppAction('/api/journals/actions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'post', documentId, expectedUpdatedAt }),
+    }, { fallback: t('postFailed') })
+  }
+
   async function post() {
     setPostWarnings([])
     // Post fences on the revision this editor holds: the token the last save
@@ -864,40 +1196,11 @@ function JournalDrawerBody({
       return
     }
     const ok = await execute(
-      () =>
-        fetchAppAction('/api/journals/actions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'post', documentId: doc.id, expectedUpdatedAt: postRevision }),
-        }, { fallback: t('postFailed') }),
+      () => requestPost(String(doc.id), postRevision),
       {
         fallbackMessage: t('postFailed'),
         onOk: async (data) => {
-          const posted = data as {
-            pendingApproval?: boolean
-            warnings?: (
-              | { code: 'partyless_control_lines'; accounts: { accountNumber: string | null; accountName: string }[] }
-              | {
-                  code: 'budgetary_control_advisory'
-                  overages: {
-                    scenarioName: string
-                    accountNumber: string
-                    accountName: string
-                    fundCode: string
-                    fundName: string
-                    subsidiaryName: string
-                    departmentName: string | null
-                    projectName: string | null
-                    locationName: string | null
-                    className: string | null
-                    extraDims: Record<string, unknown>
-                    available: string
-                    amountOver: string
-                  }[]
-                }
-              | { code: string }
-            )[]
-          }
+          const posted = data as PostResponse
           // Posting commits a new documents.revision_seq (migration 0167 bumps it
           // on EVERY update): re-pin the canonical token now, or the next fenced
           // write in this session (void) 409s on the pre-post revision. The
@@ -913,52 +1216,168 @@ function JournalDrawerBody({
               })
           if (posted.pendingApproval) toast.success(tc('actions.submitForApproval'))
           else toast.success(t('postedToast'))
-          const pinned: string[] = []
-          const partyless = (posted.warnings ?? []).find((w) => w.code === 'partyless_control_lines')
-          if (partyless && 'accounts' in partyless && partyless.accounts.length > 0) {
-            pinned.push(
-              t('partylessControlWarning', {
-                accounts: partyless.accounts.map((a) => `${a.accountNumber ?? ''} ${a.accountName}`.trim()).join(', '),
-              }),
-            )
-          }
-          // Advisory budgetary-control overages post legitimately: the entry
-          // IS posted, and each overage pins here with its remedy instead of
-          // accepting the journal silently. Hard control still refuses
-          // pre-commit and never reaches this response.
-          const advisory = (posted.warnings ?? []).find((w) => w.code === 'budgetary_control_advisory')
-          if (advisory && 'overages' in advisory) {
-            for (const overage of advisory.overages) {
-              // Every applicable named dimension stays visible: names that
-              // do not apply are omitted rather than rendered blank.
-              const dimensionNames = [
-                overage.departmentName,
-                overage.projectName,
-                overage.locationName,
-                overage.className,
-                ...Object.keys(overage.extraDims ?? {})
-                  .filter((key) => key !== 'fund' && ['string', 'number', 'boolean'].includes(typeof (overage.extraDims as Record<string, unknown>)[key]))
-                  .sort()
-                  .map((key) => `${key}: ${String((overage.extraDims as Record<string, unknown>)[key])}`),
-              ].filter((name): name is string => !!name)
-              pinned.push(
-                `${t('budgetaryControlWarning', {
-                  scenario: overage.scenarioName,
-                  account: `${overage.accountNumber} ${overage.accountName}`.trim(),
-                  fund: `${overage.fundCode} ${overage.fundName}`.trim(),
-                  subsidiary: overage.subsidiaryName,
-                  dimensions: dimensionNames.length > 0 ? ` (${dimensionNames.join(' · ')})` : '',
-                  available: overage.available,
-                  amountOver: overage.amountOver,
-                })} ${t('budgetaryControlRemedy')}`,
-              )
-            }
-          }
-          setPostWarnings(pinned)
+          setPostWarnings(postWarningMessages(posted))
         },
       },
     )
     if (ok) router.refresh()
+  }
+
+  // Keyboard posting is offered wherever Post is: a draft (or approved)
+  // source journal the viewer may post, plus the unsaved create and the
+  // draft editor, which persist first through their ordinary save. Post &
+  // new also needs the right to open the next journal.
+  const canKeyboardPost = canPost && sourceDocument && !ledgerSnapshot
+    && (createMode || isDraft || doc.status === 'approved')
+  const canPostAndNew = canKeyboardPost && canCreate
+
+  /**
+   * Post this journal from the keyboard and, for `then === 'new'`, open the
+   * next one on the same date — the heads-down batch path. Unsaved work
+   * persists first through the same create or fenced save the Save button
+   * runs; the post then runs the journal post action with the revision
+   * that write returned, so every
+   * refusal (period, balance, permissions, approval routing) applies
+   * unchanged. When a Flow routes the journal for approval the server
+   * submits it instead of posting, and the toast says so. A refusal keeps
+   * the operator on this journal (saved as a draft when the create already
+   * committed). A post that reports advisories stays on the posted journal
+   * so they are read, not skipped.
+   */
+  const postFromKeyboard = runExclusive(async (then: 'new' | 'stay') => {
+    if (!(then === 'new' ? canPostAndNew : canKeyboardPost)) return
+    if (refuseInvalidAmounts()) return
+    if (editable && refuseMissingAccount()) return
+    if (!balanced) {
+      refuse(
+        statistical
+          ? t('statisticalIncomplete')
+          : diff !== 0n && !mixedCurrencies
+            ? t('outOfBalance', { amount: money(formatJournalAmount(diff < 0n ? -diff : diff)) })
+            : t('postNeedsAmounts'),
+        t('postFailed'),
+      )
+      return
+    }
+    setPostWarnings([])
+    const entryDate = documentDate
+    const progress: { createdId: string | null; saved: { journal: JournalPayload; revision: string } | null; documentId: string; revision: string | null } = {
+      createdId: null,
+      saved: null,
+      documentId: String(doc.id),
+      revision: documentRevisionRef.current,
+    }
+    let posted: PostResponse | null = null
+    const persistsFirst = createMode || (editable && dirty)
+    setSaveState('saving')
+    const ok = await execute(
+      async () => {
+        if (createMode) {
+          if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+          const created = await fetchAppAction('/api/journals', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestIdRef.current },
+            body: JSON.stringify(payload),
+          }, { fallback: t('postFailed') })
+          if (!created.ok) return created
+          const createdDoc = (created.data as { doc?: { id?: unknown; updated_at?: unknown } } | null)?.doc
+          if (typeof createdDoc?.id !== 'string' || createdDoc.id === '') {
+            return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('createUnconfirmed') }) }
+          }
+          progress.createdId = createdDoc.id
+          progress.documentId = createdDoc.id
+          progress.revision = isDocumentRevisionToken(createdDoc.updated_at) ? createdDoc.updated_at : null
+          if (progress.revision == null) {
+            const readBack = await loadDraftDocumentSnapshot(`/api/journals/${createdDoc.id}`, t('postFailed')).catch(() => null)
+            progress.revision = readBack?.revision ?? null
+          }
+        } else if (editable && dirty) {
+          if (progress.revision == null) {
+            await refreshFromServer(false).catch(() => {})
+            progress.revision = documentRevisionRef.current
+          }
+          if (progress.revision == null) return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('postFailed') }) }
+          const outcome = await saveJournalDraft({
+            documentId: progress.documentId,
+            revision: progress.revision,
+            payload,
+            fallbackMessage: t('postFailed'),
+          })
+          if (outcome.status === 'conflict') {
+            await refreshFromServer(false).catch(() => {})
+            return { ok: false, error: new ActionError({ kind: 'conflict', serverMessage: outcome.message }) }
+          }
+          if (outcome.status !== 'saved') {
+            return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: outcome.message }) }
+          }
+          progress.saved = { journal: outcome.saved, revision: outcome.revision }
+          progress.revision = outcome.revision
+        } else if (progress.revision == null) {
+          await refreshFromServer(false).catch(() => {})
+          progress.revision = documentRevisionRef.current
+        }
+        if (progress.revision == null) {
+          return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('postFailed') }) }
+        }
+        return requestPost(progress.documentId, progress.revision)
+      },
+      {
+        fallbackMessage: t('postFailed'),
+        onOk: (data) => {
+          posted = data as PostResponse
+        },
+      },
+    )
+    const saved = progress.saved
+    if (saved) {
+      // The edits committed even if the post did not: adopt them as the baseline.
+      draftBaseline.current = { documentId: String(saved.journal.doc.id), revision: saved.revision, payload: saved.journal }
+      seenPersistedRevisions.current.add(saved.revision)
+      resetForm(saved.journal)
+      setDocumentRevision(saved.revision)
+      setDirty(false)
+      setMode('view')
+    }
+    // Only a write that failed leaves the editor in its error state; a
+    // refused post of a saved journal leaves the save itself standing.
+    setSaveState(ok || saved || progress.createdId || !persistsFirst ? 'saved' : 'error')
+    const answer = posted as PostResponse | null
+    if (!ok || !answer) {
+      if (progress.createdId) {
+        // The create committed and the post refused: open the saved draft so
+        // the refusal can be resolved there; the refusal toast names why.
+        setDirty(false)
+        toast.warning(t('savedNotPosted'))
+        const separator = returnHref.includes('?') ? '&' : '?'
+        router.replace(`${returnHref}${separator}entry=${progress.createdId}` as never)
+      }
+      router.refresh()
+      return
+    }
+    const warnings = postWarningMessages(answer)
+    setDirty(false)
+    if (then === 'new' && warnings.length === 0) {
+      toast.success(answer.pendingApproval ? t('submittedAndNew') : t('postedAndNew'))
+      startNextJournal(entryDate)
+      router.refresh()
+      return
+    }
+    // Stay on the posted (or submitted) journal; advisories stay readable.
+    toast.success(answer.pendingApproval ? t('submitted') : t('postedToast'))
+    if (progress.createdId) {
+      for (const warning of warnings) toast.warning(warning)
+      const separator = returnHref.includes('?') ? '&' : '?'
+      router.replace(`${returnHref}${separator}entry=${progress.createdId}` as never)
+    } else {
+      const readBack = await refreshFromServer(false).catch(() => null)
+      if (readBack) setLiveDoc(asJournalDoc(readBack.payload.doc))
+      setPostWarnings(warnings)
+    }
+    router.refresh()
+  })
+  const postShortcuts = {
+    postAndNew: canPostAndNew ? () => void postFromKeyboard('new') : undefined,
+    post: canKeyboardPost ? () => void postFromKeyboard('stay') : undefined,
   }
 
   async function remove() {
@@ -1184,6 +1603,133 @@ function JournalDrawerBody({
     [statistical, accounts, departments, projects, parties, multiSub, subsidiaryOpts, lineDefs, segments, layout, t, tc, ledgerSnapshot, money, amortizationTemplates, tAmortization],
   )
 
+  // -- auto-balance ------------------------------------------------------------
+  // The grid addresses cells by their position among its visible columns.
+  // Secondary (detail) columns can be hidden, so a position is trusted only
+  // while no secondary column precedes it; otherwise the suggestion is skipped.
+  const amountColumnIndex = (key: AmountSide): number => {
+    const index = columns.findIndex((column) => column.key === key)
+    if (index < 0 || columns.slice(0, index).some((column) => column.secondary)) return -1
+    return index
+  }
+  const amountInput = (rowIndex: number, side: AmountSide): HTMLInputElement | null => {
+    const column = amountColumnIndex(side)
+    if (column < 0) return null
+    return gridRef.current?.querySelector<HTMLInputElement>(`[data-lg-row="${rowIndex}"][data-lg-col="${column}"] input`) ?? null
+  }
+  /** Select a suggested amount once it renders, so typing replaces it. */
+  const selectAmountWhenFocused = (rowIndex: number, side: AmountSide) => {
+    requestAnimationFrame(() => {
+      const input = amountInput(rowIndex, side)
+      if (input && document.activeElement === input) input.select()
+    })
+  }
+  const autoBalanceActive = editable && !statistical && !ledgerSnapshot
+
+  function handleGridFocus(event: FocusEvent<HTMLDivElement>) {
+    const cell = (event.target as HTMLElement).closest?.('[data-lg-row]')
+    if (!cell || !gridRef.current?.contains(cell)) return
+    const rowIndex = Number(cell.getAttribute('data-lg-row'))
+    if (!Number.isInteger(rowIndex)) return
+    focusedRowRef.current = rowIndex
+    if (!autoBalanceActive) return
+    const column = Number(cell.getAttribute('data-lg-col'))
+    const side: AmountSide | null = column === amountColumnIndex('debit') ? 'debit' : column === amountColumnIndex('credit') ? 'credit' : null
+    if (!side) return
+    // Entering the amounts of a blank line while the entry is out of
+    // balance pre-enters the difference on the side that levels it.
+    const next = suggestBalancingLine(rows, rowIndex)
+    const row = next[rowIndex]
+    if (!row) return
+    if (next === rows) {
+      if (holdsSuggestion(row, side)) selectAmountWhenFocused(rowIndex, side)
+      return
+    }
+    if (sameAmount(row[side], rows[rowIndex]?.[side])) {
+      setRows(next)
+      return
+    }
+    // The focused cell holds its own editing text while it has focus, so the
+    // suggestion for this very cell is entered through it, exactly like
+    // typing, and then selected so the next keystroke replaces it.
+    if ((event.target as HTMLElement).tagName !== 'INPUT') return
+    const field = event.target as HTMLInputElement
+    requestAnimationFrame(() => {
+      if (document.activeElement !== field) return
+      const setValue = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), 'value')?.set
+      const EventCtor = field.ownerDocument.defaultView?.Event ?? Event
+      if (!setValue) return
+      pendingSuggestion.current = { index: rowIndex, side, row }
+      try {
+        setValue.call(field, entryText(row[side]))
+        field.dispatchEvent(new EventCtor('input', { bubbles: true }))
+      } finally {
+        pendingSuggestion.current = null
+      }
+      field.select()
+    })
+  }
+
+  /** Put the remaining difference on the line the operator last worked in. */
+  function balanceFocusedLine() {
+    // A cell that still has focus holds its own editing text; let it settle
+    // first so the balanced amount is what the line shows afterwards.
+    const active = document.activeElement as HTMLElement | null
+    if (active && gridRef.current?.contains(active)) active.blur()
+    let index = focusedRowRef.current ?? -1
+    let base = rows
+    if (index < 0 || index >= rows.length) {
+      index = rows.findIndex((row) => isBlankJournalLine(row) && blankAmount(row.debit) && blankAmount(row.credit))
+    }
+    if (index < 0) {
+      base = [...rows, emptyLine()]
+      index = base.length - 1
+    }
+    const next = balanceLineAt(base, index)
+    setRows(next)
+    focusedRowRef.current = index
+    const row = next[index]
+    const side: AmountSide | null = row?.debit ? 'debit' : row?.credit ? 'credit' : null
+    if (!side) return
+    requestAnimationFrame(() => {
+      const input = amountInput(index, side)
+      if (!input) return
+      input.focus()
+      input.select()
+    })
+  }
+  const canBalanceLine = autoBalanceActive && !mixedCurrencies && !hasInvalidAmounts && diff !== 0n
+
+  // -- more options --------------------------------------------------------------
+  // Date, Reference and Memo lead the header; mode, currency, rate,
+  // auto-reverse, party and book sit in one disclosure that opens by itself
+  // whenever any of them holds a non-default value.
+  const partyPlacement = layout?.header.groups.flatMap((group) => group.fields).find((placement) => placement.key === 'party_id')
+  const showParty = layout ? Boolean(partyPlacement?.visible) : true
+  const partyLabel = partyPlacement?.labelOverride?.trim() || tc('labels.party')
+  const mainLayout = useMemo<FormLayoutConfig | undefined>(
+    () => layout
+      ? { ...layout, header: { ...layout.header, groups: layout.header.groups.map((group) => ({ ...group, fields: group.fields.filter((placement) => placement.key !== 'party_id') })) } }
+      : undefined,
+    [layout],
+  )
+  const homeSubsidiary = (subsidiaries ?? []).find((option) => option.id === (subsidiaryId || doc.subsidiary_id)) ?? subsidiaries?.[0]
+  const optionsNonDefault = journalOptionsAreNonDefault({
+    journalMode,
+    currency,
+    defaultCurrency: homeSubsidiary?.baseCurrency ?? orgCurrency,
+    fxRate,
+    reverseOn,
+    partyId: showParty ? partyId : '',
+    accountingBookId: bookUi ? accountingBookId : '',
+  }) || (editable && showParty && partyPlacement?.required === true)
+  const [moreOptionsOpen, setMoreOptionsOpen] = useState(optionsNonDefault)
+  const [observedNonDefault, setObservedNonDefault] = useState(optionsNonDefault)
+  if (observedNonDefault !== optionsNonDefault) {
+    setObservedNonDefault(optionsNonDefault)
+    if (optionsNonDefault) setMoreOptionsOpen(true)
+  }
+
   const field = 'space-y-1.5'
   const headerDefByKey = new Map(headerDefs.map((def) => [def.key, def]))
   const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
@@ -1194,7 +1740,7 @@ function JournalDrawerBody({
     }
     switch (placement.key) {
       case 'document_date':
-        return <><Label>{override || tc('labels.date')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} /> : <p className="text-sm">{doc.document_date ? formatCivilDate(doc.document_date, locale) : '—'}</p>}</>
+        return <><Label>{override || tc('labels.date')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <DateField data-autofocus="" value={documentDate} onChange={(value) => setDocumentDate(value)} /> : <p className="text-sm">{doc.document_date ? formatCivilDate(doc.document_date, locale) : '—'}</p>}</>
       case 'party_id':
         return <><Label>{override || tc('labels.party')}</Label>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('noParty')} clearable emptyLabel={t('noParty')} /> : <p className="text-sm">{doc.party_name ?? '—'}</p>}</>
       case 'reference_number':
@@ -1241,9 +1787,28 @@ function JournalDrawerBody({
       primaryAction={
         canEditStatus && canPost ? (
           mode === 'edit' ? <>
-            <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy || hasInvalidAmounts} onClick={save}>
+            <FormShortcuts
+              enabled={!busy}
+              actions={{
+                save: () => void save(),
+                saveAndNew: canCreate ? () => void save('new') : undefined,
+                saveAndClose: () => void save('close'),
+                ...postShortcuts,
+              }}
+            />
+            <Button size="sm" variant={postShortcuts.postAndNew ? 'outline' : 'default'} className="h-8 px-2.5 text-xs" disabled={busy || hasInvalidAmounts} onClick={() => void save()}>
               {busy ? tc('actions.saving') : tc('actions.save')}
             </Button>
+            {canCreate ? (
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy || hasInvalidAmounts} onClick={() => void save('new')}>
+                {t('saveAndNew')}
+              </Button>
+            ) : null}
+            {postShortcuts.postAndNew ? (
+              <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy || hasInvalidAmounts || !balanced} title={tEntry('buttons.postAndNewHint')} onClick={postShortcuts.postAndNew}>
+                {tEntry('buttons.postAndNew')}
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={cancelWithConfirm}>
               {tc('actions.cancel')}
             </Button>
@@ -1325,6 +1890,11 @@ function JournalDrawerBody({
               ),
             })}
           </span>
+          {canBalanceLine ? (
+            <Button variant="outline" size="sm" className="h-7 px-2 text-xs" title={t('balanceLineHint')} onClick={balanceFocusedLine}>
+              {t('balanceLine')}
+            </Button>
+          ) : null}
           {isDraft ? (
             !statistical && !mixedCurrencies && diff !== 0n ? (
               <Badge variant="destructive">{t('outOfBalance', { amount: money(formatJournalAmount(diff < 0n ? -diff : diff)) })}</Badge>
@@ -1336,6 +1906,11 @@ function JournalDrawerBody({
       }
     >
       <div className="space-y-6 p-1">
+        {mode !== 'edit' && (postShortcuts.post || postShortcuts.postAndNew) ? (
+          // Reading a postable draft: Ctrl+Enter posts it and opens the next
+          // journal, Ctrl+Shift+Enter posts it in place.
+          <FormShortcuts enabled={!busy && saveState !== 'saving'} actions={postShortcuts} />
+        ) : null}
         {voidAwaitingApproval ? (
           <p role="status" className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
             {t('voidAwaitingApproval')}
@@ -1363,38 +1938,13 @@ function JournalDrawerBody({
             {warning}
           </p>
         ))}
-        {bookUi ? (
-          <JournalBookField books={books!} value={accountingBookId} onChange={setAccountingBookId} editable={editable && canPostBookSpecific} />
-        ) : null}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className={field}><Label>{t('instructions.mode')}</Label>{editable ? <SearchSelect value={journalMode} onChange={setJournalMode} options={['monetary','statistical','currency_adjustment'].map(value => ({value,label:t(`instructions.${value}`)}))} /> : <p className="text-sm">{t(`instructions.${journalMode}`)}</p>}</div>
-          {!statistical ? <><div className={field}><Label>{t('instructions.currency')}</Label>{editable ? <Input value={currency} maxLength={3} onChange={event => setCurrency(event.target.value.toUpperCase())} /> : <p className="text-sm">{currency}</p>}</div>
-          <div className={field}><Label>{t('instructions.rate')}</Label>{editable ? <Input value={fxRate} inputMode="decimal" onChange={event => setFxRate(event.target.value)} /> : <p className="text-sm">{fxRate}</p>}</div></> : null}
-          <div className={field}><Label>{t('instructions.reverseOn')}</Label>{editable ? <DateField value={reverseOn} onChange={value => setReverseOn(value)} /> : <p className="text-sm">{reverseOn || '—'}</p>}</div>
-        </div>
-        {mixedCurrencies ? <p className="text-xs text-slate-500">{t('instructions.serverBalance')}</p> : null}
-        {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {mainLayout ? <HeaderFields layout={mainLayout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
             <Label>{tc('labels.date')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
             {editable ? (
-              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
+              <DateField data-autofocus="" value={documentDate} onChange={(value) => setDocumentDate(value)} />
             ) : (
               <p className="text-sm">{doc.document_date ? formatCivilDate(doc.document_date, locale) : '—'}</p>
-            )}
-          </div>
-          <div className={`${field} lg:col-span-2`}>
-            <Label>{tc('labels.party')}</Label>
-            {editable ? (
-              <SearchSelect
-                options={parties.map((p) => ({ value: p.id, label: p.display_name ?? '' }))}
-                value={partyId}
-                onChange={(v) => setPartyId(v ?? '')}
-                placeholder={t('noParty')}
-                clearable
-                emptyLabel={t('noParty')}
-              />
-            ) : (
-              <p className="text-sm">{doc.party_name ?? '—'}</p>
             )}
           </div>
           <div className={field}>
@@ -1406,6 +1956,17 @@ function JournalDrawerBody({
               </>
             ) : (
               <p className="text-sm">{doc.reference_number ?? '—'}</p>
+            )}
+          </div>
+          <div className={`${field} lg:col-span-2`}>
+            <Label>{tc('labels.memo')}</Label>
+            {editable ? (
+              <>
+                <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('memoHint')}</p>
+              </>
+            ) : (
+              <p className="text-sm">{doc.memo ?? '—'}</p>
             )}
           </div>
           {multiSub ? (
@@ -1427,20 +1988,47 @@ function JournalDrawerBody({
               )}
             </div>
           ) : null}
-          <div className={`${field} lg:col-span-3`}>
-            <Label>{tc('labels.memo')}</Label>
-            {editable ? (
-              <>
-                <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('memoHint')}</p>
-              </>
-            ) : (
-              <p className="text-sm">{doc.memo ?? '—'}</p>
-            )}
-          </div>
         </div>
 
         <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} viewer={customFieldViewer} /></>}
+
+        <details
+          open={moreOptionsOpen}
+          onToggle={(event) => setMoreOptionsOpen(event.currentTarget.open)}
+          className="space-y-3"
+          data-journal-more-options=""
+        >
+          <summary className="cursor-pointer text-sm font-medium text-slate-600 dark:text-slate-300">
+            {t('moreOptions')}
+          </summary>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className={field}><Label>{t('instructions.mode')}</Label>{editable ? <SearchSelect value={journalMode} onChange={setJournalMode} options={['monetary','statistical','currency_adjustment'].map(value => ({value,label:t(`instructions.${value}`)}))} /> : <p className="text-sm">{t(`instructions.${journalMode}`)}</p>}</div>
+            {!statistical ? <><div className={field}><Label>{t('instructions.currency')}</Label>{editable ? <Input value={currency} maxLength={3} onChange={event => setCurrency(event.target.value.toUpperCase())} /> : <p className="text-sm">{currency}</p>}</div>
+            <div className={field}><Label>{t('instructions.rate')}</Label>{editable ? <Input value={fxRate} inputMode="decimal" onChange={event => setFxRate(event.target.value)} /> : <p className="text-sm">{fxRate}</p>}</div></> : null}
+            <div className={field}><Label>{t('instructions.reverseOn')}</Label>{editable ? <DateField value={reverseOn} onChange={value => setReverseOn(value)} /> : <p className="text-sm">{reverseOn || '—'}</p>}</div>
+            {showParty ? (
+              <div className={`${field} lg:col-span-2`}>
+                <Label>{partyLabel}</Label>
+                {editable ? (
+                  <SearchSelect
+                    options={parties.map((p) => ({ value: p.id, label: p.display_name ?? '' }))}
+                    value={partyId}
+                    onChange={(v) => setPartyId(v ?? '')}
+                    placeholder={t('noParty')}
+                    clearable
+                    emptyLabel={t('noParty')}
+                  />
+                ) : (
+                  <p className="text-sm">{doc.party_name ?? '—'}</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+          {bookUi ? (
+            <JournalBookField books={books!} value={accountingBookId} onChange={setAccountingBookId} editable={editable && canPostBookSpecific} />
+          ) : null}
+        </details>
+        {mixedCurrencies ? <p className="text-xs text-slate-500">{t('instructions.serverBalance')}</p> : null}
 
         {segments.some((segment) => segment.showOnHeader) ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1463,7 +2051,7 @@ function JournalDrawerBody({
           </div>
         ) : null}
 
-        <div className="space-y-2">
+        <div ref={gridRef} className="space-y-2" onFocus={handleGridFocus}>
           <Label>{tc('labels.lines')}</Label>
           <LineGrid<LineRow>
             columns={columns}

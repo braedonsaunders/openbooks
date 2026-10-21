@@ -1,0 +1,102 @@
+{
+  "title": "Stapelerfassung von Eingangsrechnungen",
+  "description": "Erfassen Sie einen Stapel Eingangsrechnungen in einem einzigen Raster, gleichen Sie ihn mit Kontrollsummen ab und speichern oder buchen Sie alle Rechnungen gemeinsam.",
+  "back": "Eingangsrechnungen",
+  "menuLabel": "Stapelerfassung",
+  "helpLink": "So funktioniert die Stapelerfassung",
+  "noTax": "Keine Steuer",
+  "createVendor": "Lieferanten „{name}“ anlegen",
+  "createVendorFailed": "Der Lieferant konnte nicht angelegt werden.",
+  "keyboardHint": "Eingabe oder Tab springt durch die Felder einer Rechnung, und Tab nach dem letzten Feld beginnt die nächste. F8 kopiert das Feld darüber. Fügen Sie Zeilen aus einer Tabellenkalkulation ein, mit einer Kopfzeile, um Spalten über ihren Namen zuzuordnen. Strg+S (⌘S) speichert jede Rechnung als Entwurf.",
+  "keyboardHintPost": "Eingabe oder Tab springt durch die Felder einer Rechnung, und Tab nach dem letzten Feld beginnt die nächste. F8 kopiert das Feld darüber. Fügen Sie Zeilen aus einer Tabellenkalkulation ein, mit einer Kopfzeile, um Spalten über ihren Namen zuzuordnen. Strg+S (⌘S) speichert jede Rechnung als Entwurf; Strg+Eingabe (⌘Eingabe) bucht sie.",
+  "columns": {
+    "vendor": "Lieferant",
+    "reference": "Lieferanten-Ref.-Nr.",
+    "billDate": "Rechnungsdatum",
+    "dueDate": "Fälligkeitsdatum",
+    "dueDateHelp": "Leer lassen, um die Zahlungsbedingungen des Lieferanten zu verwenden. Die Spalte „Bearbeitungsstand“ zeigt das daraus folgende Datum.",
+    "account": "Konto",
+    "memo": "Notiz",
+    "amount": "Betrag",
+    "tax": "Steuer",
+    "status": "Bearbeitungsstand"
+  },
+  "control": {
+    "heading": "Kontrollsummen",
+    "subsidiary": "Tochtergesellschaft",
+    "count": "Anzahl Rechnungen",
+    "total": "Stapelsumme",
+    "entered": "Erfasst: {count, plural, one {# Rechnung} other {# Rechnungen}} · {total}",
+    "countMatched": "Anzahl der Rechnungen stimmt",
+    "countOff": "Abweichung bei der Anzahl: {difference, number}",
+    "countInvalid": "Geben Sie die Anzahl der Rechnungen als ganze Zahl ein",
+    "totalMatched": "Stapelsumme stimmt",
+    "totalOff": "Abweichung bei der Stapelsumme: {difference}",
+    "totalInvalid": "Geben Sie die Stapelsumme als Betrag ein"
+  },
+  "actions": {
+    "saveAll": "Alle als Entwurf speichern",
+    "postAll": "Alle buchen",
+    "clearFinished": "Erledigte Zeilen entfernen ({count, number})",
+    "addBill": "Rechnung hinzufügen",
+    "progress": "Speichere {done, number} von {total, number} …"
+  },
+  "shortcuts": {
+    "saveAll": "Alle Rechnungen als Entwurf speichern",
+    "postAll": "Alle Rechnungen buchen"
+  },
+  "status": {
+    "saving": "Wird gespeichert …",
+    "saved": "Gespeichert: {number}",
+    "posted": "Gebucht: {number}",
+    "pending": "{number} wartet auf Genehmigung",
+    "termsDue": "Fällig am {date} laut Zahlungsbedingungen",
+    "openExisting": "Vorhandene Rechnung öffnen"
+  },
+  "issues": {
+    "vendor": "Wählen Sie einen Lieferanten",
+    "billDate": "Geben Sie das Rechnungsdatum ein",
+    "amountMissing": "Geben Sie den Betrag ein",
+    "amountInvalid": "Der Betrag ist keine Zahl",
+    "amountNotPositive": "Geben Sie einen positiven Betrag ein; erfassen Sie eine negative Rechnung als Lieferantengutschrift",
+    "account": "Wählen Sie ein Konto"
+  },
+  "duplicates": {
+    "badge": "Mögliches Duplikat",
+    "inBatch": "Gleicher Lieferant und gleiche Ref.-Nr. wie Zeile {rows}",
+    "onFile": "Entspricht {number} vom {date}",
+    "title": "Mögliche doppelte Rechnungen",
+    "message": "{count, plural, one {# Rechnung hat} other {# Rechnungen haben}} denselben Lieferanten und dieselbe Ref.-Nr. wie eine andere Rechnung in diesem Stapel oder eine bereits erfasste. Trotzdem speichern?",
+    "row": "Zeile {row}: {vendor}, {reference}",
+    "confirm": "Trotzdem speichern"
+  },
+  "refusals": {
+    "nothingToSave": "Dieser Stapel enthält keine ungespeicherten Rechnungen.",
+    "rowsNeedAttention": "{count, plural, one {# Rechnung muss} other {# Rechnungen müssen}} korrigiert werden, bevor etwas gespeichert wird. {first}",
+    "rowIssue": "Zeile {row}: {issue}.",
+    "controlInvalid": "Die Kontrollsummen sind nicht lesbar. Geben Sie die Anzahl der Rechnungen als ganze Zahl und die Stapelsumme als Betrag ein, oder leeren Sie die Felder.",
+    "controlCount": "Der Stapel enthält {entered, plural, one {# Rechnung} other {# Rechnungen}}, die Kontrollanzahl ist aber {control, number}. Suchen Sie die fehlende oder überzählige Rechnung, oder korrigieren Sie die Kontrollanzahl.",
+    "controlTotal": "Die Rechnungen ergeben {entered} und liegen damit {difference} {direction, select, over {über} other {unter}} der Stapelsumme. Korrigieren Sie die Beträge oder die Stapelsumme.",
+    "saveFailed": "Die Rechnung konnte nicht gespeichert werden.",
+    "unavailable": "Der Server ist nicht erreichbar. Der Stapel bleibt erhalten; speichern Sie erneut, bereits gespeicherte Rechnungen werden nicht doppelt angelegt.",
+    "conflict": "Die Rechnung dieser Zeile wurde möglicherweise bereits mit anderen Angaben gespeichert. Öffnen Sie die vorhandene Rechnung zur Prüfung, oder duplizieren Sie die Zeile, um sie als neue Rechnung zu speichern.",
+    "refusedSummary": "{count, plural, one {# Rechnung wurde nicht gespeichert oder gebucht} other {# Rechnungen wurden nicht gespeichert oder gebucht}}. Der Grund steht in jeder Zeile; beheben Sie ihn und speichern Sie erneut.",
+    "defaultsFailed": "Die Lieferantenvorgaben konnten nicht geladen werden. Wählen Sie das Konto für jede Rechnung selbst."
+  },
+  "summary": {
+    "saved": "{count, plural, one {# Rechnung als Entwurf gespeichert} other {# Rechnungen als Entwurf gespeichert}}",
+    "posted": "{posted, plural, one {# Rechnung gebucht} other {# Rechnungen gebucht}}, {pending, number} warten auf Genehmigung"
+  },
+  "restore": {
+    "title": "Ungespeicherter Stapel wiederhergestellt",
+    "body": "{count, plural, one {# ungespeicherte Rechnung} other {# ungespeicherte Rechnungen}} aus Ihrer letzten Sitzung {count, plural, one {wurde} other {wurden}} wiederhergestellt.",
+    "keep": "Behalten",
+    "discard": "Verwerfen",
+    "discardConfirm": "Die ungespeicherten Rechnungen dieses Stapels verwerfen? Dies kann nicht rückgängig gemacht werden.",
+    "storageFailed": "Dieser Browser konnte keine Kopie des Stapels behalten. Speichern Sie bald, damit keine Rechnungen verloren gehen."
+  },
+  "leave": {
+    "message": "Dieser Stapel enthält ungespeicherte Rechnungen. Sie bleiben in diesem Browser und erscheinen wieder, wenn Sie die Stapelerfassung erneut öffnen.",
+    "confirm": "Verlassen"
+  }
+}

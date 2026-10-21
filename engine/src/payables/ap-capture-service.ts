@@ -12,6 +12,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { cmp, fromUnits, sum, toUnits } from "../money/money.ts";
 import { fromQuantityUnits, toQuantityUnits } from "../money/quantity.ts";
 import { orderedNetOfCancelledSql } from "../records/order-line-remainders.ts";
+import { normalizedDocumentReferenceSql } from "../records/document-reference.ts";
 import type { Quantity } from "../money/brands.ts";
 import {
   AZURE_DOCUMENT_INTELLIGENCE_API_VERSION,
@@ -31,6 +32,7 @@ import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { loadCaptureSourceBlob as loadCaptureBlob } from "./capture-source.ts";
 import { resolveVendorParty, vendorMatchKey } from "./vendor-resolution.ts";
 import { runRecordFlows } from "../flows/index.ts";
+import { considerCaptureAutoPost } from "./ap-capture-autopost.ts";
 
 type CaptureRow = {
   id: string;
@@ -46,6 +48,8 @@ type CaptureRow = {
   content_hash: string;
   created_by: string | null;
   attempts: number;
+  /** Receiving legal entity named by the intake channel; null for uploads. */
+  subsidiary_id: string | null;
 };
 
 /** A live extraction refreshes its item lease once a minute; an unrefreshed ten-minute claim is recoverable. */
@@ -433,15 +437,15 @@ export async function resolveAndValidateCapture(input: {
        and (
          ci.content_hash = (select content_hash from ap_capture_items where id = ${input.captureItemId} and org_id = ${input.orgId})
          or (${vendorId}::uuid is not null and ci.vendor_candidate_id = ${vendorId}
-             and regexp_replace(lower(nullif(ci.normalized->>'invoiceNumber','')), '[^a-z0-9]', '', 'g')
-                 = regexp_replace(lower(${normalized.invoiceNumber}), '[^a-z0-9]', '', 'g'))
+             and ${normalizedDocumentReferenceSql(sql`ci.normalized->>'invoiceNumber'`)}
+                 = ${normalizedDocumentReferenceSql(sql`${normalized.invoiceNumber}::text`)})
        )
     union all
     select 1 from documents d
      where d.org_id = ${input.orgId} and d.kind in ('vendor_bill','vendor_credit') and d.status <> 'voided'
        and ${vendorId}::uuid is not null and d.party_id = ${vendorId}
-       and regexp_replace(lower(nullif(d.reference_number,'')), '[^a-z0-9]', '', 'g')
-           = regexp_replace(lower(${normalized.invoiceNumber}), '[^a-z0-9]', '', 'g')
+       and ${normalizedDocumentReferenceSql(sql`d.reference_number`)}
+           = ${normalizedDocumentReferenceSql(sql`${normalized.invoiceNumber}::text`)}
     limit 1
   `, "objects"));
   const duplicate = duplicateResult.length > 0;
@@ -582,7 +586,33 @@ export async function processCaptureItem(input: {
                 ${input.actorId ?? item.created_by})
       `);
     });
-    if (settings?.autoCreatePoMatchedDrafts && resolved.purchaseOrderId && !resolved.duplicate
+    // Earned auto-post decides first. Its outcome is recorded on the capture
+    // either way; an unexpected failure leaves the capture in review rather
+    // than failing an extraction that already succeeded.
+    let autoPostCreatedDraft = false;
+    try {
+      const autoPost = await considerCaptureAutoPost({
+        orgId: input.orgId,
+        captureItemId: item.id,
+        actorId: input.actorId ?? item.created_by,
+        materialize: () => materializeCapture({
+          orgId: input.orgId,
+          captureItemId: item.id,
+          actorId: input.actorId ?? item.created_by,
+          allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+        }),
+      });
+      autoPostCreatedDraft = autoPost.kind === "posted" || autoPost.kind === "pending_approval"
+        || (autoPost.kind === "refused" && autoPost.documentId !== null);
+    } catch (error) {
+      await db.execute(sql`
+        insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
+        values (${input.orgId}, ${item.id}, 'auto_post_refused',
+                ${JSON.stringify({ stage: "decision", message: error instanceof Error ? error.message.slice(0, 500) : "Auto-post could not be decided" })}::jsonb,
+                ${input.actorId ?? item.created_by})
+      `);
+    }
+    if (!autoPostCreatedDraft && settings?.autoCreatePoMatchedDrafts && resolved.purchaseOrderId && !resolved.duplicate
         && resolved.issues.length === 0) {
       try {
         await materializeCapture({
@@ -754,11 +784,12 @@ const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 async function assertLockedCaptureAssociationsVisible(
   tx: SqlExecutor,
   orgId: string,
-  item: Pick<CaptureRow, "vendor_candidate_id" | "purchase_order_id">,
+  item: Pick<CaptureRow, "vendor_candidate_id" | "purchase_order_id" | "subsidiary_id">,
   allowed: ReadonlySet<string> | null,
 ): Promise<void> {
   if (allowed === null) return;
   if (allowed.size === 0) throw new CaptureScopeDeniedError();
+  if (item.subsidiary_id && !allowed.has(item.subsidiary_id)) throw new CaptureScopeDeniedError();
   if (item.vendor_candidate_id) {
     const vendor = (await tx.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties
@@ -913,8 +944,8 @@ export async function materializeCapture(input: {
       select 1 from documents
        where org_id = ${input.orgId} and kind in ('vendor_bill','vendor_credit') and status <> 'voided'
          and party_id = ${vendorId}
-         and regexp_replace(lower(nullif(reference_number, '')), '[^a-z0-9]', '', 'g')
-             = regexp_replace(lower(${capture.invoiceNumber}), '[^a-z0-9]', '', 'g')
+         and ${normalizedDocumentReferenceSql(sql`reference_number`)}
+             = ${normalizedDocumentReferenceSql(sql`${capture.invoiceNumber}::text`)}
       limit 1
     `, "objects"));
     if (duplicate[0]) throw new CaptureMaterializationError("A draft or posted document already uses this source or vendor invoice number");
@@ -1065,11 +1096,38 @@ export async function materializeCapture(input: {
        where org_id = ${input.orgId} and is_active and not is_elimination
     `, "objects"))[0]?.n ?? 0;
     const multiEntity = entityCount > 1;
+    // An emailed capture names its receiving entity: each inbound address
+    // belongs to one legal entity, so the bill books there. A matched order
+    // in another entity is a conflict to resolve, never a silent override.
+    const intakeEntity = item.subsidiary_id
+      ? (await tx.execute<{ id: string; base_currency: string | null }>(sql`
+          select id, base_currency from subsidiaries
+           where org_id = ${input.orgId} and id = ${item.subsidiary_id} and is_active and not is_elimination
+        `)).rows[0] ?? null
+      : null;
+    if (item.subsidiary_id && !intakeEntity) {
+      throw new CaptureMaterializationError(
+        "The legal entity whose address received this bill is no longer active — reactivate it or reroute the address before creating a draft",
+      );
+    }
     let currency: string | null | undefined;
-    if (poCurrency !== undefined) {
+    if (poCurrency !== undefined && intakeEntity && poSubsidiaryId && poSubsidiaryId !== intakeEntity.id) {
+      throw new CaptureMaterializationError(
+        "The purchase order belongs to a different legal entity than the address that received this bill — match a purchase order of the receiving entity or clear the match",
+      );
+    }
+    if (poCurrency === undefined && intakeEntity) {
+      subsidiaryId = intakeEntity.id;
+      currency = capture.currency ?? intakeEntity.base_currency ?? company.org_currency;
+      if (!currency) {
+        throw new CaptureMaterializationError("The receiving legal entity has no configured base currency");
+      }
+    } else if (poCurrency !== undefined) {
       currency = poCurrency;
       if (poSubsidiaryId) {
         subsidiaryId = poSubsidiaryId;
+      } else if (intakeEntity) {
+        subsidiaryId = intakeEntity.id;
       } else if (multiEntity) {
         throw new CaptureMaterializationError(
           "The purchase order has no subsidiary — set it on the purchase order before creating a draft",
@@ -1348,3 +1406,43 @@ export async function materializeCapture(input: {
   );
   return result;
 }
+
+/*
+ * Inbound email intake and earned auto-post share this service contract, so
+ * the capture API and the inbound webhook reach them through one entrypoint.
+ */
+export {
+  beginInboundMessage,
+  consumeMailboxDelivery,
+  createMailbox,
+  finishInboundMessage,
+  listInboundMessages,
+  listMailboxes,
+  MailboxConfigurationError,
+  resolveMailboxByToken,
+  updateMailbox,
+  type InboundMessageListRow,
+  type MailboxListRow,
+  type ResolvedMailbox,
+} from "./ap-inbound-mailbox-service.ts";
+export {
+  captureAttachments,
+  INBOUND_EMAIL_PROVIDERS,
+  InboundEmailError,
+  parseInboundEmail,
+  senderAllowed,
+  verifyInboundSignature,
+  type InboundAttachment,
+  type InboundEmail,
+  type InboundEmailProvider,
+} from "./ap-inbound-email.ts";
+export {
+  DEFAULT_TRUST_STREAK,
+  resolveAutoPostPolicy,
+  vendorCaptureTrust,
+  vendorTrustSummary,
+  type AutoPostPolicy,
+  type VendorTrust,
+  type VendorTrustSummary,
+} from "./ap-capture-trust.ts";
+export { registerCaptureBillPoster, type CaptureBillPoster } from "./ap-capture-autopost.ts";

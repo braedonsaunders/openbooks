@@ -1,0 +1,80 @@
+{
+  "tabs": {
+    "queue": "采集队列",
+    "inbox": "收件箱活动"
+  },
+  "emailSource": "电子邮件",
+  "mailboxes": {
+    "title": "将账单通过电子邮件发送至",
+    "copyAddress": "复制 {label} 地址",
+    "copyWebhook": "复制 {label} 的 Webhook 地址",
+    "webhook": "Webhook 地址",
+    "copied": "已复制到剪贴板",
+    "copyFailed": "无法复制。请选中文本后手动复制。",
+    "none": "尚无已启用的接收地址。",
+    "manage": "管理地址"
+  },
+  "inbox": {
+    "columns": {
+      "received": "接收时间",
+      "address": "地址",
+      "from": "发件人",
+      "subject": "主题",
+      "attachments": "附件",
+      "outcome": "结果",
+      "detail": "详情",
+      "capture": "采集"
+    },
+    "outcomes": {
+      "received": "处理中",
+      "captured": "已采集",
+      "rejected_sender": "发件人不被允许",
+      "no_attachments": "未附账单",
+      "duplicate": "已采集过",
+      "error": "错误"
+    },
+    "capturedCount": "{count, plural, one {已创建 # 条采集} other {已创建 # 条采集}}",
+    "openCapture": "打开采集",
+    "emptyTitle": "尚无收到的电子邮件",
+    "emptyDescription": "发送到本公司应付地址的邮件会显示在此处，并列出每封邮件的处理结果。",
+    "emptyNoMailbox": "请在 设置 → 计费 → 应付接收地址 中设置接收地址，以通过电子邮件接收账单。"
+  },
+  "trust": {
+    "trusted": "已获信任：连续 {count, plural, one {# 张无修改账单} other {# 张无修改账单}}",
+    "building": "{count, plural, =0 {尚无无修改账单} one {连续 # 张无修改账单} other {连续 # 张无修改账单}}，获得信任需要 {threshold} 张"
+  },
+  "autoPost": {
+    "posted": "已按自动过账策略自动过账。",
+    "submitted": "已按自动过账策略自动提交审批。",
+    "refused": "未自动过账：{message}",
+    "skipped": {
+      "policy_off": "此账单到达时自动过账处于关闭状态。",
+      "not_a_bill": "供应商贷记从不自动过账。",
+      "needs_review": "未自动过账：有字段或行需要审阅。",
+      "duplicate": "未自动过账：可能是重复账单。",
+      "vendor_unmatched": "未自动过账：未匹配到供应商。",
+      "vendor_not_trusted": "未自动过账：该供应商尚未获得信任。",
+      "amount_unreadable": "未自动过账：无法读取总额。",
+      "over_limit": "未自动过账：总额超过策略限额。",
+      "currency_differs": "未自动过账：账单币种与策略限额币种不同。",
+      "actor_not_permitted": "未自动过账：地址所有者无权创建和过账账单。"
+    }
+  },
+  "keyboard": {
+    "listNext": "列表中的下一条采集",
+    "listPrevious": "列表中的上一条采集",
+    "next": "下一条采集",
+    "previous": "上一条采集",
+    "createDraft": "创建草稿并转到下一条采集",
+    "createAndPost": "创建草稿并过账",
+    "createAndPostButton": "创建并过账",
+    "reject": "拒绝采集",
+    "rejectConfirm": "拒绝 {name}？它将移出审阅队列。",
+    "posted": "账单已过账",
+    "submittedForApproval": "草稿已创建并提交审批",
+    "postRefused": "草稿已创建但未过账：{message}",
+    "openDraft": "打开草稿",
+    "allReviewed": "没有更多需要审阅的采集",
+    "hint": "J / K：下一条或上一条采集 · Enter：下一个需要注意的字段 · ⌘/Ctrl+Enter：创建草稿 · ⌘/Ctrl+Shift+Enter：创建并过账 · ?：所有快捷键"
+  }
+}

@@ -77,6 +77,12 @@ export interface DocumentDrawerProps {
    *  the new payment with the party and this document preselected. Resolved
    *  by the loader from the open balance and the payment permission. */
   settlementHref?: string | null
+  /**
+   * The organization is registered for Canadian goods tax, so a customer
+   * invoice may compute it natively from the place of supply. Only then is
+   * the selection offered; other organizations never see it.
+   */
+  nativeGoodsTaxAvailable?: boolean
   /** Server-known promotions gate. When explicitly false the drawer renders
    *  no promotion action or chip instead of probing an endpoint the server
    *  must refuse. Undefined preserves the hidden default. */

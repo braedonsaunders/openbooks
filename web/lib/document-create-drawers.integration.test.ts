@@ -83,7 +83,8 @@ test('every document list New opens its create drawer', { skip: !process.env.OPE
     assert.equal(bills.drawerOpen, true, 'bills New opens the create drawer')
     assert.equal((bills.drawer as { createMode?: boolean } | null)?.createMode, true)
     assertNavigable('bills', bills.newItems)
-    assert.deepEqual(bills.newItems.map((item) => item.kind), ['vendor_bill', 'vendor_credit'])
+    assert.deepEqual(bills.newItems.filter((item) => !item.href).map((item) => item.kind), ['vendor_bill', 'vendor_credit'])
+    assert.deepEqual(bills.newItems.filter((item) => item.href).map((item) => item.href), ['/ap/bills/batch'])
 
     const invoices = await load(loadArInvoices, { doc: 'new', kind: 'customer_invoice', mode: 'edit' })
     assert.equal(invoices.drawerOpen, true, 'invoices New opens the create drawer')

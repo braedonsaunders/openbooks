@@ -4103,6 +4103,14 @@
         "title": "Service-Dispositionsrichtlinie",
         "singularTitle": "Version der Dispositionsrichtlinie",
         "description": "Kundenbenachrichtigungen, Reaktionsziele je Priorität und wie weit im Voraus Verträge Einsätze erzeugen, gültig ab einem Datum."
+      },
+      "ap-capture-mailboxes": {
+        "title": "Kreditoren-Eingangsadressen",
+        "description": "E-Mail-Adressen, die per E-Mail empfangene Rechnungen in Erfassungen für einen Rechtsträger umwandeln."
+      },
+      "ap-capture-autopost-policies": {
+        "title": "Richtlinie für automatisches Buchen von Rechnungen",
+        "description": "Erfasste Rechnungen von Lieferanten automatisch buchen, deren letzte Rechnungen unverändert übernommen und gebucht wurden."
       }
     },
     "fields": {
@@ -7989,6 +7997,42 @@
       "defaultVisitMinutes": "Standarddauer eines Einsatzes (Minuten)",
       "agreementHorizonDays": "Vertragshorizont (Tage)",
       "agreementHorizonDaysHelp": "Wie weit im Voraus wiederkehrende Verträge ihre Einsätze erzeugen."
+    },
+    "apCapture": {
+      "mailboxHelp": "Richten Sie den eingehenden Webhook Ihres E-Mail-Anbieters auf die Webhook-URL dieser Adresse aus. Jeder PDF-, Bild- oder XML-Anhang wird zu einer Erfassung für den gewählten Rechtsträger.",
+      "policyHelp": "Ein Lieferant erwirbt Vertrauen, wenn seine letzten erfassten Rechnungen jeweils ohne jede Korrektur übernommen und anschließend gebucht wurden und keine davon storniert wurde. Eine einzige Bearbeitung oder Stornierung beendet die Serie. Genehmigungs-Flows gelten weiterhin, und Periodensperren oder abgelehnte Buchungen belassen die Rechnung als Entwurf.",
+      "providers": {
+        "postmark": "Postmark",
+        "mailgun": "Mailgun",
+        "sendgrid": "SendGrid",
+        "generic": "Generisches JSON"
+      },
+      "fields": {
+        "label": "Name",
+        "emailAddress": "Weiterleitungsadresse",
+        "provider": "E-Mail-Anbieter",
+        "token": "Webhook-Token",
+        "allowedSenders": "Zulässige Absender",
+        "signingSecret": "Signaturgeheimnis",
+        "clearSigningSecret": "Signaturgeheimnis entfernen",
+        "rotateToken": "Neue Webhook-URL ausstellen",
+        "enabled": "Automatisches Buchen aktiviert",
+        "cleanStreak": "Erforderliche fehlerfreie Rechnungen",
+        "maxAmount": "Höchstbetrag pro Rechnung",
+        "maxAmountCurrency": "Währung des Höchstbetrags"
+      },
+      "help": {
+        "subsidiaryId": "An diese Adresse gesendete Rechnungen werden bei diesem Rechtsträger gebucht. Dies kann später nicht geändert werden.",
+        "emailAddress": "Die Adresse bei Ihrem E-Mail-Anbieter, an die Lieferanten Rechnungen senden. Wird auf der Erfassungsseite mit einer Kopierschaltfläche angezeigt.",
+        "provider": "Postmark, Mailgun und SendGrid senden ihre eigenen Formate; Generisches JSON akzeptiert das dokumentierte JSON-Format.",
+        "allowedSenders": "Exakte Adressen (ap@vendor.com) oder ganze Domains (@vendor.com). Leer lassen, um jeden Absender zu akzeptieren.",
+        "signingSecret": "Mailgun: der Webhook-Signaturschlüssel. Postmark und SendGrid: das Passwort in den Zugangsdaten der Webhook-URL. Generisches JSON: der HMAC-Schlüssel für X-OpenBooks-Signature. Leer lassen, um das gespeicherte Geheimnis beizubehalten.",
+        "clearSigningSecret": "Zustellungen werden dann allein über das Webhook-Token authentifiziert.",
+        "rotateToken": "Die aktuelle Webhook-URL funktioniert sofort nicht mehr. Hinterlegen Sie die neue URL bei Ihrem E-Mail-Anbieter.",
+        "enabled": "Standardmäßig deaktiviert. Wenn deaktiviert, wartet jede Erfassung auf Prüfung.",
+        "cleanStreak": "Aufeinanderfolgende erfasste Rechnungen des Lieferanten, die jeweils unverändert übernommen und gebucht wurden, bevor seine Rechnungen automatisch gebucht werden (2 bis 20).",
+        "maxAmount": "Rechnungen mit einem höheren Gesamtbetrag warten auf Prüfung. Eine Rechnung in einer anderen Währung wartet immer."
+      }
     }
   },
   "flows": {

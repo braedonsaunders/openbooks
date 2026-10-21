@@ -26,9 +26,11 @@ import {
   ShieldCheck,
   ShieldAlert,
   type LucideIcon,
+  TextCursorInput,
 } from 'lucide-react'
 import { Popover, cn } from '@openbooks/ui'
 import { ThemeToggle } from './theme-toggle'
+import { EntryPreferencesPanel } from './entry-preferences-panel'
 import { EnvironmentPicker } from './environment-picker'
 import { PlatformWorkspacePicker, useOnPlatform } from './platform-menu'
 import { LOCALES, type Locale } from '../i18n/config'
@@ -48,7 +50,7 @@ function initialsFrom(name: string, email: string): string {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
 }
 
-type View = 'home' | 'tenants' | 'language' | 'theme' | 'layout' | 'platform'
+type View = 'home' | 'tenants' | 'language' | 'theme' | 'layout' | 'platform' | 'entry'
 
 async function signOut() {
   await fetch('/api/login', { method: 'DELETE' })
@@ -248,6 +250,12 @@ export function AccountMenu({
                 {t('security')}
               </span>
             </Link>
+            <Card
+              icon={TextCursorInput}
+              tint="bg-teal-50 text-teal-700 dark:bg-teal-950/40 dark:text-teal-300"
+              label={t('dataEntry')}
+              onClick={() => setView('entry')}
+            />
             {openShortcutHelp ? (
               <Card
                 icon={Keyboard}
@@ -303,7 +311,9 @@ export function AccountMenu({
                     ? t('theme')
                     : view === 'platform'
                       ? t('platform')
-                      : t('menuLayout')
+                      : view === 'entry'
+                        ? t('dataEntry')
+                        : t('menuLayout')
             }
             onBack={() => setView('home')}
           />
@@ -344,6 +354,7 @@ export function AccountMenu({
               <ThemeToggle />
             </div>
           )}
+          {view === 'entry' && <EntryPreferencesPanel className="max-h-[26rem] w-80 overflow-y-auto" />}
         </div>
       )}
     </Popover>

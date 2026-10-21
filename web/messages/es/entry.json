@@ -1,0 +1,93 @@
+{
+  "moreDetails": "More details",
+  "noPaymentTermsVendor": "No payment terms on {name} — set terms on the vendor or a company default",
+  "partyDefault": {
+    "configured": "New lines use {account}, the default account for {party}.",
+    "history": "New lines use {account}, used on {count, plural, one {# recent document} other {# recent documents}} from {party}."
+  },
+  "controlTotal": {
+    "label": "Control total",
+    "help": "Type the total printed on the vendor's document. Saving waits until the lines add up to it.",
+    "off": "Off by {difference}",
+    "mismatch": "The lines don't add up to the control total yet: they are off by {difference}. Correct a line, or clear the control total.",
+    "invalid": "The control total isn't an amount. Type a number such as 1250.00, or clear it."
+  },
+  "postAfterSave": {
+    "posted": "{number} saved and posted",
+    "pending": "{number} saved and submitted for approval"
+  },
+  "buttons": {
+    "saveDraft": "Save draft",
+    "saveHint": "Save as a draft (⌘S / Ctrl+S)",
+    "saveAndNew": "Save & new",
+    "saveAndNewHint": "Save and start the next one (⌃⌥S / Ctrl+Alt+S)",
+    "postAndNew": "Post & new",
+    "postAndNewHint": "Save, post and start the next one (⌘↵ / Ctrl+Enter)",
+    "post": "Post",
+    "postHint": "Save and post (⌘⇧↵ / Ctrl+Shift+Enter)"
+  },
+  "createParty": {
+    "vendor": "Create vendor “{name}”",
+    "customer": "Create customer “{name}”",
+    "failed": "The party could not be created."
+  },
+  "duplicate": {
+    "title": "This vendor already has a bill with this invoice number",
+    "match": "{number} · {date} · {total} · {status}"
+  },
+  "recall": {
+    "offer": "Last from this party: {number} · {date} · {total} · {lines, plural, one {# line} other {# lines}}",
+    "use": "Use its lines",
+    "shortcut": "Use the last document's lines",
+    "shortcutHint": "Fill the lines from this party's last document (⌃⌥L / Ctrl+Alt+L)",
+    "applied": "Lines filled from {number}. Change anything that differs.",
+    "undo": "Undo"
+  },
+  "preferences": {
+    "saveFailed": "The preference could not be saved. Try again.",
+    "enterMovesToNextField": {
+      "label": "Enter moves to the next field",
+      "help": "Enter walks across a line and on to the next one, as in desktop accounting systems. Off: Enter moves down the column."
+    },
+    "autoDecimal": {
+      "label": "Place the decimal point automatically",
+      "help": "Type 1785 to enter 17.85 in amount fields — for ten-key entry. Typing a decimal point still works as usual."
+    },
+    "keepDateOnNew": {
+      "label": "Keep the date on Save & new",
+      "help": "The next document starts with the date you just used."
+    },
+    "keepPartyOnNew": {
+      "label": "Keep the vendor or customer on Save & new",
+      "help": "For entering several documents from the same party."
+    },
+    "recallLastDocument": {
+      "label": "When you pick a vendor or customer",
+      "help": "Their most recent document of the same kind can fill the lines for you.",
+      "suggest": "Offer their last lines",
+      "apply": "Fill from their last document",
+      "off": "Don't recall"
+    }
+  },
+  "keys": {
+    "title": "Lines, lists and amounts",
+    "preferencesTitle": "Data entry preferences",
+    "gridEnter": "Next line (or next field, by preference)",
+    "gridShiftEnter": "Previous line",
+    "gridArrows": "Move between lines",
+    "gridTab": "Next field; past the last field, a new line",
+    "gridInsertBelow": "Insert a line below",
+    "gridInsertAbove": "Insert a line above",
+    "gridCopyAbove": "Copy the field from the line above",
+    "gridDuplicate": "Duplicate the line",
+    "gridRemove": "Remove the line",
+    "gridMove": "Move the line up or down",
+    "gridMenu": "Line menu",
+    "gridPaste": "Paste rows copied from a spreadsheet",
+    "pickerType": "Type to search a list (names and codes)",
+    "pickerTab": "Accept the highlighted match and move on",
+    "pickerOpen": "Open the list",
+    "amountMath": "Arithmetic in amounts (200+47.83)",
+    "fieldHelp": "Explain the focused field"
+  }
+}

@@ -3,7 +3,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Search, CornerDownLeft, Loader2, X } from 'lucide-react'
+import { Search, CornerDownLeft, Loader2, Plus, X } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { NavIcon, type SidebarNavGroup } from './sidebar-nav'
 import { relatedPartyHref } from './related-party-link'
@@ -12,9 +12,26 @@ import { buildPageIndex, searchPages, type PageSearchHit } from '../lib/nav/page
 import { readRecents, rememberRecent, writeRecents, type StoredRecent } from '../lib/search-recent'
 import { statusLabel } from '../lib/status-label'
 import { useShortcuts } from './shortcuts/shortcut-provider'
+import { useGlobalCreate, type GlobalCreateKey, type GlobalCreatePermissions } from './global-create-menu'
 import type { RecentRef, SearchBadge, SearchGroup, SearchHit, SearchResponse } from '../lib/search-types'
 
-type Hit = Omit<SearchHit, 'type'> & { type: SearchHit['type'] | 'page' }
+type Hit = Omit<SearchHit, 'type'> & { type: SearchHit['type'] | 'page' | 'action' }
+
+const NO_CREATE_PERMISSIONS = {} as GlobalCreatePermissions
+
+/**
+ * Whether a typed command names a create action: optional verbs ("new",
+ * "create", localized) followed by words that each start a word of the
+ * action's label. A verb alone lists every action.
+ */
+export function matchesCreateAction(query: string, label: string, verbs: readonly string[]): boolean {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const verbSet = new Set(verbs.map((verb) => verb.toLowerCase()))
+  const rest = words.filter((word) => !verbSet.has(word))
+  if (rest.length === 0) return words.length > 0
+  const labelWords = label.toLowerCase().split(/[\s\-_/]+/).filter(Boolean)
+  return rest.every((word) => labelWords.some((part) => part.startsWith(word)))
+}
 type Group = { type: string; labelKey: string; hits: Hit[] }
 
 /** Results that open a page rather than a record drawer over the current page. */
@@ -51,8 +68,11 @@ export function GlobalSearch({
   className,
   navGroups,
   recentScope,
+  createPermissions,
 }: {
   className?: string
+  /** The shell's create permissions: matching create actions run from the search. */
+  createPermissions?: GlobalCreatePermissions
   navGroups: readonly SidebarNavGroup[]
   /** The signed-in user in the current organization; recents never cross either. */
   recentScope: string
@@ -60,6 +80,8 @@ export function GlobalSearch({
   const t = useTranslations('shell.globalSearch')
   const tShortcuts = useTranslations('shell.shortcuts.commands')
   const tCommon = useTranslations('common')
+  const tCreate = useTranslations('shell.globalCreate')
+  const { available: createActions, create } = useGlobalCreate(createPermissions ?? NO_CREATE_PERMISSIONS)
   const router = useRouter()
   const pathname = usePathname() ?? '/'
   const searchParams = useSearchParams()
@@ -85,6 +107,22 @@ export function GlobalSearch({
     const hits = searchPages(pageIndex, pageQuery).map(pageHit)
     return hits.length ? { type: 'page', labelKey: 'pages', hits } : null
   }, [pageIndex, pageQuery])
+  // Create actions answer typed commands ("new bill", "invoice") ahead of
+  // records, through the same permission-filtered paths as the + menu.
+  const actionGroup: Group | null = useMemo(() => {
+    if (pageQuery.length < 2 || !createPermissions) return null
+    const verbs = t('createVerbs').split(/\s+/)
+    const hits = createActions
+      .filter((action) => matchesCreateAction(pageQuery, tCreate(`items.${action.key}` as never), verbs))
+      .slice(0, 5)
+      .map((action): Hit => ({
+        id: action.key,
+        type: 'action',
+        title: t('createAction', { name: tCreate(`items.${action.key}` as never) }),
+        href: '',
+      }))
+    return hits.length ? { type: 'action', labelKey: 'actions', hits } : null
+  }, [createActions, createPermissions, pageQuery, t, tCreate])
   // A report or setting that is also a menu page shows once, as the page.
   const pageHrefs = new Set(pageGroup?.hits.map((hit) => hit.href) ?? [])
   const serverGroups: Group[] = (res?.groups ?? []).map((group: SearchGroup) => ({
@@ -92,7 +130,7 @@ export function GlobalSearch({
     hits: group.hits.filter((hit) => !(PAGE_TYPES.has(hit.type) && pageHrefs.has(hit.href))),
   }))
   const groups: Group[] = searching
-    ? [...(pageGroup ? [pageGroup] : []), ...serverGroups].filter((group) => group.hits.length > 0)
+    ? [...(actionGroup ? [actionGroup] : []), ...(pageGroup ? [pageGroup] : []), ...serverGroups].filter((group) => group.hits.length > 0)
     : recentHits?.length
       ? [{ type: 'recent', labelKey: 'recent', hits: recentHits }]
       : []
@@ -243,6 +281,10 @@ export function GlobalSearch({
       setRecentHits(null)
       setRecentFailed(false)
       inputRef.current?.blur()
+      if (hit.type === 'action') {
+        void create(hit.id as GlobalCreateKey)
+        return
+      }
       const entry: StoredRecent = hit.type === 'page' ? { type: 'page', id: hit.href } : { type: hit.type, id: hit.id }
       writeRecents(recentScope, rememberRecent(readRecents(recentScope), entry))
       if (PAGE_TYPES.has(hit.type)) {
@@ -256,7 +298,7 @@ export function GlobalSearch({
         { scroll: false },
       )
     },
-    [pathname, recentScope, router, searchParams],
+    [create, pathname, recentScope, router, searchParams],
   )
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -364,7 +406,7 @@ export function GlobalSearch({
                               : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
                           )}
                         >
-                          <NavIcon iconKey={hit.iconKey} size={15} />
+                          {hit.type === 'action' ? <Plus size={15} /> : <NavIcon iconKey={hit.iconKey} size={15} />}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2">

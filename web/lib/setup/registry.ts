@@ -39,6 +39,7 @@ import { CRM_SETUP_ENTITIES } from './entities/crm'
 import { STORED_VALUE_ENTITIES } from './entities/stored-value'
 import { POS_ENTITIES } from './entities/pos'
 import { EINVOICING_ENTITIES } from './entities/einvoicing'
+import { AP_CAPTURE_ENTITIES } from './entities/ap-capture'
 import { REBATE_AGREEMENTS_ENTITY } from './entities/rebates'
 import { RENEWAL_POLICIES_ENTITY } from './entities/renewals'
 import { REVENUE_ENTITIES } from './entities/revenue'
@@ -87,6 +88,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...STORED_VALUE_ENTITIES,
   ...POS_ENTITIES,
   ...EINVOICING_ENTITIES,
+  ...AP_CAPTURE_ENTITIES,
   ...REVENUE_ENTITIES,
   REBATE_AGREEMENTS_ENTITY,
   RENEWAL_POLICIES_ENTITY,

@@ -1,0 +1,80 @@
+{
+  "tabs": {
+    "queue": "File de capture",
+    "inbox": "Activité de la boîte de réception"
+  },
+  "emailSource": "E-mail",
+  "mailboxes": {
+    "title": "Envoyer les factures par e-mail à",
+    "copyAddress": "Copier l’adresse {label}",
+    "copyWebhook": "Copier l’URL du webhook {label}",
+    "webhook": "URL du webhook",
+    "copied": "Copié dans le presse-papiers",
+    "copyFailed": "Copie impossible. Sélectionnez le texte et copiez-le manuellement.",
+    "none": "Aucune adresse de réception n’est encore active.",
+    "manage": "Gérer les adresses"
+  },
+  "inbox": {
+    "columns": {
+      "received": "Reçu",
+      "address": "Adresse",
+      "from": "Expéditeur",
+      "subject": "Objet",
+      "attachments": "Pièces jointes",
+      "outcome": "Résultat",
+      "detail": "Détail",
+      "capture": "Capture"
+    },
+    "outcomes": {
+      "received": "En traitement",
+      "captured": "Capturé",
+      "rejected_sender": "Expéditeur non autorisé",
+      "no_attachments": "Aucune facture jointe",
+      "duplicate": "Déjà capturé",
+      "error": "Erreur"
+    },
+    "capturedCount": "{count, plural, one {# capture créée} other {# captures créées}}",
+    "openCapture": "Ouvrir la capture",
+    "emptyTitle": "Aucun e-mail reçu pour l’instant",
+    "emptyDescription": "Les messages envoyés aux adresses fournisseurs de cette société apparaissent ici, avec le traitement appliqué à chacun.",
+    "emptyNoMailbox": "Configurez une adresse de réception sous Configuration → Facturation → Adresses de réception des factures fournisseurs pour recevoir les factures par e-mail."
+  },
+  "trust": {
+    "trusted": "Fiable : {count, plural, one {# facture sans correction} other {# factures sans correction}} d’affilée",
+    "building": "{count, plural, =0 {Aucune facture sans correction pour l’instant} one {# facture sans correction d’affilée} other {# factures sans correction d’affilée}} sur {threshold} requises pour obtenir la confiance"
+  },
+  "autoPost": {
+    "posted": "Comptabilisée automatiquement selon la politique de comptabilisation automatique.",
+    "submitted": "Soumise automatiquement pour approbation selon la politique de comptabilisation automatique.",
+    "refused": "Non comptabilisée automatiquement : {message}",
+    "skipped": {
+      "policy_off": "La comptabilisation automatique était désactivée à la réception de cette facture.",
+      "not_a_bill": "Les avoirs fournisseurs ne sont jamais comptabilisés automatiquement.",
+      "needs_review": "Non comptabilisée automatiquement : un champ ou une ligne doit être révisé.",
+      "duplicate": "Non comptabilisée automatiquement : il peut s’agir d’un doublon.",
+      "vendor_unmatched": "Non comptabilisée automatiquement : le fournisseur n’a pas été identifié.",
+      "vendor_not_trusted": "Non comptabilisée automatiquement : le fournisseur n’a pas encore obtenu la confiance.",
+      "amount_unreadable": "Non comptabilisée automatiquement : le total n’a pas pu être lu.",
+      "over_limit": "Non comptabilisée automatiquement : le total dépasse la limite de la politique.",
+      "currency_differs": "Non comptabilisée automatiquement : la devise de la facture diffère de la devise de la limite de la politique.",
+      "actor_not_permitted": "Non comptabilisée automatiquement : le propriétaire de l’adresse n’est pas autorisé à créer et comptabiliser des factures."
+    }
+  },
+  "keyboard": {
+    "listNext": "Capture suivante dans la liste",
+    "listPrevious": "Capture précédente dans la liste",
+    "next": "Capture suivante",
+    "previous": "Capture précédente",
+    "createDraft": "Créer le brouillon et passer à la capture suivante",
+    "createAndPost": "Créer le brouillon et comptabiliser",
+    "createAndPostButton": "Créer et comptabiliser",
+    "reject": "Rejeter la capture",
+    "rejectConfirm": "Rejeter {name} ? Le document quitte la file de révision.",
+    "posted": "Facture comptabilisée",
+    "submittedForApproval": "Brouillon créé et soumis pour approbation",
+    "postRefused": "Le brouillon a été créé mais n’a pas été comptabilisé : {message}",
+    "openDraft": "Ouvrir le brouillon",
+    "allReviewed": "Plus aucune capture à réviser",
+    "hint": "J / K : capture suivante ou précédente · Enter : prochain champ à vérifier · ⌘/Ctrl+Enter : créer le brouillon · ⌘/Ctrl+Shift+Enter : créer et comptabiliser · ? : tous les raccourcis"
+  }
+}

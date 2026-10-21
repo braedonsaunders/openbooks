@@ -51,7 +51,9 @@
     "saveState": {
       "saved": "已保存所有更改",
       "error": "保存失败——请修正后重试",
-      "dirty": "有未保存的更改…"
+      "dirty": "有未保存的更改…",
+      "unavailable": "服务器或连接失败——已保留输入内容，请重试",
+      "unavailableDetail": "保存未获确认前，服务器或连接出现故障。您的输入内容仍保留在此，请重试保存。"
     },
     "deleteTitle": "删除此单据？",
     "deleteDraftBody": "此操作将永久删除该草稿，且无法撤销。",

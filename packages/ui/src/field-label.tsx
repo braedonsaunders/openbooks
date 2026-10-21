@@ -30,6 +30,7 @@ function textFromNode(node: React.ReactNode): string {
 
 /**
  * The `?` help button + popover that `FieldLabel` renders beside every label.
+ * Keyboard users reach it with F1 from the field it explains.
  * Exported so surfaces without a `<label>` (toolbar hints, checkbox rows,
  * table headers) can attach the SAME field-help affordance — never a bespoke
  * hint paragraph.
@@ -58,6 +59,11 @@ export function FieldHelp({
       trigger={
         <button
           type="button"
+          // Help sits outside the Tab order so a keyboard pass through a form
+          // visits only fields. F1 opens the focused field's help instead
+          // (see the shortcut provider), and pointer users click it as before.
+          tabIndex={-1}
+          data-field-help=""
           aria-label={buttonLabel ?? t('open')}
           aria-expanded={open}
           aria-haspopup="dialog"

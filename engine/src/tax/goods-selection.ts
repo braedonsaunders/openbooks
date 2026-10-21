@@ -17,6 +17,19 @@ export interface CanadianGoodsSelection {
   deliveryMethod:'delivered_or_made_available'|'supplier_arranged_shipping'|'recipient_collection'
   agreementEvidence:string
 }
+/**
+ * Whether native Canadian goods tax can apply to this organization's sales
+ * at all: the Canada tax pack is installed and active and an active Canadian
+ * selling legal entity exists. Forms offer the selection only then; the
+ * resolver still validates every registration, rate and account at use.
+ */
+export async function nativeGoodsTaxAvailable(orgId:string,exec:SqlExecutor=db):Promise<boolean> {
+  const row=(await exec.execute<{available:boolean}>(sql`select
+      exists(select 1 from tax_country_pack_installations where org_id=${orgId} and pack_code=${CANADA_TAX_PACK.code} and country='CA' and status='active')
+      and exists(select 1 from subsidiaries where org_id=${orgId} and country='CA' and is_active and not is_elimination) as available`)).rows[0]
+  return row?.available===true
+}
+
 export interface GoodsTaxLine {amount:string;itemId?:string|null;taxCodeId?:string|null;taxGroupId?:string|null;taxOverridden?:boolean}
 export function parseCanadianGoodsSelection(raw:unknown):CanadianGoodsSelection|null {
   if(raw===undefined || raw===null)return null

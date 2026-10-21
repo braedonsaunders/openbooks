@@ -51,7 +51,9 @@
     "saveState": {
       "saved": "Todas as alterações salvas",
       "error": "Falha ao salvar — corrija e tente novamente",
-      "dirty": "Alterações não salvas…"
+      "dirty": "Alterações não salvas…",
+      "unavailable": "Falha no servidor ou na conexão — dados mantidos, tente novamente",
+      "unavailableDetail": "O servidor ou a conexão falhou antes da confirmação do salvamento. Suas informações continuam aqui — tente salvar novamente."
     },
     "deleteTitle": "Excluir este documento?",
     "deleteDraftBody": "Isto exclui permanentemente o rascunho. Não é possível desfazer.",

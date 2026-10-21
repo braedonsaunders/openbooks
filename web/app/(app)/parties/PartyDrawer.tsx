@@ -47,6 +47,7 @@ import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { PartyTaxIdSection } from './PartyTaxIdSection'
 import { BillingRelationshipsSection } from './BillingRelationshipsSection'
 import { VendorCompliancePanel, type ComplianceClassOption } from './VendorCompliancePanel'
+import { VendorCaptureTrust } from './VendorCaptureTrust'
 import { VendorTaxIdentityPanel, type VendorTaxIdentity } from './VendorTaxIdentityPanel'
 import { countryOptions } from '../../../lib/countries'
 import { ReadOnlyValue } from '../../../components/read-only-value'
@@ -2407,6 +2408,7 @@ export function PartyDrawer({
       ) : null}
       {showComplianceTab && keptTabs.has('compliance') ? (
         <div hidden={tab !== 'compliance'} className="space-y-7 p-1">
+          <VendorCaptureTrust partyId={String(p.id)} />
           {compliance ? (
             <VendorCompliancePanel
               partyId={String(p.id)}

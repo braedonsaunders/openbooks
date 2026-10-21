@@ -379,7 +379,7 @@ test("editing a bill without the designer grant offers no Actions button", async
     host.remove();
   });
   assert.ok(
-    [...document.querySelectorAll("button")].some((b) => b.textContent?.trim() === "Save"),
+    [...document.querySelectorAll("button")].some((b) => ["Save", "Save draft"].includes(b.textContent?.trim() ?? "")),
     "the bill is really being edited (Save is primary)",
   );
   assert.equal(actionsButton(), undefined, "no empty Actions popover is offered while editing");

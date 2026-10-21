@@ -9,6 +9,10 @@
  * - `chord`: Ctrl+Alt (⌃⌥ on macOS) for application commands;
  * - `primary`: ⌘ on macOS, Ctrl elsewhere, for the few editor conventions
  *   people expect (Save, Search);
+ * - `none`: an unmodified non-text key (F1, F8) for entry aids that must
+ *   work while typing in a field;
+ * - `alt`: Alt (⌥) with a non-text key such as an arrow, for moving between
+ *   records in a review queue;
  * - a bare character (`?`) for the help sheet, matched on the produced
  *   character because its physical key differs between layouts.
  *
@@ -19,7 +23,7 @@
 export type ShortcutScope = 'global' | 'page' | 'form'
 
 export type ShortcutBinding =
-  | { modifier: 'chord' | 'primary'; code: string; shift?: boolean }
+  | { modifier: 'chord' | 'primary' | 'none' | 'alt'; code: string; shift?: boolean }
   | { character: string }
 
 export interface ShortcutCommand {
@@ -86,6 +90,11 @@ export function bindingMatches(binding: ShortcutBinding, event: KeyEventLike, ap
   if (binding.modifier === 'chord') {
     if (event.getModifierState?.('AltGraph')) return false
     return event.ctrlKey && event.altKey && !event.metaKey
+  }
+  if (binding.modifier === 'none') return !event.ctrlKey && !event.altKey && !event.metaKey
+  if (binding.modifier === 'alt') {
+    if (event.getModifierState?.('AltGraph')) return false
+    return event.altKey && !event.ctrlKey && !event.metaKey
   }
   return apple
     ? event.metaKey && !event.ctrlKey && !event.altKey
@@ -200,6 +209,10 @@ const CODE_LABELS: Record<string, string> = {
   Minus: '-',
   Comma: ',',
   Period: '.',
+  Quote: "'",
+  Backspace: '⌫',
+  ArrowUp: '↑',
+  ArrowDown: '↓',
 }
 
 function codeLabel(code: string): string {
@@ -218,7 +231,8 @@ export function bindingKeys(binding: ShortcutBinding, apple: boolean): string[] 
   if ('character' in binding) return [binding.character]
   const keys: string[] = []
   if (binding.modifier === 'chord') keys.push(...(apple ? ['⌃', '⌥'] : ['Ctrl', 'Alt']))
-  else keys.push(apple ? '⌘' : 'Ctrl')
+  else if (binding.modifier === 'primary') keys.push(apple ? '⌘' : 'Ctrl')
+  else if (binding.modifier === 'alt') keys.push(apple ? '⌥' : 'Alt')
   if (binding.shift) keys.push(apple ? '⇧' : 'Shift')
   keys.push(codeLabel(binding.code))
   return keys
@@ -227,7 +241,13 @@ export function bindingKeys(binding: ShortcutBinding, apple: boolean): string[] 
 /** The `aria-keyshortcuts` value for a binding (WAI-ARIA key names). */
 export function ariaKeyShortcut(binding: ShortcutBinding, apple: boolean): string {
   if ('character' in binding) return binding.character
-  const parts: string[] = binding.modifier === 'chord' ? ['Control', 'Alt'] : [apple ? 'Meta' : 'Control']
+  const parts: string[] = binding.modifier === 'chord'
+    ? ['Control', 'Alt']
+    : binding.modifier === 'none'
+      ? []
+      : binding.modifier === 'alt'
+        ? ['Alt']
+        : [apple ? 'Meta' : 'Control']
   if (binding.shift) parts.push('Shift')
   parts.push(codeLabel(binding.code))
   return parts.join('+')

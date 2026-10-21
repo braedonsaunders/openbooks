@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
+import { useCallback, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '../lib/api-error'
 import { CustomFieldInput } from './custom-field-input'
 import { postedCorrectionFieldClass } from '@openbooks/engine/ledger/posted-correction-fields'
 import { type HeaderFieldPlacement, customFieldDefKey, isCustomFieldKey } from '@openbooks/customization'
@@ -69,7 +70,19 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
     setBillingMethod,
     isFinalInvoice,
     setIsFinalInvoice,
+    isCreate,
+    tEntry,
+    controlSide,
+    controlChoices,
+    controlChoice,
+    controlLabel,
+    controlDefault,
   } = scope
+
+  // Labels name their controls (click-to-focus, screen readers, and F1
+  // help all resolve a field through this association).
+  const idPrefix = useId()
+  const fieldId = (key: string) => `${idPrefix}-${key}`
 
   // Card-instrument fallback: no UI creates payment_cards rows,
   // so with zero instruments the instrument picker is unfillable. Offer the
@@ -107,6 +120,43 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
   const pickerPartyRole = config.partyRole ?? config.optionalPartyRole ?? null
   const partyLabel = pickerPartyRole === 'customer' ? tCommon('labels.customer') : tCommon('labels.vendor')
   const partyPlaceholder = pickerPartyRole === 'customer' ? t('drawer.selectCustomerPlaceholder') : t('drawer.selectVendorPlaceholder')
+
+  // Parties created inline from the picker join its options at once; the
+  // page's own list catches up on the next load.
+  const [createdParties, setCreatedParties] = useState<{ id: string; display_name: string }[]>([])
+  const partyOptions = useMemo(() => {
+    const known = new Set((parties ?? []).map((party) => party.id))
+    return [
+      ...(parties ?? []).map((party) => ({
+        value: party.id,
+        label: party.display_name ?? '',
+        hint: party.short_code ?? undefined,
+        keywords: party.short_code ? [party.short_code] : undefined,
+      })),
+      ...createdParties.filter((party) => !known.has(party.id)).map((party) => ({ value: party.id, label: party.display_name })),
+    ]
+  }, [parties, createdParties])
+  /**
+   * Create a vendor or customer from the picker with just its name, through
+   * the same party command as the directory (permissions, audit and
+   * duplicate-code refusals included). Further details are added later on
+   * the party record.
+   */
+  const createParty = useCallback(async (name: string) => {
+    if (!pickerPartyRole) return null
+    const response = await fetch('/api/parties', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify({ kind: 'company', displayName: name, roles: { [pickerPartyRole]: { enabled: true } } }),
+    })
+    if (!response.ok) throw new Error(await readApiErrorMessage(response, tEntry('createParty.failed')))
+    const body = (await response.json().catch(() => null)) as { party?: { id?: unknown; display_name?: unknown } } | null
+    const id = typeof body?.party?.id === 'string' ? body.party.id : null
+    if (!id) throw new Error(tEntry('createParty.failed'))
+    const label = typeof body?.party?.display_name === 'string' ? body.party.display_name : name
+    setCreatedParties((current) => [...current, { id, display_name: label }])
+    return { value: id, label }
+  }, [pickerPartyRole, tEntry])
 
   const headerDefByDefKey = useMemo(() => new Map(headerDefs.map((d) => [d.key, d])), [headerDefs])
   const defLabelForHeader = (key: string): string => {
@@ -147,13 +197,19 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
       case 'party_id':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}{required && isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}{required && isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
             {isEditable ? (
               <SearchSelect
-                options={(parties ?? []).map((v) => ({ value: v.id, label: v.display_name ?? '' }))}
+                id={fieldId(p.key)}
+                options={partyOptions}
                 value={partyId}
                 onChange={changeParty}
                 placeholder={partyPlaceholder}
+                advanceOnSelect
+                recentKey={pickerPartyRole ? `party:${pickerPartyRole}` : undefined}
+                onCreate={pickerPartyRole ? createParty : undefined}
+                createLabel={(query) => pickerPartyRole === 'customer' ? tEntry('createParty.customer', { name: query }) : tEntry('createParty.vendor', { name: query })}
+                data-autofocus={isCreate && !partyId ? true : undefined}
               />
             ) : (<p className="text-sm">{doc.party_name}</p>)}
           </>
@@ -162,14 +218,17 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
         const savedCardName = (cards ?? []).find((c) => c.id === doc.payment_card_id)?.display_name ?? doc.payment_card_id
         return (
           <>
-            <FieldLabel fieldName={label}>{label}{required && isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}{required && isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
             {isEditable ? (
               (cards ?? []).length > 0 ? (
                 <SearchSelect
+                  id={fieldId(p.key)}
                   options={(cards ?? []).map((c) => ({ value: c.id, label: c.display_name ?? c.label ?? '' }))}
                   value={paymentCardId}
                   onChange={(v) => setPaymentCardId(v ?? '')}
                   placeholder={t('drawer.selectCardPlaceholder')}
+                  advanceOnSelect
+                  data-autofocus={isCreate && !paymentCardId && !pickerPartyRole ? true : undefined}
                 />
               ) : (
                 cardAccountFallback(true)
@@ -187,22 +246,24 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
       case 'document_date':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
+              <DateField id={fieldId(p.key)} value={documentDate} onChange={(value) => setDocumentDate(value)} />
             ) : (<p className="text-sm">{doc.document_date}</p>)}
           </>
         )
       case 'due_date':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <>
-                <DateField value={dueDate} onChange={(value) => editDueDate(value)} />
+                <DateField id={fieldId(p.key)} value={dueDate} onChange={(value) => editDueDate(value)} />
                 {noTermsHint ? (
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    {tCommon('documentDefaults.noPaymentTerms', { name: noTermsHint })}
+                    {pickerPartyRole === 'vendor'
+                      ? tEntry('noPaymentTermsVendor', { name: noTermsHint })
+                      : tCommon('documentDefaults.noPaymentTerms', { name: noTermsHint })}
                   </p>
                 ) : null}
               </>
@@ -212,18 +273,18 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
       case 'reference_number':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
+              <Input id={fieldId(p.key)} autoComplete="off" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
             ) : (<p className="text-sm">{doc.reference_number ?? '—'}</p>)}
           </>
         )
       case 'memo':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
+              <Input id={fieldId(p.key)} value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (<p className="text-sm">{doc.memo ?? '—'}</p>)}
           </>
         )
@@ -237,10 +298,10 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
           isEditable && (!isPosted || postedCorrectionFieldClass('postingDate') !== 'financial')
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {canOfferPostingDate ? (
               <>
-                <DateField value={postingDate} onChange={(value) => setPostingDate(value)} />
+                <DateField id={fieldId(p.key)} value={postingDate} onChange={(value) => setPostingDate(value)} />
                 {!postingDate && /^\d{4}-\d{2}-\d{2}$/.test(documentDate) && !isPosted ? (
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     {tCommon('documentDefaults.postingDateFallback', { date: documentDate })}
@@ -254,9 +315,9 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
       case 'expected_pay_date':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <DateField value={expectedPayDate} onChange={(value) => setExpectedPayDate(value)} />
+              <DateField id={fieldId(p.key)} value={expectedPayDate} onChange={(value) => setExpectedPayDate(value)} />
             ) : (<p className="text-sm">{doc.expected_pay_date ?? '—'}</p>)}
           </>
         )
@@ -264,45 +325,45 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
         if (!carriesWorkDates) return null
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <DateField value={workCompletedOn} onChange={(value) => setWorkCompletedOn(value)} />
+              <DateField id={fieldId(p.key)} value={workCompletedOn} onChange={(value) => setWorkCompletedOn(value)} />
             ) : (<p className="text-sm">{doc.work_completed_on ?? '—'}</p>)}
           </>
         )
       case 'department_id':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <SearchSelect options={(departments ?? []).map((d) => ({ value: d.id, label: d.name ?? '' }))} value={departmentId} onChange={(v) => setDepartmentId(v ?? '')} placeholder="—" />
+              <SearchSelect id={fieldId(p.key)} advanceOnSelect options={(departments ?? []).map((d) => ({ value: d.id, label: d.name ?? '' }))} value={departmentId} onChange={(v) => setDepartmentId(v ?? '')} placeholder="—" />
             ) : (<p className="text-sm">{optName(departments, doc.department_id)}</p>)}
           </>
         )
       case 'project_id':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable && config.kind !== 'project_charge' ? (
-              <SearchSelect options={(projects ?? []).map((pr) => ({ value: pr.id, label: pr.name ?? '' }))} value={projectIdHeader} onChange={(v) => setProjectIdHeader(v ?? '')} placeholder="—" />
+              <SearchSelect id={fieldId(p.key)} advanceOnSelect options={(projects ?? []).map((pr) => ({ value: pr.id, label: pr.name ?? '' }))} value={projectIdHeader} onChange={(v) => setProjectIdHeader(v ?? '')} placeholder="—" />
             ) : (<p className="text-sm">{optName(projects, doc.project_id)}</p>)}
           </>
         )
       case 'location_id':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <SearchSelect options={(locations ?? []).map((l) => ({ value: l.id, label: l.name ?? '' }))} value={locationId} onChange={(v) => setLocationId(v ?? '')} placeholder="—" />
+              <SearchSelect id={fieldId(p.key)} advanceOnSelect options={(locations ?? []).map((l) => ({ value: l.id, label: l.name ?? '' }))} value={locationId} onChange={(v) => setLocationId(v ?? '')} placeholder="—" />
             ) : (<p className="text-sm">{optName(locations, doc.location_id)}</p>)}
           </>
         )
       case 'class_id':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <SearchSelect options={(classes ?? []).map((c) => ({ value: c.id, label: c.name ?? '' }))} value={classId} onChange={(v) => setClassId(v ?? '')} placeholder="—" />
+              <SearchSelect id={fieldId(p.key)} advanceOnSelect options={(classes ?? []).map((c) => ({ value: c.id, label: c.name ?? '' }))} value={classId} onChange={(v) => setClassId(v ?? '')} placeholder="—" />
             ) : (<p className="text-sm">{optName(classes, doc.class_id)}</p>)}
           </>
         )
@@ -316,9 +377,11 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
         if (!multiSub) return null
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable && !isPosted && config.kind !== 'project_charge' ? (
               <SearchSelect
+                id={fieldId(p.key)}
+                advanceOnSelect
                 options={subsidiaryOpts}
                 value={subsidiaryId}
                 onChange={(v) => setSubsidiaryId(v ?? '')}
@@ -332,27 +395,27 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
       case 'payment_hold_reason':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <Input value={paymentHoldReason} onChange={(e) => setPaymentHoldReason(e.target.value)} />
+              <Input id={fieldId(p.key)} value={paymentHoldReason} onChange={(e) => setPaymentHoldReason(e.target.value)} />
             ) : (<p className="text-sm">{doc.payment_hold_reason ?? '—'}</p>)}
           </>
         )
       case 'internal_notes':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <Input value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} />
+              <Input id={fieldId(p.key)} value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} />
             ) : (<p className="text-sm">{doc.internal_notes ?? '—'}</p>)}
           </>
         )
       case 'billing_method':
         return (
           <>
-            <FieldLabel fieldName={label}>{label}</FieldLabel>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <Select value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)}>
+              <Select id={fieldId(p.key)} value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)}>
                 <option value="">—</option>
                 <option value="time_and_materials">{tCommon('billingMethods.timeAndMaterials')}</option>
                 <option value="fixed_price">{tCommon('billingMethods.fixedPrice')}</option>
@@ -374,6 +437,24 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
                 {tCommon('labels.finalInvoice')}
               </label>
             ) : (<p className="text-sm">{doc.is_final_invoice ? tCommon('labels.yes') : tCommon('labels.no')}</p>)}
+          </>
+        )
+      case 'control_account':
+        if (!controlSide || !controlChoices) return null
+        return (
+          <>
+            <FieldLabel htmlFor={fieldId(p.key)} fieldName={t('drawer.controlAccount')}>{t('drawer.controlAccount')}</FieldLabel>
+            <SearchSelect
+              id={fieldId(p.key)}
+              advanceOnSelect
+              options={controlChoices.accounts.map((option) => ({ value: option.id, label: controlLabel(option), keywords: option.number ? [option.number] : undefined }))}
+              value={controlChoice}
+              onChange={(value) => setCustomValues((current) => ({ ...current, controlAccountId: value ?? '' }))}
+              placeholder={controlDefault}
+              clearable
+              emptyLabel={controlDefault}
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('drawer.controlAccountHelp')}</p>
           </>
         )
       default:

@@ -1,0 +1,1 @@
+Adding a defaulted, constrained JSON column to users changes no existing rows' meaning: every user resolves to the documented default preferences.

@@ -4016,6 +4016,14 @@
         "title": "Service dispatch policy",
         "singularTitle": "Service dispatch policy version",
         "description": "Customer notices, response targets by priority and how far ahead agreements generate visits, effective from a date."
+      },
+      "ap-capture-mailboxes": {
+        "title": "AP inbound addresses",
+        "description": "Email addresses that turn emailed bills into captures for one legal entity."
+      },
+      "ap-capture-autopost-policies": {
+        "title": "Bill auto-post policy",
+        "description": "Post captured bills automatically from vendors whose recent bills were accepted unchanged and posted."
       }
     },
     "fields": {
@@ -7989,6 +7997,42 @@
       "defaultVisitMinutes": "Default visit length (minutes)",
       "agreementHorizonDays": "Agreement horizon (days)",
       "agreementHorizonDaysHelp": "How far ahead recurring agreements generate their visits."
+    },
+    "apCapture": {
+      "mailboxHelp": "Point your email provider's inbound webhook at this address's webhook URL. Each PDF, image or XML attachment becomes a capture for the chosen legal entity.",
+      "policyHelp": "A vendor earns trust when its most recent captured bills were each accepted without any correction and then posted, with none voided. One edit or void ends the streak. Approval Flows still apply, and period locks or posting refusals leave the bill as a draft.",
+      "providers": {
+        "postmark": "Postmark",
+        "mailgun": "Mailgun",
+        "sendgrid": "SendGrid",
+        "generic": "Generic JSON"
+      },
+      "fields": {
+        "label": "Name",
+        "emailAddress": "Forwarding address",
+        "provider": "Email provider",
+        "token": "Webhook token",
+        "allowedSenders": "Allowed senders",
+        "signingSecret": "Signing secret",
+        "clearSigningSecret": "Remove the signing secret",
+        "rotateToken": "Issue a new webhook URL",
+        "enabled": "Auto-post enabled",
+        "cleanStreak": "Clean bills required",
+        "maxAmount": "Maximum amount per bill",
+        "maxAmountCurrency": "Maximum amount currency"
+      },
+      "help": {
+        "subsidiaryId": "Bills received at this address book to this legal entity. It cannot change later.",
+        "emailAddress": "The address vendors send bills to at your email provider. Shown on the capture page with a copy button.",
+        "provider": "Postmark, Mailgun and SendGrid post their own formats; Generic accepts the documented JSON format.",
+        "allowedSenders": "Exact addresses (ap@vendor.com) or whole domains (@vendor.com). Leave empty to accept any sender.",
+        "signingSecret": "Mailgun: the webhook signing key. Postmark and SendGrid: the password in the webhook URL's credentials. Generic: the HMAC key for X-OpenBooks-Signature. Leave empty to keep the stored secret.",
+        "clearSigningSecret": "Deliveries are then authenticated by the webhook token alone.",
+        "rotateToken": "The current webhook URL stops working immediately. Update your email provider with the new one.",
+        "enabled": "Off by default. When off, every capture waits for review.",
+        "cleanStreak": "Consecutive captured bills from the vendor, each accepted unchanged and posted, before its bills post automatically (2 to 20).",
+        "maxAmount": "Bills above this total wait for review. A bill in another currency always waits."
+      }
     }
   },
   "flows": {

@@ -1,0 +1,102 @@
+{
+  "title": "Registro de facturas por lote",
+  "description": "Registre una pila de facturas de proveedor en una sola cuadrícula, compruébelas con los totales de control y guárdelas o contabilícelas juntas.",
+  "back": "Facturas de proveedor",
+  "menuLabel": "Registro por lote",
+  "helpLink": "Cómo funciona el registro por lote",
+  "noTax": "Sin impuesto",
+  "createVendor": "Crear el proveedor «{name}»",
+  "createVendorFailed": "No se pudo crear el proveedor.",
+  "keyboardHint": "Intro o Tab recorre los campos de una factura, y Tab después del último campo empieza la siguiente. F8 copia el campo de arriba. Pegue filas desde una hoja de cálculo, con una fila de encabezado para emparejar las columnas por nombre. Ctrl+S (⌘S) guarda cada factura como borrador.",
+  "keyboardHintPost": "Intro o Tab recorre los campos de una factura, y Tab después del último campo empieza la siguiente. F8 copia el campo de arriba. Pegue filas desde una hoja de cálculo, con una fila de encabezado para emparejar las columnas por nombre. Ctrl+S (⌘S) guarda cada factura como borrador; Ctrl+Intro (⌘Intro) las contabiliza.",
+  "columns": {
+    "vendor": "Proveedor",
+    "reference": "N.º de ref. del proveedor",
+    "billDate": "Fecha de la factura",
+    "dueDate": "Fecha de vencimiento",
+    "dueDateHelp": "Déjela en blanco para usar las condiciones de pago del proveedor. La columna de estado muestra la fecha que resulta de ellas.",
+    "account": "Cuenta",
+    "memo": "Nota",
+    "amount": "Monto",
+    "tax": "Impuesto",
+    "status": "Estado"
+  },
+  "control": {
+    "heading": "Totales de control",
+    "subsidiary": "Subsidiaria",
+    "count": "Número de facturas",
+    "total": "Total del lote",
+    "entered": "Registrado: {count, plural, one {# factura} other {# facturas}} · {total}",
+    "countMatched": "El número de facturas coincide",
+    "countOff": "Diferencia en el número de facturas: {difference, number}",
+    "countInvalid": "Introduzca el número de facturas como número entero",
+    "totalMatched": "El total del lote coincide",
+    "totalOff": "Diferencia en el total del lote: {difference}",
+    "totalInvalid": "Introduzca el total del lote como importe"
+  },
+  "actions": {
+    "saveAll": "Guardar todo como borradores",
+    "postAll": "Contabilizar todo",
+    "clearFinished": "Quitar las filas terminadas ({count, number})",
+    "addBill": "Agregar factura",
+    "progress": "Guardando {done, number} de {total, number}…"
+  },
+  "shortcuts": {
+    "saveAll": "Guardar todas las facturas como borradores",
+    "postAll": "Contabilizar todas las facturas"
+  },
+  "status": {
+    "saving": "Guardando…",
+    "saved": "Guardada {number}",
+    "posted": "Contabilizada {number}",
+    "pending": "{number} pendiente de aprobación",
+    "termsDue": "Vence el {date} según las condiciones",
+    "openExisting": "Abrir la factura existente"
+  },
+  "issues": {
+    "vendor": "Elija un proveedor",
+    "billDate": "Introduzca la fecha de la factura",
+    "amountMissing": "Introduzca el monto",
+    "amountInvalid": "El monto no es un número",
+    "amountNotPositive": "Introduzca un monto positivo; registre una factura negativa como nota de crédito del proveedor",
+    "account": "Elija una cuenta"
+  },
+  "duplicates": {
+    "badge": "Posible duplicado",
+    "inBatch": "Mismo proveedor y n.º de ref. que la fila {rows}",
+    "onFile": "Coincide con {number} del {date}",
+    "title": "Posibles facturas duplicadas",
+    "message": "{count, plural, one {# factura tiene} other {# facturas tienen}} el mismo proveedor y n.º de ref. que otra factura de este lote o ya registrada. ¿Guardar de todos modos?",
+    "row": "Fila {row}: {vendor}, {reference}",
+    "confirm": "Guardar de todos modos"
+  },
+  "refusals": {
+    "nothingToSave": "Este lote no tiene facturas sin guardar.",
+    "rowsNeedAttention": "{count, plural, one {# factura necesita} other {# facturas necesitan}} correcciones antes de guardar nada. {first}",
+    "rowIssue": "Fila {row}: {issue}.",
+    "controlInvalid": "No se pueden leer los totales de control. Introduzca el número de facturas como número entero y el total del lote como importe, o bórrelos.",
+    "controlCount": "El lote tiene {entered, plural, one {# factura} other {# facturas}}, pero el número de control es {control, number}. Busque la factura que falta o sobra, o corrija el número de control.",
+    "controlTotal": "Las facturas suman {entered}, {difference} {direction, select, over {más} other {menos}} que el total del lote. Corrija los montos o el total del lote.",
+    "saveFailed": "No se pudo guardar la factura.",
+    "unavailable": "No se pudo conectar con el servidor. El lote se conserva; vuelva a guardar para reintentar, y las facturas ya guardadas no se crean dos veces.",
+    "conflict": "Es posible que la factura de esta fila ya se haya guardado con otros datos. Abra la factura existente para revisarla o duplique la fila para guardarla como una factura nueva.",
+    "refusedSummary": "{count, plural, one {# factura no se guardó ni se contabilizó} other {# facturas no se guardaron ni se contabilizaron}}. El motivo aparece en cada fila; corríjalo y vuelva a guardar.",
+    "defaultsFailed": "No se pudieron cargar los valores predeterminados del proveedor. Elija la cuenta de cada factura."
+  },
+  "summary": {
+    "saved": "{count, plural, one {# factura guardada como borrador} other {# facturas guardadas como borradores}}",
+    "posted": "{posted, plural, one {# factura contabilizada} other {# facturas contabilizadas}}, {pending, number} pendientes de aprobación"
+  },
+  "restore": {
+    "title": "Lote sin guardar restaurado",
+    "body": "Se {count, plural, one {restauró # factura sin guardar} other {restauraron # facturas sin guardar}} de su última sesión.",
+    "keep": "Conservar",
+    "discard": "Descartar",
+    "discardConfirm": "¿Descartar las facturas sin guardar de este lote? Esta acción no se puede deshacer.",
+    "storageFailed": "Este navegador no pudo conservar una copia del lote. Guarde pronto para no perder ninguna factura."
+  },
+  "leave": {
+    "message": "Este lote tiene facturas sin guardar. Permanecen en este navegador y vuelven a aparecer al abrir de nuevo el registro por lote.",
+    "confirm": "Salir"
+  }
+}

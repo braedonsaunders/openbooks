@@ -58,6 +58,7 @@ import { structuredInterviewsOffersJobBoards } from './articles/structured-inter
 // HR-18 end
 import { taxConfiguration } from './articles/tax-configuration'
 import { electronicInvoicing } from './articles/electronic-invoicing'
+import { apEmailInbox } from './articles/ap-email-inbox'
 import { contractorWithholding } from './articles/contractor-withholding'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
@@ -78,6 +79,8 @@ import { distributionScanning } from './articles/distribution-scanning'
 import { distributionLabels } from './articles/distribution-labels'
 import { extensions } from './articles/extensions'
 import { apps } from './articles/apps'
+import { batchBillEntry } from './articles/batch-bill-entry'
+import { fastDataEntry } from './articles/fast-data-entry'
 import { appBuilder } from './articles/app-builder'
 import { appApiReference } from './articles/app-api-reference'
 import { appAssistantTools } from './articles/app-assistant-tools'
@@ -268,6 +271,8 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'sales-workflow': 'transactions-daily',
   'electronic-invoicing': 'transactions-daily',
   'purchasing-workflow': 'transactions-daily',
+  'batch-bill-entry': 'transactions-daily',
+  'fast-data-entry': 'transactions-daily',
   'distribution-backorders': 'transactions-daily',
   'payments-and-applications': 'transactions-daily',
   'property-management': 'transactions-daily',
@@ -344,7 +349,10 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   multiBookAccounting,
   salesWorkflow,
   electronicInvoicing,
+  apEmailInbox,
   purchasingWorkflow,
+  batchBillEntry,
+  fastDataEntry,
   distributionBackorders,
   paymentsAndApplications,
   propertyManagement,

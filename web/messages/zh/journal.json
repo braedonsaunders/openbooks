@@ -169,7 +169,19 @@
       "reversalStatus": "自动冲回：{status} · {date}",
       "retryReversals": "重试到期冲回",
       "viewReversal": "查看冲回分录"
-    }
+    },
+    "saveAndNew": "保存并新建",
+    "savedNumbered": "已保存 {number}",
+    "invalidAmounts": "有金额不是有效数字。请更正标出的金额，然后再次保存。",
+    "postedAndNew": "已过账至总账。已准备好同一日期的新分录。",
+    "submitted": "已提交审批而未过账：此分录受审批流程管控。",
+    "submittedAndNew": "已提交审批而未过账：此分录受审批流程管控。已准备好同一日期的新分录。",
+    "savedNotPosted": "分录已保存为草稿，但未过账。请解决所示原因，然后过账该草稿。",
+    "statisticalIncomplete": "每条统计行都需要科目、单位和非零数量，分录才能过账。",
+    "postNeedsAmounts": "过账前请输入借方和贷方金额。",
+    "moreOptions": "更多选项",
+    "balanceLine": "平衡此行",
+    "balanceLineHint": "将剩余差额放到您最后编辑的行上"
   },
   "book": {
     "label": "会计账簿",

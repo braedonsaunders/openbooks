@@ -4103,6 +4103,14 @@
         "title": "サービス配員ポリシー",
         "singularTitle": "サービス配員ポリシーのバージョン",
         "description": "顧客通知、優先度別の対応目標、契約が訪問を生成する期間。指定日から有効です。"
+      },
+      "ap-capture-mailboxes": {
+        "title": "買掛金受信アドレス",
+        "description": "メールで届いた請求書を、1つの法人の取込に変換するメールアドレスです。"
+      },
+      "ap-capture-autopost-policies": {
+        "title": "請求書の自動転記ポリシー",
+        "description": "直近の請求書が修正なしで承認・転記された仕入先について、取込した請求書を自動的に転記します。"
       }
     },
     "fields": {
@@ -7989,6 +7997,42 @@
       "defaultVisitMinutes": "既定の訪問時間（分）",
       "agreementHorizonDays": "契約の生成期間（日）",
       "agreementHorizonDaysHelp": "定期契約が訪問を何日先まで生成するか。"
+    },
+    "apCapture": {
+      "mailboxHelp": "ご利用のメールプロバイダーの受信 Webhook を、このアドレスの Webhook URL に向けてください。PDF、画像、XML の各添付ファイルは、選択した法人の取込になります。",
+      "policyHelp": "仕入先は、直近に取込した請求書がいずれも修正なしで承認されてから転記され、無効化されたものが1件もない場合に信頼を獲得します。1回でも編集または無効化があると連続記録は途切れます。承認 Flows は引き続き適用され、期間ロックや転記の拒否があった場合、請求書は下書きのまま残ります。",
+      "providers": {
+        "postmark": "Postmark",
+        "mailgun": "Mailgun",
+        "sendgrid": "SendGrid",
+        "generic": "汎用 JSON"
+      },
+      "fields": {
+        "label": "名前",
+        "emailAddress": "転送先アドレス",
+        "provider": "メールプロバイダー",
+        "token": "Webhook トークン",
+        "allowedSenders": "許可する差出人",
+        "signingSecret": "署名シークレット",
+        "clearSigningSecret": "署名シークレットを削除",
+        "rotateToken": "新しい Webhook URL を発行",
+        "enabled": "自動転記を有効化",
+        "cleanStreak": "必要な修正なし請求書の件数",
+        "maxAmount": "請求書1件あたりの上限金額",
+        "maxAmountCurrency": "上限金額の通貨"
+      },
+      "help": {
+        "subsidiaryId": "このアドレスで受信した請求書はこの法人に計上されます。後から変更することはできません。",
+        "emailAddress": "仕入先が請求書を送信する、メールプロバイダー上のアドレスです。取込ページにコピーボタン付きで表示されます。",
+        "provider": "Postmark、Mailgun、SendGrid はそれぞれ独自の形式で送信します。汎用 JSON はドキュメントに記載された JSON 形式を受け付けます。",
+        "allowedSenders": "完全一致のアドレス（ap@vendor.com）またはドメイン全体（@vendor.com）。空欄の場合はすべての差出人を受け付けます。",
+        "signingSecret": "Mailgun: Webhook 署名キー。Postmark と SendGrid: Webhook URL の認証情報に含まれるパスワード。汎用 JSON: X-OpenBooks-Signature 用の HMAC キー。空欄の場合は保存済みのシークレットを維持します。",
+        "clearSigningSecret": "以降、配信は Webhook トークンのみで認証されます。",
+        "rotateToken": "現在の Webhook URL はただちに使用できなくなります。メールプロバイダーの設定を新しい URL に更新してください。",
+        "enabled": "既定ではオフです。オフの場合、すべての取込は確認待ちになります。",
+        "cleanStreak": "仕入先の請求書が自動転記されるまでに必要な、修正なしで承認・転記された連続取込請求書の件数（2〜20）。",
+        "maxAmount": "合計金額がこの金額を超える請求書は確認待ちになります。他の通貨の請求書は常に確認待ちになります。"
+      }
     }
   },
   "flows": {

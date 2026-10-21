@@ -29,6 +29,8 @@ export type Opt = {
   currency_restriction?: string | null
   /** Party pickers carry the party's primary subsidiary (drafts default to it). */
   subsidiary_id?: string | null
+  /** The party's organization-defined short code; pickers match it as typed. */
+  short_code?: string | null
   tax_components?: import('@openbooks/engine/documents/totals').TaxComponentConfig[]
 };
 
@@ -49,7 +51,7 @@ export async function partyOptions(
                        and cr.party_id = p.id
                        and cr.is_active)`
   const r = (await db.execute<Opt>(sql`
-    select p.id, p.display_name, p.subsidiary_id from parties p
+    select p.id, p.display_name, p.subsidiary_id, p.short_code from parties p
      where p.org_id = ${resolvedOrgId} and ${filter} and p.is_active
        ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by p.display_name limit 2000

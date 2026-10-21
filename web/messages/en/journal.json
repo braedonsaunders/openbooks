@@ -169,7 +169,19 @@
       "reversalStatus": "Automatic reversal: {status} · {date}",
       "retryReversals": "Retry due reversals",
       "viewReversal": "View reversal"
-    }
+    },
+    "saveAndNew": "Save & new",
+    "savedNumbered": "Saved {number}",
+    "invalidAmounts": "An amount is not a valid number. Correct the highlighted amount, then save again.",
+    "postedAndNew": "Posted to the ledger. A new journal is ready on the same date.",
+    "submitted": "Submitted for approval instead of posted: an approval flow governs this journal.",
+    "submittedAndNew": "Submitted for approval instead of posted: an approval flow governs this journal. A new journal is ready on the same date.",
+    "savedNotPosted": "The journal was saved as a draft but not posted. Resolve the reason shown, then post the draft.",
+    "statisticalIncomplete": "Every statistical line needs an account, a unit and a non-zero quantity before the journal can post.",
+    "postNeedsAmounts": "Enter the debit and credit amounts before posting.",
+    "moreOptions": "More options",
+    "balanceLine": "Balance line",
+    "balanceLineHint": "Put the remaining difference on the line you last worked in"
   },
   "book": {
     "label": "Accounting book",

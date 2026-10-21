@@ -164,7 +164,7 @@ async function mountCreate() {
 
 function saveButton(): HTMLButtonElement {
   const buttons = [...document.querySelectorAll("button")].filter(
-    (b) => b.textContent?.trim() === "Save",
+    (b) => ["Save", "Save draft"].includes(b.textContent?.trim() ?? ""),
   );
   assert.equal(buttons.length, 1, `exactly one Save button must render (saw ${buttons.length})`);
   return buttons[0] as HTMLButtonElement;
@@ -292,7 +292,8 @@ test("an unsaved create offers no Submit or Post before the record exists", asyn
     host.remove();
   });
   const labels = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim() ?? "");
-  assert.ok(labels.includes("Save"), "create mode offers Save as the only write");
+  // Save & new and Post & new act only after the save has created the record.
+  assert.ok(labels.includes("Save") || labels.includes("Save draft"), "create mode offers Save");
   assert.ok(
     !labels.some((label) => /^(Post|Submit for approval)$/.test(label)),
     `no lifecycle action may run before the record exists (saw: ${labels.join(" | ")})`,

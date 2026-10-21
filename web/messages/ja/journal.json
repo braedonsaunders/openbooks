@@ -169,7 +169,19 @@
       "reversalStatus": "自動反転：{status} · {date}",
       "retryReversals": "期日到来の反転を再試行",
       "viewReversal": "反転仕訳を表示"
-    }
+    },
+    "saveAndNew": "保存して新規作成",
+    "savedNumbered": "{number} を保存しました",
+    "invalidAmounts": "有効な数値ではない金額があります。強調表示された金額を修正してから、もう一度保存してください。",
+    "postedAndNew": "元帳に記帳しました。同じ日付の新しい仕訳を用意しました。",
+    "submitted": "記帳せずに承認申請しました。この仕訳には承認フローが適用されます。",
+    "submittedAndNew": "記帳せずに承認申請しました。この仕訳には承認フローが適用されます。同じ日付の新しい仕訳を用意しました。",
+    "savedNotPosted": "仕訳は下書きとして保存されましたが、記帳されていません。表示された理由を解決してから、下書きを記帳してください。",
+    "statisticalIncomplete": "仕訳を記帳するには、各統計行に勘定科目、単位、ゼロ以外の数量が必要です。",
+    "postNeedsAmounts": "記帳する前に借方と貸方の金額を入力してください。",
+    "moreOptions": "その他のオプション",
+    "balanceLine": "行で貸借を合わせる",
+    "balanceLineHint": "残りの差額を最後に作業した行に入れます"
   },
   "book": {
     "label": "会計帳簿",

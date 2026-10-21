@@ -42,7 +42,11 @@
     "scanUnavailable": "The scanned record is not an available choice for this line.",
     "scanNetworkError": "The scan could not be resolved. Check the connection and try again.",
     "scanNotFound": "No exact record matches this scan. Check the value or choose a record from the list.",
-    "scanAmbiguous": "This scan matches multiple records. Choose the intended record from the candidates."
+    "scanAmbiguous": "This scan matches multiple records. Choose the intended record from the candidates.",
+    "recent": "Recent",
+    "allOptions": "All",
+    "create": "Create “{query}”",
+    "createFailed": "This could not be created."
   },
   "sparkline": {
     "noTrend": "No trend data",
@@ -103,7 +107,7 @@
     "selectAll": "Select all rows",
     "selectRow": "Select row {row}",
     "addLine": "Add line",
-    "keyboardHint": "Enter adds/moves down · Alt+↑/↓ reorders · ⌘D duplicates · ⌘⌫ removes",
+    "keyboardHint": "Enter next line · Tab past the end adds a line · F8 copies from above · Alt+Enter inserts · ⌘D duplicates · ⌘⌫ removes · paste rows from a spreadsheet",
     "lineActionsAria": "Line {number} actions",
     "insertAbove": "Insert above",
     "insertBelow": "Insert below",
@@ -116,6 +120,14 @@
       "computedOverriddenTitle": "Computed {amount} · overridden",
       "resetAria": "Reset tax to computed",
       "resetTitle": "Reset to computed {amount}"
-    }
+    },
+    "keyboardHintEnterAdvances": "Enter next field · Shift+Enter previous line · F8 copies from above · Alt+Enter inserts · ⌘D duplicates · ⌘⌫ removes · paste rows from a spreadsheet",
+    "paste": {
+      "done": "{count, plural, one {# row pasted} other {# rows pasted}}.",
+      "unmatched": "{count, plural, one {# pasted value needs} other {# pasted values need}} attention — the flagged cells show what was pasted.",
+      "unmatchedCell": "Pasted “{value}” did not match a choice or amount here"
+    },
+    "moreColumns": "Show all columns",
+    "fewerColumns": "Show fewer columns"
   }
 }

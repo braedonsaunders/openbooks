@@ -40,6 +40,7 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
     isPosted,
     isCreate,
     isCashKind,
+    isTransfer,
     canCreate,
     canPost,
     canEditStatus,
@@ -79,7 +80,13 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
     refundHref,
     creditHref,
     save,
+    canSaveAndPost,
     freshFormHref,
+    tEntry,
+    controlTotal,
+    setControlTotal,
+    controlDifference,
+    controlMismatch,
     cancelWithConfirm,
     confirmDiscard,
     act,
@@ -252,11 +259,43 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
                   save: () => void save(),
                   saveAndNew: freshFormHref ? () => void save('new') : undefined,
                   saveAndClose: () => void save('close'),
+                  postAndNew: canSaveAndPost ? () => void save(freshFormHref ? 'postNew' : 'post') : undefined,
+                  post: canSaveAndPost ? () => void save('post') : undefined,
                 }}
               />
-              <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => void save()}>
-                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
+              <Button
+                size="sm"
+                variant={canSaveAndPost ? 'outline' : 'default'}
+                className="h-8 px-2.5 text-xs"
+                disabled={busy}
+                title={tEntry('buttons.saveHint')}
+                onClick={() => void save()}
+              >
+                {busy ? tCommon('actions.saving') : canSaveAndPost ? tEntry('buttons.saveDraft') : tCommon('actions.save')}
               </Button>
+              {freshFormHref ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2.5 text-xs"
+                  disabled={busy}
+                  title={tEntry('buttons.saveAndNewHint')}
+                  onClick={() => void save('new')}
+                >
+                  {tEntry('buttons.saveAndNew')}
+                </Button>
+              ) : null}
+              {canSaveAndPost ? (
+                <Button
+                  size="sm"
+                  className="h-8 px-2.5 text-xs"
+                  disabled={busy}
+                  title={freshFormHref ? tEntry('buttons.postAndNewHint') : tEntry('buttons.postHint')}
+                  onClick={() => void save(freshFormHref ? 'postNew' : 'post')}
+                >
+                  {freshFormHref ? tEntry('buttons.postAndNew') : tEntry('buttons.post')}
+                </Button>
+              ) : null}
               <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={cancelWithConfirm}>
                 {tCommon('actions.cancel')}
               </Button>
@@ -369,6 +408,31 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
               : null}
           </span>
           <span className="flex-1" />
+          {editable && config.partyRole && !isTransfer ? (
+            <label className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" title={tEntry('controlTotal.help')}>
+              {tEntry('controlTotal.label')}
+              <input
+                inputMode="decimal"
+                value={controlTotal}
+                onChange={(event) => setControlTotal(event.target.value)}
+                placeholder="—"
+                aria-invalid={controlMismatch || undefined}
+                className={
+                  'h-7 w-28 rounded-md border bg-white px-2 text-right text-sm tabular-nums outline-none focus:ring-2 dark:bg-slate-900 ' +
+                  (controlMismatch
+                    ? 'border-red-400 text-red-700 focus:ring-red-500/30 dark:text-red-300'
+                    : controlTotal && controlDifference !== null
+                      ? 'border-emerald-400 focus:ring-emerald-500/30'
+                      : 'border-slate-300 focus:ring-teal-500/25 dark:border-slate-700')
+                }
+              />
+              {controlMismatch && controlDifference !== null ? (
+                <span className="font-medium text-red-600 dark:text-red-400">
+                  {tEntry('controlTotal.off', { difference: money(controlDifference, { currency: doc.currency }) })}
+                </span>
+              ) : null}
+            </label>
+          ) : null}
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
             {editable && nativeGoods && !calculatedTotals ? tCommon('nativeGoodsTax.previewUnavailable') : <>
             {t('drawer.subtotalAmount', { amount: money(effectiveTotals.subtotal, { currency: doc.currency }) })}

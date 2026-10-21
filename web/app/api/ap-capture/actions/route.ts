@@ -32,7 +32,8 @@ function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null) {
   if (allowed === null) return sql``
   if (allowed.size === 0) return sql` and false`
   return sql`${subsidiaryVisibleFilter(sql`po.subsidiary_id`, allowed, { orgWideNull: true })}
-             ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}`
+             ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}
+             ${subsidiaryVisibleFilter(sql`ci.subsidiary_id`, allowed, { orgWideNull: true })}`
 }
 
 function apCaptureVisibleExists(orgId: string, id: string, allowed: ReadonlySet<string> | null) {

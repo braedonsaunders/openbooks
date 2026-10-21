@@ -163,7 +163,7 @@ function OptionalShortcuts({ enabled, children }: { enabled: boolean; children: 
 
 function saveButton(): HTMLButtonElement {
   const buttons = [...document.querySelectorAll("button")].filter(
-    (b) => b.textContent?.trim() === "Save",
+    (b) => ["Save", "Save draft"].includes(b.textContent?.trim() ?? ""),
   );
   assert.equal(buttons.length, 1, `exactly one Save button must render (saw ${buttons.length})`);
   return buttons[0] as HTMLButtonElement;

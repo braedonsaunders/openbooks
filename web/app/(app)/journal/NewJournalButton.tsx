@@ -15,7 +15,7 @@ export function NewJournalButton() {
     <UnsavedCreateButton
       base="/journal"
       param="entryNew"
-      clear={['entry', 'journalEntry', 'txn', 'reportRecord', 'reportRecordKind', 'accountRegister', 'transactionTab', 'drawerReturn']}
+      clear={['entry', 'entryDate', 'journalEntry', 'txn', 'reportRecord', 'reportRecordKind', 'accountRegister', 'transactionTab', 'drawerReturn']}
       label={t('label')}
       extra={{ mode: 'edit' }}
     />

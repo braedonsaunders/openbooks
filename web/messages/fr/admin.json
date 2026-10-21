@@ -3941,6 +3941,14 @@
         "title": "Politique de répartition des services",
         "singularTitle": "Version de la politique de répartition",
         "description": "Avis aux clients, délais de réponse par priorité et horizon de génération des visites des contrats, en vigueur à partir d'une date."
+      },
+      "ap-capture-mailboxes": {
+        "title": "Adresses de réception des factures fournisseurs",
+        "description": "Adresses e-mail qui transforment les factures reçues par e-mail en captures pour une entité juridique."
+      },
+      "ap-capture-autopost-policies": {
+        "title": "Politique de comptabilisation automatique des factures",
+        "description": "Comptabiliser automatiquement les factures capturées des fournisseurs dont les factures récentes ont été acceptées sans modification puis comptabilisées."
       }
     },
     "fields": {
@@ -7989,6 +7997,42 @@
       "defaultVisitMinutes": "Durée de visite par défaut (minutes)",
       "agreementHorizonDays": "Horizon des contrats (jours)",
       "agreementHorizonDaysHelp": "Jusqu'où les contrats récurrents génèrent leurs visites à l'avance."
+    },
+    "apCapture": {
+      "mailboxHelp": "Faites pointer le webhook entrant de votre service de messagerie vers l’URL du webhook de cette adresse. Chaque pièce jointe PDF, image ou XML devient une capture pour l’entité juridique choisie.",
+      "policyHelp": "Un fournisseur obtient la confiance lorsque ses dernières factures capturées ont chacune été acceptées sans aucune correction puis comptabilisées, sans aucune annulation. Une seule modification ou annulation interrompt la série. Les Flows d’approbation continuent de s’appliquer, et les périodes verrouillées ou les refus de comptabilisation laissent la facture à l’état de brouillon.",
+      "providers": {
+        "postmark": "Postmark",
+        "mailgun": "Mailgun",
+        "sendgrid": "SendGrid",
+        "generic": "JSON générique"
+      },
+      "fields": {
+        "label": "Nom",
+        "emailAddress": "Adresse de transfert",
+        "provider": "Service de messagerie",
+        "token": "Jeton du webhook",
+        "allowedSenders": "Expéditeurs autorisés",
+        "signingSecret": "Secret de signature",
+        "clearSigningSecret": "Supprimer le secret de signature",
+        "rotateToken": "Émettre une nouvelle URL de webhook",
+        "enabled": "Comptabilisation automatique activée",
+        "cleanStreak": "Factures sans correction requises",
+        "maxAmount": "Montant maximal par facture",
+        "maxAmountCurrency": "Devise du montant maximal"
+      },
+      "help": {
+        "subsidiaryId": "Les factures reçues à cette adresse sont enregistrées dans cette entité juridique. Ce choix ne peut pas être modifié ultérieurement.",
+        "emailAddress": "L’adresse de votre service de messagerie à laquelle les fournisseurs envoient leurs factures. Affichée sur la page de capture avec un bouton de copie.",
+        "provider": "Postmark, Mailgun et SendGrid envoient leurs propres formats ; JSON générique accepte le format JSON documenté.",
+        "allowedSenders": "Adresses exactes (ap@vendor.com) ou domaines entiers (@vendor.com). Laissez vide pour accepter tout expéditeur.",
+        "signingSecret": "Mailgun : la clé de signature du webhook. Postmark et SendGrid : le mot de passe figurant dans les identifiants de l’URL du webhook. JSON générique : la clé HMAC pour X-OpenBooks-Signature. Laissez vide pour conserver le secret enregistré.",
+        "clearSigningSecret": "Les envois sont alors authentifiés uniquement par le jeton du webhook.",
+        "rotateToken": "L’URL actuelle du webhook cesse immédiatement de fonctionner. Mettez à jour votre service de messagerie avec la nouvelle URL.",
+        "enabled": "Désactivée par défaut. Lorsqu’elle est désactivée, chaque capture attend une révision.",
+        "cleanStreak": "Nombre de factures capturées consécutives du fournisseur, chacune acceptée sans modification puis comptabilisée, avant que ses factures soient comptabilisées automatiquement (de 2 à 20).",
+        "maxAmount": "Les factures dont le total dépasse ce montant attendent une révision. Une facture dans une autre devise attend toujours une révision."
+      }
     }
   },
   "flows": {

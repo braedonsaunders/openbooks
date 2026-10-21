@@ -21,6 +21,7 @@ import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { loadJournalDoc, redactJournalHeaderCustom } from '../../../lib/journals'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/civil-date'
 import { JOURNAL_ENTRY_TABLE, journalScopeWhere, journalDraftScopeWhere } from '../../../lib/customization/entity-list-query/journal-entries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
@@ -68,6 +69,11 @@ export async function loadJournal(
   // nothing, Cancel writes nothing, and the drawer's explicit Save is the
   // single idempotent POST. Gated on gl.post like the draft flow was.
   const creating = pickString(sp.entryNew) === '1' && canCreate
+  // Save & new and Post & new carry the previous journal's date forward
+  // (?entryDate=YYYY-MM-DD) so a batch for one date needs no retyping. Any
+  // other value is ignored and the create opens on the business date.
+  const requestedEntryDate = pickString(sp.entryDate)
+  const carriedEntryDate = requestedEntryDate && isIsoCalendarDate(requestedEntryDate) ? requestedEntryDate : null
   const draftsView = pickString(sp.journalTab) === 'drafts'
   const [draftCount, openJournal, pickers, postedCount] = await Promise.all([
     db.execute<{ n: string }>(sql`
@@ -126,7 +132,7 @@ export async function loadJournal(
   // Tab changes reset view-specific filters and close competing drawers.
   const tabParams = { ...sp, page: undefined, sort: undefined, dir: undefined,
     status: undefined, origin: undefined, view: undefined, q: undefined,
-    entry: undefined, entryNew: undefined, journalEntry: undefined, txn: undefined,
+    entry: undefined, entryNew: undefined, entryDate: undefined, journalEntry: undefined, txn: undefined,
     reportRecord: undefined, reportRecordKind: undefined, accountRegister: undefined,
     reportDrill: undefined, drawerReturn: undefined, mode: undefined, form: undefined }
   const tabs: ModuleHomeTab[] = [
@@ -141,6 +147,7 @@ export async function loadJournal(
   const closeHref = mergeHref('/journal', sp, {
     entry: undefined,
     entryNew: undefined,
+    entryDate: undefined,
     mode: undefined,
     form: undefined,
     journalEntry: undefined,
@@ -152,7 +159,7 @@ export async function loadJournal(
   const newJournalPayload = creating && pickers
     ? (() => {
         const defaults = pickers[8]
-        const today = defaults?.[0] ?? ''
+        const today = carriedEntryDate ?? defaults?.[0] ?? ''
         const root = defaults?.[1].rows[0]
         const homeSub = (pickers[6] ?? [])[0] as { id: string; baseCurrency?: string } | undefined
         return {
@@ -205,6 +212,9 @@ export async function loadJournal(
           // Every drawer mutation (save, post, delete, void) requires
           // gl.post server-side — the drawer hides them all without it.
           canPost: can(authz, 'gl.post'),
+          // Save & new / Post & new open the next unsaved journal, which
+          // this loader fills only for viewers who may create one.
+          canCreate,
           closeHref,
         }
       : null

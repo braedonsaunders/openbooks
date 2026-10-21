@@ -51,7 +51,9 @@
     "saveState": {
       "saved": "Toutes les modifications sont enregistrées",
       "error": "Échec de l’enregistrement — corrigez et réessayez",
-      "dirty": "Modifications non enregistrées…"
+      "dirty": "Modifications non enregistrées…",
+      "unavailable": "Échec du serveur ou de la connexion — saisie conservée, réessayez",
+      "unavailableDetail": "Le serveur ou la connexion a échoué avant la confirmation de l’enregistrement. Vos saisies sont conservées — réessayez l’enregistrement."
     },
     "deleteTitle": "Supprimer ce document ?",
     "deleteDraftBody": "Cela supprime définitivement le brouillon. Cette action est irréversible.",

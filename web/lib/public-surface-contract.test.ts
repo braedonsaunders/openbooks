@@ -114,6 +114,12 @@ type TokenSurface = {
 
 const TOKEN_SURFACES: TokenSurface[] = [
   {
+    dir: join(webApp, "api", "inbound", "ap"),
+    kind: "api",
+    tokenMarker: /receiveInboundApEmail/,
+    refusalMarker: /answers 404/,
+  },
+  {
     dir: join(webApp, "api", "documents", "sign"),
     kind: "api",
     tokenMarker: /readTokenDocument|signTokenDocument|declineTokenDocument|acknowledgeDocument/,

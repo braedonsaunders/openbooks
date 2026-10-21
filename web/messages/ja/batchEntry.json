@@ -1,0 +1,102 @@
+{
+  "title": "仕入請求書の一括入力",
+  "description": "仕入請求書の束を一つのグリッドに入力し、コントロール合計と照合してから、まとめて保存または記帳します。",
+  "back": "仕入請求書",
+  "menuLabel": "一括入力",
+  "helpLink": "一括入力の使い方",
+  "noTax": "税なし",
+  "createVendor": "仕入先「{name}」を作成",
+  "createVendorFailed": "仕入先を作成できませんでした。",
+  "keyboardHint": "Enter または Tab で請求書の項目間を移動し、最後の項目で Tab を押すと次の請求書に進みます。F8 で上の行の項目をコピーします。表計算ソフトから行を貼り付けでき、見出し行があれば列名で対応付けます。Ctrl+S（⌘S）ですべての請求書を下書き保存します。",
+  "keyboardHintPost": "Enter または Tab で請求書の項目間を移動し、最後の項目で Tab を押すと次の請求書に進みます。F8 で上の行の項目をコピーします。表計算ソフトから行を貼り付けでき、見出し行があれば列名で対応付けます。Ctrl+S（⌘S）ですべての請求書を下書き保存し、Ctrl+Enter（⌘Enter）で記帳します。",
+  "columns": {
+    "vendor": "仕入先",
+    "reference": "仕入先参照番号",
+    "billDate": "請求書日付",
+    "dueDate": "支払期日",
+    "dueDateHelp": "空欄にすると仕入先の支払条件を使用します。ステータス列に支払条件から求めた日付が表示されます。",
+    "account": "勘定",
+    "memo": "メモ",
+    "amount": "金額",
+    "tax": "税",
+    "status": "ステータス"
+  },
+  "control": {
+    "heading": "コントロール合計",
+    "subsidiary": "子会社",
+    "count": "請求書の件数",
+    "total": "バッチ合計",
+    "entered": "入力済み：{count} 件 · {total}",
+    "countMatched": "件数が一致しています",
+    "countOff": "件数の差異：{difference, number}",
+    "countInvalid": "請求書の件数を整数で入力してください",
+    "totalMatched": "バッチ合計が一致しています",
+    "totalOff": "バッチ合計の差異：{difference}",
+    "totalInvalid": "バッチ合計を金額で入力してください"
+  },
+  "actions": {
+    "saveAll": "すべて下書き保存",
+    "postAll": "すべて記帳",
+    "clearFinished": "完了した行を消去（{count, number}）",
+    "addBill": "請求書を追加",
+    "progress": "{total, number} 件中 {done, number} 件を保存中…"
+  },
+  "shortcuts": {
+    "saveAll": "すべての請求書を下書き保存",
+    "postAll": "すべての請求書を記帳"
+  },
+  "status": {
+    "saving": "保存中…",
+    "saved": "保存済み {number}",
+    "posted": "記帳済み {number}",
+    "pending": "{number} 承認待ち",
+    "termsDue": "支払条件により {date} 期日",
+    "openExisting": "既存の請求書を開く"
+  },
+  "issues": {
+    "vendor": "仕入先を選択してください",
+    "billDate": "請求書日付を入力してください",
+    "amountMissing": "金額を入力してください",
+    "amountInvalid": "金額が数値ではありません",
+    "amountNotPositive": "正の金額を入力してください。マイナスの請求書は仕入先クレジットとして記録します",
+    "account": "勘定を選択してください"
+  },
+  "duplicates": {
+    "badge": "重複の可能性",
+    "inBatch": "{rows} 行目と仕入先・参照番号が同じです",
+    "onFile": "{date} 付の {number} と一致",
+    "title": "重複の可能性がある請求書",
+    "message": "{count} 件の請求書が、このバッチ内または登録済みの別の請求書と仕入先・参照番号が同じです。このまま保存しますか？",
+    "row": "{row} 行目：{vendor}、{reference}",
+    "confirm": "このまま保存"
+  },
+  "refusals": {
+    "nothingToSave": "このバッチに未保存の請求書はありません。",
+    "rowsNeedAttention": "保存する前に {count} 件の請求書を修正する必要があります。{first}",
+    "rowIssue": "{row} 行目：{issue}。",
+    "controlInvalid": "コントロール合計を読み取れません。請求書の件数を整数で、バッチ合計を金額で入力するか、空欄にしてください。",
+    "controlCount": "バッチには {entered} 件の請求書がありますが、コントロール件数は {control, number} 件です。不足または余分な請求書を探すか、コントロール件数を修正してください。",
+    "controlTotal": "請求書の合計は {entered} で、バッチ合計より {difference} {direction, select, over {多く} other {少なく}}なっています。金額またはバッチ合計を修正してください。",
+    "saveFailed": "請求書を保存できませんでした。",
+    "unavailable": "サーバーに接続できませんでした。バッチは保持されています。再度保存して再試行してください。保存済みの請求書が二重に作成されることはありません。",
+    "conflict": "この行の請求書は、別の内容ですでに保存されている可能性があります。既存の請求書を開いて確認するか、行を複製して新しい請求書として保存してください。",
+    "refusedSummary": "{count} 件の請求書を保存または記帳できませんでした。理由は各行に表示されています。修正して再度保存してください。",
+    "defaultsFailed": "仕入先の既定値を読み込めませんでした。各請求書の勘定を選択してください。"
+  },
+  "summary": {
+    "saved": "{count} 件の請求書を下書き保存しました",
+    "posted": "{posted} 件の請求書を記帳しました。{pending, number} 件が承認待ちです"
+  },
+  "restore": {
+    "title": "未保存のバッチを復元しました",
+    "body": "前回のセッションの未保存の請求書 {count} 件を復元しました。",
+    "keep": "保持",
+    "discard": "破棄",
+    "discardConfirm": "このバッチの未保存の請求書を破棄しますか？この操作は元に戻せません。",
+    "storageFailed": "このブラウザーにバッチのコピーを保持できませんでした。請求書を失わないよう、早めに保存してください。"
+  },
+  "leave": {
+    "message": "このバッチには未保存の請求書があります。請求書はこのブラウザーに残り、一括入力を再度開くと復元されます。",
+    "confirm": "移動する"
+  }
+}

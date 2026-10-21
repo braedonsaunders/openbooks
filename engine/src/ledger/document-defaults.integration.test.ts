@@ -4,7 +4,12 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, seedPostingAccount, type ScratchOrg } from "../testing/fixtures.ts";
-import { resolveDocumentLineDefaults, resolveTermsDueDate } from "./document-defaults.ts";
+import {
+  resolveDocumentLineDefaults,
+  resolvePartyLineDefault,
+  resolveRecentPartyDocument,
+  resolveTermsDueDate,
+} from "./document-defaults.ts";
 import { createDocument } from "./document-write.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -248,6 +253,206 @@ test("purchase lines propose the company clearing account when the profile names
     }));
     assert.equal(lines[0]!.accountId, companyGrni);
     assert.equal(lines[0]!.accountSource, "inventory_clearing");
+  } finally {
+    await dropScratchOrg(s.org.orgId);
+  }
+});
+
+interface SeedLine {
+  accountId?: string | null;
+  itemId?: string | null;
+  amount: string;
+  description?: string;
+  quantity?: string;
+  unitPrice?: string;
+  departmentId?: string | null;
+  taxCodeId?: string | null;
+}
+
+/** A draft document with direct lines, written straight to storage so its date
+ *  can sit anywhere in the party's history. */
+async function seedPartyDocument(orgId: string, row: {
+  kind: string;
+  partyId: string;
+  date: string;
+  number: string;
+  reference?: string;
+  memo?: string;
+  lines: SeedLine[];
+}): Promise<string> {
+  const id = randomUUID();
+  await withBypass(async () => {
+    await db.execute(sql`
+      insert into documents (id, org_id, kind, status, document_number, document_date, party_id, currency, reference_number, memo)
+      values (${id}, ${orgId}, ${row.kind}, 'draft', ${row.number}, ${row.date}, ${row.partyId}, 'USD',
+              ${row.reference ?? null}, ${row.memo ?? null})`);
+    for (const [index, line] of row.lines.entries()) {
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, item_id, description, quantity, unit_price, amount, department_id, tax_code_id)
+        values (${orgId}, ${id}, ${index + 1}, ${line.accountId ?? null}, ${line.itemId ?? null}, ${line.description ?? null},
+                ${line.quantity ?? "1"}, ${line.unitPrice ?? line.amount}, ${line.amount}, ${line.departmentId ?? null}, ${line.taxCodeId ?? null})`);
+    }
+  });
+  return id;
+}
+
+const AS_OF = "2026-09-30";
+
+test("a vendor's default expense account wins over the vendor's own history", { skip: !DB }, async () => {
+  const s = await seed();
+  try {
+    for (const [index, date] of ["2026-07-01", "2026-08-01", "2026-09-01"].entries()) {
+      await seedPartyDocument(s.org.orgId, {
+        kind: "vendor_bill", partyId: s.org.vendorId, date, number: `B-${index}`,
+        lines: [{ accountId: s.officeExpense, amount: "40.0000" }],
+      });
+    }
+    await withBypass(() => db.execute(sql`
+      update vendor_roles set tax_code_id = ${s.hstOn} where org_id = ${s.org.orgId} and party_id = ${s.org.vendorId}`));
+    const resolved = await withBypass(() => resolvePartyLineDefault(db, s.org.orgId, {
+      kind: "vendor_bill", partyId: s.org.vendorId, asOfDate: AS_OF, allowedSubsidiaryIds: null,
+    }));
+    assert.deepEqual(resolved, {
+      accountId: s.vendorDefaultExpense, accountSource: "party_default", taxCodeId: s.hstOn, taxSource: "party",
+    });
+  } finally {
+    await dropScratchOrg(s.org.orgId);
+  }
+});
+
+test("without a usable default, the most-used recent account is proposed and ties go to the latest use", { skip: !DB }, async () => {
+  const s = await seed();
+  try {
+    const utilities = await withBypass(() => seedPostingAccount(s.org.orgId, "6300", "Utilities", "expense"));
+    const repairs = await withBypass(() => seedPostingAccount(s.org.orgId, "6400", "Repairs", "expense"));
+    // Retiring the vendor default makes it unusable: it is skipped, never proposed.
+    await withBypass(() => db.execute(sql`update accounts set is_active = false where id = ${s.vendorDefaultExpense}`));
+    const bill = (date: string, number: string, lines: SeedLine[]) =>
+      seedPartyDocument(s.org.orgId, { kind: "vendor_bill", partyId: s.org.vendorId, date, number, lines });
+    // Office supplies on two bills (two lines on one of them still count once).
+    await bill("2026-03-01", "B-1", [{ accountId: s.officeExpense, amount: "10.0000" }, { accountId: s.officeExpense, amount: "5.0000" }]);
+    await bill("2026-04-01", "B-2", [{ accountId: s.officeExpense, amount: "10.0000" }]);
+    await bill("2026-05-01", "B-3", [{ accountId: utilities, amount: "80.0000" }]);
+    // Outside the 365-day window: three older bills never outvote recent coding.
+    for (const number of ["B-OLD-1", "B-OLD-2", "B-OLD-3"]) {
+      await bill("2025-06-01", number, [{ accountId: repairs, amount: "99.0000" }]);
+    }
+    // An item line's account is the item's posting account, not the vendor's coding.
+    await bill("2026-06-01", "B-ITEM", [{ accountId: repairs, itemId: s.supplies, amount: "1.0000" }]);
+    await bill("2026-06-02", "B-ITEM-2", [{ accountId: repairs, itemId: s.supplies, amount: "1.0000" }]);
+    await bill("2026-06-03", "B-ITEM-3", [{ accountId: repairs, itemId: s.supplies, amount: "1.0000" }]);
+
+    const resolve = () => withBypass(() => resolvePartyLineDefault(db, s.org.orgId, {
+      kind: "vendor_bill", partyId: s.org.vendorId, asOfDate: AS_OF, allowedSubsidiaryIds: null,
+    }));
+    assert.deepEqual(await resolve(), {
+      accountId: s.officeExpense, accountSource: "party_history", taxCodeId: null, taxSource: null, historyCount: 2,
+    });
+
+    // A second utilities bill ties the count; utilities was used more recently.
+    await bill("2026-09-15", "B-4", [{ accountId: utilities, amount: "80.0000" }]);
+    const tied = await resolve();
+    assert.equal(tied.accountId, utilities);
+    assert.equal(tied.historyCount, 2);
+
+    // An inactive account is never proposed from history either.
+    await withBypass(() => db.execute(sql`update accounts set is_active = false where id = ${utilities}`));
+    assert.equal((await resolve()).accountId, s.officeExpense);
+
+    // A different kind keeps its own history.
+    const credit = await withBypass(() => resolvePartyLineDefault(db, s.org.orgId, {
+      kind: "vendor_credit", partyId: s.org.vendorId, asOfDate: AS_OF, allowedSubsidiaryIds: null,
+    }));
+    assert.deepEqual(credit, { accountId: null, accountSource: null, taxCodeId: null, taxSource: null });
+  } finally {
+    await dropScratchOrg(s.org.orgId);
+  }
+});
+
+test("sales history proposes only income accounts and stays inside the reader's subsidiaries", { skip: !DB }, async () => {
+  const s = await seed();
+  try {
+    await seedPartyDocument(s.org.orgId, {
+      kind: "customer_invoice", partyId: s.org.customerId, date: "2026-09-01", number: "INV-1",
+      lines: [{ accountId: s.services, amount: "100.0000" }],
+    });
+    // Expense coding on invoices is not an account an invoice line may take.
+    for (const number of ["INV-2", "INV-3"]) {
+      await seedPartyDocument(s.org.orgId, {
+        kind: "customer_invoice", partyId: s.org.customerId, date: "2026-09-10", number,
+        lines: [{ accountId: s.officeExpense, amount: "10.0000" }],
+      });
+    }
+    const resolve = (allowedSubsidiaryIds: ReadonlySet<string> | null) => withBypass(() => resolvePartyLineDefault(db, s.org.orgId, {
+      kind: "customer_invoice", partyId: s.org.customerId, asOfDate: AS_OF, allowedSubsidiaryIds,
+    }));
+    const open = await resolve(null);
+    assert.equal(open.accountId, s.services);
+    assert.equal(open.accountSource, "party_history");
+    assert.equal(open.historyCount, 1);
+    assert.equal(open.taxCodeId, s.hstOn);
+    // A reader scoped to no subsidiary of that invoice learns nothing from it.
+    const scoped = await resolve(new Set([randomUUID()]));
+    assert.equal(scoped.accountId, null);
+    assert.equal(scoped.taxCodeId, s.hstOn);
+  } finally {
+    await dropScratchOrg(s.org.orgId);
+  }
+});
+
+test("recall returns the latest non-voided document with references the pickers can still offer", { skip: !DB }, async () => {
+  const s = await seed();
+  try {
+    const shop = randomUUID();
+    await withBypass(() => db.execute(sql`
+      insert into departments (id, org_id, name) values (${shop}, ${s.org.orgId}, 'Shop')`));
+    await seedPartyDocument(s.org.orgId, {
+      kind: "vendor_bill", partyId: s.org.vendorId, date: "2026-08-01", number: "B-OLDER",
+      lines: [{ accountId: s.vendorDefaultExpense, amount: "1.0000" }],
+    });
+    const latest = await seedPartyDocument(s.org.orgId, {
+      kind: "vendor_bill", partyId: s.org.vendorId, date: "2026-09-01", number: "B-LATEST",
+      reference: "INV-7781", memo: "September service",
+      lines: [
+        { accountId: s.officeExpense, amount: "120.5000", quantity: "2", unitPrice: "60.25", description: "Toner", departmentId: shop, taxCodeId: s.hstOn },
+        { accountId: s.vendorDefaultExpense, amount: "15.0000", description: "Delivery" },
+      ],
+    });
+    // A newer voided bill is never recalled.
+    await withBypass(() => db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, document_date, party_id, currency, voided_at, voided_by, void_reason)
+      values (${randomUUID()}, ${s.org.orgId}, 'vendor_bill', 'voided', 'B-VOID', '2026-09-20', ${s.org.vendorId}, 'USD',
+              now(), ${s.org.vendorId}, 'entered twice by mistake')`));
+    await withBypass(() => db.execute(sql`update departments set is_active = false where id = ${shop}`));
+    await withBypass(() => db.execute(sql`update accounts set is_active = false where id = ${s.vendorDefaultExpense}`));
+
+    const recalled = await withBypass(() => resolveRecentPartyDocument(db, s.org.orgId, {
+      kind: "vendor_bill", partyId: s.org.vendorId, allowedSubsidiaryIds: null,
+    }));
+    assert.equal(recalled?.id, latest);
+    assert.equal(recalled?.documentNumber, "B-LATEST");
+    assert.equal(recalled?.referenceNumber, "INV-7781");
+    assert.equal(recalled?.memo, "September service");
+    assert.equal(recalled?.lines.length, 2);
+    const [toner, delivery] = recalled!.lines;
+    // The retired department is blanked on its own; the rest of the line is kept exactly.
+    assert.equal(toner!.accountId, s.officeExpense);
+    assert.equal(toner!.departmentId, null);
+    assert.equal(toner!.taxCodeId, s.hstOn);
+    assert.equal(toner!.description, "Toner");
+    assert.equal(Number(toner!.quantity), 2);
+    assert.match(toner!.amount, /^120\.50*$/);
+    assert.match(toner!.unitPrice, /^60\.250*$/);
+    // The retired account is blanked; the description still recalls what the line was.
+    assert.equal(delivery!.accountId, null);
+    assert.equal(delivery!.description, "Delivery");
+
+    // A reader scoped away from the bill's subsidiary recalls nothing.
+    assert.equal(await withBypass(() => resolveRecentPartyDocument(db, s.org.orgId, {
+      kind: "vendor_bill", partyId: s.org.vendorId, allowedSubsidiaryIds: new Set([randomUUID()]),
+    })), null);
   } finally {
     await dropScratchOrg(s.org.orgId);
   }

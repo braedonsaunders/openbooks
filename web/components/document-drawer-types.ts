@@ -10,6 +10,8 @@ export type Opt = {
   rate?: string
   label?: string
   subsidiary_id?: string | null
+  /** The party's organization-defined short code; pickers match it as typed. */
+  short_code?: string | null
   tax_components?: TaxComponentConfig[]
   /** Settlement currency the account accepts (null = any). */
   currency_restriction?: string | null

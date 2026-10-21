@@ -15,6 +15,18 @@ import { lineText, type LineRow } from './document-drawer-types'
 import { emptyLine } from './document-drawer-lines'
 import type { DocumentDrawerHeaderScope } from './document-drawer-header'
 import { DateField } from './date-field'
+import { CONTROL_ACCOUNT_DETAIL, entryHeaderLayout } from './document-drawer-entry'
+import { RecallShortcut } from './document-drawer-recall-shortcut'
+import { STATUS_KEYS } from './document-drawer-title'
+
+/** Decimal places the currency is entered in (2 for USD, 0 for JPY, 3 for KWD). */
+function currencyMinorUnits(currency: unknown): number {
+  try {
+    return new Intl.NumberFormat('en', { style: 'currency', currency: String(currency || 'USD') }).resolvedOptions().maximumFractionDigits ?? 2
+  } catch {
+    return 2
+  }
+}
 
 /** The record body: refusals, banners, header fields, and the line grid. */
 export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
@@ -110,9 +122,26 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
     setExplicitFx,
     subsidiaryId,
     postingDate,
+    tEntry,
+    localDate,
+    recallAvailable,
+    recentDocument,
+    recall,
+    applyRecall,
+    undoRecall,
+    duplicates,
+    partyDefaultHint,
+    hrefForDocument,
+    nativeGoodsTaxAvailable,
   } = scope
 
   const field = 'space-y-1.5'
+  // While editing, the receivable/payable account sits under "More details"
+  // with the other rarely-changed header fields.
+  const headerLayout = layout && editable
+    ? entryHeaderLayout(layout, tEntry('moreDetails'), controlSide && controlChoices ? [CONTROL_ACCOUNT_DETAIL] : [])
+    : layout
+  const controlInDetails = Boolean(headerLayout && headerLayout !== layout && headerLayout.header.groups.some((group) => group.fields.some((placement) => placement.key === CONTROL_ACCOUNT_DETAIL.key)))
   return (
     <div className="space-y-6 p-1">
       <ActionAlert error={refusal} fallbackMessage={t('toasts.actionFailed')} />
@@ -122,6 +151,50 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
           {warning}
         </p>
       ))}
+      {editable && duplicates.length > 0 ? (
+        <div role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <p className="font-medium">{tEntry('duplicate.title')}</p>
+          <ul className="mt-1 space-y-0.5">
+            {duplicates.slice(0, 3).map((match) => (
+              <li key={match.id}>
+                <Link className="underline decoration-dotted hover:text-amber-700" href={hrefForDocument(match.id)}>
+                  {tEntry('duplicate.match', {
+                    number: match.documentNumber,
+                    date: localDate(match.documentDate),
+                    total: match.total ? money(match.total, { currency: doc.currency }) : '—',
+                    status: match.status && STATUS_KEYS[match.status] ? tCommon(`status.${STATUS_KEYS[match.status]}`) : (match.status ?? ''),
+                  })}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {editable && (recallAvailable || recall) && recentDocument ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-200">
+          {recall ? (
+            <>
+              <span className="min-w-48 flex-1">{tEntry('recall.applied', { number: recall.documentNumber ?? '' })}</span>
+              <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={undoRecall}>{tEntry('recall.undo')}</Button>
+            </>
+          ) : (
+            <>
+              <RecallShortcut enabled={recallAvailable} onRecall={applyRecall} label={tEntry('recall.shortcut')} />
+              <span className="min-w-48 flex-1">
+                {tEntry('recall.offer', {
+                  number: recentDocument.documentNumber ?? '',
+                  date: localDate(recentDocument.documentDate),
+                  total: money(recentDocument.total, { currency: recentDocument.currency ?? doc.currency }),
+                  lines: recentDocument.lines.length,
+                })}
+              </span>
+              <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-xs" title={tEntry('recall.shortcutHint')} onClick={applyRecall}>
+                {tEntry('recall.use')}
+              </Button>
+            </>
+          )}
+        </div>
+      ) : null}
       {canMatchBill && (matchHint || matchRefused) ? (
         <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
           <p className="min-w-48 flex-1">{t('drawer.matchBanner')}</p>
@@ -142,7 +215,7 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
           }}
         />
       ) : null}
-        {config.kind==='customer_invoice' && (editable || nativeGoods) ? <div className="space-y-3 border-b p-4">
+        {config.kind==='customer_invoice' && ((editable && nativeGoodsTaxAvailable === true) || nativeGoods) ? <div className="space-y-3 border-b p-4">
           <div className="space-y-1"><FieldLabel fieldName={tCommon('nativeGoodsTax.title')}>{tCommon('nativeGoodsTax.title')}</FieldLabel>
             {editable ? <Select value={nativeGoods ? 'native' : 'manual'} onChange={event=>setCustomValues(values=>({...values,canadianGoodsTax:event.target.value==='native'
               ? {basis:'ordinary_taxable_goods_sale',country:'CA',deliveryProvince:'',deliveryMethod:'delivered_or_made_available',agreementEvidence:''} : null}))}>
@@ -211,7 +284,12 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
 
       {useLayout ? (
         <>
-          <HeaderFields layout={layout!} editable={editable} renderField={renderHeaderField} expandDetails={!createMode} />
+          <HeaderFields
+            layout={headerLayout!}
+            editable={editable}
+            renderField={renderHeaderField}
+            expandDetails={!createMode}
+          />
           {multiSub && !layoutShowsSubsidiary ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className={field}>{renderHeaderField({ key: 'subsidiary_id', visible: true }, editable)}</div>
@@ -328,7 +406,7 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
         onChange={setExplicitFx}
       />
 
-      {controlSide && controlChoices ? (
+      {controlSide && controlChoices && !controlInDetails ? (
         <div className="grid gap-4 sm:grid-cols-2">
           <div className={field}>
             <FieldLabel fieldName={t('drawer.controlAccount')}>{t('drawer.controlAccount')}</FieldLabel>
@@ -415,7 +493,11 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
             readOnly={!editable || config.kind === 'project_charge'}
             formatAmount={(value) => money(value, { currency: doc.currency })}
             distribution={distribution}
+            minorUnits={currencyMinorUnits(doc.currency)}
           />
+          {editable && partyDefaultHint ? (
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">{partyDefaultHint}</p>
+          ) : null}
         </div>
       ) : null}
       {splitTarget !== null && rows[splitTarget] ? (

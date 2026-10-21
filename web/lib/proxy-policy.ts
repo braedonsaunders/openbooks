@@ -41,6 +41,10 @@ const PUBLIC_SEGMENT_ROOTS = [
   // public: web/lib/public-surface-contract.test.ts derives every v1 route
   // from the filesystem and refuses exactly that.
   "/api/v1",
+  // Inbound AP email webhooks (/api/inbound/ap/<token>): email providers hold
+  // no session; the unguessable address token and the provider signature are
+  // verified inside the route (unknown token 404, inactive 403, bad signature 401).
+  "/api/inbound/ap",
   "/pay",
   "/api/pay",
   // Customer portal: every route under /portal and its APIs authenticates by

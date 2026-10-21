@@ -1,0 +1,80 @@
+{
+  "tabs": {
+    "queue": "Capture queue",
+    "inbox": "Inbox activity"
+  },
+  "emailSource": "Email",
+  "mailboxes": {
+    "title": "Email bills to",
+    "copyAddress": "Copy the {label} address",
+    "copyWebhook": "Copy the {label} webhook URL",
+    "webhook": "Webhook URL",
+    "copied": "Copied to the clipboard",
+    "copyFailed": "Could not copy. Select the text and copy it manually.",
+    "none": "No inbound address is active yet.",
+    "manage": "Manage addresses"
+  },
+  "inbox": {
+    "columns": {
+      "received": "Received",
+      "address": "Address",
+      "from": "From",
+      "subject": "Subject",
+      "attachments": "Attachments",
+      "outcome": "Outcome",
+      "detail": "Detail",
+      "capture": "Capture"
+    },
+    "outcomes": {
+      "received": "Processing",
+      "captured": "Captured",
+      "rejected_sender": "Sender not allowed",
+      "no_attachments": "No bill attached",
+      "duplicate": "Already captured",
+      "error": "Error"
+    },
+    "capturedCount": "{count, plural, one {# capture created} other {# captures created}}",
+    "openCapture": "Open capture",
+    "emptyTitle": "No inbound email yet",
+    "emptyDescription": "Messages sent to this company's AP addresses appear here with what happened to each one.",
+    "emptyNoMailbox": "Set up an inbound address under Setup → Billing → AP inbound addresses to receive bills by email."
+  },
+  "trust": {
+    "trusted": "Trusted: {count, plural, one {# clean bill} other {# clean bills}} in a row",
+    "building": "{count, plural, =0 {No clean bills yet} one {# clean bill in a row} other {# clean bills in a row}} of {threshold} needed for trust"
+  },
+  "autoPost": {
+    "posted": "Posted automatically under the auto-post policy.",
+    "submitted": "Submitted for approval automatically under the auto-post policy.",
+    "refused": "Not posted automatically: {message}",
+    "skipped": {
+      "policy_off": "Auto-post was off when this bill arrived.",
+      "not_a_bill": "Vendor credits are never posted automatically.",
+      "needs_review": "Not posted automatically: a field or line needs review.",
+      "duplicate": "Not posted automatically: this may be a duplicate.",
+      "vendor_unmatched": "Not posted automatically: the vendor was not matched.",
+      "vendor_not_trusted": "Not posted automatically: the vendor has not earned trust yet.",
+      "amount_unreadable": "Not posted automatically: the total could not be read.",
+      "over_limit": "Not posted automatically: the total is over the policy limit.",
+      "currency_differs": "Not posted automatically: the bill currency differs from the policy limit currency.",
+      "actor_not_permitted": "Not posted automatically: the address owner may not create and post bills."
+    }
+  },
+  "keyboard": {
+    "listNext": "Next capture in the list",
+    "listPrevious": "Previous capture in the list",
+    "next": "Next capture",
+    "previous": "Previous capture",
+    "createDraft": "Create draft and go to the next capture",
+    "createAndPost": "Create draft and post",
+    "createAndPostButton": "Create and post",
+    "reject": "Reject capture",
+    "rejectConfirm": "Reject {name}? It leaves the review queue.",
+    "posted": "Bill posted",
+    "submittedForApproval": "Draft created and submitted for approval",
+    "postRefused": "The draft was created but not posted: {message}",
+    "openDraft": "Open draft",
+    "allReviewed": "No more captures need review",
+    "hint": "J / K: next or previous capture · Enter: next field that needs attention · ⌘/Ctrl+Enter: create draft · ⌘/Ctrl+Shift+Enter: create and post · ?: all shortcuts"
+  }
+}

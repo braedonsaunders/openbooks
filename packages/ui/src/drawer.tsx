@@ -258,15 +258,46 @@ export function Drawer({
       'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
     // Defer the initial focus until the panel has mounted for this open cycle.
+    // A form marks its first entry field with `data-autofocus` (the vendor on
+    // a new bill, the date on a new journal) so a clerk can type immediately;
+    // without one, focus falls to the first focusable element as before.
+    const autofocusTarget = (panel: HTMLElement): HTMLElement | null => {
+      const marked = panel.querySelector<HTMLElement>('[data-autofocus]')
+      if (!marked) return null
+      if (marked.matches(focusablesSelector) && !marked.matches('[disabled]')) return marked
+      return marked.querySelector<HTMLElement>(focusablesSelector)
+    }
     const focusTimer = window.setTimeout(() => {
       if (hasDeeperDrawer()) return
       const panel = panelRef.current
       if (!panel) return
-      const first = Array.from(panel.querySelectorAll<HTMLElement>(focusablesSelector)).find(
+      const marked = autofocusTarget(panel)
+      const first = marked ?? Array.from(panel.querySelectorAll<HTMLElement>(focusablesSelector)).find(
         (el) => el.offsetParent !== null,
       )
       ;(first ?? panel).focus()
     }, 0)
+    // Record bodies that load after the shell (an async create form) mark
+    // their first field once rendered: claim it if focus is still parked on
+    // the shell's own chrome and the operator has not moved it.
+    let initialFocus: Element | null = null
+    const observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => {
+      const panel = panelRef.current
+      if (!panel || hasDeeperDrawer()) return
+      const marked = autofocusTarget(panel)
+      if (!marked) return
+      observer?.disconnect()
+      const active = document.activeElement
+      const untouched = active === initialFocus || active === panel || active === document.body || !panel.contains(active)
+      if (untouched && active !== marked) marked.focus()
+    })
+    const settleTimer = window.setTimeout(() => {
+      initialFocus = document.activeElement
+      const panel = panelRef.current
+      if (!panel || !observer || autofocusTarget(panel)) return
+      observer.observe(panel, { childList: true, subtree: true })
+    }, 0)
+    const observerDeadline = window.setTimeout(() => observer?.disconnect(), 4000)
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Tab') return
@@ -298,6 +329,9 @@ export function Drawer({
     document.addEventListener('keydown', onKeyDown)
     return () => {
       window.clearTimeout(focusTimer)
+      window.clearTimeout(settleTimer)
+      window.clearTimeout(observerDeadline)
+      observer?.disconnect()
       document.removeEventListener('keydown', onKeyDown)
       // Restore focus to the trigger if it's still in the document.
       if (previouslyFocused && document.contains(previouslyFocused)) {

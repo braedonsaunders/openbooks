@@ -181,6 +181,8 @@ export const users = pgTable(
     /** Navigation layout: 'sidebar' | 'topbar'. Null = org default
      *  (orgs.settings.defaultNavMode). See web/lib/nav-mode.ts. */
     navMode: text("nav_mode"),
+    /** Personal data-entry preferences (web/lib/entry-preferences.ts); `{}` = defaults. */
+    entryPreferences: jsonb("entry_preferences").notNull().default({}),
     /**
      * The user's personal home dashboard (insight_dashboards.id). Null = fall
      * back to their role's default home, then the org's seeded system default.

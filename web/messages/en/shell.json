@@ -29,7 +29,8 @@
     "security": "Sign-in security",
     "keyboardShortcuts": "Keyboard shortcuts",
     "switchFailed": "The workspace could not be switched. Try again.",
-    "switchUnavailable": "You no longer have access to that workspace."
+    "switchUnavailable": "You no longer have access to that workspace.",
+    "dataEntry": "Data entry"
   },
   "sandboxBanner": {
     "sandbox": "Sandbox environment",
@@ -84,6 +85,7 @@
       "salesOrder": "Sales order",
       "customerPayment": "Customer payment",
       "bill": "Bill",
+      "billBatch": "Several bills (batch entry)",
       "vendorCredit": "Vendor credit",
       "purchaseOrder": "Purchase order",
       "vendorPayment": "Vendor payment",
@@ -139,8 +141,11 @@
       "dashboards": "Dashboards",
       "locations": "Locations",
       "warehouses": "Warehouses",
-      "workOrders": "Work orders"
-    }
+      "workOrders": "Work orders",
+      "actions": "Actions"
+    },
+    "createAction": "Create: {name}",
+    "createVerbs": "new create add enter make"
   },
   "meta": {
     "description": "The open business suite. Run on open books."
@@ -288,7 +293,11 @@
       "save": "Save",
       "saveAndNew": "Save and new",
       "saveAndClose": "Save and close",
-      "addLine": "Add line"
+      "addLine": "Add line",
+      "fieldHelp": "Explain the focused field",
+      "postAndNew": "Post and new",
+      "postRecord": "Save and post",
+      "recallLast": "Use the last document's lines"
     }
   },
   "dateEntry": {

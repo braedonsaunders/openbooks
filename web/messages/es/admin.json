@@ -3941,6 +3941,14 @@
         "title": "Política de despacho de servicio",
         "singularTitle": "Versión de la política de despacho",
         "description": "Avisos a clientes, objetivos de respuesta por prioridad y horizonte de generación de visitas de los contratos, vigente desde una fecha."
+      },
+      "ap-capture-mailboxes": {
+        "title": "Direcciones de recepción de cuentas por pagar",
+        "description": "Direcciones de correo electrónico que convierten las facturas recibidas por correo en capturas para una entidad jurídica."
+      },
+      "ap-capture-autopost-policies": {
+        "title": "Política de contabilización automática de facturas",
+        "description": "Contabilizar automáticamente las facturas capturadas de proveedores cuyas facturas recientes se aceptaron sin cambios y se contabilizaron."
       }
     },
     "fields": {
@@ -7989,6 +7997,42 @@
       "defaultVisitMinutes": "Duración predeterminada de la visita (minutos)",
       "agreementHorizonDays": "Horizonte de contratos (días)",
       "agreementHorizonDaysHelp": "Con cuánta antelación los contratos recurrentes generan sus visitas."
+    },
+    "apCapture": {
+      "mailboxHelp": "Apunte el webhook de entrada de su proveedor de correo electrónico a la URL del webhook de esta dirección. Cada adjunto PDF, de imagen o XML se convierte en una captura para la entidad jurídica elegida.",
+      "policyHelp": "Un proveedor obtiene la confianza cuando cada una de sus facturas capturadas más recientes se aceptó sin ninguna corrección y luego se contabilizó, sin ninguna anulada. Una sola edición o anulación interrumpe la racha. Los Flows de aprobación siguen aplicándose, y los bloqueos de período o los rechazos de contabilización dejan la factura como borrador.",
+      "providers": {
+        "postmark": "Postmark",
+        "mailgun": "Mailgun",
+        "sendgrid": "SendGrid",
+        "generic": "JSON genérico"
+      },
+      "fields": {
+        "label": "Nombre",
+        "emailAddress": "Dirección de reenvío",
+        "provider": "Proveedor de correo electrónico",
+        "token": "Token del webhook",
+        "allowedSenders": "Remitentes permitidos",
+        "signingSecret": "Secreto de firma",
+        "clearSigningSecret": "Quitar el secreto de firma",
+        "rotateToken": "Emitir una nueva URL de webhook",
+        "enabled": "Contabilización automática activada",
+        "cleanStreak": "Facturas sin correcciones requeridas",
+        "maxAmount": "Importe máximo por factura",
+        "maxAmountCurrency": "Moneda del importe máximo"
+      },
+      "help": {
+        "subsidiaryId": "Las facturas recibidas en esta dirección se registran en esta entidad jurídica. No se puede cambiar más adelante.",
+        "emailAddress": "La dirección de su proveedor de correo electrónico a la que los proveedores envían sus facturas. Se muestra en la página de captura con un botón para copiarla.",
+        "provider": "Postmark, Mailgun y SendGrid envían sus propios formatos; JSON genérico acepta el formato JSON documentado.",
+        "allowedSenders": "Direcciones exactas (ap@vendor.com) o dominios completos (@vendor.com). Déjelo vacío para aceptar cualquier remitente.",
+        "signingSecret": "Mailgun: la clave de firma del webhook. Postmark y SendGrid: la contraseña de las credenciales de la URL del webhook. JSON genérico: la clave HMAC para X-OpenBooks-Signature. Déjelo vacío para conservar el secreto guardado.",
+        "clearSigningSecret": "Las entregas se autenticarán entonces solo con el token del webhook.",
+        "rotateToken": "La URL actual del webhook deja de funcionar de inmediato. Actualice su proveedor de correo electrónico con la nueva.",
+        "enabled": "Desactivada de forma predeterminada. Cuando está desactivada, cada captura espera revisión.",
+        "cleanStreak": "Facturas capturadas consecutivas del proveedor, cada una aceptada sin cambios y contabilizada, antes de que sus facturas se contabilicen automáticamente (de 2 a 20).",
+        "maxAmount": "Las facturas cuyo total supere este importe esperan revisión. Una factura en otra moneda siempre espera revisión."
+      }
     }
   },
   "flows": {

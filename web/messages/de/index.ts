@@ -10,6 +10,7 @@ import allocations from './allocations.json'
 import amortization from './amortization.json'
 import analytics from './analytics.json'
 import ap from './ap.json'
+import apInbox from './apInbox.json'
 import apiDocs from './apiDocs.json'
 import apiErrors from './apiErrors.json'
 import applications from './applications.json'
@@ -19,6 +20,7 @@ import ar from './ar.json'
 import assets from './assets.json'
 import assistant from './assistant.json'
 import banking from './banking.json'
+import batchEntry from './batchEntry.json'
 import billingImport from './billingImport.json'
 import budgets from './budgets.json'
 import channels from './channels.json'
@@ -35,6 +37,7 @@ import data from './data.json'
 import docs from './docs.json'
 import documents from './documents.json'
 import entities from './entities.json'
+import entry from './entry.json'
 import equity from './equity.json'
 import estimates from './estimates.json'
 import expenses from './expenses.json'
@@ -100,6 +103,7 @@ export default {
   amortization,
   analytics,
   ap,
+  apInbox,
   apiDocs,
   apiErrors,
   applications,
@@ -109,6 +113,7 @@ export default {
   assets,
   assistant,
   banking,
+  batchEntry,
   billingImport,
   budgets,
   channels,
@@ -125,6 +130,7 @@ export default {
   docs,
   documents,
   entities,
+  entry,
   equity,
   estimates,
   expenses,

@@ -1,0 +1,80 @@
+{
+  "tabs": {
+    "queue": "Cola de captura",
+    "inbox": "Actividad de la bandeja de entrada"
+  },
+  "emailSource": "Correo electrónico",
+  "mailboxes": {
+    "title": "Enviar facturas por correo a",
+    "copyAddress": "Copiar la dirección {label}",
+    "copyWebhook": "Copiar la URL del webhook {label}",
+    "webhook": "URL del webhook",
+    "copied": "Copiado al portapapeles",
+    "copyFailed": "No se pudo copiar. Seleccione el texto y cópielo manualmente.",
+    "none": "Todavía no hay ninguna dirección de recepción activa.",
+    "manage": "Administrar direcciones"
+  },
+  "inbox": {
+    "columns": {
+      "received": "Recibido",
+      "address": "Dirección",
+      "from": "De",
+      "subject": "Asunto",
+      "attachments": "Adjuntos",
+      "outcome": "Resultado",
+      "detail": "Detalle",
+      "capture": "Captura"
+    },
+    "outcomes": {
+      "received": "Procesando",
+      "captured": "Capturado",
+      "rejected_sender": "Remitente no permitido",
+      "no_attachments": "Sin factura adjunta",
+      "duplicate": "Ya capturado",
+      "error": "Error"
+    },
+    "capturedCount": "{count, plural, one {# captura creada} other {# capturas creadas}}",
+    "openCapture": "Abrir captura",
+    "emptyTitle": "Aún no hay correos recibidos",
+    "emptyDescription": "Los mensajes enviados a las direcciones de cuentas por pagar de esta empresa aparecen aquí con el resultado de cada uno.",
+    "emptyNoMailbox": "Configure una dirección de recepción en Configuración → Facturación → Direcciones de recepción de cuentas por pagar para recibir facturas por correo electrónico."
+  },
+  "trust": {
+    "trusted": "De confianza: {count, plural, one {# factura consecutiva sin correcciones} other {# facturas consecutivas sin correcciones}}",
+    "building": "{count, plural, =0 {Aún no hay facturas sin correcciones} one {# factura sin correcciones consecutiva} other {# facturas sin correcciones consecutivas}} de {threshold} necesarias para obtener confianza"
+  },
+  "autoPost": {
+    "posted": "Contabilizada automáticamente según la política de contabilización automática.",
+    "submitted": "Enviada automáticamente para aprobación según la política de contabilización automática.",
+    "refused": "No se contabilizó automáticamente: {message}",
+    "skipped": {
+      "policy_off": "La contabilización automática estaba desactivada cuando llegó esta factura.",
+      "not_a_bill": "Los abonos de proveedor nunca se contabilizan automáticamente.",
+      "needs_review": "No se contabilizó automáticamente: un campo o una línea requiere revisión.",
+      "duplicate": "No se contabilizó automáticamente: podría ser un duplicado.",
+      "vendor_unmatched": "No se contabilizó automáticamente: no se identificó al proveedor.",
+      "vendor_not_trusted": "No se contabilizó automáticamente: el proveedor todavía no ha obtenido la confianza.",
+      "amount_unreadable": "No se contabilizó automáticamente: no se pudo leer el total.",
+      "over_limit": "No se contabilizó automáticamente: el total supera el límite de la política.",
+      "currency_differs": "No se contabilizó automáticamente: la moneda de la factura difiere de la moneda del límite de la política.",
+      "actor_not_permitted": "No se contabilizó automáticamente: el propietario de la dirección no puede crear ni contabilizar facturas."
+    }
+  },
+  "keyboard": {
+    "listNext": "Siguiente captura de la lista",
+    "listPrevious": "Captura anterior de la lista",
+    "next": "Siguiente captura",
+    "previous": "Captura anterior",
+    "createDraft": "Crear borrador e ir a la siguiente captura",
+    "createAndPost": "Crear borrador y contabilizar",
+    "createAndPostButton": "Crear y contabilizar",
+    "reject": "Rechazar captura",
+    "rejectConfirm": "¿Rechazar {name}? Saldrá de la cola de revisión.",
+    "posted": "Factura contabilizada",
+    "submittedForApproval": "Borrador creado y enviado para aprobación",
+    "postRefused": "Se creó el borrador, pero no se contabilizó: {message}",
+    "openDraft": "Abrir borrador",
+    "allReviewed": "No quedan capturas pendientes de revisión",
+    "hint": "J / K: captura siguiente o anterior · Enter: siguiente campo que requiere atención · ⌘/Ctrl+Enter: crear borrador · ⌘/Ctrl+Shift+Enter: crear y contabilizar · ?: todos los atajos"
+  }
+}

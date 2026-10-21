@@ -169,7 +169,19 @@
       "reversalStatus": "Contrepassation automatique : {status} · {date}",
       "retryReversals": "Réessayer les contrepassations échues",
       "viewReversal": "Voir la contrepassation"
-    }
+    },
+    "saveAndNew": "Enregistrer et nouveau",
+    "savedNumbered": "{number} enregistrée",
+    "invalidAmounts": "Un montant n'est pas un nombre valide. Corrigez le montant signalé, puis enregistrez à nouveau.",
+    "postedAndNew": "Comptabilisé au grand livre. Une nouvelle écriture est prête à la même date.",
+    "submitted": "Soumise pour approbation au lieu d'être comptabilisée : un flux d'approbation régit cette écriture.",
+    "submittedAndNew": "Soumise pour approbation au lieu d'être comptabilisée : un flux d'approbation régit cette écriture. Une nouvelle écriture est prête à la même date.",
+    "savedNotPosted": "L'écriture a été enregistrée comme brouillon mais n'a pas été comptabilisée. Corrigez le motif indiqué, puis comptabilisez le brouillon.",
+    "statisticalIncomplete": "Chaque ligne statistique doit avoir un compte, une unité et une quantité non nulle avant que l'écriture puisse être comptabilisée.",
+    "postNeedsAmounts": "Saisissez les montants au débit et au crédit avant de comptabiliser.",
+    "moreOptions": "Plus d'options",
+    "balanceLine": "Équilibrer la ligne",
+    "balanceLineHint": "Reporter l'écart restant sur la dernière ligne modifiée"
   },
   "book": {
     "label": "Livre comptable",

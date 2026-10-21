@@ -1,0 +1,80 @@
+{
+  "tabs": {
+    "queue": "取込キュー",
+    "inbox": "受信トレイのアクティビティ"
+  },
+  "emailSource": "メール",
+  "mailboxes": {
+    "title": "請求書のメール送信先",
+    "copyAddress": "{label} のアドレスをコピー",
+    "copyWebhook": "{label} の Webhook URL をコピー",
+    "webhook": "Webhook URL",
+    "copied": "クリップボードにコピーしました",
+    "copyFailed": "コピーできませんでした。テキストを選択して手動でコピーしてください。",
+    "none": "有効な受信アドレスはまだありません。",
+    "manage": "アドレスを管理"
+  },
+  "inbox": {
+    "columns": {
+      "received": "受信日時",
+      "address": "アドレス",
+      "from": "差出人",
+      "subject": "件名",
+      "attachments": "添付ファイル",
+      "outcome": "結果",
+      "detail": "詳細",
+      "capture": "取込"
+    },
+    "outcomes": {
+      "received": "処理中",
+      "captured": "取込済み",
+      "rejected_sender": "許可されていない差出人",
+      "no_attachments": "請求書の添付なし",
+      "duplicate": "取込済み（重複）",
+      "error": "エラー"
+    },
+    "capturedCount": "{count, plural, one {# 件の取込を作成しました} other {# 件の取込を作成しました}}",
+    "openCapture": "取込を開く",
+    "emptyTitle": "受信メールはまだありません",
+    "emptyDescription": "この会社の買掛金受信アドレスに送信されたメッセージが、それぞれの処理結果とともにここに表示されます。",
+    "emptyNoMailbox": "メールで請求書を受け取るには、セットアップ → 請求 → 買掛金受信アドレス で受信アドレスを設定してください。"
+  },
+  "trust": {
+    "trusted": "信頼済み: {count, plural, one {# 件連続で修正なしの請求書} other {# 件連続で修正なしの請求書}}",
+    "building": "{count, plural, =0 {修正なしの請求書はまだありません} one {# 件連続で修正なしの請求書} other {# 件連続で修正なしの請求書}}（信頼には {threshold} 件が必要）"
+  },
+  "autoPost": {
+    "posted": "自動転記ポリシーに基づき自動的に転記されました。",
+    "submitted": "自動転記ポリシーに基づき自動的に承認申請されました。",
+    "refused": "自動転記されませんでした: {message}",
+    "skipped": {
+      "policy_off": "この請求書の受信時、自動転記はオフでした。",
+      "not_a_bill": "仕入先クレジットは自動転記されません。",
+      "needs_review": "自動転記されませんでした: 確認が必要な項目または明細があります。",
+      "duplicate": "自動転記されませんでした: 重複の可能性があります。",
+      "vendor_unmatched": "自動転記されませんでした: 仕入先が照合されませんでした。",
+      "vendor_not_trusted": "自動転記されませんでした: 仕入先がまだ信頼を獲得していません。",
+      "amount_unreadable": "自動転記されませんでした: 合計金額を読み取れませんでした。",
+      "over_limit": "自動転記されませんでした: 合計金額がポリシーの上限を超えています。",
+      "currency_differs": "自動転記されませんでした: 請求書の通貨がポリシー上限の通貨と異なります。",
+      "actor_not_permitted": "自動転記されませんでした: アドレスの所有者には請求書の作成と転記が許可されていません。"
+    }
+  },
+  "keyboard": {
+    "listNext": "リスト内の次の取込",
+    "listPrevious": "リスト内の前の取込",
+    "next": "次の取込",
+    "previous": "前の取込",
+    "createDraft": "下書きを作成して次の取込へ移動",
+    "createAndPost": "下書きを作成して転記",
+    "createAndPostButton": "作成して転記",
+    "reject": "取込を却下",
+    "rejectConfirm": "{name} を却下しますか？確認キューから外れます。",
+    "posted": "請求書を転記しました",
+    "submittedForApproval": "下書きを作成し、承認申請しました",
+    "postRefused": "下書きは作成されましたが、転記されませんでした: {message}",
+    "openDraft": "下書きを開く",
+    "allReviewed": "確認が必要な取込はもうありません",
+    "hint": "J / K: 次または前の取込 · Enter: 確認が必要な次の項目 · ⌘/Ctrl+Enter: 下書きを作成 · ⌘/Ctrl+Shift+Enter: 作成して転記 · ?: すべてのショートカット"
+  }
+}
