@@ -163,7 +163,7 @@ test(
         unmatchedStatementLines: 0,
         matchedJournalLines: 2,
       });
-      assert.deepEqual(await markReconciled(recon.id, ctx), { journalLinesReconciled: 2 });
+      assert.deepEqual(await markReconciled(recon.id, ctx), { status: "signed_off", journalLinesReconciled: 2 });
 
       // The GL-signed carry chains into the next session: new lines balance
       // on the carried opening exactly like the chequing path.

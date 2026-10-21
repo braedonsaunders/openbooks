@@ -1,3 +1,4 @@
+import { intlServerStubSource } from '../../../../testing/stub-modules'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
@@ -32,7 +33,7 @@ registerHooks({
         shortCircuit: true,
         url:
           'data:text/javascript,' +
-          encodeURIComponent(
+          encodeURIComponent(intlServerStubSource(
             `import crm from ${JSON.stringify(crmUrl)} with { type: 'json' };
              const bundles = { crm };
              function walk(ns, key) {
@@ -42,7 +43,7 @@ registerHooks({
                if (typeof node !== 'string') throw new Error('MISSING_MESSAGE:' + ns + '.' + key);
                return node;
              }
-             export async function getTranslations(ns) { return (key) => walk(ns, key); }`,
+             export async function getTranslations(ns) { return (key) => walk(ns, key); }`),
           ),
       }
     }

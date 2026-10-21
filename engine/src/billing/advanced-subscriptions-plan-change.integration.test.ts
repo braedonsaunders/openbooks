@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -56,6 +58,9 @@ async function seedPlanVersion(
 
 /** A contract on plan A starting 2026-05-15, invoiced once so its paid-through date is 2026-06-15. */
 async function seedBilledContract(org: ScratchOrg, actorId: string) {
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb) || '{"subscriptionBilling":true,"advancedSubscriptions":true}'::jsonb)
+    where id=${org.orgId}`);
   const plan = await seedPlanVersion(org, actorId, { name: "Plan A", unitPrice: "100.00" });
   const subscriptionId = randomUUID();
   await db.execute(sql`

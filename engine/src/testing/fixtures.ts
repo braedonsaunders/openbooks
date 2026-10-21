@@ -1250,6 +1250,13 @@ function disposableOrgPredicate(kind: DisposableOrgKind) {
     : sql`name like ${SIM_ORG_PREFIX + "%"} and settings->'simHarness' = 'true'::jsonb`;
 }
 
+/** Break the project/quote reference cycle before deleting disposable tenant rows. */
+async function clearDisposableProjectAwardReferences(tx: TeardownTx, orgId: string): Promise<void> {
+  await tx.execute(sql`
+    update projects set awarded_from_document_id = null, awarded_at = null, awarded_by = null
+     where org_id = ${orgId} and awarded_from_document_id is not null`);
+}
+
 /** Recheck identity under a row lock in EVERY mutating transaction. A rename
  * or tag revocation between committed passes must stop the next pass before
  * any tenant data or trigger changes. The policies are intentionally disjoint. */
@@ -1468,12 +1475,7 @@ async function dropDisposableOrgEscaped(
       where user_id in (select id from users where org_id = ${orgId})`);
     await tx.execute(sql`update users set is_active = false where org_id = ${orgId}`);
     await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId} and status = 'posted'`);
-    // projects.awarded_from_document_id and documents.project_id reference
-    // each other; clear the award provenance so documents can be deleted
-    // before projects.
-    await tx.execute(sql`
-      update projects set awarded_from_document_id = null, awarded_at = null, awarded_by = null
-       where org_id = ${orgId} and awarded_from_document_id is not null`);
+    await clearDisposableProjectAwardReferences(tx, orgId);
     // Remove capture evidence before its protected source files. These guards
     // are unconditional; use the same exact-trigger, scoped transaction as
     // other immutable fixture evidence. The locked disposable-org identity
@@ -2141,7 +2143,7 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
       ...CORE_A.filter((t) => remainingSet.has(t)),
     ];
     const failed: { table: string; error: string }[] = await db.transaction(async (tx) => {
-        await setTeardownGucs(tx);
+        await guardTeardownTransaction(tx, org.orgId, "scratch");
         // This is a dedicated disposable database owned by the CI job. The reset
         // must run as the test login, which is deliberately NOT a superuser (so
         // tenant RLS stays enforced for every pooled query) — so replica mode
@@ -2167,6 +2169,7 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
           if (!touched.has(table)) continue;
           await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
         }
+        await clearDisposableProjectAwardReferences(tx, org.orgId);
         const hasBankFiles = (await tx.execute(sql`select 1 as x from pay_run_bank_files where org_id = ${org.orgId} limit 1`)).rows.length > 0;
         if (hasBankFiles) {
           await tx.execute(sql.raw(`alter table public."pay_run_bank_files" disable trigger pay_run_bank_file_immutable`));

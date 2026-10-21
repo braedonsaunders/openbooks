@@ -88,6 +88,8 @@ async function seedTwoBookDepreciated(postsGl = true): Promise<TwoBook> {
   `);
   await buildSchedule(assetId, org.orgId, actorId, org.bookId);
   await buildSchedule(assetId, org.orgId, actorId, secondaryBookId);
+  const { grantScratchPermissions } = await import("../testing/fixtures.ts");
+  await grantScratchPermissions(org.orgId, actors.approver1Id, ["assets.manage"]);
   await seedApprovalFlow(org.orgId, {
     subjectKind: "financial_change",
     assignees: [{ type: "user", userId: actors.approver1Id }],

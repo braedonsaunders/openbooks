@@ -1,3 +1,4 @@
+import { intlServerStubSource } from "../../../../testing/stub-modules";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
@@ -41,8 +42,8 @@ registerHooks({
         shortCircuit: true,
         url:
           "data:text/javascript," +
-          encodeURIComponent(
-            `export async function getLocale(){return 'en'} export async function getTranslations(ns) {
+          encodeURIComponent(intlServerStubSource(
+            `export async function getTranslations(ns) {
               const catalogs = globalThis.__compReadbackCatalogs;
               const catalog = ns === 'shell.routeState' ? catalogs.routeState : ns === 'admin' ? catalogs.admin : ns === 'nav' ? catalogs.nav : catalogs.hrm;
               const lookup = (key) => {
@@ -60,7 +61,7 @@ registerHooks({
               };
               t.has = (key) => lookup(key) !== key;
               return t;
-            }`,
+            }`),
           ),
       };
     }

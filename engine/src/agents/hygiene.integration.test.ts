@@ -1,3 +1,5 @@
+import { approveBudgetScenarioFixture } from "../testing/budgets.ts";
+import { withSimClock } from "../platform/clock.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -71,10 +73,7 @@ test(
       await withBypassContext(() => db.execute(sql`
         insert into budget_lines (id, org_id, scenario_id, account_id, period_id, amount)
         values (${randomUUID()}, ${org.orgId}, ${scenarioId}, ${revenueAccount}, ${org.periodId}, '100')`));
-      await withBypassContext(() => db.execute(sql`
-        update budget_scenarios set status = 'pending_approval', revision = revision + 1 where id = ${scenarioId}`));
-      await withBypassContext(() => db.execute(sql`
-        update budget_scenarios set status = 'approved', revision = revision + 1 where id = ${scenarioId}`));
+      await approveBudgetScenarioFixture(org.orgId, scenarioId);
 
       const componentId = randomUUID();
       await withBypassContext(() => db.execute(sql`
@@ -191,7 +190,8 @@ test(
       await postBalanced(org.date, org.accounts.cogs, swing, "150000");
 
       const findings = await withBypassContext(() =>
-        hygieneFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("hygiene")),
+        withSimClock(`${org.date}T12:00:00.000Z`, () =>
+          hygieneFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("hygiene"))),
       );
       const subjects = new Set(
         findings

@@ -35,16 +35,6 @@ const mockAuthz = (realUrl: string): string => `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    // load under the plain runner (same seam as platform.test.ts).
-    // Forward Next.js-style aliases to the real modules they point at.
-    // The shared dependency tree links @openbooks/engine to another checkout;
-    // route tests must execute this worktree's service boundary.
-    if (specifier.startsWith("@openbooks/engine/") && context.parentURL?.includes("setup/payment-providers")) {
-      return nextResolve(
-        new URL(`../../../../../../engine/${specifier.slice("@openbooks/engine/".length)}`, context.parentURL).href,
-        context,
-      );
-    }
     if (
       (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/payment-providers")) ||
       // The route factory resolves its session gate through the "@/lib/authz"

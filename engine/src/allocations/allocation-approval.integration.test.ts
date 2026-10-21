@@ -26,17 +26,15 @@ installEngineSeams();
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 // ---------------------------------------------------------------------------
-// A14 approval flows for period-mode allocation runs: a version with
-// approval_flow_id posts ONLY after the flow approves. postAllocationRun
-// opens the flow and waits in pending_approval (no journal); the flow
-// engine's release posts (actor = approver) or records the rejection.
+// Tenant-configured approval gates control period-mode allocation runs.
+// postAllocationRun waits in pending_approval without a journal until every
+// configured gate approves; the release posts as the approver or records rejection.
 // ---------------------------------------------------------------------------
 
 async function seedPeriodRule(opts: {
   org: ScratchOrg;
   publisherId: string;
   poolAccountId: string;
-  approvalFlowId?: string | null;
   runPolicy?: string;
 }): Promise<{ ruleId: string; versionId: string }> {
   const ruleId = randomUUID();
@@ -51,14 +49,14 @@ async function seedPeriodRule(opts: {
        book_scope, book_ids, account_scope, dimension_filters, source_measure,
        basis_kind, driver_id, driver_as_of, basis_config,
        target_kind, dynamic_target, impact, residual_policy, solve_method,
-       run_policy, run_offset_days, approval_flow_id, memo_template, published_at, published_by)
+       run_policy, run_offset_days, memo_template, published_at, published_by)
     values (${versionId}, ${opts.org.orgId}, ${ruleId}, 1, 'draft', '2026-01-01', null,
        'primary', '[]'::jsonb,
        ${JSON.stringify({ kind: "accounts", accountIds: [opts.poolAccountId] })}::jsonb,
        '{}'::jsonb, 'period_activity',
        'fixed_percent', null, 'period', '{}'::jsonb,
        'explicit', '{}'::jsonb, 'reclass', 'largest_share', 'sequential',
-       ${opts.runPolicy ?? "manual"}, 0, ${opts.approvalFlowId ?? null},
+       ${opts.runPolicy ?? "manual"}, 0,
        'Allocation {{rule.name}} for {{period.name}}', now(), ${opts.publisherId})`);
   const deptA = await seedDepartment(opts.org.orgId, `A-${ruleId.slice(0, 4)}`);
   const deptB = await seedDepartment(opts.org.orgId, `B-${ruleId.slice(0, 4)}`);
@@ -160,7 +158,7 @@ test("post with an approval flow opens the flow and waits — no journal", { ski
   await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
-    const { flowId } = await seedApprovalFlow(org.orgId, {
+    await seedApprovalFlow(org.orgId, {
       subjectKind: "allocation_run",
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
@@ -170,7 +168,6 @@ test("post with an approval flow opens the flow and waits — no journal", { ski
       org,
       publisherId: actors.adminId,
       poolAccountId: org.accounts.adjustment,
-      approvalFlowId: flowId,
     });
     const linesBefore = await journalLineCount(org.orgId);
     const preview = await previewAllocationRun({
@@ -204,7 +201,7 @@ test("flow approval posts the run with journal + lineage as the approver", { ski
   await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
-    const { flowId } = await seedApprovalFlow(org.orgId, {
+    await seedApprovalFlow(org.orgId, {
       subjectKind: "allocation_run",
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
@@ -214,7 +211,6 @@ test("flow approval posts the run with journal + lineage as the approver", { ski
       org,
       publisherId: actors.adminId,
       poolAccountId: org.accounts.adjustment,
-      approvalFlowId: flowId,
     });
     const preview = await previewAllocationRun({
       orgId: org.orgId,
@@ -243,7 +239,7 @@ test("flow rejection records failure with no journal and untouched lineage", { s
   await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
-    const { flowId } = await seedApprovalFlow(org.orgId, {
+    await seedApprovalFlow(org.orgId, {
       subjectKind: "allocation_run",
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
@@ -253,7 +249,6 @@ test("flow rejection records failure with no journal and untouched lineage", { s
       org,
       publisherId: actors.adminId,
       poolAccountId: org.accounts.adjustment,
-      approvalFlowId: flowId,
     });
     const linesBefore = await journalLineCount(org.orgId);
     const preview = await previewAllocationRun({
@@ -307,7 +302,6 @@ test("post refuses when the configured flow gates but another allocation flow fa
       org,
       publisherId: actors.adminId,
       poolAccountId: org.accounts.adjustment,
-      approvalFlowId: good.flowId,
     });
     const preview = await previewAllocationRun({
       orgId: org.orgId,
@@ -343,7 +337,7 @@ test("scheduler auto_post with a flow waits in pending_approval, never posts", {
   await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
-    const { flowId } = await seedApprovalFlow(org.orgId, {
+    await seedApprovalFlow(org.orgId, {
       subjectKind: "allocation_run",
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
@@ -353,7 +347,6 @@ test("scheduler auto_post with a flow waits in pending_approval, never posts", {
       org,
       publisherId: actors.adminId,
       poolAccountId: org.accounts.adjustment,
-      approvalFlowId: flowId,
       runPolicy: "auto_post",
     });
     const outcome = await processAllocationRunOutboxRow({
@@ -410,11 +403,13 @@ test("misconfigured approval flow fails closed — the run stays previewed", { s
   const actors = await seedFlowActors(org.orgId);
   try {
     await seedSourceEntry(org, actors.adminId, "1000.0000");
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "allocation_run", assignees: [{ type: "user", userId: randomUUID() }], mode: "all",
+    });
     const { ruleId } = await seedPeriodRule({
       org,
       publisherId: actors.adminId,
       poolAccountId: org.accounts.adjustment,
-      approvalFlowId: randomUUID(),
     });
     const preview = await previewAllocationRun({
       orgId: org.orgId,
@@ -439,7 +434,7 @@ test("a period closed after approval was requested refuses at approval time", { 
   await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
-    const { flowId } = await seedApprovalFlow(org.orgId, {
+    await seedApprovalFlow(org.orgId, {
       subjectKind: "allocation_run",
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
@@ -449,7 +444,6 @@ test("a period closed after approval was requested refuses at approval time", { 
       org,
       publisherId: actors.adminId,
       poolAccountId: org.accounts.adjustment,
-      approvalFlowId: flowId,
     });
     const preview = await previewAllocationRun({
       orgId: org.orgId,

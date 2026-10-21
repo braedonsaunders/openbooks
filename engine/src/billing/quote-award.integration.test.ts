@@ -12,6 +12,8 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrgReporting,
+  dropScratchOrg,
+  orgRowCounts,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { awardQuote, previewQuoteAward, QuoteAwardError } from "./quote-award.ts";
@@ -271,4 +273,40 @@ test("a service quote signature does not block award of the same estimate", DB, 
     });
     assert.ok(awarded.projectId);
   });
+});
+
+
+test("releasing an awarded quote fixture clears its reference cycle and preserves another tenant", DB, async () => {
+  const org = await createScratchOrg();
+  const other = await createScratchOrg();
+  const pooled = process.env.OPENBOOKS_TEST_FIXTURE_POOL === "1"
+    || Boolean(process.env.OPENBOOKS_TEST_FIXTURE_OWNER_PORT);
+  const baseline = pooled ? await orgRowCounts(org.orgId) : {};
+  const otherBaseline = await orgRowCounts(other.orgId);
+  try {
+    const actor = await createScratchUser(org.orgId, "Project controller", "admin");
+    await seedProjectTypes(org.orgId, actor);
+    const quote = await seedQuote(org, actor);
+    const awarded = await awardQuote({ orgId: org.orgId, actorId: actor, allowedSubsidiaryIds: null }, quote.quoteId, {
+      lineCosts: [{ lineId: quote.mobilizationLineId, cost: "300" }],
+    });
+    const cycle = await db.execute(sql`
+      select p.id from projects p join documents d
+        on d.org_id = p.org_id and d.id = p.awarded_from_document_id and d.project_id = p.id
+       where p.org_id = ${org.orgId} and p.id = ${awarded.projectId}`);
+    assert.equal(cycle.rows.length, 1, "the native award establishes both references");
+    await dropScratchOrg(org.orgId);
+    assert.deepEqual(await orgRowCounts(org.orgId), baseline);
+    assert.deepEqual(await orgRowCounts(other.orgId), otherBaseline);
+    const next = await createScratchOrg();
+    try {
+      assert.deepEqual(await orgRowCounts(other.orgId), otherBaseline);
+      assert.ok((await orgRowCounts(next.orgId)).orgs, "a subsequent lease remains usable");
+    } finally {
+      await dropScratchOrg(next.orgId);
+    }
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+    await dropScratchOrgReporting(other.orgId);
+  }
 });

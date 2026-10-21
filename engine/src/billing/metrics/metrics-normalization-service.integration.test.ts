@@ -67,7 +67,7 @@ interface Fixture {
 async function withFixture(run: (ctx: Fixture) => Promise<void>, options:Parameters<typeof prepareNormalizationFlowFixture>[1]={}): Promise<void> {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const requester = await createScratchUser(org.orgId, "Normalization Requester", "admin");
+    const requester = await createScratchUser(org.orgId, "Normalization Requester", "metrics_requester");
     const approver = await createScratchUser(org.orgId, "Normalization Approver", "admin");
     await withOrgTransaction(org.orgId, async () => {
       await enableMetrics(org.orgId);

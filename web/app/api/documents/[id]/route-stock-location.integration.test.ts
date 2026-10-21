@@ -15,8 +15,10 @@ const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:t
 const sessionModule = `
   export async function getAuthz() {
     const s = globalThis.__documentStockState;
-    return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
+    return { user: { orgId: s.orgId, id: s.actorId, roles: [], isSuperAdmin: false }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
   }
+  export async function guardPermission() { return getAuthz() }
+  export async function requirePermission() { return getAuthz() }
   export { can, guardSubsidiaryScope, subsidiariesInScope } from '${root}web/lib/authz.ts'
 `
 registerHooks({
@@ -39,7 +41,7 @@ registerHooks({
 })
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 const { PATCH } = await import('./route.ts')
 
@@ -98,7 +100,7 @@ test('invoice PATCH persists an explicit line warehouse', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId
-    state.actorId = randomUUID()
+    state.actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Invoice editor', 'admin'))
     const id = await makeDraftInvoice(org)
     const res = await patchDoc(org.orgId, id, {
       expectedUpdatedAt: await revision(org.orgId, id),
@@ -115,7 +117,7 @@ test('invoice PATCH leaves a blank warehouse blank with several locations, stamp
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId
-    state.actorId = randomUUID()
+    state.actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Invoice editor', 'admin'))
     const ambiguous = await makeDraftInvoice(org)
     const kept = await patchDoc(org.orgId, ambiguous, {
       expectedUpdatedAt: await revision(org.orgId, ambiguous),
@@ -141,7 +143,7 @@ test('invoice PATCH stamps no default for a non-stocked line', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     state.orgId = org.orgId
-    state.actorId = randomUUID()
+    state.actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Invoice editor', 'admin'))
     await withBypassContext(() => db.execute(sql`
       update stock_locations set is_active = false where id = ${org.stockLocationId2} and org_id = ${org.orgId}`))
     const id = await makeDraftInvoice(org)

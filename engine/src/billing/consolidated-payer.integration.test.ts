@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { installEngineSeams } from "../composition/install.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { billSubscriptionNow } from "./subscription-billing.ts";
 import { runConsolidationGroup } from "./consolidated-billing.ts";
@@ -28,7 +29,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function grantConsolidationOperator(orgId: string, actorId: string): Promise<void> {
   const result = await db.execute(sql`
-    update app_roles set permissions='["documents.manage","ar.post"]'::jsonb,
+    update app_roles set permissions='["documents.manage","ar.post","ar.pay"]'::jsonb,
       subsidiary_restriction='{"mode":"all"}'::jsonb
     where org_id=${orgId} and id in
       (select role_id from role_assignments where org_id=${orgId} and user_id=${actorId}) returning id
@@ -71,6 +72,7 @@ type PayerFixture = {
 
 /** One child subscription consolidated into one posted payer invoice. */
 async function seedPayerInvoice(dueDate: string): Promise<PayerFixture> {
+  installEngineSeams();
   const org = await createScratchOrg();
   const actorId = await createScratchUser(org.orgId, "Billing", "admin");
   await grantConsolidationOperator(org.orgId, actorId);
@@ -179,6 +181,8 @@ test("autopay collects a consolidated invoice through the subscription enrollmen
   const fix = await seedPayerInvoice("2026-06-15");
   try {
     const result = await runAutopayCollectionForOrg(fix.org.orgId, { asOf: "2026-08-15", charge: succeedCharge });
+    assert.deepEqual(result.orgErrors, []);
+    assert.deepEqual(result.notices.filter(notice => notice.status === "error"), []);
     assert.equal(result.charged, 1);
     assert.equal(result.succeeded, 1);
     const attempt = (

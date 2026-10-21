@@ -6,7 +6,8 @@ const stateKey = Symbol.for('openbooks.project-detail-route-test')
 type Scope = Set<string> | null
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string }
+    user: { orgId: string; id: string; roles: { key: string }[] }
+    permissions: Set<string>
     allowedSubsidiaryIds: Scope
   }
   payload: { project: Record<string, unknown> }
@@ -18,7 +19,8 @@ interface RouteState {
 
 const routeState: RouteState = {
   authz: {
-    user: { orgId: 'org-1', id: 'user-1' },
+    user: { orgId: 'org-1', id: 'user-1', roles: [] },
+    permissions: new Set(['*']),
     allowedSubsidiaryIds: new Set(['sub-allowed']),
   },
   payload: { project: { id: 'project-1', subsidiary_id: 'sub-allowed' } },
@@ -81,7 +83,8 @@ stubModules({
     `),
     "../../../../lib/custom-fields": `
       export async function loadFieldDefs() { return [] }
-      export function validateCustomValues() { return { ok: true, cleaned: {} } }
+      export { validateCustomValues, customFieldViewerFor, visibleCustomFieldDefs, hiddenCustomFieldRefusal }
+        from '${new URL('../../../../lib/custom-fields.ts', import.meta.url).href}'
       export async function findUnownedCustomReferences() { return [] }
     `,
     "../../../../lib/projects-gate": `

@@ -655,7 +655,7 @@ test("report_definition drivers run saved definitions under the actor", { skip: 
     const detailed = await runDriverReport({ ...base, reportDefinitionId: rowsId });
     assert.deepEqual(detailed.rows, [{ dimension: ctx.org.accounts.cogs, value: "100.0000" }]);
     // An actor without reports.read is refused, not given silent zeros.
-    const outsider = await createScratchUser(ctx.org.orgId, "Outsider", "viewer");
+    const outsider = await createScratchUser(ctx.org.orgId, "Outsider", "allocation_report_outsider");
     await assert.rejects(
       runDriverReport({ ...base, reportDefinitionId: summarizeId, actorId: outsider }),
       /cannot run reports/,

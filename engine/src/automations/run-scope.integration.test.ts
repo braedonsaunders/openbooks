@@ -157,7 +157,7 @@ test("leave-request run scope resolves its employer subsidiary", { skip: !DB }, 
       await db.execute(sql`insert into hrm_leave_types (id, org_id, code, name)
         values (${leaveTypeId}, ${h.orgId}, 'VAC', 'Vacation')`);
       await db.execute(sql`insert into hrm_leave_requests (id, org_id, employment_id, leave_type_id, starts_on, ends_on, hours, status)
-        values (${leaveRequestId}, ${h.orgId}, ${employmentId}, ${leaveTypeId}, '2026-10-19', '2026-10-19', 8, 'submitted')`);
+        values (${leaveRequestId}, ${h.orgId}, ${employmentId}, ${leaveTypeId}, '2026-10-19', '2026-10-19', 8, 'draft')`);
     });
     const scope = await withBypassContext(() => resolveRunSubjectSubsidiaries(h.orgId, [
       { subjectKind: "leave_request", subjectId: leaveRequestId },

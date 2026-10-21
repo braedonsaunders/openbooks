@@ -30,7 +30,8 @@ registerHooks({
       return {
         format: "module",
         shortCircuit: true,
-        source: `const key = Symbol.for('openbooks.backups-gate')
+        source: `export { guardUnrestrictedScope } from ${JSON.stringify(new URL('./authz.ts', import.meta.url).href)}
+          const key = Symbol.for('openbooks.backups-gate')
           export async function requirePermission() { return globalThis[key] }`,
       };
     }
