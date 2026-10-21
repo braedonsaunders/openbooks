@@ -276,8 +276,10 @@ export function canonicalizePgDump(rawDump, { annotations = new Map(), registryR
   // A schema-selected dump needs explicit extension inclusion, but pg_trgm
   // remains optional. Its acceleration indexes must honor the same decision
   // as extension installation on restricted PostgreSQL providers.
+  // Host administrators own installed extensions; their descriptions are not
+  // application schema and require ownership the migration role lacks.
   source = source.replace(/^CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;\n/gm, "")
-    .replace(/^COMMENT ON EXTENSION pg_trgm IS '[^\n]*';\n/gm, "")
+    .replace(/--\n-- Name: EXTENSION [a-z_]+; Type: COMMENT; Schema: -; Owner: -\n--\n\nCOMMENT ON EXTENSION [a-z_]+ IS '[^\n]*';\n\n\n/g, "")
     .replace(/^CREATE INDEX [^\n]*\bpublic\.(?:gin|gist)_trgm_ops[^\n]*;$/gm,
       (statement) => `DO $trigram_index$\nBEGIN\n  IF EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'pg_trgm') THEN\n    ${statement}\n  END IF;\nEND\n$trigram_index$;`);
 
@@ -306,6 +308,7 @@ export function canonicalizePgDump(rawDump, { annotations = new Map(), registryR
   }
 
   for (const required of [
+    "CREATE SCHEMA tenant_retirement;",
     "CREATE TABLE public.orgs",
     "CREATE TABLE public.pay_run_adjustments",
     "CREATE TABLE public.pay_runs",

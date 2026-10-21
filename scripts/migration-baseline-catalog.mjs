@@ -8,24 +8,47 @@ export const BASELINE_REGISTRIES = Object.freeze({
   platform_settings: ["id"],
   openbooks_query_catalog_relations: ["relation", "added_in"],
   openbooks_document_close_modules: ["kind", "close_module", "added_in"],
+  openbooks_schedule_board_types: ["key", "row_kind", "capabilities", "added_in"],
+  marketplace_nexus_state_rules: ["state", "include_in_threshold", "needs_review", "source"],
 });
 
+/** Installation migration evidence. It records how one database reached its
+ * schema and is never application schema, dump content or catalog evidence. */
+export const MIGRATION_LEDGER_TABLES = Object.freeze(["_applied_migrations", "_applied_migration_baselines", "_migration_execution_corrections"]);
+const ledgerNames = MIGRATION_LEDGER_TABLES.map((name) => `'${name}'`).join(",");
+const ledgerOids = MIGRATION_LEDGER_TABLES.map((name) => `coalesce(to_regclass('public.${name}'),0::oid)`).join(",");
+
 export const baselineDigest = (value) => createHash("sha256").update(value).digest("hex");
+
+/** Application schemas, including the maintenance-owned private authority. */
+const APPLICATION_SCHEMAS = "'public', 'openbooks_query', 'tenant_retirement'";
+
+/** PostgreSQL system functions whose EXECUTE access differs from PUBLIC
+ * defaults. Query-console hardening withholds administrative functions from
+ * the read role; that access is part of the release schema. */
+const CATALOG_FUNCTION_PRIVILEGES = `select p.proname as name,
+    pg_get_function_identity_arguments(p.oid) as arguments,
+    has_function_privilege('public', p.oid, 'EXECUTE') as public_execute,
+    case when to_regrole('openbooks_read') is null then null
+      else has_function_privilege('openbooks_read', p.oid, 'EXECUTE') end as read_execute
+  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='pg_catalog' and not (has_function_privilege('public', p.oid, 'EXECUTE')
+    and (to_regrole('openbooks_read') is null or has_function_privilege('openbooks_read', p.oid, 'EXECUTE')))
+  order by 1,2`;
 
 // Object OIDs, owners, runtime-login grants and creation timestamps are
 // installation-specific. Definitions, PUBLIC/read access, security attributes
 // and registry membership must survive the cut unchanged.
 export async function baselineCatalog(client) {
-  const scope = "n.nspname in ('public', 'openbooks_query')";
+  const scope = `n.nspname in (${APPLICATION_SCHEMAS})`;
   const queries = {
     relations: `select n.nspname as schema, c.relname as name, c.relkind as kind,
       c.relrowsecurity as rls, c.relforcerowsecurity as force_rls, c.reloptions as options,
       case when c.relkind in ('v','m') then pg_get_viewdef(c.oid, false) end as view
       from pg_class c join pg_namespace n on n.oid=c.relnamespace where ${scope}
       and c.relkind not in ('i','I')
-      and c.relname not in ('_applied_migrations','_applied_migration_baselines')
-      and c.oid not in (select indexrelid from pg_index where indrelid in
-        (coalesce(to_regclass('public._applied_migrations'),0::oid),coalesce(to_regclass('public._applied_migration_baselines'),0::oid)))
+      and c.relname not in (${ledgerNames})
+      and c.oid not in (select indexrelid from pg_index where indrelid in (${ledgerOids}))
       order by n.nspname,c.relname`,
     columns: `select n.nspname as schema,c.relname as relation,a.attname as name,
       format_type(a.atttypid,a.atttypmod) as type,a.attnotnull as not_null,
@@ -34,22 +57,20 @@ export async function baselineCatalog(client) {
       from pg_attribute a join pg_class c on c.oid=a.attrelid
       join pg_namespace n on n.oid=c.relnamespace
       left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum
-      where ${scope} and c.relkind in ('r','p','v','m') and c.relname not in ('_applied_migrations','_applied_migration_baselines')
+      where ${scope} and c.relkind in ('r','p','v','m') and c.relname not in (${ledgerNames})
       and a.attnum>0 and not a.attisdropped order by n.nspname,c.relname,a.attname`,
     constraints: `select n.nspname as schema,c.conname as name,
       c.conrelid::regclass::text as relation,c.contype as type,c.convalidated as validated,
       c.condeferrable as deferrable,c.condeferred as deferred,
       pg_get_constraintdef(c.oid,true) as definition
       from pg_constraint c join pg_namespace n on n.oid=c.connamespace where ${scope}
-      and c.conrelid <> coalesce(to_regclass('public._applied_migrations'),0::oid)
-      and c.conrelid <> coalesce(to_regclass('public._applied_migration_baselines'),0::oid)
+      and c.conrelid not in (${ledgerOids})
       order by n.nspname,c.conrelid::regclass::text,c.conname`,
     indexes: `select n.nspname as schema,c.relname as name,pg_get_indexdef(c.oid) as definition,
       i.indisvalid as valid,i.indisready as ready
       from pg_index i join pg_class c on c.oid=i.indexrelid
       join pg_namespace n on n.oid=c.relnamespace where ${scope}
-      and i.indrelid <> coalesce(to_regclass('public._applied_migrations'),0::oid)
-      and i.indrelid <> coalesce(to_regclass('public._applied_migration_baselines'),0::oid)
+      and i.indrelid not in (${ledgerOids})
       order by n.nspname,c.relname`,
     functions: `select n.nspname as schema,p.proname as name,
       pg_get_function_identity_arguments(p.oid) as arguments,pg_get_functiondef(p.oid) as definition
@@ -62,14 +83,14 @@ export async function baselineCatalog(client) {
       join pg_namespace n on n.oid=c.relnamespace where ${scope} and not t.tgisinternal
       order by n.nspname,c.relname,t.tgname`,
     policies: `select schemaname,tablename,policyname,permissive,roles,cmd,qual,with_check
-      from pg_policies where schemaname in ('public','openbooks_query')
+      from pg_policies where schemaname in (${APPLICATION_SCHEMAS})
       order by schemaname,tablename,policyname`,
     enums: `select n.nspname as schema,t.typname as name,e.enumlabel as label
       from pg_enum e join pg_type t on t.oid=e.enumtypid
       join pg_namespace n on n.oid=t.typnamespace where ${scope}
       order by n.nspname,t.typname,e.enumsortorder`,
     sequences: `select schemaname,sequencename,data_type,start_value,min_value,max_value,
-      increment_by,cycle,cache_size from pg_sequences where schemaname in ('public','openbooks_query')
+      increment_by,cycle,cache_size from pg_sequences where schemaname in (${APPLICATION_SCHEMAS})
       order by schemaname,sequencename`,
     function_acl: `select n.nspname as schema,p.proname as name,
       pg_get_function_identity_arguments(p.oid) as arguments,
@@ -93,7 +114,8 @@ export async function baselineCatalog(client) {
       from pg_class c join pg_namespace n on n.oid=c.relnamespace
       cross join lateral aclexplode(coalesce(c.relacl,acldefault(case when c.relkind='S' then 'S'::"char" else 'r'::"char" end,c.relowner))) a
       where ${scope} and (a.grantee=0 or pg_get_userbyid(a.grantee)='openbooks_read')
-      and c.relname not in ('_applied_migrations','_applied_migration_baselines') order by 1,2,3,4,5`,
+      and c.relname not in (${ledgerNames}) order by 1,2,3,4,5`,
+    catalog_function_privileges: CATALOG_FUNCTION_PRIVILEGES,
   };
   const catalog = {};
   await client.query("set search_path = public, pg_catalog");
@@ -130,8 +152,43 @@ export function assertBaselineCatalogsEqual(expected, actual) {
   }
 }
 
+/**
+ * Statements reproducing this installation's changes to PostgreSQL system
+ * function privileges, derived against the server's initial privileges.
+ * Grants to installation-specific logins are refused: only PUBLIC and the
+ * read role are release schema.
+ */
+export async function catalogPrivilegeSql(client) {
+  const rows = (await client.query(`with current_acl as (
+      select p.oid, a.grantee, a.privilege_type from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+      cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+      where n.nspname='pg_catalog' and a.grantee <> p.proowner),
+    initial_acl as (
+      select p.oid, a.grantee, a.privilege_type from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+      left join pg_init_privs i on i.objoid=p.oid and i.classoid='pg_proc'::regclass and i.objsubid=0
+      cross join lateral aclexplode(coalesce(i.initprivs, acldefault('f', p.proowner))) a
+      where n.nspname='pg_catalog' and a.grantee <> p.proowner),
+    changes as (
+      select 'REVOKE' as action, * from (select * from initial_acl except select * from current_acl) revoked
+      union all select 'GRANT', * from (select * from current_acl except select * from initial_acl) granted)
+    select c.action, c.privilege_type, format('pg_catalog.%I(%s)', p.proname, pg_get_function_identity_arguments(p.oid)) as function,
+      case when c.grantee=0 then 'PUBLIC' else pg_get_userbyid(c.grantee) end as grantee
+    from changes c join pg_proc p on p.oid=c.oid order by 3,1,4,2`)).rows;
+  return rows.map((row) => {
+    if (row.grantee !== "PUBLIC" && row.grantee !== "openbooks_read") throw new Error(`system function privilege for installation login ${row.grantee} cannot enter a release baseline: ${row.function}`);
+    return row.action === "REVOKE"
+      ? `REVOKE ${row.privilege_type} ON FUNCTION ${row.function} FROM ${row.grantee};`
+      : `GRANT ${row.privilege_type} ON FUNCTION ${row.function} TO ${row.grantee};`;
+  }).join("\n");
+}
+
 export function baselineRegistrySql(catalog) {
-  const literal = (value) => `'${String(value).replaceAll("'", "''")}'`;
+  const quote = (text) => `'${text.replaceAll("'", "''")}'`;
+  const literal = (value) => {
+    if (value === null || value === undefined) return "NULL";
+    if (Array.isArray(value)) return quote(`{${value.map((item) => `"${String(item).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`).join(",")}}`);
+    return quote(String(value));
+  };
   return Object.entries(BASELINE_REGISTRIES).map(([table, columns]) => {
     if (!catalog[table]?.length) throw new Error(`baseline system registry is empty: ${table}`);
     return `INSERT INTO public.${table} (${columns.join(", ")}) VALUES\n`
