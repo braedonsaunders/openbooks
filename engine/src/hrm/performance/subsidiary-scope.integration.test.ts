@@ -198,8 +198,8 @@ scopeMatrix([
     seed: (w) => reviewWorld(w),
     write: async (w, { a, cycleId, reviewId }) => {
       const orgId = w.orgId;
+      await refusal(calibrateReview({ orgId, actorId: w.hrB, reviewId, calibratedRating: "4", reason: "cross-scope attempt" }), HrmPerformanceError, "NOT_FOUND");
       for (const call of [
-        () => calibrateReview({ orgId, actorId: w.hrB, reviewId, calibratedRating: "4", reason: "cross-scope attempt" }),
         () => reopenReview({ orgId, actorId: w.hrB, reviewId, reason: "cross-scope reopen" }),
         () => shareReview({ orgId, actorId: w.hrB, reviewId }),
       ]) await denied(call());

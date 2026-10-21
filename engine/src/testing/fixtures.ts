@@ -2411,14 +2411,21 @@ async function productionScratchPool(): Promise<ScratchOrgPool<ScratchOrg>> {
   return pool;
 }
 
+let fixtureComposition: Promise<void> | undefined;
+function initializeFixtureComposition(): Promise<void> {
+  return fixtureComposition ??= import("../composition/install.ts").then(({ installEngineSeams }) => { installEngineSeams(); });
+}
+
 /** A company consumed by native retirement cannot be a reusable pool slot. */
 export async function createRetirementFixtureOrg(): Promise<ScratchOrg> {
   await assertFixtureDatabase();
+  await initializeFixtureComposition();
   return bootstrapScratchOrg();
 }
 
 /** Create a pooled lease in CI, or a standalone fixture when pooling is disabled. */
 export async function createScratchOrg(): Promise<ScratchOrg> {
+  await initializeFixtureComposition();
   if (fixtureOwnerPort()) {
     const response = await fixtureOwnerRequest<{ org: ScratchOrg }>({ op: "lease" });
     outstandingFixtureOwnerLeases.add(response.org.orgId);

@@ -30,7 +30,9 @@ async function postReceivable(org: Org, actor: string, input: {
     values (${org.orgId}, ${id}, 1, ${input.receipt ? org.accounts.bank : org.accounts.revenue}, 1, ${input.amount}, ${input.amount}, 0, ${input.amount})`)
   const approved = await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${id} returning id`)
   assert.equal(approved.rows.length, 1, 'the fixture document must reach its approved state before posting')
-  return await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })
+  // Missing due dates represent imported history; ordinary posting resolves
+  // current due-on-receipt terms and cannot create that historical condition.
+  return await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }, { migration: input.due === null })
 }
 
 async function withFixture(action: (org: Org, actor: string) => Promise<void>) {
@@ -131,6 +133,8 @@ test('foreign-functional receivables round each line before grouping and refuse 
       await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2) on conflict (code) do nothing`)
       await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         values (${subsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Foreign entity', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
+      await db.execute(sql`insert into party_subsidiaries(org_id,party_id,subsidiary_id,created_by,updated_by)
+        values(${org.orgId},${org.customerId},${subsidiary},${actor},${actor})`)
       await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
         values (${org.orgId}, 'USD', 'CAD', ${AS_OF}, 'spot', '1.35', 'manual')`)
       await postReceivable(org, actor, { amount: '100.0001', due: '2026-07-01', subsidiary, currency: 'USD' })

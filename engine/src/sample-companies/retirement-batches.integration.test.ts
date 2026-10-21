@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withMaintenanceTransaction, withOrgContext } from "../platform/db.ts";
+import { db, withBypass, withMaintenanceTransaction, withOrgTransaction, withOrgContext } from "../platform/db.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { buildSchedule, runDepreciation } from "../assets/depreciation.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
@@ -45,7 +45,7 @@ test("bounded native retirement keeps complete journal entries and restores all 
         }, { post: index % 2 === 0, allowedSubsidiaryIds: null, idempotencyKey: `recovery:${org.orgId}:${index}` }));
       }
     }
-    await withBypass(async () => {
+    await withOrgTransaction(target.orgId, async () => {
       const author = await createScratchUser(target.orgId, "Native asset author", "admin");
       const categoryId = randomUUID(), assetId = randomUUID();
       await db.execute(sql`insert into asset_categories
@@ -58,13 +58,11 @@ test("bounded native retirement keeps complete journal entries and restores all 
          acquisition_cost,salvage_value,depreciation_method,useful_life_months,custom)
         values(${assetId},${target.orgId},${target.subsidiaryId},${categoryId},'RETIRE-EQUIPMENT','Equipment',
           'in_service',${target.date},${target.date},'1200.0000','0.0000','straight_line',12,'{}'::jsonb)`);
-      await withOrgContext(target.orgId, async () => {
-        await buildSchedule(assetId,target.orgId,author,target.bookId);
-        const result = await runDepreciation(target.orgId,'2026-07-31',author,assetId);
-        assert.equal(result.posted,1,JSON.stringify(result.problems));
-        await assert.rejects(db.execute(sql`delete from depreciation_schedule_lines where org_id=${target.orgId}
-          and journal_entry_id is not null`), error => errorChainMatches(error,/Posted depreciation evidence is immutable/));
-      });
+      await buildSchedule(assetId,target.orgId,author,target.bookId);
+      const result = await runDepreciation(target.orgId,'2026-07-31',author,assetId);
+      assert.equal(result.posted,1,JSON.stringify(result.problems));
+      await assert.rejects(db.transaction(tx => tx.execute(sql`delete from depreciation_schedule_lines where org_id=${target.orgId}
+          and journal_entry_id is not null`)), error => errorChainMatches(error,/Posted depreciation evidence is immutable/));
     });
     const snapshot = (id: string) => withMaintenanceTransaction(null, async () => retirementFingerprint(await loadCatalog(), id), { isolationLevel: "REPEATABLE READ" });
     const beforeTarget = await snapshot(target.orgId);

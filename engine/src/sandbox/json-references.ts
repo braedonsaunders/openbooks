@@ -70,42 +70,22 @@ export function remapScopeFilter(
   return after;
 }
 
-/**
- * A copied flow graph's legal-entity limit (`subjectScope.subsidiaryIds`).
- * The catalog rebase copies the graph JSON verbatim, so without this the
- * copied policy would name PRODUCTION subsidiaries and admit nothing in
- * the sandbox. Only the scope ids change: every other graph field — and
- * any unrelated key inside the scope object — is preserved verbatim, an
- * unscoped graph returns untouched (same reference), and any entry
- * without a proven sandbox counterpart refuses the clone rather than
- * being guessed or dropped. Retained flow_runs context (the pinned
- * submission graph and its routing digest) is historical dispatch
- * evidence and is deliberately NOT rewritten here: it proves what ran in
- * production, and the sandbox dispatches fresh runs under its own rebased
- * graph.
- */
-export function remapFlowGraphSubjectScope(
+/** Flow identities are rebased once by the native clone evidence function.
+ * Validate its copied legal-entity limits against proven sandbox counterparts;
+ * never rewrite the live graph independently of its frozen routing evidence. */
+export function validateClonedFlowGraphScope(
   graph: unknown,
-  ids: ReadonlyMap<string, string>,
+  sandboxIds: ReadonlySet<string>,
   label: string,
-): unknown {
+): void {
   if (!graph || typeof graph !== "object" || Array.isArray(graph)) throw new Error(`${label}: invalid flow graph`);
   const record = graph as Record<string, unknown>;
-  if (!("subjectScope" in record) || record.subjectScope === undefined) return graph;
-  // The shared graph schema is the one authority on a legal-entity limit:
-  // uuid shape, the entity cap, emptiness and case-variant uniqueness all
-  // refuse here exactly as they do at author time, and case canonicalizes
-  // before the counterpart lookup. No entry is filtered or repaired.
+  if (!("subjectScope" in record) || record.subjectScope === undefined) return;
   const parsed = flowGraphSubjectScopeSchema.safeParse(record.subjectScope);
   if (!parsed.success) throw new Error(`${label}: invalid flow subject scope`);
-  const mapped = parsed.data.subsidiaryIds.map((id) => {
-    const target = ids.get(id);
-    if (!target) throw new Error(`${label}: flow subject scope subsidiary has no counterpart in the target organization`, {
-      cause: { subsidiaryId: id, availableSourceIds: [...ids.keys()] },
-    });
-    return target;
-  });
-  return { ...record, subjectScope: { ...(record.subjectScope as Record<string, unknown>), subsidiaryIds: mapped } };
+  for (const id of parsed.data.subsidiaryIds) {
+    if (!sandboxIds.has(id)) throw new Error(`${label}: flow subject scope subsidiary has no counterpart in the target organization`);
+  }
 }
 
 /** Run inside the clone's transaction after every referenced table was copied.
@@ -160,10 +140,7 @@ export async function rebaseClonedJsonReferences(args: {
     const copiedFlows = (await db.execute<{ id: string; graph: unknown }>(sql`
       select id, graph from flows where org_id = ${args.sandboxOrgId} order by id for update`)).rows;
     for (const flow of copiedFlows) {
-      const after = remapFlowGraphSubjectScope(flow.graph, ids, `sandbox flow ${flow.id}`);
-      if (JSON.stringify(after) === JSON.stringify(flow.graph)) continue;
-      await db.execute(sql`update flows set graph=${JSON.stringify(after)}::jsonb where org_id=${args.sandboxOrgId} and id=${flow.id}`);
-      await recordRebase(args.sandboxOrgId, "flows", flow.id, "graph", flow.graph, after);
+      validateClonedFlowGraphScope(flow.graph, new Set(ids.values()), `sandbox flow ${flow.id}`);
     }
   }
   await rebaseChecklistReferences(args);

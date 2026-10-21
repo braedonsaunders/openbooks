@@ -41,6 +41,8 @@ test("an ordinary member receives a fresh local preview administrator while inhe
     const memberUserId = await withBypass(() => createScratchUser(home.orgId, "Ordinary preview member", "viewer"));
     const legacyUserId = await withBypass(() => createScratchUser(source.orgId, "Legacy restricted administrator", "admin"));
     await withOrgContext(source.orgId, async () => {
+      await db.execute(sql`update app_roles set permissions='[]'::jsonb,is_built_in=false
+        where org_id=${source.orgId} and key='admin'`);
       await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
         values(${source.orgId},${legacyUserId},'gl.post','deny')`);
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{sampleTemplate}',

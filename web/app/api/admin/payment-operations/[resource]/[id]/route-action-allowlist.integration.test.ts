@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -26,7 +25,7 @@ registerHooks({
 })
 const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { PATCH } = await import('./route.ts')
 
 interface Fixture {
@@ -38,11 +37,10 @@ interface Fixture {
 async function fixture(): Promise<Fixture> {
   const org = await createScratchOrg()
   state.orgId = org.orgId
-  state.actorId = randomUUID()
-  const bankAccountId = (await db.execute<{ id: string }>(sql`
-    insert into party_bank_accounts (org_id, party_id, bank_name, currency, account_last_four, approved_at, approval_status, is_active)
-    values (${org.orgId}, ${org.vendorId}, 'Test Bank', 'CAD', '1234', now()::date, 'approved', true)
-    returning id`)).rows[0]!.id
+  state.actorId = await createScratchUser(org.orgId,"Payment operator","admin")
+  const { seedApprovedBankAccountFixture } = await import('@openbooks/engine/testing/bank-accounts')
+  const bankAccountId = await seedApprovedBankAccountFixture({ orgId:org.orgId,actorId:state.actorId,partyId:org.vendorId,
+    bankName:'Test Bank',country:'CA',currency:'CAD',routing:{},lastFour:'1234' })
   const mandateId = (await db.execute<{ id: string }>(sql`
     insert into payment_mandates (org_id, party_id, party_bank_account_id, scheme, mandate_reference, status)
     values (${org.orgId}, ${org.vendorId}, ${bankAccountId}, 'custom', 'MAND-ALLOWLIST-1', 'active')

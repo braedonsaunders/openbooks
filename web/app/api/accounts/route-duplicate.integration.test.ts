@@ -10,7 +10,7 @@ import { isUuid } from "@openbooks/engine/platform/identifiers";
 // existingAccountNumber } so the drawer can link the account instead of
 // leaving the operator guessing. Only the session gate is stubbed.
 const stateKey = Symbol.for("openbooks.account-duplicate-test");
-const routeState: { authz: { user: { orgId: string; id: string }; permissions: Set<string>; allowedSubsidiaryIds: Set<string> | null } | null } = { authz: null };
+const routeState: { authz: { user: { orgId: string; id: string; roles: Array<{key:string}> }; permissions: Set<string>; allowedSubsidiaryIds: Set<string> | null } | null } = { authz: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const module_ = (source: string) => ({
@@ -59,7 +59,7 @@ test("a duplicate account number names the holding account", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-    routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+    routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] }, permissions: new Set(), allowedSubsidiaryIds: null };
 
     const first = await POST(postRequest(randomUUID(), { name: "Cash Over and Short", type: "expense", number: "6820" }));
     assert.equal(first.status, 201, JSON.stringify(await first.clone().json()));
@@ -86,7 +86,7 @@ test("renumbering onto another account names the holding account", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-    routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+    routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] }, permissions: new Set(), allowedSubsidiaryIds: null };
 
     const holder = await POST(postRequest(randomUUID(), { name: "Cash Over and Short", type: "expense", number: "6820" }));
     assert.equal(holder.status, 201);
@@ -119,7 +119,7 @@ test("a same-name account is refused until the duplicate is acknowledged", async
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-    routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+    routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] }, permissions: new Set(), allowedSubsidiaryIds: null };
 
     const holder = await POST(postRequest(randomUUID(), { name: "Interest Expense", type: "expense_other", number: "7000" }));
     assert.equal(holder.status, 201);
@@ -154,7 +154,7 @@ test("renaming onto an active account's name is refused until acknowledged", asy
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
-    routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+    routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] }, permissions: new Set(), allowedSubsidiaryIds: null };
 
     const holder = await POST(postRequest(randomUUID(), { name: "Interest Expense", type: "expense_other", number: "7000" }));
     assert.equal(holder.status, 201);

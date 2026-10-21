@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { remapFlowGraphSubjectScope, remapRoleRestriction, remapScopeFilter } from "./json-references.ts";
+import { validateClonedFlowGraphScope, remapRoleRestriction, remapScopeFilter } from "./json-references.ts";
 
 const ids = {
   subsidiaries: new Map([["11111111-1111-4111-8111-111111111111", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]]),
@@ -16,9 +16,9 @@ test("remapScopeFilter keeps absent and null pins, maps both identities case-ins
   );
 });
 
-const flowCounterparts = new Map([
-  ["11111111-1111-4111-8111-111111111111", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
-  ["22222222-2222-4222-8222-222222222222", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
+const flowCounterparts = new Set([
+  "abcdefab-abcd-4bcd-8bcd-abcdefabcdef",
+  "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
 ]);
 
 function scopedFlowGraph(subsidiaryIds: unknown): Record<string, unknown> {
@@ -34,40 +34,31 @@ function scopedFlowGraph(subsidiaryIds: unknown): Record<string, unknown> {
   };
 }
 
-test("remapFlowGraphSubjectScope rebases only the scope ids, preserving every other field", () => {
-  const graph = scopedFlowGraph(["11111111-1111-4111-8111-111111111111".toUpperCase(), "22222222-2222-4222-8222-222222222222"]);
-  const after = remapFlowGraphSubjectScope(graph, flowCounterparts, "flow") as Record<string, unknown>;
-  assert.deepEqual(after, {
-    ...graph,
-    subjectScope: {
-      subsidiaryIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
-      note: "kept verbatim",
-    },
-  });
-  // The production graph is evidence too: the rebase never mutates it.
-  assert.deepEqual((graph.subjectScope as { subsidiaryIds: unknown }).subsidiaryIds, [
-    "11111111-1111-4111-8111-111111111111".toUpperCase(),
-    "22222222-2222-4222-8222-222222222222",
-  ]);
+test("copied Flow scope validation accepts canonical counterparts without rewriting evidence", () => {
+  const graph = scopedFlowGraph(["ABCDEFAB-ABCD-4BCD-8BCD-ABCDEFABCDEF", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]);
+  const before = structuredClone(graph);
+  validateClonedFlowGraphScope(graph, flowCounterparts, "flow");
+  assert.deepEqual(graph, before);
 });
 
-test("remapFlowGraphSubjectScope leaves an unscoped graph untouched, by reference", () => {
+test("copied Flow scope validation leaves an unscoped graph untouched", () => {
   const graph = { schemaVersion: 1, nodes: [], edges: [] };
-  assert.equal(remapFlowGraphSubjectScope(graph, flowCounterparts, "flow"), graph);
+  validateClonedFlowGraphScope(graph, flowCounterparts, "flow");
+  assert.deepEqual(graph, { schemaVersion: 1, nodes: [], edges: [] });
 });
 
-test("remapFlowGraphSubjectScope refuses counterparts that cannot be proven", () => {
+test("validateClonedFlowGraphScope refuses counterparts that cannot be proven", () => {
   const unknown = "33333333-3333-4333-8333-333333333333";
   for (const graph of [
     scopedFlowGraph([unknown]),
-    scopedFlowGraph(["11111111-1111-4111-8111-111111111111", unknown]),
-    scopedFlowGraph([unknown, "11111111-1111-4111-8111-111111111111"]),
+    scopedFlowGraph(["abcdefab-abcd-4bcd-8bcd-abcdefabcdef", unknown]),
+    scopedFlowGraph([unknown, "abcdefab-abcd-4bcd-8bcd-abcdefabcdef"]),
   ]) {
-    assert.throws(() => remapFlowGraphSubjectScope(graph, flowCounterparts, "sandbox flow 9"), /sandbox flow 9: flow subject scope subsidiary has no counterpart/);
+    assert.throws(() => validateClonedFlowGraphScope(graph, flowCounterparts, "sandbox flow 9"), /sandbox flow 9: flow subject scope subsidiary has no counterpart/);
   }
 });
 
-test("remapFlowGraphSubjectScope refuses malformed scopes rather than repairing them", () => {
+test("validateClonedFlowGraphScope refuses malformed scopes rather than repairing them", () => {
   const overlength = Array.from({ length: 101 }, (_, i) =>
     `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`);
   for (const graph of [
@@ -86,7 +77,7 @@ test("remapFlowGraphSubjectScope refuses malformed scopes rather than repairing 
     scopedFlowGraph(["11111111-1111-4111-8111-111111111111", "11111111-1111-4111-8111-111111111111".toUpperCase()]),
     scopedFlowGraph(overlength),
   ]) {
-    assert.throws(() => remapFlowGraphSubjectScope(graph, flowCounterparts, "sandbox flow 9"), /sandbox flow 9: invalid flow/);
+    assert.throws(() => validateClonedFlowGraphScope(graph, flowCounterparts, "sandbox flow 9"), /sandbox flow 9: invalid flow/);
   }
 });
 
