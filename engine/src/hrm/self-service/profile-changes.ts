@@ -113,7 +113,7 @@ export function profileSubmitRefusal(requestId: string, error: unknown): SelfSer
  * File a profile proposal and submit it for HR approval in one user
  * action. Two governed steps in two transactions: the draft commits
  * first, then the submit binds the approval run in its own transaction.
- * A submit refusal (no approval flow configured, a race on the
+ * A submit refusal (an invalid configured Flow or a race on the
  * employment) does NOT roll the stored draft back with it: the throw
  * names the remedy and carries the draft id, so the caller renders the
  * refusal beside the saved draft instead of losing the person's work —
