@@ -755,12 +755,13 @@ test.describe.serial("close to reporting", () => {
   test("book and subsidiary filters isolate the seeded scopes", async ({ browser, baseURL }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
-      // Adjusting book: only the 10,000 depreciation entry.
+      // An adjustment-only book reports the primary basis plus its own
+      // 10,000 depreciation adjustment; selecting it must retain both.
       await page.goto(`/reports/pnl?${range}&book=${SEED.adjustingBookId}`);
       const adjusting = page.locator("main");
-      await expect(adjusting.locator("tr", { hasText: "Total Expenses" })).toContainText("$10,000.00");
-      await expect(adjusting.locator("tr", { hasText: "Net income" }).last()).toContainText("($10,000.00)");
-      await expect(adjusting).not.toContainText("$25,000.00");
+      await expect(adjusting.locator("tr", { hasText: "Total Revenue" })).toContainText("$25,000.00");
+      await expect(adjusting.locator("tr", { hasText: "Total Expenses" })).toContainText("$26,500.00");
+      await expect(adjusting.locator("tr", { hasText: "Net income" }).last()).toContainText("($3,500.00)");
       // Root subsidiary consolidates its children: identical to unfiltered.
       await page.goto(`/reports/pnl?${range}&sub=${SEED.rootSubId}`);
       const subA = page.locator("main");

@@ -62,6 +62,6 @@ test('submitPayApp reads blank draw amounts as zero', async () => {
     })
     assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()))
     const status = (await db.execute<{ status: string }>(sql`select status from pay_applications where id=${appId}`)).rows[0]!.status
-    assert.equal(status, 'submitted')
+    assert.equal(status, 'approved')
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })

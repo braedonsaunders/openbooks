@@ -15,7 +15,7 @@ registerHooks({
     if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
       export async function guardPermission() {
         const s = globalThis.__journalIdState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
+        return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['gl.read','gl.post']), allowedSubsidiaryIds: null };
       }
       export function guardSubsidiaryScope() { return null }
       export function subsidiariesInScope() { return true }
@@ -41,7 +41,7 @@ async function call(verb: 'GET' | 'PATCH' | 'DELETE', id: string): Promise<{ sta
       new Request(`http://journals.test/api/journals/${id}`, {
         method: verb,
         headers: { 'content-type': 'application/json' },
-        body: verb === 'GET' ? undefined : JSON.stringify({}),
+        body: verb === 'GET' ? undefined : JSON.stringify(verb === 'PATCH' ? { memo: 'Journal identifier validation' } : {}),
       }),
       { params: Promise.resolve({ id }) },
     ))

@@ -810,10 +810,14 @@ test.describe('bank to books: feed to reconciliation to cash application', () =>
       const prompt = page.locator('[role="dialog"]', { hasText: 'Void this transaction?' }).last();
       await expect(prompt).toBeVisible();
       await prompt.getByPlaceholder('Describe why the transaction must be reversed').fill('e2e void probe of reconciled deposit');
+      await prompt.getByRole('button', { name: 'Void', exact: true }).click();
+      const reversal = page.getByRole('dialog', { name: 'Reverse into which period?' });
+      await expect(reversal).toBeVisible();
+      await expect(reversal.getByRole('textbox')).toHaveValue(/^\d{4}-\d{2}-\d{2}$/);
       const voided = page.waitForResponse(
         (r) => r.url().endsWith(`/api/documents/${S.depositId}/void`) && r.request().method() === 'POST',
       );
-      await prompt.getByRole('button', { name: 'Void', exact: true }).click();
+      await reversal.getByRole('button', { name: 'Void', exact: true }).click();
       expect((await voided).status()).toBe(422);
       await expect(page.getByText(/bank-reconciled/i).first()).toBeVisible({ timeout: 15000 });
       // Nothing was voided: the deposit still stands posted.

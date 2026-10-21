@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { complianceWriteFailure } from './compliance-errors.ts'
+import { CertificateApprovalError } from '@openbooks/engine/compliance/certificate-verification'
 
 /**
  * C-39: compliance write verbs surfaced raw Postgres driver text —
@@ -14,10 +15,25 @@ function pgError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code })
 }
 
-async function bodyText(res: Response): Promise<{ status: number; json: Record<string, unknown> }> {
+async function bodyText(result: Response | Promise<Response>): Promise<{ status: number; json: Record<string, unknown> }> {
+  const res = await result
   const json = (await res.json()) as Record<string, unknown>
   return { status: res.status, json }
 }
+
+test('a stale certificate revision preserves its native conflict and reload remedy', async () => {
+  const message = 'This certificate changed. Reload and submit the current revision.'
+  const { status, json } = await bodyText(complianceWriteFailure(new CertificateApprovalError(message, 409)))
+  assert.equal(status, 409)
+  assert.deepEqual(json, { error: message })
+})
+
+test('an unsupported certificate transition remains an actionable business refusal', async () => {
+  const message = 'This certificate is retained history. Verify its current replacement.'
+  const { status, json } = await bodyText(complianceWriteFailure(new CertificateApprovalError(message)))
+  assert.equal(status, 422)
+  assert.deepEqual(json, { error: message })
+})
 
 test('a unique violation refuses as 409 without driver internals', async () => {
   const { status, json } = await bodyText(

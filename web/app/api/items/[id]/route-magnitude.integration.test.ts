@@ -16,7 +16,7 @@ registerHooks({
         (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function guardPermission() {
         const s = globalThis.__itemPatchMagnitudeState;
-        return { user: { orgId: s.orgId, id: s.actorId, roles: [] }, permissions: [], allowedSubsidiaryIds: null };
+        return { user: { orgId: s.orgId, id: s.actorId, roles: [] }, permissions: new Set(['items.manage']), allowedSubsidiaryIds: null };
       }
       // Catalog writes need unrestricted scope (1cb07bf7b); the scripted actor is unrestricted, so this passes.
       export function guardUnrestrictedScope() { return null; }

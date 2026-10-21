@@ -146,7 +146,8 @@ test("costing refuses an asset-account move while stock is on hand", { skip: !DB
 
       console.log("COSTING-ASSET-GUARD");
     } finally {
-      await dropScratchOrg(org.orgId);
+      try { await dropScratchOrg(org.orgId); }
+      finally { await (await import("@openbooks/jobs")).closeJobConnections(); }
     }
   `;
 
@@ -162,7 +163,7 @@ test("costing refuses an asset-account move while stock is on hand", { skip: !DB
       "-e",
       source,
     ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    { cwd: process.cwd(), env: process.env, encoding: "utf8", timeout: 180_000 },
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /COSTING-ASSET-GUARD/);

@@ -185,7 +185,7 @@ test(
   },
 );
 
-test("an unknown action is a 422 through the real body validation", { skip: !DB }, async () => {
+test("an unknown action is a 400 through the real body validation", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     state.user = { id: randomUUID(), orgId: org.orgId };
@@ -194,7 +194,7 @@ test("an unknown action is a 422 through the real body validation", { skip: !DB 
       postRequest({ action: "OWN EVERYTHING", periodId: org.periodId }),
     );
 
-    assert.equal(response.status, 422);
+    assert.equal(response.status, 400);
     const body = await response.json() as { error: string; issues: Array<{ path: string; message: string }> };
     assert.match(body.error, /derive-rates.*ownership.*eliminate.*consolidate/);
     assert.deepEqual(body.issues, [{ path: "action", message: body.error }]);

@@ -219,7 +219,7 @@ test('documents/actions submit with refused routing commits no script effects', 
       assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()))
       const body = await refused.json() as { error?: string }
       assert.match(body.error ?? '', /invalid graph.*Open Flows/)
-      assert.match(body.error ?? '', /Broken flow/)
+      assert.match(body.error ?? '', /Flow .+ has an invalid graph\. Open Flows to correct it before submitting this record\./)
     })
     const after = (await withBypassContext(() => db.execute<{ status: string; memo: string | null }>(sql`
       select status, memo from documents where id = ${invoiceId} and org_id = ${org.orgId}`))).rows[0]!

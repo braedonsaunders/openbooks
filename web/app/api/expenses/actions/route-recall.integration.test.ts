@@ -98,7 +98,7 @@ async function submittedReport(orgId: string, submitterId: string, scratch: { da
     values (${employeeId}, ${orgId}, 'employee', 'Sammy Sloppy', true, '{}'::jsonb)`)
   await db.execute(sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${employeeId})`)
   const id = randomUUID()
-  await grantScratchPermissions(orgId, submitterId, ['expenses.create', 'ap.post'])
+  await grantScratchPermissions(orgId, submitterId, ['expenses.create', 'ap.post', 'ap.approve'])
   await db.execute(sql`
     insert into documents (id, org_id, kind, status, document_number, document_date, party_id, subsidiary_id, currency, subtotal, tax_total, total, custom, created_by)
     values (${id}, ${orgId}, 'expense_report', 'draft', ${'EXP-' + id.slice(0, 8)}, ${scratch.date}, ${employeeId}, ${scratch.subsidiaryId}, 'CAD', '875.50', '0', '875.50', '{}'::jsonb, ${submitterId})`)

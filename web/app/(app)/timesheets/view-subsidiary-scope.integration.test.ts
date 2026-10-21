@@ -17,7 +17,7 @@ const mockAuthz = `
   export function can(authz, permission) { return authz.permissions.has(permission) }
 `
 const mockIntl = `export async function getTranslations() { return key => key }`
-const mockFeatures = `export async function isFeatureEnabled() { return false }`
+const mockFeatures = `export async function isFeatureEnabled(_orgId, feature) { return feature === 'projects' }`
 const mockFeatureGate = `export async function requireFeatureEnabled() {}`
 const mockCustomFields = `export async function loadFieldDefs() { return [] }`
 const mockTimePolicy = `export async function loadTimePolicy() { return { requireApproval: true } }`
@@ -120,7 +120,7 @@ test('timesheet page and drawer stay within the caller subsidiary scope', async 
 
     state.authz = {
       user: { id: supervisor, orgId: org.orgId },
-      permissions: new Set(['time.read', 'time.manage', 'time.approve']),
+      permissions: new Set(['time.read', 'time.manage', 'time.approve', 'projects.read']),
       allowedSubsidiaryIds: new Set([org.subsidiaryId]),
     }
     await withOrgContext(org.orgId, async () => {

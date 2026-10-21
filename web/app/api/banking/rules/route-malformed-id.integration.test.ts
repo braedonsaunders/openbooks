@@ -53,11 +53,11 @@ async function patch(body: unknown): Promise<{ status: number; json: unknown }> 
   }
 }
 
-test('PATCH returns 422 for a malformed rule id before database access', async () => {
+test('PATCH returns 400 for a malformed rule id before database access', async () => {
   const org = await fixture()
   try {
     const result = await patch({ id: 'not-a-uuid', ...RULE_BODY })
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
+    assert.equal(result.status, 400, `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.deepEqual(result.json, { error: "must be a valid id", issues: [{ path: "id", message: "must be a valid id" }] })
   } finally {
     await dropScratchOrg(org.orgId)

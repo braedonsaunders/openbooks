@@ -4,14 +4,6 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { SessionUser } from '../../../../../lib/auth'
 
-/**
- * A draft budget has no submit-for-approval path, so the
- * Pending approval / Approved states the list filter already offers are
- * unreachable. The actions route must move draft → pending_approval
- * (submit, budgets.manage), pending_approval → approved (approve,
- * budgets.approve) and pending_approval → draft (reject, budgets.approve),
- * revision-guarded and audit-logged like every other budget action.
- */
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __budgetActionsUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
@@ -25,8 +17,11 @@ registerHooks({
 })
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow } = await import('@openbooks/engine/testing/fixtures')
 const { POST } = await import('./route')
+const { installEngineSeams } = await import('@openbooks/engine/composition/install')
+const { decideGate } = await import('@openbooks/engine/testing/flows/gates')
+installEngineSeams()
 
 const request = (id: string, body: unknown) =>
   new Request(`http://budget.local/api/budgets/${id}/actions`, {
@@ -50,169 +45,116 @@ async function scenarioState(orgId: string, id: string) {
   )
 }
 
-test('budget approval lifecycle: submit, approve, reject', async () => {
+async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
-  try {
-    const manager = await withBypassContext(() => createScratchUser(org.orgId, 'Budget manager', 'budget_manager'))
-    const approver = await withBypassContext(() => createScratchUser(org.orgId, 'Budget approver', 'budget_approver'))
-    const scenarioId = randomUUID()
+  const manager = await withBypassContext(() => createScratchUser(org.orgId, 'Budget manager', 'budget_manager'))
+  const approver = await withBypassContext(() => createScratchUser(org.orgId, 'Budget approver', 'budget_approver'))
+  await withBypassContext(async () => {
+    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,budgets}', 'true') where id = ${org.orgId}`)
+    await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.manage","budgets.approve"]'::jsonb where org_id = ${org.orgId} and key = 'budget_manager'`)
+    await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.approve"]'::jsonb where org_id = ${org.orgId} and key = 'budget_approver'`)
+  })
+  async function draft(withLines = true) {
+    const id = randomUUID()
     await withBypassContext(async () => {
-      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,budgets}', 'true') where id = ${org.orgId}`)
-      await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.manage"]'::jsonb where org_id = ${org.orgId} and key = 'budget_manager'`)
-      await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.approve"]'::jsonb where org_id = ${org.orgId} and key = 'budget_approver'`)
-      await db.execute(sql`
-        insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
-        values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Lifecycle operating', 'budget', 'draft', ${manager}, ${manager})`)
-      // The scenario guard requires a non-zero line before submit/approve.
-      await db.execute(sql`
-        insert into budget_lines (org_id, scenario_id, account_id, period_id, amount, created_by, updated_by)
-        values (${org.orgId}, ${scenarioId}, ${org.accounts.revenue}, ${org.periodId}, '-900.0000', ${manager}, ${manager})`)
+      await db.execute(sql`insert into budget_scenarios (id,org_id,book_id,fiscal_year,name,kind,status,created_by,updated_by)
+        values (${id},${org.orgId},${org.bookId},2026,${'Operating '+id},'budget','draft',${manager},${manager})`)
+      if (withLines) await db.execute(sql`insert into budget_lines (org_id,scenario_id,account_id,period_id,amount,created_by,updated_by)
+        values (${org.orgId},${id},${org.accounts.revenue},${org.periodId},'-900.0000',${manager},${manager})`)
     })
-
-    // Submit: draft → pending_approval with the manage grant.
-    state.user = asUser(manager, org.orgId, 'manager')
-    const submitted = await withOrgContext(org.orgId, () =>
-      POST(request(scenarioId, { action: 'submit', expectedRevision: 1 }), params(scenarioId)))
-    assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()))
-    assert.deepEqual(await submitted.json(), { revision: 2, status: 'pending_approval' })
-    const pending = await scenarioState(org.orgId, scenarioId)
-    assert.equal(pending.status, 'pending_approval')
-    assert.equal(pending.submitted_by, manager)
-
-    // Submitting again is a lifecycle refusal, not a silent no-op.
-    const resubmit = await withOrgContext(org.orgId, () =>
-      POST(request(scenarioId, { action: 'submit', expectedRevision: 2 }), params(scenarioId)))
-    assert.equal(resubmit.status, 409)
-
-    // Approve needs the approve grant, not just manage.
-    const managerApprove = await withOrgContext(org.orgId, () =>
-      POST(request(scenarioId, { action: 'approve', expectedRevision: 2 }), params(scenarioId)))
-    assert.equal(managerApprove.status, 403)
-    state.user = asUser(approver, org.orgId, 'approver')
-    const approved = await withOrgContext(org.orgId, () =>
-      POST(request(scenarioId, { action: 'approve', expectedRevision: 2 }), params(scenarioId)))
-    assert.equal(approved.status, 200, JSON.stringify(await approved.clone().json()))
-    assert.deepEqual(await approved.json(), { revision: 3, status: 'approved' })
-    assert.equal((await scenarioState(org.orgId, scenarioId)).approved_by, approver)
-
-    // Reject returns a pending budget to draft and clears the submission.
-    const scenario2 = randomUUID()
-    await withBypassContext(async () => {
-      await db.execute(sql`
-        insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
-        values (${scenario2}, ${org.orgId}, ${org.bookId}, 2026, 'Lifecycle reject', 'budget', 'draft', ${manager}, ${manager})`)
-      await db.execute(sql`
-        insert into budget_lines (org_id, scenario_id, account_id, period_id, amount, created_by, updated_by)
-        values (${org.orgId}, ${scenario2}, ${org.accounts.revenue}, ${org.periodId}, '-100.0000', ${manager}, ${manager})`)
-    })
-    state.user = asUser(manager, org.orgId, 'manager')
-    await withOrgContext(org.orgId, () =>
-      POST(request(scenario2, { action: 'submit', expectedRevision: 1 }), params(scenario2)))
-    state.user = asUser(approver, org.orgId, 'approver')
-    for (const reason of [undefined, '', '   ']) {
-      const refused = await withOrgContext(org.orgId, () =>
-        POST(request(scenario2, { action: 'reject', expectedRevision: 2, reason }), params(scenario2)))
-      assert.equal(refused.status, 422, 'rejection requires a nonblank reason')
-      assert.equal((await scenarioState(org.orgId, scenario2)).status, 'pending_approval')
-    }
-    const rejected = await withOrgContext(org.orgId, () =>
-      POST(request(scenario2, { action: 'reject', expectedRevision: 2, reason: '  Reduce operating expense assumptions before resubmission.  ' }), params(scenario2)))
-    assert.equal(rejected.status, 200, JSON.stringify(await rejected.clone().json()))
-    assert.deepEqual(await rejected.json(), { revision: 3, status: 'draft' })
-    const backToDraft = await scenarioState(org.orgId, scenario2)
-    assert.equal(backToDraft.submitted_by, null)
-    const evidence = await withOrgContext(org.orgId, () => db.execute<{ actor_id: string; changes: Record<string, unknown> }>(sql`
-      select actor_id, changes from audit_log where org_id=${org.orgId} and table_name='budget_scenarios'
-        and row_id=${scenario2} and changes->>'action'='reject'`))
-    assert.equal(evidence.rows.length, 1)
-    assert.equal(evidence.rows[0]!.actor_id, approver)
-    assert.deepEqual(evidence.rows[0]!.changes, { action: 'reject', from: 'pending_approval', to: 'draft',
-      reason: 'Reduce operating expense assumptions before resubmission.', revisionBefore: 2, revisionAfter: 3 })
-
-    // Approving a draft directly is refused; stale revisions conflict.
-    const badApprove = await withOrgContext(org.orgId, () =>
-      POST(request(scenario2, { action: 'approve', expectedRevision: 3 }), params(scenario2)))
-    assert.equal(badApprove.status, 409)
-    state.user = asUser(manager, org.orgId, 'manager')
-    const stale = await withOrgContext(org.orgId, () =>
-      POST(request(scenario2, { action: 'submit', expectedRevision: 2 }), params(scenario2)))
-    assert.equal(stale.status, 409)
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    return id
   }
+  async function submit(id: string, expectedRevision = 1) {
+    state.user = asUser(manager, org.orgId, 'manager')
+    return withOrgContext(org.orgId, () => POST(request(id, { action: 'submit', expectedRevision }), params(id)))
+  }
+  async function pendingGate(id: string) {
+    return withBypassContext(async () => {
+      const rows = (await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`)).rows
+      assert.equal(rows.length, 1)
+      return rows[0]!.id
+    })
+  }
+  return { org, manager, approver, draft, submit, pendingGate }
+}
+
+test('budget submission without a configured gate releases once and refuses a stale retry', async () => {
+  const f = await fixture()
+  try {
+    const id = await f.draft()
+    const response = await f.submit(id)
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), { revision: 3, status: 'approved' })
+    assert.equal((await scenarioState(f.org.orgId, id)).approved_by, f.manager)
+    assert.equal((await f.submit(id)).status, 409)
+    assert.equal((await scenarioState(f.org.orgId, id)).revision, 3)
+  } finally { await withBypassContext(() => dropScratchOrg(f.org.orgId)) }
 })
 
-/**
- * Submitting a draft with no lines must be refused with a typed
- * message, not a silent 500 from the scenario-guard trigger. The drawer
- * keys its pinned refusal off this code.
- */
-test('submitting a line-less draft is refused with budget_requires_lines', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test('budget gates approve or reject through Flows with assignment, revision and audit protection', async () => {
+  const f = await fixture()
   try {
-    const manager = await withBypassContext(() => createScratchUser(org.orgId, 'Budget manager', 'budget_manager'))
-    const scenarioId = randomUUID()
-    await withBypassContext(async () => {
-      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,budgets}', 'true') where id = ${org.orgId}`)
-      await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.manage"]'::jsonb where org_id = ${org.orgId} and key = 'budget_manager'`)
-      await db.execute(sql`
-        insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
-        values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Empty submit probe', 'budget', 'draft', ${manager}, ${manager})`)
-    })
-    state.user = asUser(manager, org.orgId, 'manager')
-    const refused = await withOrgContext(org.orgId, () =>
-      POST(request(scenarioId, { action: 'submit', expectedRevision: 1 }), params(scenarioId)))
-    assert.equal(refused.status, 422, `expected a typed refusal, got ${refused.status}`)
-    assert.deepEqual(await refused.json(), { error: 'budget_requires_lines' })
-    assert.equal((await scenarioState(org.orgId, scenarioId)).status, 'draft')
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
+    await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind:'budget_scenario', assignees:[{type:'user',userId:f.approver}], mode:'all', preventSelfApproval:true }))
+    const id = await f.draft()
+    const submitted = await f.submit(id)
+    assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()))
+    assert.deepEqual(await submitted.json(), {revision:2,status:'pending_approval'})
+    assert.equal((await f.submit(id, 2)).status, 409)
+    const gateId = await f.pendingGate(id)
+    await assert.rejects(() => withOrgContext(f.org.orgId, () => decideGate({gateId,userId:f.manager,decision:'approved'})), /not an approver/)
+    assert.equal((await scenarioState(f.org.orgId,id)).status, 'pending_approval')
+    await withOrgContext(f.org.orgId, () => decideGate({gateId,userId:f.approver,decision:'approved'}))
+    assert.equal((await scenarioState(f.org.orgId,id)).approved_by, f.approver)
+    assert.equal((await scenarioState(f.org.orgId,id)).revision, 3)
+    await assert.rejects(() => withOrgContext(f.org.orgId, () => decideGate({gateId,userId:f.approver,decision:'approved'})), /already resolved/)
+
+    const rejectedId = await f.draft()
+    assert.equal((await f.submit(rejectedId)).status, 200)
+    const reason = 'Reduce operating expense assumptions before resubmission.'
+    await withOrgContext(f.org.orgId, async () => decideGate({gateId:await f.pendingGate(rejectedId),userId:f.approver,decision:'rejected',comment:reason}))
+    const rejected = await scenarioState(f.org.orgId,rejectedId)
+    assert.equal(rejected.status,'draft')
+    assert.equal(rejected.submitted_by,null)
+    assert.equal(rejected.revision,3)
+    const evidence = await withBypassContext(() => db.execute<{actor_id:string;changes:Record<string,unknown>}>(sql`select actor_id,changes from audit_log where org_id=${f.org.orgId} and table_name='budget_scenarios' and row_id=${rejectedId} and changes->>'event'='rejected'`))
+    assert.equal(evidence.rows.length,1)
+    assert.equal(evidence.rows[0]!.actor_id,f.approver)
+    assert.equal(evidence.rows[0]!.changes.comment,reason)
+    assert.equal(evidence.rows[0]!.changes.mode,'gated')
+  } finally { await withBypassContext(() => dropScratchOrg(f.org.orgId)) }
 })
 
-/**
- * A submitter holding budgets.approve must not approve their own
- * budget — the document and close paths both refuse self-approval, and the
- * budget path is the outlier. The refusal names the reason; a different
- * approver can still decide the same budget.
- */
-test('a submitter cannot approve their own budget', async () => {
-  const org = await withBypassContext(() => createScratchOrg())
+test('submitting an empty budget returns an actionable refusal and preserves the draft', async () => {
+  const f = await fixture()
   try {
-    const maker = await withBypassContext(() => createScratchUser(org.orgId, 'Budget maker', 'budget_manager'))
-    const checker = await withBypassContext(() => createScratchUser(org.orgId, 'Budget checker', 'budget_approver'))
-    const scenarioId = randomUUID()
-    await withBypassContext(async () => {
-      await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'), '{features,budgets}', 'true') where id = ${org.orgId}`)
-      // One role holding both grants: the maker/checker who triggers the gap.
-      await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.manage","budgets.approve"]'::jsonb where org_id = ${org.orgId} and key = 'budget_manager'`)
-      await db.execute(sql`update app_roles set permissions = '["budgets.read","budgets.approve"]'::jsonb where org_id = ${org.orgId} and key = 'budget_approver'`)
-      await db.execute(sql`
-        insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
-        values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Self approval probe', 'budget', 'draft', ${maker}, ${maker})`)
-      await db.execute(sql`
-        insert into budget_lines (org_id, scenario_id, account_id, period_id, amount, created_by, updated_by)
-        values (${org.orgId}, ${scenarioId}, ${org.accounts.revenue}, ${org.periodId}, '-900.0000', ${maker}, ${maker})`)
-    })
-    state.user = asUser(maker, org.orgId, 'maker')
-    const submitted = await withOrgContext(org.orgId, () =>
-      POST(request(scenarioId, { action: 'submit', expectedRevision: 1 }), params(scenarioId)))
-    assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()))
-    // Self-approval is refused with a reason, and the budget stays pending.
-    const selfApproved = await withOrgContext(org.orgId, () =>
-      POST(request(scenarioId, { action: 'approve', expectedRevision: 2 }), params(scenarioId)))
-    assert.equal(selfApproved.status, 409, `expected a self-approval refusal, got ${selfApproved.status}`)
-    assert.deepEqual(await selfApproved.json(), { error: 'self_approval_forbidden' })
-    const still = await scenarioState(org.orgId, scenarioId)
-    assert.equal(still.status, 'pending_approval')
-    assert.equal(still.approved_by, null)
-    // A different approver decides the same budget without friction.
-    state.user = asUser(checker, org.orgId, 'checker')
-    const approved = await withOrgContext(org.orgId, () =>
-      POST(request(scenarioId, { action: 'approve', expectedRevision: 2 }), params(scenarioId)))
-    assert.equal(approved.status, 200, JSON.stringify(await approved.clone().json()))
-    assert.deepEqual(await approved.json(), { revision: 3, status: 'approved' })
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
+    const id = await f.draft(false)
+    const refused = await f.submit(id)
+    assert.equal(refused.status,409)
+    assert.deepEqual(await refused.json(),{error:'Add at least one nonzero budget line before submitting.'})
+    assert.equal((await scenarioState(f.org.orgId,id)).status,'draft')
+    assert.equal((await scenarioState(f.org.orgId,id)).revision,1)
+  } finally { await withBypassContext(() => dropScratchOrg(f.org.orgId)) }
+})
+
+test('the tenant Flow chooses whether a budget maker may approve', async () => {
+  for (const preventSelfApproval of [true,false]) {
+    const f = await fixture()
+    try {
+      await withBypassContext(() => seedApprovalFlow(f.org.orgId,{subjectKind:'budget_scenario',assignees:[{type:'user',userId:f.manager},{type:'user',userId:f.approver}],mode:'any',preventSelfApproval}))
+      const id = await f.draft()
+      const response = await f.submit(id)
+      assert.equal(response.status,200,JSON.stringify(await response.clone().json()))
+      const gates = await withBypassContext(() => db.execute<{id:string;assignee_user_id:string}>(sql`select id,assignee_user_id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`))
+      if (preventSelfApproval) {
+        assert.ok(gates.rows.every(gate=>gate.assignee_user_id!==f.manager))
+        assert.equal((await scenarioState(f.org.orgId,id)).status,'pending_approval')
+        await withOrgContext(f.org.orgId, () => decideGate({gateId:gates.rows[0]!.id,userId:f.approver,decision:'approved'}))
+      } else {
+        const own = gates.rows.find(gate=>gate.assignee_user_id===f.manager)
+        assert.ok(own)
+        await withOrgContext(f.org.orgId, () => decideGate({gateId:own.id,userId:f.manager,decision:'approved'}))
+      }
+      assert.equal((await scenarioState(f.org.orgId,id)).status,'approved')
+    } finally { await withBypassContext(() => dropScratchOrg(f.org.orgId)) }
   }
 })

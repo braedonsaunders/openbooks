@@ -70,7 +70,7 @@ async function seedSubmittedWeek(status: "submitted" | "approved" | "draft" = "s
   // The shared time authority lock runs for real: the actor holds time.manage.
   await withBypassContext(async () => {
     await db.execute(sql`
-      update app_roles set permissions = '["time.read", "time.manage"]'::jsonb
+      update app_roles set permissions = '["time.read", "time.manage", "time.approve"]'::jsonb
        where org_id = ${org.orgId} and key = 'admin'`);
   });
   const employeeId = randomUUID();

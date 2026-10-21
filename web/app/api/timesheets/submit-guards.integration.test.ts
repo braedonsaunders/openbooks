@@ -35,7 +35,7 @@ function runIntegrationSource(source: string): void {
       "-e",
       source,
     ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    { cwd: process.cwd(), env: process.env, encoding: "utf8", timeout: 180_000 },
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
@@ -87,7 +87,8 @@ const SEED = `
   }
 
   async function cleanup(fixture) {
-    await dropScratchOrg(fixture.org.orgId);
+    try { await dropScratchOrg(fixture.org.orgId); }
+    finally { await (await import("@openbooks/jobs")).closeJobConnections(); }
   }
 
 `;

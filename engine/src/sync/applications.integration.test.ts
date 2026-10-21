@@ -1781,7 +1781,7 @@ test("authenticated source settlement replay reverses and replaces FX evidence w
     const originalLines = (await db.execute(sql`select * from journal_lines
       where org_id=${org.orgId} and entry_id=${before[0]!.fx_gain_loss_entry_id} order by line_number`)).rows;
     await assert.rejects(() => reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],snapshot),
-      error => errorChainMatches(error,/period is closed for AR posting/));
+      error => errorChainMatches(error,/AR is closed for this period and accounting book/));
     assert.deepEqual(await settlementSnapshot(org.orgId),before,"unauthenticated reconciliation cannot release a closed-period allocation");
     assert.equal((await db.execute(sql`select id from connector_replay_authorizations where org_id=${org.orgId}`)).rows.length,0);
     const result=await reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],{...snapshot,syncRunId:runId});

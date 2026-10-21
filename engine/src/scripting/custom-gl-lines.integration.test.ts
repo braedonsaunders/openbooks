@@ -182,9 +182,10 @@ async function postJournal(
   org: ScratchOrg,
   documentId: string,
   actorId: string | null,
+  submissionActorId: string | null = actorId,
 ): Promise<string> {
   await withOrgTransaction(org.orgId, async () => {
-    await submitAndReleaseIfUngated("journal", documentId, actorId);
+    await submitAndReleaseIfUngated("journal", documentId, submissionActorId);
     await postDocument(documentId, postingControlDeps(org), {
       deferEffects: true,
       audit: { actorId, source: "test" },
@@ -581,12 +582,12 @@ test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !
       seedBalancedDraftJournal(org, "JE-CGL-SYSTEM", posterId),
     );
     await assert.rejects(
-      postJournal(org, system, null),
+      postJournal(org, system, null, posterId),
       /custom_gl_lines script "custom gl": this run has no signed-in user and the script has no run-as user; save the script again as a user who holds gl\.post/,
     );
     await withOrgContext(org.orgId, () => db.execute(sql`
       update user_scripts set run_as_user_id = ${posterId} where org_id = ${org.orgId}`));
-    await postJournal(org, system, null);
+    await postJournal(org, system, null, posterId);
     const afterSystem = await withOrgContext(org.orgId, () =>
       db.execute<{ n: number }>(sql`
         select count(*)::int as n from journal_lines

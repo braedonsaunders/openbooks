@@ -103,7 +103,7 @@ test('unmeasurable annuals refuse by name instead of annualising blindly', { ski
       // The scratch monthly calendar steps aside for a non-monthly default
       // whose periods end in 2025, leaving July 2026 uncovered.
       await db.execute(sql`update fiscal_calendars set is_default = false where org_id = ${org.orgId}`)
-      await db.execute(sql`insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone, adjustment_period_enabled, is_default, is_active, custom)
+      await db.execute(sql`insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone, adjustment_period_enabled, is_default, is_active, config)
         values (${calId}, ${org.orgId}, 'Ops', 'four_four_five', 2, 1, 'UTC', false, true, true, '{}'::jsonb)`)
       for (const [n, from, to] of [[1, '2025-02-01', '2025-03-01'], [2, '2025-03-02', '2025-03-29'], [3, '2025-03-30', '2025-04-26']] as const) {
         await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)

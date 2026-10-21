@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { apiErrorResponse, typedRefusal } from './api/error-response'
 
 /**
  * Shared failure mapper for compliance write verbs. It lives apart from
@@ -12,7 +13,8 @@ import { NextResponse } from 'next/server'
  * Driver text — table names, constraint names, parameter values — stays in
  * the server log, never in the body.
  */
-export function complianceWriteFailure(error: unknown): NextResponse {
+export async function complianceWriteFailure(error: unknown): Promise<NextResponse> {
+  if (typedRefusal(error)) return apiErrorResponse(error)
   const code = (error as { code?: unknown } | null)?.code
   if (code === '23505') {
     return NextResponse.json(
