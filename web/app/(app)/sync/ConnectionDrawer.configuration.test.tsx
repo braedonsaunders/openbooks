@@ -53,7 +53,7 @@ async function fill(label: string, value: string) {
 }
 
 const manifest = (source: string) => ({ source, displayName: source, authKind: 'token' as const, blurb: '',
-  configFields: source === 'netsuite' ? [{ key: 'mappingJson', label: 'Legacy JSON', kind: 'textarea' as const }] : [],
+  configFields: [],
   secretFields: [], ...connectorSettings(source),
 })
 
@@ -61,7 +61,7 @@ test('structured connection mappings and content save and reopen without losing 
   const host = document.createElement('div'); document.body.append(host)
   const root = createRoot(host)
   let editing = { id: 'connection-1', source: 'netsuite', displayName: 'Source account', authKind: 'token', status: 'active' as const,
-    config: { realmId: 'callback-owned', mappingJson: JSON.stringify({ projectForemanField: 'custentity_foreman', projectStatuses: { 'In Progress': 'active' }, taxCodeFallbacks: { sales: '13' } }) } as Record<string, unknown>,
+    config: { realmId: 'callback-owned', entityMappings: { version: 1, entities: {}, sourceOptions: { projectForemanField: 'custentity_foreman', projectStatuses: { 'In Progress': 'active' }, taxCodeFallbacks: { sales: '13' } } } } as Record<string, unknown>,
     mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const,
     postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
   let saved: { config: Record<string, unknown> } | undefined
@@ -124,7 +124,7 @@ test('structured connection mappings and content save and reopen without losing 
   assert.ok(saved, `save must send a request after completing the mapping: ${errorMessages().at(-1) ?? 'no refusal'}`)
   assert.equal(readSaved()!.config.realmId, undefined, 'callback identity is not edited')
   assert.deepEqual(readSaved()!.config.syncOptions, { attachments: false, projectFinancials: true, crm: true, fixedAssets: true })
-  assert.equal(readSaved()!.config.mappingJson, undefined, 'legacy storage is retired when saving')
+  assert.equal(readSaved()!.config.mappingJson, undefined, 'only the structured configuration is written')
   const mappings = (readSaved()!.config.entityMappings as { sourceOptions: Record<string, unknown> }).sourceOptions
   assert.deepEqual(mappings.projectStatuses, { 'In Progress': 'active', Completed: 'closed' })
   assert.deepEqual(mappings.taxCodeFallbacks, { sales: '13' })
@@ -232,8 +232,8 @@ test('every new drawer message resolves with real native translation and interpo
 test('unrepresentable saved mappings are read-only, preserve nested values, block saving and require explicit removal', async (t) => {
   const host = document.createElement('div'); document.body.append(host)
   const root = createRoot(host)
-  const editing = { id: 'legacy-connection', source: 'netsuite', displayName: 'Saved connection', authKind: 'token', status: 'active' as const,
-    config: { mappingJson: JSON.stringify({ projectForemanField: 'custentity_foreman', obsolete: { nested: ['Original saved value', '100.0100'] } }) },
+  const editing = { id: 'saved-connection', source: 'netsuite', displayName: 'Saved connection', authKind: 'token', status: 'active' as const,
+    config: { entityMappings: { version: 1, entities: {}, sourceOptions: { projectForemanField: 'custentity_foreman' }, unavailableRules: [{ key: 'obsolete', value: { nested: ['Original saved value', '100.0100'] }, reason: 'This source option is unsupported' }] } },
     mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const, postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
   let saved: { config: Record<string, unknown> } | undefined
   const readSaved = (): { config: Record<string, unknown> } | undefined => saved

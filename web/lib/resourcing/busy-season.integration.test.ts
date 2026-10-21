@@ -143,7 +143,7 @@ test('busy-season gaps, spans, evidence, and fail-closed refusals', enabled, asy
   assert.equal(gap.capacityHours, '80.0000')
   assert.equal(gap.gapHours, '8.0000')
   assert.equal(gap.suggestedJobTitle, 'Senior Tax Associate')
-  assert.deepEqual(gap.evidence.demandLineIds, [extra.manualLine, extra.pipelineLine])
+  assert.deepEqual(gap.evidence.demandLineIds, [extra.manualLine, extra.pipelineLine].sort())
   assert.deepEqual(gap.evidence.opportunityIds, [ids.openOpp])
   assert.deepEqual(gap.evidence.assignmentIds, [written[0], written[2]].sort())
   assert.deepEqual(gap.evidence.capacityPersonIds, [ids.alice, ids.bob].sort())

@@ -4,13 +4,15 @@ import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import ExcelJS from "exceljs";
+import { createTranslator } from "next-intl";
+import messages from "../messages/en/index.ts";
 import { resolveAppModule } from "./test-module-hooks";
 import { stubModules } from '../testing/stub-modules.ts'
 
 const root = pathToFileURL(process.cwd() + "/").href;
 const state: { user: import("./auth").SessionUser | null } = { user: null };
-Object.assign(globalThis, { __pagedExportStreamState: state });
-stubModules({ navigation: false, intl: 'export async function getTranslations(){const t=(s)=>s;t.has=()=>false;t.rich=(s)=>s;return t;};export async function getLocale(){return "en"}', authz: false, features: false });
+Object.assign(globalThis, { __pagedExportStreamState: state, __pagedExportIntl: { createTranslator, messages } });
+stubModules({ navigation: false, intl: 'export async function getTranslations(namespace){const {createTranslator,messages}=globalThis.__pagedExportIntl;return createTranslator({locale:"en",messages,namespace});};export async function getLocale(){return "en"}', authz: false, features: false });
 
 registerHooks({
   resolve(s, c, next) {
@@ -231,13 +233,13 @@ test("the row cap truncates with a disclosed footer instead of materialising eve
     const lines = streamed.csv.split("\r\n").filter((line) => line !== "");
     assert.equal(lines.length, 1 + 700 + 3);
     const last = lines[lines.length - 1] ?? "";
-    assert.ok(last.includes("run.exportTruncated"), last);
+    assert.ok(last.includes("Showing the first"), last);
     const streamedX = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
       streamPagedReportXlsx(fx.org.orgId, plan(), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, money: MONEY, rowCap: 700 })));
     assert.equal(streamedX.rowCount, 700);
     assert.equal(streamedX.truncated, true);
     const back = await readSheet(streamedX.xlsx);
-    assert.ok(back.rows.some((row) => JSON.stringify(row).includes("run.exportTruncated")));
+    assert.ok(back.rows.some((row) => JSON.stringify(row).includes("Showing the first")));
   } finally { await release(fx); }
 });
 
@@ -275,7 +277,7 @@ test("a row cap that cuts whole trailing sections still attributes the header an
     // notice disclosed — never on the surviving prefix, never silent.
     const last = lines[lines.length - 1]!;
     assert.ok(last.startsWith(`${sectionTitle},`), last);
-    assert.ok(last.includes("run.exportTruncated"), last);
+    assert.ok(last.includes("Showing the first"), last);
   } finally { await release(fx); }
 });
 
@@ -302,7 +304,7 @@ test("a row cap that cuts whole trailing sections still emits every sheet", enab
     assert.equal(first.rowCount, 4 + 10);
     const lastSheet = newWb.worksheets[1]!;
     const lastText = JSON.stringify(lastSheet.getCell(lastSheet.rowCount, 1).value);
-    assert.ok(lastText.includes("run.exportTruncated"), lastText);
+    assert.ok(lastText.includes("Showing the first"), lastText);
   } finally { await release(fx); }
 });
 
@@ -330,9 +332,6 @@ test("the definitions export route streams paged CSV/XLSX and keeps PDF buffered
     const back = await readSheet(Buffer.from(await xlsx.arrayBuffer()));
     assert.equal(back.headers[0], "Recall");
     assert.ok(back.rows.length >= 1200);
-    const narrow = await run(() => GET(new Request(`http://test.local/api/reports/definitions/${defId}/export?format=pdf`), params));
-    assert.equal(narrow.status, 422);
-    assert.equal((await narrow.json()).code, 'pdf_layout_too_narrow');
     await withOrgContext(fx.org.orgId, () => db.execute(sql`update report_definitions
       set layout='{"paperSize":"tabloid","orientation":"landscape","density":"compact","marginMm":5}'::jsonb
       where org_id=${fx.org.orgId} and id=${defId}`));

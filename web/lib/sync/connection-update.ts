@@ -95,13 +95,14 @@ export async function updateConnection(
           ? existing.config
           : {};
       if (!manifest) return { refusal: refused(400, { error: "unknown source type" }) };
-      if (Object.hasOwn(body.config, 'entityMappings') && Object.hasOwn(body.config, 'mappingJson')) return { refusal: refused(400, { error: 'Save mappings through the structured entity controls only' }) };
+      if (Object.hasOwn(body.config, 'mappingJson')) return { refusal: refused(400, { error: 'Save mappings through the structured entity controls only' }) };
+      if (Object.hasOwn(currentConfig, 'mappingJson')) return { refusal: refused(400, { error: 'Apply the native database upgrade before editing this saved connection mapping' }) };
       let merged = mergedDeclaredSourceConfig(
         manifest,
         currentConfig as Record<string, unknown>,
         body.config as Record<string, unknown>,
       );
-      try { merged = canonicalConnectionMappingConfig(merged, manifest.mappingGroups ?? [], Object.hasOwn(body.config, 'entityMappings')); }
+      try { merged = canonicalConnectionMappingConfig(merged, manifest.mappingGroups ?? []); }
       catch (cause) {
         if (cause instanceof ConnectionMappingError) return { refusal: refused(400, { error: cause.message }) };
         console.error('[platform/connections] mapping config validation failed', cause);

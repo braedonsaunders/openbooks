@@ -23,7 +23,7 @@ import { MIGRATION_WORKSPACE_HREF } from "@/lib/migration/links";
 import Link from "next/link";
 import { ConnectionMappingWorkspace, ConnectionSyncContent, type MappingDrafts } from "./ConnectionContent";
 import { decodeEntityMappings } from "@openbooks/engine/sync/entity-mapping-contract";
-import { connectorSettings, resolveSyncSelection, migrateConnectionEntityMappings, validateStructuredConnectionMappings, type MappingGroup, type SyncCapabilities, type SyncContentKey } from "@openbooks/engine/sync/connection-settings";
+import { connectorSettings, resolveSyncSelection, validateStructuredConnectionMappings, type MappingGroup, type SyncCapabilities, type SyncContentKey } from "@openbooks/engine/sync/connection-settings";
 import { RecordTabs } from "@/components/module-home/record-tabs";
 import { readApiErrorMessage, refusalMessageFromBody } from "../../../lib/api-error";
 import { confirmDialog } from "@/lib/confirm";
@@ -65,7 +65,7 @@ interface FieldSpec {
   placeholder?: string;
   required?: boolean;
   help?: string;
-  kind?: "text" | "select" | "textarea" | "mappings" | "sync-options" | "entity-mappings";
+  kind?: "text" | "select" | "textarea" | "sync-options" | "entity-mappings";
   options?: { value: string; label: string }[];
   optionsSource?: "currencies";
 }
@@ -1155,8 +1155,7 @@ export function ConnectionDrawer({
             .filter(([k]) => !CALLBACK_OWNED_CONFIG_KEYS.has(k))
             .map(([k, v]) => [k, v ?? ""]),
         );
-      savedConfig.entityMappings = migrateConnectionEntityMappings(editing.config?.entityMappings, editing.config?.mappingJson, sourceTypes.find(type => type.source === editing.source)?.mappingGroups ?? connectorSettings(editing.source).mappingGroups);
-      delete savedConfig.mappingJson;
+      savedConfig.entityMappings = decodeEntityMappings(editing.config?.entityMappings);
       setConfig(savedConfig);
       setSecrets({});
       setPostedChangePolicy(editing.postedChangePolicy);
@@ -1358,7 +1357,7 @@ export function ConnectionDrawer({
               </div>
             ) : null}
 
-            {def.configFields.filter((f) => f.kind !== "mappings" && f.key !== "mappingJson" && f.kind !== "sync-options" && f.kind !== "entity-mappings").map((f) => (
+            {def.configFields.filter((f) => f.kind !== "sync-options" && f.kind !== "entity-mappings").map((f) => (
               <div key={f.key}>
                 <Label>
                   {fieldLabel(f)}

@@ -31,7 +31,7 @@ import { createScratchOrg, dropScratchOrg, seedWorkerEmployment } from "../testi
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 async function scan(orgId: string, threshold = "1000.0000") {
-  return withSimClock("2026-08-02T12:00:00Z", () => payrollFindings(orgId, threshold, defaultContinuousCloseDetectors("payroll")));
+  return withSimClock("2026-08-10T12:00:00Z", () => payrollFindings(orgId, threshold, defaultContinuousCloseDetectors("payroll")));
 }
 
 function fingerprints(findings: Awaited<ReturnType<typeof scan>>): string[] {
@@ -282,7 +282,7 @@ test(
         detectors.some((detector) => detector.detectorKey === "payroll_remittance_due" && detector.enabled),
         "the remittance detector must be enabled for this proof",
       );
-      const findings = await withSimClock("2026-08-02T12:00:00Z", () => payrollFindings(fx.orgId, "1.0000", detectors));
+      const findings = await withSimClock("2026-08-10T12:00:00Z", () => payrollFindings(fx.orgId, "1.0000", detectors));
       const gaps = findings.filter((finding) => finding.findingType === "payroll_remittance_gap");
       assert.ok(gaps.length > 0, `an unevaluable month must surface a gap, got ${fingerprints(findings)}`);
       // The fixture run pays in July, so one gap must cover it and name the

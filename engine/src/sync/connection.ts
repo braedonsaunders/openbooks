@@ -39,7 +39,7 @@ export interface SourceFieldSpec {
   required?: boolean;
   help?: string;
   /** Render as a dropdown instead of a text input. */
-  kind?: "text" | "select" | "textarea" | "mappings" | "sync-options" | "entity-mappings";
+  kind?: "text" | "select" | "textarea" | "sync-options" | "entity-mappings";
   /** Static options for a `select` field. */
   options?: { value: string; label: string }[];
   /** Populate a `select` from a live app list (resolved by the API layer). */
@@ -116,12 +116,6 @@ export const SOURCE_TYPES: SourceTypeManifest[] = ([
         label: "Bridge deployment ID",
         placeholder: "customdeploy_openbooks_bridge_rl",
         help: "The deployment ID of the installed OpenBooks extraction RESTlet. Leave blank to use the standard ID.",
-      },
-      {
-        key: "mappingJson",
-        label: "Account field mappings",
-        kind: "mappings",
-        help: "Map account-specific fields, records and source values to native concepts.",
       },
     ],
     secretFields: [
@@ -506,7 +500,6 @@ function buildUnmappedSource(conn: ConnectionRow): MigrationSource {
       baseCurrency?: string;
       bridgeScriptId?: string;
       bridgeDeploymentId?: string;
-      mappingJson?: string;
       accountingBookId?: string;
       soapEndpoint?: string;
     };

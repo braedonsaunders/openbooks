@@ -134,7 +134,7 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
         { entryId: b, number: 2, amount: '10', dims: { allocation: valueB } },
       ]);
       await post([a,b]);
-    }), (error: unknown) => errorChainMatches(error,/journal entry .* does not balance for segment allocation value .* \(sum = -?10\.0000\)/));
+    }), (error: unknown) => errorChainMatches(error,/The journal must balance per entity and value of balancing segment allocation\./));
     assert.deepEqual(await evidence(),beforeSegment);
     await assert.rejects(withOrgTransaction(org.orgId, async () => {
       await lines([{ entryId: ids[0]!, number: 3, amount: '1' }]);

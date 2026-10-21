@@ -146,7 +146,7 @@ test("buildSource builds a NetSuite source once every credential is present", ()
 
 test("connection commands validate supported content and nested mappings through the real manifests", () => {
   const netsuite = sourceType("netsuite")!;
-  assert.equal(netsuite.configFields.find((field) => field.key === "mappingJson")?.kind, "mappings");
+  assert.equal(netsuite.configFields.find((field) => field.key === "entityMappings")?.kind, "entity-mappings");
   for (const name of ["netsuite", "odoo", "erpnext", "qbd", "qbo", "xero", "dynamics"]) {
     const manifest = sourceType(name)!;
     assert.equal(manifest.configFields.filter((field) => field.key === "syncOptions").length, 1);
@@ -154,8 +154,8 @@ test("connection commands validate supported content and nested mappings through
     if (name === "qbd") assert.match(validateSourceConfig(manifest, { syncOptions: { attachments: true } }) ?? "", /does not support attachments/);
     if (name !== "netsuite") assert.match(validateSourceConfig(manifest, { syncOptions: { crm: true } }) ?? "", /does not support crm/);
   }
-  assert.equal(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, syncOptions: { attachments: false }, mappingJson: {
+  assert.equal(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, syncOptions: { attachments: false }, entityMappings: { version: 1, entities: {}, sourceOptions: {
     timeTypeRecord: "customrecord_time", timeTypeMultiplierField: "custrecord_multiplier", projectStatuses: { Complete: "closed" },
-  } }), null);
-  assert.match(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, mappingJson: { timeTypeMultiplierField: "custrecord_multiplier" } }) ?? "", /requires timeTypeRecord/);
+  } } }), null);
+  assert.match(validateSourceConfig(netsuite, { ...NETSUITE_CONFIG, entityMappings: { version: 1, entities: {}, sourceOptions: { timeTypeMultiplierField: "custrecord_multiplier" } } }) ?? "", /requires timeTypeRecord/);
 });

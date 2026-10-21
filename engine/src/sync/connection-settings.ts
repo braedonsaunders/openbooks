@@ -50,7 +50,7 @@ export function connectorSettings(source: string): {
 }
 
 function objectValue(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ConnectionMappingError(`${label} must be an object`);
   return value as Record<string, unknown>;
 }
 
@@ -65,19 +65,9 @@ export function resolveSyncSelection(value: unknown, capabilities: SyncCapabilit
   return Object.fromEntries(SYNC_CONTENT_KEYS.map((key) => [key, raw[key] ?? capabilities[key]])) as SyncSelection;
 }
 
-/** Decode legacy text and current structured mappings without discarding keys. */
-export function decodeConnectionMappings(value: unknown): Record<string, unknown> {
-  if (value == null || value === '') return {};
-  let parsed = value;
-  if (typeof value === 'string') {
-    try { parsed = JSON.parse(value); } catch { throw new Error('Saved field mappings cannot be read; correct the connection mappings before saving'); }
-  }
-  return objectValue(parsed, 'Field mappings');
-}
-
 /** Validate source identifiers and value maps before a connector builds queries. */
 export function validateConnectionMappings(value: unknown, groups: readonly MappingGroup[]): Record<string, unknown> {
-  const raw = decodeConnectionMappings(value);
+  const raw = value == null ? {} : objectValue(value, 'Field mappings');
   const fields = new Map(groups.flatMap((group) => group.fields.map((field) => [field.key, field] as const)));
   for (const [key, value] of Object.entries(raw)) {
     const field = fields.get(key);
@@ -103,37 +93,6 @@ export function validateConnectionMappings(value: unknown, groups: readonly Mapp
   return raw;
 }
 
-/** Preserve legacy rules until the operator explicitly resolves or removes them. */
-export function migrateConnectionEntityMappings(value: unknown, legacy: unknown, groups: readonly MappingGroup[]): ConnectionEntityMappings {
-  let model: ConnectionEntityMappings;
-  try { model = decodeEntityMappings(value); }
-  catch (cause) { model = { version: 1, entities: {}, unavailableRules: [{ key: 'entityMappings', value, reason: cause instanceof Error ? cause.message : 'Saved entity mappings cannot be read' }] }; }
-  const sourceOptions = { ...model.sourceOptions };
-  const unavailableRules = [...(model.unavailableRules ?? [])];
-  let stored: Record<string, unknown>;
-  try { stored = decodeConnectionMappings(legacy); }
-  catch (cause) {
-    unavailableRules.push({ key: 'savedMapping', value: legacy, reason: cause instanceof Error ? cause.message : 'Saved mappings cannot be read' });
-    return { ...model, unavailableRules };
-  }
-  const candidates = { ...stored, ...sourceOptions };
-  for (const [key, original] of Object.entries(stored)) {
-    if (Object.hasOwn(sourceOptions, key) && JSON.stringify(sourceOptions[key]) !== JSON.stringify(original)) {
-      unavailableRules.push({ key, value: original, reason: 'This saved rule conflicts with the structured source option. Remove the conflicting rule explicitly before saving.' });
-      continue;
-    }
-    try {
-      const field = groups.flatMap(group => group.fields).find(field => field.key === key);
-      const selected = field?.requires ? { [field.requires]: candidates[field.requires], [key]: original } : { [key]: original };
-      validateConnectionMappings(selected, groups);
-      sourceOptions[key] = original;
-    } catch (cause) {
-      unavailableRules.push({ key, value: original, reason: cause instanceof Error ? cause.message : 'This connector cannot apply the saved rule' });
-    }
-  }
-  return { ...model, ...(Object.keys(sourceOptions).length || model.sourceOptions !== undefined ? { sourceOptions } : {}), ...(unavailableRules.length ? { unavailableRules } : {}) };
-}
-
 export function validateStructuredConnectionMappings(value: unknown, groups: readonly MappingGroup[]): ConnectionEntityMappings {
   const model = decodeEntityMappings(value);
   if (model.unavailableRules?.length) throw new ConnectionMappingError('Remove or resolve the unavailable saved mapping rules before saving or syncing this connection');
@@ -141,22 +100,13 @@ export function validateStructuredConnectionMappings(value: unknown, groups: rea
   return model;
 }
 
-/** Existing connections remain readable; edited connections have one mapping authority. */
+/** The versioned entity model is the sole connector mapping authority. */
 export function connectionSourceOptions(config: Record<string, unknown>, groups: readonly MappingGroup[]): Record<string, unknown> {
-  if (config.entityMappings !== undefined) {
-    const model = validateStructuredConnectionMappings(config.entityMappings, groups);
-    if (model.sourceOptions !== undefined || config.mappingJson === undefined) return model.sourceOptions ?? {};
-  }
-  return validateConnectionMappings(config.mappingJson, groups);
+  if (Object.hasOwn(config, 'mappingJson')) throw new ConnectionMappingError('Apply the native database upgrade before using this saved connection mapping');
+  return validateStructuredConnectionMappings(config.entityMappings, groups).sourceOptions ?? {};
 }
 
-export function canonicalConnectionMappingConfig(config: Record<string, unknown>, groups: readonly MappingGroup[], structuredReplacement = false): Record<string, unknown> {
-  const next = { ...config };
-  if (next.mappingJson !== undefined || next.entityMappings !== undefined) {
-    next.entityMappings = structuredReplacement
-      ? validateStructuredConnectionMappings(next.entityMappings, groups)
-      : validateStructuredConnectionMappings(migrateConnectionEntityMappings(next.entityMappings, next.mappingJson, groups), groups);
-    delete next.mappingJson;
-  }
-  return next;
+export function canonicalConnectionMappingConfig(config: Record<string, unknown>, groups: readonly MappingGroup[]): Record<string, unknown> {
+  connectionSourceOptions(config, groups);
+  return config.entityMappings === undefined ? { ...config } : { ...config, entityMappings: validateStructuredConnectionMappings(config.entityMappings, groups) };
 }

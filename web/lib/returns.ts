@@ -1,5 +1,5 @@
 import 'server-only'
-import { isUuid } from '@openbooks/engine/platform/uuid'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 import { randomUUID } from 'node:crypto'
 import { createHash } from 'node:crypto'

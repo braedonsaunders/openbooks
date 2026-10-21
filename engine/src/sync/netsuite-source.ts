@@ -294,8 +294,8 @@ function parseNetSuiteTaxCodeFallbacks(value: unknown): NetSuiteTaxCodeFallbacks
 }
 
 export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
-  if (value == null || value === "") return {};
-  const parsed = typeof value === "string" ? JSON.parse(value) as unknown : value;
+  if (value == null) return {};
+  const parsed = value;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("NetSuite field mappings must be a JSON object");
   }

@@ -171,7 +171,7 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
     assert.equal((await recurringLines(supplemental.documentId)).rows.length, 0);
     const consumed = await post({ action: 'delete-assignment', id: saved.body.id })
     assert.equal(consumed.status, 422)
-    assert.match(consumed.body.error ?? '', /already priced a pay stub — end the assignment instead/)
+    assert.match(consumed.body.error ?? '', /already priced a pay stub — end it instead of deleting it/)
     const ended = await post({ action: 'end-assignment', id: saved.body.id, effectiveTo: '2026-12-31' })
     assert.equal(ended.status, 200)
     const audit = await withBypassContext(() => db.execute<{ action: string; changes: { after: { runApplicability: string } } }>(sql`select action, changes from audit_log

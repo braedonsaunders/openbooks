@@ -117,13 +117,17 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
     await t.test("an existing installation applies a pending forward migration with the constrained owner", async () => {
       // Reconstruct one missing forward change only in this test's new database;
       // published migration bytes and other history remain untouched.
-      const filename = "generated/0241_hrm_party_reference_integrity.sql";
+      const filename = "generated/0787_depreciation_retirement_authority.sql";
       const before = await ownerPool.query("select filename, sha256, applied_at from _applied_migrations where filename <> $1 order by filename", [filename]);
-      await ownerPool.query("alter table public.hrm_feedback drop constraint hrm_feedback_author_party_tenant_fkey");
+      const currentGuard = (await ownerPool.query("select pg_get_functiondef('public.depreciation_source_authority_guard()'::regprocedure) as definition")).rows[0].definition as string;
+      const retirementBranch = "  IF TG_OP='DELETE' AND tenant_retirement.openbooks_tenant_retirement_delete_allowed(TG_TABLE_NAME,to_jsonb(OLD)) THEN\n    RETURN OLD;\n  END IF;\n";
+      assert.equal(currentGuard.split(retirementBranch).length, 2);
+      // Reconstruct the immediate predecessor only in this uniquely owned database.
+      await ownerPool.query(currentGuard.replace(retirementBranch, ""));
       const removed = await ownerPool.query("delete from _applied_migrations where filename=$1 returning sha256", [filename]);
       assert.equal(removed.rowCount, 1);
       await bootstrap();
-      assert.equal((await ownerPool.query("select count(*)::int as count from pg_constraint where conrelid='public.hrm_feedback'::regclass and conname='hrm_feedback_author_party_tenant_fkey'")).rows[0].count, 1);
+      assert.equal((await ownerPool.query("select pg_get_functiondef('public.depreciation_source_authority_guard()'::regprocedure) as definition")).rows[0].definition, currentGuard);
       assert.equal((await ownerPool.query("select sha256 from _applied_migrations where filename=$1", [filename])).rows[0].sha256, removed.rows[0].sha256);
       assert.deepEqual((await ownerPool.query("select filename, sha256, applied_at from _applied_migrations where filename <> $1 order by filename", [filename])).rows, before.rows);
     });

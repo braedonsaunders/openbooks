@@ -86,6 +86,8 @@ const connectorPaths = [
   /^integrations\//,
   /^schema\/src\/(?:extension|qbd)\.ts$/,
   /^schema\/migrations\/generated\/0045_canonical_customer_parties\.sql$/,
+  // Connector configuration adoption must identify the adapter owning its saved fields.
+  /^schema\/migrations\/generated\/0788_connection_mapping_authority\.sql$/,
   /^schema\/migrations\/generated\/0109_schema_convergence_and_legacy_evidence\.sql$/,
   // 0246's header explains that the soft-close posting fence has to hold the
   // same line a competitor's period-lock date does — connector-mapping
