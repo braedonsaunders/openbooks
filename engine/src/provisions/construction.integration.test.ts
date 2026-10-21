@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '../platform/db.ts'
+import { db, withBypassContext, withOrgContext, withTransactionSavepoint } from '../platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow, grantScratchPermissions } from '../testing/fixtures.ts'
 import { submitFinancialChange } from '../flows/financial-changes-adapter.ts'
 import { decideGate } from '../flows/gates.ts'
@@ -145,14 +145,19 @@ test('loss-contract detection follows the project owner and the closing book', {
       assert.deepEqual(await unassessedLossContracts(db, org.orgId, lossScope), [])
       assert.deepEqual(await unownedContractProjects(db, org.orgId), [])
 
-      // A second root leaves the unassigned project with no owner: it cannot be
-      // measured or assessed anywhere, so it is reported rather than skipped.
-      await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-        values (${randomUUID()}, ${org.orgId}, 'Second root', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`))
+      // The native hierarchy refuses ambiguous ownership and preserves the assessed project.
+      await assert.rejects(withTransactionSavepoint(db, () => db.execute(sql`insert into subsidiaries
+        (id,org_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+        values (${randomUUID()},${org.orgId},'Second root','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`)),
+        error => {
+          const cause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+          assert.match(String(cause), /root/i);
+          return true;
+        })
+      assert.deepEqual((await db.execute<{ id: string }>(sql`select id from subsidiaries
+        where org_id=${org.orgId} and parent_id is null`)).rows, [{ id: org.subsidiaryId }])
       assert.deepEqual(await unassessedLossContracts(db, org.orgId, lossScope), [])
-      await db.execute(sql`insert into projects(org_id,code,name,contract_value)
-        values (${org.orgId},'OWNERLESS','Contract awaiting legal entity assignment','1000000')`)
-      assert.deepEqual((await unownedContractProjects(db, org.orgId)).map((row) => row.code), ['OWNERLESS'])
+      assert.deepEqual(await unownedContractProjects(db, org.orgId), [])
     })
   } finally { await dropScratchOrg(org.orgId) }
 })
