@@ -12,7 +12,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
-import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+import { applyChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 
 async function fixture(run: (f: { orgId: string; sandboxOrgId: string; sandboxId: string; approve: () => Promise<string>; applier: string }) => Promise<void>) {
   const org = await createScratchOrg();
@@ -29,7 +29,6 @@ async function fixture(run: (f: { orgId: string; sandboxOrgId: string; sandboxId
     await run({ orgId: org.orgId, sandboxOrgId: sandbox.sandboxOrgId, sandboxId, applier: actors[3]!, approve: async () => {
       const { changeSetId } = await buildChangeSet(sandboxId, "Script configuration", actors[0]);
       await reviewChangeSet(changeSetId, actors[1]);
-      await approveChangeSet(changeSetId, actors[2]);
       return changeSetId;
     } });
   } finally {

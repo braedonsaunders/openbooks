@@ -330,3 +330,13 @@ test("a referenced document smaller than the line is proposed as an overpayment 
 test("stored part-payment and overpayment reasons parse", () => {
   assert.deepEqual(parseStoredMatchReasons([{ code: "partial_open_balance", remaining: "1.0000" }, { code: "on_account_remainder", remainder: "2.0000" }]).map((reason) => reason.code), ["partial_open_balance", "on_account_remainder"]);
 });
+
+test("generic receipt and customer words do not manufacture counterparty confidence", () => {
+  const scored = scoreLedgerCandidate(
+    line({ postedOn: "2026-10-14", description: "Customer receipt partial" }),
+    journal({ memo: "Customer payment", partyName: "Civic Authority" }),
+  )!;
+  assert.equal(scored.score, 68);
+  assert.deepEqual(scored.reasons, [{ code: "exact_amount" }, { code: "date_lag", days: 4 }]);
+  assert.ok(scored.score <= REVIEW_SCORE_CEILING);
+});

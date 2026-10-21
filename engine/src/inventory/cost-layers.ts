@@ -195,18 +195,29 @@ export async function consumeLayers(
         const partitions:Array<{quantity:string;value:string;consumed:boolean;basis:string|null;movementId:string;subsidiaryId:string;receivedAt:string}>=[];
         let drawRemaining=coveredUnits,drawCumulative=0n,retainedCumulative=0n,drawAssigned='0.0000',retainedAssigned='0.0000';
         const retainedQuantity=availableUnits-coveredUnits,retainedValue=add(poolValue,neg(weightedCost));
+        const poolBasis = sumOriginalCosts(layers.map(layer => layer.remaining_original_cost));
+        const consumedBasis = consumeOriginalCost(poolBasis,fromUnits(coveredUnits),fromUnits(availableUnits),poolLocation);
+        const retainedBasis = poolBasis === null || consumedBasis === null ? null : add(poolBasis,neg(consumedBasis));
         for(const source of sources.values()) {
           const sourceQuantity=toUnits(source.quantity),draw=sourceQuantity<drawRemaining?sourceQuantity:drawRemaining,retained=sourceQuantity-draw;
           drawRemaining-=draw;drawCumulative+=draw;retainedCumulative+=retained;
-          const drawnBasis=consumeOriginalCost(source.basis,fromUnits(draw),source.quantity,poolLocation);
           if(draw>0n) {
             const cumulative=fromUnits(roundDiv(toUnits(weightedCost)*drawCumulative,coveredUnits));
-            partitions.push({...source,quantity:fromUnits(draw),value:add(cumulative,neg(drawAssigned)),consumed:true,basis:drawnBasis});drawAssigned=cumulative;
+            partitions.push({...source,quantity:fromUnits(draw),value:add(cumulative,neg(drawAssigned)),consumed:true,basis:null});drawAssigned=cumulative;
           }
           if(retained>0n) {
             const cumulative=fromUnits(roundDiv(toUnits(retainedValue)*retainedCumulative,retainedQuantity));
-            partitions.push({...source,quantity:fromUnits(retained),value:add(cumulative,neg(retainedAssigned)),consumed:false,basis:source.basis==null||drawnBasis==null?null:add(source.basis,neg(drawnBasis))});retainedAssigned=cumulative;
+            partitions.push({...source,quantity:fromUnits(retained),value:add(cumulative,neg(retainedAssigned)),consumed:false,basis:null});retainedAssigned=cumulative;
           }
+        }
+        // Moving-average original basis follows the whole weighted pool, even
+        // when restored receipts share a carrying rate but have different bases.
+        // Receipt attribution and all earlier consumption evidence remain intact.
+        for (const consumed of [true,false]) {
+          const group = partitions.filter(partition => partition.consumed === consumed);
+          const bases = splitOriginalCost(consumed ? consumedBasis : retainedBasis,
+            group.map(partition => partition.quantity),group.map(partition => partition.value),poolLocation);
+          group.forEach((partition,index) => { partition.basis = bases[index]!; });
         }
         const created: { id: string; quantity: string; unitCost: string; consumed: boolean; originalCost: string | null }[] = [];
         for (const layer of layers) {

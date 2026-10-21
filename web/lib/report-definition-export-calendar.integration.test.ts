@@ -8,7 +8,15 @@ const root = new URL("./", import.meta.url);
 const authState: { user: import("./auth").SessionUser | null } = { user: null };
 Object.assign(globalThis, { __definitionExportCalendarState: authState });
 
-stubModules({ navigation: false, intl: 'export async function getTranslations(){const t=(s)=>s;t.has=()=>false;t.rich=(s)=>s;return t} export async function getLocale(){return "en"}', authz: false, features: false });
+const intlCoreUrl=import.meta.resolve("use-intl/core");
+const englishMessagesUrl=new URL("../messages/en/index.ts",import.meta.url).href;
+stubModules({navigation:false,authz:false,features:false,intl:`
+  import {createTranslator} from ${JSON.stringify(intlCoreUrl)};
+  import messages from ${JSON.stringify(englishMessagesUrl)};
+  export async function getTranslations(input){return createTranslator({locale:"en",messages,namespace:typeof input==="string"?input:input?.namespace})}
+  export async function getLocale(){return "en"}
+  export async function getMessages(){return messages}
+`});
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -156,7 +164,7 @@ test("saved-definition PDF and XLSX artifacts use the organization business day"
     const pdf = await withSimClock(BUSINESS_INSTANT, () =>
       run(fx.org.orgId, fx.authz, () => exportRequest(fx.definitionId, "format=pdf")),
     );
-    assert.equal(pdf.status, 200);
+    assert.equal(pdf.status, 200, pdf.status===200?undefined:await pdf.text());
     assert.match(pdf.headers.get("content-disposition") ?? "", new RegExp(BUSINESS_DAY));
     assert.match(pdf.headers.get("content-type") ?? "", /application\/pdf/);
 

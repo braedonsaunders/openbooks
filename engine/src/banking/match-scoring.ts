@@ -123,6 +123,7 @@ const CHANNEL_WORDS: ReadonlySet<string> = new Set([
   "debit", "dep", "deposit", "direct", "eft", "etransfer", "fee", "fees", "for", "from", "inc", "int",
   "interac", "llc", "ltd", "mastercard", "online", "payment", "pmt", "pos", "preauthorized", "purchase",
   "pymt", "rec", "ref", "the", "transfer", "trf", "txn", "visa", "web", "wire", "withdrawal", "www",
+  "batch", "client", "customer", "invoice", "partial", "receipt", "receipts", "refund", "supplier", "vendor",
 ]);
 
 function fold(text: string): string {

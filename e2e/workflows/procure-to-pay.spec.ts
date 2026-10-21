@@ -809,7 +809,7 @@ test.describe("procure-to-pay workflows", () => {
       })();
       await page.goto(`/banking/match?account=${acct["1099"]}`);
       await dismissSetupWizard(page);
-      await page.locator("tr", { hasText: `P2P NACHA ${TAG}` }).first().locator('input[type="radio"]').check();
+      await page.locator("tr", { hasText: `P2P NACHA ${TAG}` }).first().locator('input[type="checkbox"]').check();
       await page.locator("tr", { hasText: payNumber }).first().locator('input[type="checkbox"]').check();
       {
         const matched = page.waitForResponse(

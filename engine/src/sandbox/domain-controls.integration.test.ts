@@ -12,7 +12,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
-import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+import { applyChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 
 const permissions = {
   user_scripts: "scripts.manage", custom_field_defs: "admin.custom_fields.manage",
@@ -45,7 +45,6 @@ for (const [table, permission] of Object.entries(permissions)) {
       await db.execute(sql`update ${tableSql} set ${columnSql}='Promoted' where org_id=${sandbox.sandboxOrgId}`);
       const change = await buildChangeSet(sandbox.sandboxId, "Domain authority", actors[0]);
       await reviewChangeSet(change.changeSetId, actors[1]);
-      await approveChangeSet(change.changeSetId, actors[2]);
       await assert.rejects(applyChangeSet(change.changeSetId, applier), new RegExp(`requires ${permission.replaceAll('.', '\\.')}`));
       assert.equal((await db.execute(sql`select ${columnSql} as value from ${tableSql} where org_id=${org.orgId}`)).rows[0]!.value, "Original");
       assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`)).rows[0]!.status, "approved");

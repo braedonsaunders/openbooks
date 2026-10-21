@@ -83,7 +83,7 @@ const DETAIL = {
   ],
 };
 
-async function renderDrawer(actorId: string) {
+async function renderDrawer() {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -91,7 +91,7 @@ async function renderDrawer(actorId: string) {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="fr" messages={messages} timeZone="UTC">
-        <ChangeSetDrawer detail={{ ...DETAIL, items: DETAIL.items.map((item) => ({ ...item })) }} actorId={actorId} />
+        <ChangeSetDrawer detail={{ ...DETAIL, items: DETAIL.items.map((item) => ({ ...item })) }} />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -126,7 +126,7 @@ async function click(el: Element) {
 }
 
 test("an actionable change set renders French drawer copy", async (t) => {
-  const { unmount } = await renderDrawer("reviewer-1");
+  const { unmount } = await renderDrawer();
   t.after(unmount);
   const text = document.body.textContent ?? "";
   for (const expected of [
@@ -170,7 +170,7 @@ test("an actionable change set renders French drawer copy", async (t) => {
 });
 
 test("the capture author can record the native review before tenant Flow approval", async (t) => {
-  const { unmount } = await renderDrawer("creator");
+  const { unmount } = await renderDrawer();
   t.after(unmount);
   const text = document.body.textContent ?? "";
   assert.ok(text.includes("Enregistrer l'examen"));

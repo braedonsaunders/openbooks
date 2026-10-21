@@ -1,3 +1,4 @@
+import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
@@ -238,12 +239,8 @@ async function employee(fx: Fixture, name: string, opts: {
   }, { percentFloor: '4', method: 'accrue' });
 
   if (opts.approvedBank) {
-    await db.execute(sql`
-      insert into party_bank_accounts (org_id, party_id, bank_name, country, currency,
-                                       account_last_four, approval_status, is_active,
-                                       created_by, updated_by)
-      values (${fx.orgId}, ${id}, 'Test Bank', 'CA', 'CAD', '1234', 'approved', true,
-              ${fx.actorId}, ${fx.actorId})`);
+    await seedApprovedBankAccountFixture({ orgId: fx.orgId, actorId: fx.actorId, partyId: id,
+      bankName: 'Test Bank', country: 'CA', currency: 'CAD', routing: {}, lastFour: '1234' });
   }
   return id;
 }

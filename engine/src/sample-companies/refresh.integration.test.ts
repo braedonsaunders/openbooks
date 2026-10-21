@@ -3,9 +3,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { installEngineSeams } from "../composition/install.ts";
-import { provisionOrg, wipeSimOrg } from "../sim/world.ts";
+import { provisionOrg } from "../sim/world.ts";
 import { getProfile } from "../sim/profiles/index.ts";
-import { createScratchOrg, createScratchUser, dropSampleCloneOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { createSampleCompany } from "./service.ts";
 import { installDemoScenarios, DEMO_DATA_VERSION, verifyDemoScenarios } from "./install-scenarios.ts";
 import { refreshAllSampleCompanies, refreshSampleCompany, sampleRefreshPlan } from "./refresh.ts";
@@ -123,11 +123,7 @@ test("native exploration refresh preserves rebased posted history, member drafts
     assert.deepEqual(await snapshot(), before, "revoked operator refuses without touching existing records");
     await assert.rejects(refreshAllSampleCompanies({ industryKey: "general_business", digest: "stale" }), /sample population changed/i);
   } finally {
-    const retired = await retireSampleFixtureCompanies(home.orgId, [...(memberOrgId ? [memberOrgId] : []), master.orgId]);
-    if (!retired) {
-      if (memberOrgId) await withBypass(() => dropSampleCloneOrg(memberOrgId!));
-      await wipeSimOrg(master.orgId);
-    }
+    await retireSampleFixtureCompanies(home.orgId, [...(memberOrgId ? [memberOrgId] : []), master.orgId]);
     await withBypass(() => dropScratchOrg(home.orgId));
   }
 });
@@ -165,7 +161,7 @@ test("construction refresh requires local field-ticket authors before changing e
     await assert.rejects(refreshSampleCompany(world.orgId, "construction_contractor", { actorId }), refusal);
     assert.deepEqual(await snapshot(), before, "foreign author refuses before draft lines, settings, audit or labor evidence changes");
   } finally {
-    if (!await retireSampleFixtureCompanies(home.orgId, [world.orgId])) await wipeSimOrg(world.orgId);
+    await retireSampleFixtureCompanies(home.orgId, [world.orgId]);
     await withBypass(() => dropScratchOrg(home.orgId));
   }
 });

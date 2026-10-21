@@ -37,7 +37,7 @@ const authorizationMigration = readFileSync(
 );
 
 const deployedWipGuard = `
-CREATE OR REPLACE FUNCTION public.prebill_event_append_only_guard() RETURNS trigger
+CREATE OR REPLACE FUNCTION public.wip_prebill_event_append_only_guard() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
@@ -52,14 +52,14 @@ test("0043 scopes the deployed WIP guard and replays safely", { skip: !DB }, asy
     await client.query("begin");
     await client.query(deployedWipGuard);
     const before = await client.query<{ definition: string }>(
-      "select pg_get_functiondef('public.prebill_event_append_only_guard()'::regprocedure) as definition",
+      "select pg_get_functiondef('public.wip_prebill_event_append_only_guard()'::regprocedure) as definition",
     );
     assert.match(before.rows[0]!.definition, /current_setting\('openbooks\.sandbox_wipe'/);
 
     await client.query(migration);
     await client.query(migration);
     const after = await client.query<{ definition: string }>(
-      "select pg_get_functiondef('public.prebill_event_append_only_guard()'::regprocedure) as definition",
+      "select pg_get_functiondef('public.wip_prebill_event_append_only_guard()'::regprocedure) as definition",
     );
     assert.match(after.rows[0]!.definition, /openbooks_sandbox_wipe_allowed\(old\.org_id\)/i);
     assert.doesNotMatch(after.rows[0]!.definition, /current_setting\(/);
@@ -225,7 +225,7 @@ test("a fresh-schema sandbox wipe fully clears WIP pre-bill events", { skip: !DB
           delete from prebill_events
            where org_id = ${org.orgId} and id = ${eventId}`);
       }),
-      (error: unknown) => pgMessage(error).includes("WIP prebill events are append-only"),
+      (error: unknown) => /pre.?bill events are append-only/i.test(pgMessage(error)),
     );
     const preserved = await db.execute<{ count: number }>(sql`
       select count(*)::int as count

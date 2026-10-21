@@ -339,7 +339,7 @@ test('all tenant sign-off gates complete before the session and matched ledger e
   const gates=await f.inOrg(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='bank_reconciliation_sign_off' and subject_id=${id} and status='pending' order by id`));
   assert.equal(gates.rows.length,10);
   for(const gate of gates.rows.slice(0,-1))await decideGate({gateId:gate.id,userId:f.signer,decision:'approved'});
-  assert.deepEqual((await read()).rows[0],{status:'in_progress',stamps:0});
+  assert.deepEqual((await read()).rows[0],{status:'balanced',stamps:0});
   await decideGate({gateId:gates.rows.at(-1)!.id,userId:f.signer,decision:'approved'});
   assert.deepEqual((await read()).rows[0],{status:'signed_off',stamps:1});
   assert.deepEqual(await f.inOrg(()=>markReconciled(id,f.ctx(f.signer))),{status:'signed_off',journalLinesReconciled:1});

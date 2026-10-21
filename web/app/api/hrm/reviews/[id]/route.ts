@@ -4,7 +4,6 @@ import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import {
   acknowledgeReview,
-  calibrateReview,
   reopenReview,
   shareReview,
   submitReview,
@@ -22,7 +21,7 @@ export const runtime = "nodejs";
 /**
  * One review: GET resolves the review with its snapshot answers through
  * the privacy scope (HR, its reviewer, or its subject once shared — anyone
- * else 404s uniformly); PATCH submits, calibrates, shares, acknowledges,
+ * else 404s uniformly); PATCH submits, shares, acknowledges,
  * or reopens through an action-discriminated body. Authorship is identity
  * in the service (reviewer, subject, or HR with a reason) — the route
  * carries the authenticated caller, never a permission shortcut. The
@@ -83,14 +82,6 @@ export const PATCH = defineRoute({
           revision: body.revision,
           answers: body.answers,
           overallRating: body.overallRating ?? null,
-        });
-        return NextResponse.json({ review });
-      }
-      if (body.action === "calibrate") {
-        const review = await calibrateReview({
-          ...base,
-          calibratedRating: body.calibratedRating,
-          reason: body.reason,
         });
         return NextResponse.json({ review });
       }

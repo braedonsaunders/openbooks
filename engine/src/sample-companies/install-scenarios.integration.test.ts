@@ -5,7 +5,7 @@ import { verifySampleOperatingHistory } from "./readiness.ts";
 import { cmp, fromUnits, toUnits } from "../money/money.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { db, withOrgContext, withBypass } from "../platform/db.ts";
-import { provisionOrg, wipeSimOrg } from "../sim/world.ts";
+import { provisionOrg } from "../sim/world.ts";
 import { getProfile } from "../sim/profiles/index.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
@@ -25,7 +25,7 @@ async function cleanupInstalledWorld(orgId: string): Promise<void> {
   const anchor = await withBypass(() => createScratchOrg());
   // The native helper creates an active local recovery actor in this retained
   // company. Keep both available if admission or target cleanup refuses.
-  if (!await retireSampleFixtureCompanies(anchor.orgId, [orgId])) await wipeSimOrg(orgId);
+  await retireSampleFixtureCompanies(anchor.orgId, [orgId]);
   await withBypass(() => dropScratchOrg(anchor.orgId));
 }
 

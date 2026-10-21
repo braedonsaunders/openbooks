@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { db, longPool } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { sandboxRefreshLockKey } from "./lifecycle.ts";
-import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+import { applyChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 
 // D5: promotion capture must refuse a sandbox that is anything but ready,
 // and must hold the same-sandbox lock refresh uses. Without the gate, a
@@ -130,14 +130,12 @@ test("apply refuses while the sandbox is mid-refresh", async () => {
   const pair = await seedPair("ready");
   try {
     const { changeSetId } = await buildChangeSet(pair.sandboxId, "Gate Apply Regression", null);
-    // Review + approve need distinct production actors holding sandbox
-    // authority; the apply gate is what this regression proves.
+    // Zero configured Flow gates release the reviewed capture; readiness
+    // remains independently required at application.
     const reviewer = await createScratchUser(pair.prodOrgId, "Gate Reviewer", "admin");
-    const approver = await createScratchUser(pair.prodOrgId, "Gate Approver", "admin");
     const applier = await createScratchUser(pair.prodOrgId, "Gate Applier", "admin");
     await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${pair.prodOrgId} and key='admin'`);
     await reviewChangeSet(changeSetId, reviewer);
-    await approveChangeSet(changeSetId, approver);
     await db.execute(sql`update sandboxes set status = 'refreshing' where id = ${pair.sandboxId}`);
     await assert.rejects(() => applyChangeSet(changeSetId, applier), /not ready/);
     const status = (await db.execute<{ status: string }>(sql`

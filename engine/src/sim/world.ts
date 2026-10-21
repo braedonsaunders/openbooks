@@ -556,7 +556,7 @@ export async function provisionOrg(
       engagements, jobs, subscriptions,
     };
     if (profile.meteredProducts?.length) {
-      await provisionSaasUsage(profile, simWorld, window);
+      await withOrgContext(orgId, () => provisionSaasUsage(profile, simWorld, window));
     }
     if (profile.resourcing) await provisionResourcingPlan({
       profile,

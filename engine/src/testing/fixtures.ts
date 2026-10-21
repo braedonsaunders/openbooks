@@ -758,7 +758,7 @@ export interface FlowActors {
   approver2Id: string;
   /** An org admin (canActOnGate via the admin role). */
   adminId: string;
-  /** A user with no role in the org (for negative/authz tests). */
+  /** An active user with no granted permissions (for negative/authz tests). */
   outsiderId: string;
 }
 
@@ -770,10 +770,12 @@ export async function createScratchUser(
   userId = randomUUID(),
 ): Promise<string> {
   await assertFixtureDatabase();
+  const nativeRole = BUILT_IN_ROLES[roleKey];
   await db.transaction(async (tx) => {
     const role = await tx.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions)
-      values (${orgId}, ${roleKey}, ${roleKey.replaceAll('_', ' ')}, false, '[]'::jsonb)
+      values (${orgId}, ${roleKey}, ${nativeRole?.name ?? roleKey.replaceAll('_', ' ')}, ${nativeRole !== undefined},
+        ${JSON.stringify(nativeRole?.permissions ?? [])}::jsonb)
       on conflict (org_id, key) do update set updated_at = now()
       returning id
     `);
@@ -877,16 +879,8 @@ export async function seedFlowActors(orgId: string): Promise<FlowActors> {
     approver1Id: await mk("Approver One", "approver"),
     approver2Id: await mk("Approver Two", "approver"),
     adminId: await mk("Admin", "admin"),
-    outsiderId: await mk("Outsider", "viewer"),
+    outsiderId: await mk("Outsider", "permissionless"),
   };
-  for (const key of ["accountant", "approver", "admin"]) {
-    const role = BUILT_IN_ROLES[key]!;
-    const written =
-      await db.execute(sql`update app_roles set permissions=${JSON.stringify(role.permissions)}::jsonb
-      where org_id=${orgId} and key=${key} and permissions='[]'::jsonb returning id`);
-    if (written.rows.length > 1)
-      throw new Error("A fixture role has ambiguous native authority.");
-  }
   return actors;
 }
 
@@ -2417,7 +2411,13 @@ async function productionScratchPool(): Promise<ScratchOrgPool<ScratchOrg>> {
   return pool;
 }
 
-/** Create a pooled lease in CI, or retain the historical one-off fixture locally. */
+/** A company consumed by native retirement cannot be a reusable pool slot. */
+export async function createRetirementFixtureOrg(): Promise<ScratchOrg> {
+  await assertFixtureDatabase();
+  return bootstrapScratchOrg();
+}
+
+/** Create a pooled lease in CI, or a standalone fixture when pooling is disabled. */
 export async function createScratchOrg(): Promise<ScratchOrg> {
   if (fixtureOwnerPort()) {
     const response = await fixtureOwnerRequest<{ org: ScratchOrg }>({ op: "lease" });

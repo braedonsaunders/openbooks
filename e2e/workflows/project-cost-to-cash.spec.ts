@@ -775,17 +775,14 @@ test.describe('project cost-to-cash (construction billing, retainage, WIP)', () 
         const row = page.locator('tr', { hasText: inv1Number }).first();
         await expect(row.getByText(fmtUSD(toCents(M.app1Due))).first()).toBeVisible();
       }
-      // AR aging carries the FULL customer position: the net collectible
-      // plus the held retainage. The report folds every asset_receivable
-      // control (1100 AR and 1110 Retainage Receivable) into the party total,
-      // so it reads 40,000 while the invoice balance reads 36,000 due now.
-      // The party row is attempt-scoped (tagged customer); the Total row is
-      // kept for the cross-report tie below (it holds across attempts).
+      // The customer open-item row is the net amount collectible now.
+      // Held retainage has no open item until release; it remains in the
+      // report's separate control-entry reconciliation and its GL-tied total.
       await page.goto(`/reports/aging?${PERIOD}&side=ar`);
       {
         const rows = await reportRows(page);
         const ar = findRow(rows, `${t} Civic Authority`);
-        expect(ar[ar.length - 1]).toBe(fmtUSD(toCents(M.app1Gross)));
+        expect(ar[ar.length - 1]).toBe(fmtUSD(toCents(M.app1Due)));
         const totalRow = findTotalsRow(rows);
         app1AgingTotal = parseUSD(totalRow[totalRow.length - 1]!);
       }
@@ -813,8 +810,8 @@ test.describe('project cost-to-cash (construction billing, retainage, WIP)', () 
         expect(rev[rev.length - 1]).toBe(fmtUSD(-toCents(M.app1Gross)));
         // Shared controls tie attempt-agnostically: every receivable leg
         // ever posted (this attempt's and any earlier attempt's) sits in AR
-        // plus retainage receivable, and the aging total folds exactly that
-        // set — so the sums agree at every stop however many attempts ran.
+        // plus retainage receivable, and the aging total includes the open-item and control-entry
+        // populations — so the sums agree at every stop however many attempts ran.
         const ar = findRow(rows, 'Accounts Receivable');
         const ret = findRow(rows, 'Retainage Receivable');
         expect(parseUSD(ar[ar.length - 1]!) + parseUSD(ret[ret.length - 1]!)).toBe(app1AgingTotal);

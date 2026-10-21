@@ -753,7 +753,7 @@ test.describe("subscription to revenue", () => {
       const req = page.request;
       const origin = baseURL!;
       ok(
-        await api(req, origin, "POST", "/api/subscriptions", { action: "updateSubscription", id: S.subBId, status: "canceled" }),
+        await api(req, origin, "POST", "/api/subscriptions", { action: "updateSubscription", id: S.subBId, status: "canceled", canceledOn: "2027-01-01" }),
         "cancel B",
       );
       const subs = ok(await api(req, origin, "GET", "/api/subscriptions"), "subs after cancel");

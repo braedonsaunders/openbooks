@@ -493,8 +493,8 @@ test.describe('quote-to-cash workflows', () => {
       // Match each statement line against its receipt journal, one pair at a
       // time: statement row by its description, GL row by receipt number.
       for (const [label, receipt] of [['Receipt one', receipt1.number], ['Receipt two', receipt2.number]] as const) {
-        // Statement lines are single-select radios; ledger lines are checkboxes.
-        await page.locator('tr', { hasText: label }).first().locator('input[type="radio"]').check();
+        // Bank and ledger lines both support multi-selection.
+        await page.locator('tr', { hasText: label }).first().locator('input[type="checkbox"]').check();
         await page.locator('tr', { hasText: receipt }).first().locator('input[type="checkbox"]').check();
         const matched = page.waitForResponse(
           (r) => r.url().endsWith(`/api/banking/reconciliations/${recId}/matches`) && r.request().method() === 'POST',
@@ -658,7 +658,7 @@ test.describe('quote-to-cash workflows', () => {
       expect(imp.imported).toBe(1);
       await page.goto(`/banking/match?account=${seed.bankId}`);
       await dismissSetupWizard(page);
-      await page.locator('tr', { hasText: 'Cash receipt' }).first().locator('input[type="radio"]').check();
+      await page.locator('tr', { hasText: 'Cash receipt' }).first().locator('input[type="checkbox"]').check();
       await page.locator('tr', { hasText: receiptNumber }).first().locator('input[type="checkbox"]').check();
       {
         const matched = page.waitForResponse(
@@ -814,7 +814,7 @@ test.describe('quote-to-cash workflows', () => {
       expect(imp.imported).toBe(1);
       await page.goto(`/banking/match?account=${seed.bankId}`);
       await dismissSetupWizard(page);
-      await page.locator('tr', { hasText: 'FX receipt' }).first().locator('input[type="radio"]').check();
+      await page.locator('tr', { hasText: 'FX receipt' }).first().locator('input[type="checkbox"]').check();
       await page.locator('tr', { hasText: receiptNumber }).first().locator('input[type="checkbox"]').check();
       {
         const matched = page.waitForResponse(

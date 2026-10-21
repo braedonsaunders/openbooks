@@ -1549,6 +1549,7 @@ test("one concurrent payment-run poster owns the processing claim and its eviden
 
 test("0080 payment-instruction claim-fence bundle guard replays safely", { skip: !DB }, async () => {
   const client = await pool.connect();
+  const before=(await client.query<{definition:string}>("select pg_get_functiondef('public.enforce_payment_instruction_posting_claim()'::regprocedure) as definition")).rows[0]!.definition;
   try {
     await client.query("begin");
     await client.query(paymentInstructionClaimFenceBundleGuardMigration);
@@ -1566,7 +1567,9 @@ test("0080 payment-instruction claim-fence bundle guard replays safely", { skip:
     `);
     assert.match(functionState.rows[0]!.definition, /to_jsonb\(new\).*status/i);
     assert.equal(functionState.rows[0]!.trigger_count, 1);
-    await client.query("commit");
+    await client.query("rollback");
+    const after=(await client.query<{definition:string}>("select pg_get_functiondef('public.enforce_payment_instruction_posting_claim()'::regprocedure) as definition")).rows[0]!.definition;
+    assert.equal(after,before,"isolated published-migration replay preserves the current native guard contract");
   } catch (error) {
     await client.query("rollback").catch(() => undefined);
     throw error;
@@ -1575,22 +1578,7 @@ test("0080 payment-instruction claim-fence bundle guard replays safely", { skip:
   }
 });
 
-test("0080 payment-instruction claim fence rejects an untrusted sandbox-wipe GUC", { skip: !DB }, async () => {
-  // Keep this regression self-contained: a focused run must exercise the
-  // forward migration after 0078 just as a full bootstrap does.
-  const migrationClient = await pool.connect();
-  try {
-    await migrationClient.query("begin");
-    await migrationClient.query(paymentInstructionClaimFenceBundleGuardMigration);
-    await migrationClient.query(paymentInstructionClaimFenceBundleGuardMigration);
-    await migrationClient.query("commit");
-  } catch (error) {
-    await migrationClient.query("rollback").catch(() => undefined);
-    throw error;
-  } finally {
-    migrationClient.release();
-  }
-
+test("the current payment-instruction claim fence rejects an untrusted sandbox-wipe GUC", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const actorId = await withBypass(() => createScratchUser(org.orgId, "Sandbox-wipe fence", "admin"));

@@ -100,7 +100,9 @@ export function remapFlowGraphSubjectScope(
   if (!parsed.success) throw new Error(`${label}: invalid flow subject scope`);
   const mapped = parsed.data.subsidiaryIds.map((id) => {
     const target = ids.get(id);
-    if (!target) throw new Error(`${label}: flow subject scope subsidiary has no counterpart in the target organization`);
+    if (!target) throw new Error(`${label}: flow subject scope subsidiary has no counterpart in the target organization`, {
+      cause: { subsidiaryId: id, availableSourceIds: [...ids.keys()] },
+    });
     return target;
   });
   return { ...record, subjectScope: { ...(record.subjectScope as Record<string, unknown>), subsidiaryIds: mapped } };

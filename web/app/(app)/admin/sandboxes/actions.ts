@@ -7,7 +7,6 @@ import { db } from "@openbooks/engine/platform/db";
 import { enqueueSandboxOp } from "@openbooks/jobs";
 import {
   applyChangeSet,
-  approveChangeSet,
   buildChangeSet,
   reviewChangeSet,
 } from "@openbooks/engine/sandbox/promote";
@@ -179,16 +178,6 @@ export async function reviewChangeSetAction(changeSetId: string): Promise<void> 
   revalidatePath("/admin/sandboxes");
 }
 
-export async function approveChangeSetAction(changeSetId: string): Promise<void> {
-  const authz = await requireManager();
-  assertUuid(changeSetId, "Change set");
-  const r = await db.execute(sql`
-    select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`);
-  if (!r.rows.length) throw new Error("change set not found");
-  await approveChangeSet(changeSetId, authz.user.id);
-  revalidatePath("/admin/sandboxes");
-}
-
 export async function applyChangeSetAction(changeSetId: string): Promise<void> {
   const authz = await requireManager();
   assertUuid(changeSetId, "Change set");
@@ -202,7 +191,6 @@ export async function applyChangeSetAction(changeSetId: string): Promise<void> {
 export async function transitionChangeSetAction(changeSetId: string, transition: PromotionTransition): Promise<{ error: string | null }> {
   try {
     if (transition === "review") await reviewChangeSetAction(changeSetId);
-    else if (transition === "approve") await approveChangeSetAction(changeSetId);
     else if (transition === "apply") await applyChangeSetAction(changeSetId);
     else throw new Error("Invalid change-set transition");
     revalidatePath("/admin/sandboxes/change-sets");

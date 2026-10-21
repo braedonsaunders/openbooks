@@ -1,5 +1,12 @@
 /** Published DELETE contracts; unknown live guards refuse retirement. */
 export const TENANT_RETIREMENT_GUARDS = [
+  {
+    name: "depreciation_source_authority_guard",
+    source: "0787_depreciation_retirement_authority.sql",
+    sha256: "63fdeb6a8c7461daabb24fb344e4b2b246700cbceb3baf581698f7a6bbc54d80",
+    newSha256: "63fdeb6a8c7461daabb24fb344e4b2b246700cbceb3baf581698f7a6bbc54d80",
+    patch: false,
+  },
   {name:"calibration_entry_published_guard",source:"0775_close_and_calibration_flow_authority.sql",sha256:"a8d128e484d16f9f16a462afef52b325e2b541bbdf8a000162f7358daf0225f4",newSha256:"a8d128e484d16f9f16a462afef52b325e2b541bbdf8a000162f7358daf0225f4",patch:false},
   {
     name: "subcontract_change_pending_terms_guard",
@@ -19,10 +26,10 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     name: "flow_submission_receipt_guard",
-    source: "0774_flow_receipt_actor_identity.sql",
-    sha256: "1df873cdfa5f4bc9e42d5e80bc914344920d43e2abb2affd196d76d5688c1165",
+    source: "0786_channel_sync_flow_principal.sql",
+    sha256: "16e9679b1b8b780cfcd936657cc51ad53290eb0b76a51c0f122bd1360f3a1d47",
     newSha256:
-      "1df873cdfa5f4bc9e42d5e80bc914344920d43e2abb2affd196d76d5688c1165",
+      "16e9679b1b8b780cfcd936657cc51ad53290eb0b76a51c0f122bd1360f3a1d47",
     patch: false,
   },
   {
@@ -1190,10 +1197,10 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     name: "inventory_serial_lifecycle_guard",
-    source: "0632_serial_manufacturing_lifecycle.sql",
-    sha256: "afca5b0f6fa07555dc01e37cbf428b40c0a09267a0ccea0763e9d64d8a8b6c05",
+    source: "0762_serial_manufacturing_reversal_evidence.sql",
+    sha256: "322f7963f1479042a2db00f86d6bbc21eedbca863b5df92a9716fde15789d340",
     newSha256:
-      "afca5b0f6fa07555dc01e37cbf428b40c0a09267a0ccea0763e9d64d8a8b6c05",
+      "322f7963f1479042a2db00f86d6bbc21eedbca863b5df92a9716fde15789d340",
     patch: false,
   },
   {
@@ -2223,6 +2230,7 @@ export const TENANT_RETIREMENT_GUARDS = [
 ] as const;
 
 export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
+  { name: "depreciation_source_authority_guard", config: ["search_path=public,pg_catalog"] },
   {name:"calibration_entry_published_guard",config:["search_path=public,pg_catalog"]},
   {
     name: "subcontract_change_pending_terms_guard",
@@ -3335,6 +3343,8 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
 ] as const;
 
 export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
+  { table: "depreciation_schedule_lines", trigger: "depreciation_source_authority_guard", function: "depreciation_source_authority_guard" },
+  { table: "hrm_leave_payroll_entitlement_mappings", trigger: "hrm_leave_payroll_entitlement_mappings_immutable", function: "financial_policy_version_immutable" },
   {table:"hrm_calibration_entries",trigger:"calibration_entry_published_guard",function:"calibration_entry_published_guard"},
   {table:"hrm_calibration_sessions",trigger:"native_command_pending_terms_guard",function:"native_command_pending_terms_guard"},
   {table:"hrm_calibration_entries",trigger:"native_command_pending_terms_guard",function:"native_command_pending_terms_guard"},

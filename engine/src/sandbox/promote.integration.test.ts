@@ -10,7 +10,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
-import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+import { applyChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 
 // Live-Postgres regression: a change set must diff EVERY promotable table.
 // The catalog lookup filters `table_name = any(<promotable>)`; a plain JS
@@ -32,7 +32,6 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
   const prod = await createScratchOrg();
   const actorId = await createScratchUser(prod.orgId, "Promote Admin", "admin");
   const reviewerId = await createScratchUser(prod.orgId, "Promote Reviewer", "admin");
-  const approverId = await createScratchUser(prod.orgId, "Promote Approver", "admin");
   const applierId = await createScratchUser(prod.orgId, "Promote Applier", "admin");
   await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${prod.orgId} and key='admin'`);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}','{"scripts":true}'::jsonb) where id=${prod.orgId}`);
@@ -152,15 +151,13 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
     assert.ok(!byKey.has(`user_scripts:update:${pMatchedScript}`));
     assert.ok(![...items.rows].some((r) => r.target_id === sMatchedScript || r.target_id === sChangedScript));
 
-    // A captured draft is not executable. Review and approval are explicit,
-    // and each lifecycle step must be performed by a different actor.
+    // A captured draft is not executable. Reviewing it submits the exact
+    // snapshot through the tenant's native zero-gate policy.
     await assert.rejects(() => applyChangeSet(changeSetId, actorId), /not approved/);
     await db.execute(sql`update change_sets set capture_complete = false where id = ${changeSetId}`);
     await assert.rejects(() => reviewChangeSet(changeSetId, reviewerId), /capture is incomplete/);
     await db.execute(sql`update change_sets set capture_complete = true where id = ${changeSetId}`);
     await reviewChangeSet(changeSetId, reviewerId);
-    await assert.rejects(() => approveChangeSet(changeSetId, reviewerId), /different users/);
-    await approveChangeSet(changeSetId, approverId);
     await assert.rejects(
       () =>
         db
@@ -171,7 +168,6 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
           }),
       /Failed query/,
     );
-    await assert.rejects(() => applyChangeSet(changeSetId, approverId), /different users/);
 
     // Apply: production converges to the sandbox customization layer, with an
     // attributable actor distinct from the creator, reviewer, and approver.
@@ -197,13 +193,13 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
     assert.equal(scriptAudit.changes.after?.name, "Renamed Script");
     assert.equal(scriptAudit.changes.before?.created_at, scriptAudit.changes.after?.created_at, "updates preserve creation evidence");
     assert.equal(scriptAudit.changes.after?.updated_by, applierId);
-    assert.equal((await db.execute(sql`select id from role_assignments where org_id = ${prod.orgId}`)).rows.length, 4, "promotion preserves every actor's assigned role");
+    assert.equal((await db.execute(sql`select id from role_assignments where org_id = ${prod.orgId}`)).rows.length, 3, "promotion preserves every actor's assigned role");
     const status = (await db.execute<{ status: string; applied_by: string; approved_by: string; reviewed_by: string }>(sql`
       select status, applied_by, approved_by, reviewed_by from change_sets where id = ${changeSetId}`));
     assert.deepEqual(status.rows[0], {
       status: "applied",
       applied_by: applierId,
-      approved_by: approverId,
+      approved_by: reviewerId,
       reviewed_by: reviewerId,
     });
   } finally {
@@ -248,7 +244,6 @@ async function rolePromotionFixture(kind: "update_assigned" | "delete_assigned" 
   const { changeSetId, itemCount } = await buildChangeSet(sandboxId, "Role promotion", actors[0]!);
   assert.equal(itemCount, 1);
   await reviewChangeSet(changeSetId, actors[1]!);
-  await approveChangeSet(changeSetId, actors[2]!);
   return { orgId: prod.orgId, sbxOrgId, roleId, changeSetId, actorId: actors[3]! };
 }
 

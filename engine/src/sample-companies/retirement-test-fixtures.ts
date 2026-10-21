@@ -50,13 +50,9 @@ export async function drainSampleFixtureFlowEmails(orgId: string): Promise<numbe
   });
 }
 
-/** Return false only when the native lifecycle is absent. Callers retain their
- * legacy fixture path in that case; installed retirement never falls back. */
-export async function retireSampleFixtureCompanies(homeOrgId: string, exactOrgIds: readonly string[]): Promise<boolean> {
+/** Retire exact fixture companies through the same governed lifecycle as production. */
+export async function retireSampleFixtureCompanies(homeOrgId: string, exactOrgIds: readonly string[]): Promise<void> {
   await assertFixtureDatabase();
-  const installed = await withMaintenanceTransaction(null, async () => (await db.execute<{ installed: boolean }>(sql`
-    select to_regprocedure('tenant_retirement.openbooks_retirement_register(uuid,text,text,jsonb,uuid[],uuid[],uuid,text,jsonb,jsonb)') is not null as installed`)).rows[0]!.installed);
-  if (!installed) return false;
   const selection = [...new Set(exactOrgIds)];
   assert.ok(!selection.includes(homeOrgId), "the recovery actor's home company must be retained");
   const state = await withMaintenanceTransaction(null, async () => ({
@@ -65,18 +61,18 @@ export async function retireSampleFixtureCompanies(homeOrgId: string, exactOrgId
     live: (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map(row => row.id),
   }));
   const retireOrgIds = selection.filter(id => state.live.includes(id));
-  if (!retireOrgIds.length) return true;
+  if (!retireOrgIds.length) return;
   for (const orgId of retireOrgIds) await drainSampleFixtureFlowEmails(orgId);
 // bypass: identity-bootstrap — the recovery administrator is created in the home organization before any tenant context exists.
   const actorId = await withBypass(() => createScratchUser(homeOrgId, "Sample fixture recovery administrator", "admin"));
   const plan = await sampleRetirementPlan({ version: 1, database: state.database, retainOrgIds: state.live.filter(id => !retireOrgIds.includes(id)),
     retireOrgIds, reason: "Retire the exact sample fixtures after native preservation verification" });
-  assert.deepEqual(plan.blockers, []);
+  assert.deepEqual(plan.blockers, [],JSON.stringify({guardDrift:plan.guardDrift,
+    retainedDependencies:plan.retainedDependencies,retainedAccessDependencies:plan.retainedAccessDependencies}));
   // Synthetic disposable-fixture attestations are not operational backup proof.
   const fixtureHash = createHash("sha256").update("Sample fixture recovery contract").digest("hex");
   const runId = randomUUID();
   await admitSampleRetirement({ plan, runId, actorId, recovery: { backupSha256: fixtureHash, restoreReceiptSha256: fixtureHash,
     preservationReceiptSha256: fixtureHash, objectRetentionReceiptSha256: fixtureHash, verifiedAt: new Date().toISOString(), verifier: "Disposable sample fixture" } });
   for (const orgId of retireOrgIds) await executeSampleRetirement({ runId, orgId, planDigest: plan.digest });
-  return true;
 }

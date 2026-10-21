@@ -22,7 +22,8 @@ import { BenefitsError } from "../benefits/errors.ts";
 import { HrmPerformanceError } from "../performance/errors.ts";
 import { createGoal } from "../performance/goals.ts";
 import { createCycle, openCycle } from "../performance/review-cycles.ts";
-import { calibrateReview, shareReview } from "../performance/reviews.ts";
+import { shareReview } from "../performance/reviews.ts";
+import { calibrateReviewFixture as calibrateReview } from "../../testing/performance.ts";
 import { SelfServiceError } from "./actor.ts";
 import {
   acknowledgeMyReview,

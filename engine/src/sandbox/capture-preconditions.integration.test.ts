@@ -1,10 +1,13 @@
+import { installEngineSeams } from "../composition/install.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
-import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+import { applyChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+
+installEngineSeams();
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 for (const scenario of ["unchanged", "update drift", "delete drift", "late conflict", "legacy", "invalid base", "insert", "insert collision"] as const) {
@@ -38,7 +41,6 @@ for (const scenario of ["unchanged", "update drift", "delete drift", "late confl
           (error: unknown) => (error as { cause?: { constraint?: string } }).cause?.constraint === "change_set_items_captured_base_valid");
       }
       await reviewChangeSet(change.changeSetId, actors[1]);
-      await approveChangeSet(change.changeSetId, actors[2]);
       if (["update drift", "delete drift", "late conflict"].includes(scenario)) {
         await db.execute(sql`update app_roles set name='Later production change',updated_at=clock_timestamp() where org_id=${org.orgId} and id=${items.at(-1)!.target_id}`);
       } else if (scenario === "insert collision") {

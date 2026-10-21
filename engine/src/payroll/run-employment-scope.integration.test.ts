@@ -1,5 +1,5 @@
 import { seedPayrollSettings } from '../testing/fixtures.ts';
-import { seedPayrollComponent } from '../testing/fixtures.ts';
+import { seedPayrollStatutoryTreatment, seedPayrollComponent } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPayrollProfile, seedPayrollWage,
   createScratchOrg, dropScratchOrg, seedFlowActors,
@@ -69,6 +69,8 @@ test("a stale assignment under a prior employment is not paid twice", { skip: !D
     code: 'REHIRE-ALLOW', name: 'REHIRE-ALLOW', kind: 'earning', systemKey: null, basis: 'fixed_amount',
     isActive: true, createdBy: actorId, updatedBy: actorId,
   });
+  await seedPayrollStatutoryTreatment(org.orgId,componentId,{ effectiveFrom: '2026-01-01',
+    programExclusions: [], vacationable: false, createdBy: actorId, updatedBy: actorId });
   // The stale row under the old employment was never closed; the current row
   // under the new employment covers the same window. Both are active.
   for (const employmentId of [oldEmploymentId, newEmploymentId]) {

@@ -1,3 +1,4 @@
+import { calibrateReviewFixture as calibrateReview } from "../../testing/performance.ts";
 import { sql } from "drizzle-orm";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -14,7 +15,6 @@ import { listExitRecords, recordExit, updateExitRecord } from "./exits.ts";
 import { createGoal, setGoalStatus, updateGoalProgress } from "./goals.ts";
 import {
   acknowledgeReview,
-  calibrateReview,
   reopenReview,
   shareReview,
   submitReview,

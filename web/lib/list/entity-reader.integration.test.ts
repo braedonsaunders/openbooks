@@ -98,10 +98,11 @@ test("null, empty, and many scopes deliver at runtime", enabled, async () => {
     const many = await readEntityListPage(query(org.orgId, manyActor, { allowedSubsidiaryIds: fresh }));
     assert.ok(many.ok, "exact fresh many-set executes");
     const noperm = await scopedActor(org.orgId, "NoPerm", "reader-noperm", null, '[]');
-    const denied = await readEntityListPage(query(org.orgId, noperm));
-    assert.ok(!denied.ok && /forbidden/.test(denied.error), "grantless actor compiles nothing");
-    const deniedSort = await readEntityListPage(query(org.orgId, noperm, { sort: "nope" }));
-    assert.ok(!deniedSort.ok && /forbidden/.test(deniedSort.error), "permission refuses before sort compiles");
+    const nopermScope=await allowedSubsidiaryIds(noperm,org.orgId);
+    const denied = await readEntityListPage(query(org.orgId, noperm,{allowedSubsidiaryIds:nopermScope}));
+    assert.ok(!denied.ok && /forbidden/.test(denied.error), `grantless actor compiles nothing: ${JSON.stringify(denied)}`);
+    const deniedSort = await readEntityListPage(query(org.orgId, noperm, { sort: "nope",allowedSubsidiaryIds:nopermScope }));
+    assert.ok(!deniedSort.ok && /forbidden/.test(deniedSort.error), `permission refuses before sort compiles: ${JSON.stringify(deniedSort)}`);
   } finally { await dropScratchOrgReporting(org.orgId); }
 });
 

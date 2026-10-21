@@ -11,7 +11,7 @@ import { JsonValue } from "../app/(app)/admin/audit/AuditEventDrawer";
 import { promotionNextStep, type PromotionState } from "./sandbox-promotion";
 
 const captured: PromotionState = { status: "draft", captureComplete: true, itemCount: 1, capturedCount: 1, baseComplete: true, createdBy: "creator", reviewedBy: null, approvedBy: null };
-test("legacy and partial captures cannot be advanced by the review screen", () => {
+test("incomplete and unverified captures cannot be advanced by the review screen", () => {
   // Blocked promotions report a stable reasonKey (resolved to translated
   // copy by the drawer) rather than reviewer-facing English.
   const cases = [
@@ -20,7 +20,7 @@ test("legacy and partial captures cannot be advanced by the review screen", () =
     { invalid: { capturedCount: 0 }, reasonKey: "incomplete" },
   ] as const;
   for (const { invalid, reasonKey } of cases) {
-    const step = promotionNextStep({ ...captured, ...invalid }, "reviewer");
+    const step = promotionNextStep({ ...captured, ...invalid });
     assert.equal(step.transition, null);
     assert.equal(step.reasonKey, reasonKey);
   }

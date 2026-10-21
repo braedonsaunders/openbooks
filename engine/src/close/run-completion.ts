@@ -35,9 +35,10 @@ export async function closeApprovedRun(
         book_id: string;
         status: string;
         approved_by:string|null;
+        data_fingerprint:string|null;
         scope: { subsidiaryIds?: string[] };
       }>(sql`
-      select period_id, book_id, status, approved_by, scope from close_runs
+      select period_id, book_id, status, approved_by, data_fingerprint, scope from close_runs
        where id = ${runId} and org_id = ${orgId} for update`));
     const row = run.rows[0];
     if (!row) throw new CloseError("close run not found");
@@ -66,6 +67,7 @@ export async function closeApprovedRun(
       return "critical exceptions reappeared after approval; review the updated run and obtain approval again before locking";
     }
 
+    if(!row.data_fingerprint)throw new CloseError("Validate the current financial evidence before locking the close run.");
     const scopes = row.scope?.subsidiaryIds?.length
       ? row.scope.subsidiaryIds
       : [undefined];
@@ -109,10 +111,13 @@ export async function closeApprovedRun(
         });
       }
     }
-    await tx.execute(sql`
+    const lockTasks=await tx.execute(sql`select id from close_run_tasks where run_id=${runId} and org_id=${orgId}
+      and key in ('lock-subledgers','lock-gl') for update`);
+    const completedLocks=await tx.execute(sql`
       update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
-             updated_at = now(), updated_by = ${actorId}
-       where run_id = ${runId} and org_id = ${orgId} and key in ('lock-subledgers','lock-gl')`);
+             data_fingerprint=${row.data_fingerprint},updated_at = now(), updated_by = ${actorId}
+       where run_id = ${runId} and org_id = ${orgId} and key in ('lock-subledgers','lock-gl') returning id`);
+    if(completedLocks.rows.length!==lockTasks.rows.length)throw new CloseError("The close lock tasks changed; revalidate the current run before locking.");
     const closed = await tx.execute(sql`
       update close_runs set status = 'closed', current_stage = 'publish', closed_at = now(),
              closed_by = ${actorId}, updated_at = now(), updated_by = ${actorId}

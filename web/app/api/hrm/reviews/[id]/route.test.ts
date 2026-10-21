@@ -50,7 +50,6 @@ const mockSources = new Map<string, string>([
       }
       export const submitReview = action('submit', 'submitted')
       export const saveReviewDraft = action('save-draft', 'pending')
-      export const calibrateReview = action('calibrate', 'calibrated')
       export const shareReview = action('share', 'shared')
       export const acknowledgeReview = action('acknowledge', 'acknowledged')
       export const reopenReview = action('reopen', 'pending')
@@ -177,14 +176,14 @@ test("an unknown id never reaches the service", async () => {
     ]);
   });
 
-  test("calibrate and reopen require their reason at the real boundary", async () => {
+  test("review routes refuse direct calibration and require a reopen reason", async () => {
     reset();
     assert.equal(
       (await itemRoute!.PATCH(patchRequest({ action: "calibrate", calibratedRating: "4" }), params)).status,
       400,
     );
     assert.equal(
-      (await itemRoute!.PATCH(patchRequest({ action: "calibrate", calibratedRating: "4", reason: "  " }), params)).status,
+      (await itemRoute!.PATCH(patchRequest({ action: "calibrate", calibratedRating: "4", reason: "Reviewed rating" }), params)).status,
       400,
     );
     assert.equal(

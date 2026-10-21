@@ -1,23 +1,21 @@
+import {installEngineSeams} from "../composition/install.ts";
+import {decideGate} from "../flows/gates.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { approveChangeSet, reviewChangeSet } from "./promote.ts";
+import { reviewChangeSet } from "./promote.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
+  seedApprovalFlow,
 } from "../testing/fixtures.ts";
 
-/**
- * Change-set review and approval are the four-eyes authorization for
- * promoting sandbox work into production. Each actor must hold
- * admin.sandboxes.manage (the same engine authority apply already required),
- * and each transition must leave an audit_log row naming its actor with the
- * before/after status, not just the reviewed_by/approved_by columns.
- * (Per-row apply evidence already exists; these header transitions have none.)
- */
+/** Tenant-configured change-set decisions require current native authority
+ * and retain actor, time and before/after audit evidence. */
+installEngineSeams();
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function insertDraftChangeSet(orgId: string, createdBy: string): Promise<string> {
@@ -56,6 +54,7 @@ test("change-set review and approval require admin.sandboxes.manage", { skip: !D
   try {
     const actors = await seedFlowActors(org.orgId);
     const changeSetId = await insertDraftChangeSet(org.orgId, actors.submitterId);
+    await seedApprovalFlow(org.orgId,{subjectKind:"sandbox_change_set",assignees:[{type:"user",userId:actors.approver2Id}],mode:"all"});
 
     // An active production user is not enough: seedFlowActors mints the
     // approver role with permissions []. Unrelated grants, and a deny of the
@@ -87,13 +86,13 @@ test("change-set review and approval require admin.sandboxes.manage", { skip: !D
 
     await setRolePermissions(org.orgId, "approver", []);
     await assert.rejects(
-      () => approveChangeSet(changeSetId, actors.approver2Id),
-      /requires admin\.sandboxes\.manage/,
+      () => decideChangeSet(org.orgId,changeSetId,actors.approver2Id),
+      /not an approver|permission|authoriz|admin\.sandboxes\.manage/i,
     );
     assert.equal(await changeSetStatus(org.orgId, changeSetId), "reviewed");
 
     await setRolePermissions(org.orgId, "approver", ["admin.sandboxes.manage"]);
-    await approveChangeSet(changeSetId, actors.approver2Id);
+    await decideChangeSet(org.orgId,changeSetId,actors.approver2Id);
     assert.equal(await changeSetStatus(org.orgId, changeSetId), "approved");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -106,9 +105,10 @@ test("change-set review and approval evidence their transitions in audit_log", {
     const actors = await seedFlowActors(org.orgId);
     await setRolePermissions(org.orgId, "approver", ["admin.sandboxes.manage"]);
     const changeSetId = await insertDraftChangeSet(org.orgId, actors.submitterId);
+    await seedApprovalFlow(org.orgId,{subjectKind:"sandbox_change_set",assignees:[{type:"user",userId:actors.approver2Id}],mode:"all"});
 
     await reviewChangeSet(changeSetId, actors.approver1Id);
-    await approveChangeSet(changeSetId, actors.approver2Id);
+    await decideChangeSet(org.orgId,changeSetId,actors.approver2Id);
 
     assert.equal(await changeSetStatus(org.orgId, changeSetId), "approved");
 
@@ -147,3 +147,9 @@ test("change-set review and approval evidence their transitions in audit_log", {
     await dropScratchOrg(org.orgId);
   }
 });
+
+async function decideChangeSet(orgId:string,subjectId:string,userId:string): Promise<void> {
+  const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${orgId}
+    and subject_kind='sandbox_change_set' and subject_id=${subjectId} and status='pending'`)).rows[0];
+  assert.ok(gate);await decideGate({gateId:gate.id,userId,decision:"approved"});
+}

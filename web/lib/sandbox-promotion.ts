@@ -1,4 +1,4 @@
-export type PromotionTransition = 'review' | 'approve' | 'apply'
+export type PromotionTransition = 'review' | 'apply'
 export interface PromotionState {
   status: string
   captureComplete: boolean
@@ -21,7 +21,6 @@ export type PromotionBlockReason = 'incomplete' | 'noSnapshot' | 'empty'
 /** Native capture and application controls; tenant Flow gates own approval decisions. */
 export function promotionNextStep(
   state: PromotionState,
-  _actorId: string,
 ): {
   transition: PromotionTransition | null
   reasonKey: PromotionBlockReason | null
@@ -32,17 +31,8 @@ export function promotionNextStep(
     return { transition: null, reasonKey: 'incomplete' }
   if (!state.baseComplete) return { transition: null, reasonKey: 'noSnapshot' }
   if (state.itemCount === 0) return { transition: null, reasonKey: 'empty' }
-  const transition =
-    state.status === 'draft'
-      ? 'review'
-      : state.status === 'reviewed'
-        ? 'approve'
-        : state.status === 'approved'
-          ? 'apply'
-          : null
-
   return {
-    transition: transition === 'approve' ? null : transition,
+    transition: state.status === 'draft' ? 'review' : state.status === 'approved' ? 'apply' : null,
     reasonKey: null,
   }
 }

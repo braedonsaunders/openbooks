@@ -97,7 +97,6 @@ test("sandbox actions fail closed on malformed ids before any database write", a
   await assert.rejects(actions.setScheduleAction("not-a-uuid", "daily"), /invalid/i);
   await assert.rejects(actions.promoteSandboxAction("not-a-uuid", "x"), /invalid/i);
   await assert.rejects(actions.reviewChangeSetAction("not-a-uuid"), /invalid/i);
-  await assert.rejects(actions.approveChangeSetAction("not-a-uuid"), /invalid/i);
   await assert.rejects(actions.applyChangeSetAction("not-a-uuid"), /invalid/i);
 });
 

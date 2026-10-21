@@ -4,9 +4,11 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withMaintenanceTransaction, withOrgContext } from "../platform/db.ts";
 import { installEngineSeams } from "../composition/install.ts";
+import { buildSchedule, runDepreciation } from "../assets/depreciation.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { seedRolesForOrg } from "../provisioning/seed-roles.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { createRetirementFixtureOrg, createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { loadCatalog } from "../sandbox/catalog.ts";
 import { beginTenantRetirement, releaseTenantRetirement } from "../organization/tenant-retirement.ts";
 import { admitSampleRetirement } from "./retirement.ts";
@@ -19,8 +21,8 @@ installEngineSeams();
 
 test("bounded native retirement keeps complete journal entries and restores all batches on target rollback", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const anchor = await withBypass(() => createScratchOrg());
-  const target = await withBypass(() => createScratchOrg());
-  const retained = await withBypass(() => createScratchOrg());
+  const target = await withBypass(() => createRetirementFixtureOrg());
+  const retained = await withBypass(() => createRetirementFixtureOrg());
   const actor = await withBypass(async () => {
     await seedRolesForOrg(anchor.orgId);
     return createScratchUser(anchor.orgId, "Recovery administrator", "admin");
@@ -43,6 +45,27 @@ test("bounded native retirement keeps complete journal entries and restores all 
         }, { post: index % 2 === 0, allowedSubsidiaryIds: null, idempotencyKey: `recovery:${org.orgId}:${index}` }));
       }
     }
+    await withBypass(async () => {
+      const author = await createScratchUser(target.orgId, "Native asset author", "admin");
+      const categoryId = randomUUID(), assetId = randomUUID();
+      await db.execute(sql`insert into asset_categories
+        (id,org_id,name,asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id,
+         default_method,default_life_months,default_convention,tax_attributes,is_active)
+        values(${categoryId},${target.orgId},'Equipment',${target.accounts.invAsset},${target.accounts.clearing},
+          ${target.accounts.adjustment},'straight_line',12,'full_month','{}'::jsonb,true)`);
+      await db.execute(sql`insert into fixed_assets
+        (id,org_id,subsidiary_id,category_id,asset_number,name,status,acquired_on,in_service_on,
+         acquisition_cost,salvage_value,depreciation_method,useful_life_months,custom)
+        values(${assetId},${target.orgId},${target.subsidiaryId},${categoryId},'RETIRE-EQUIPMENT','Equipment',
+          'in_service',${target.date},${target.date},'1200.0000','0.0000','straight_line',12,'{}'::jsonb)`);
+      await withOrgContext(target.orgId, async () => {
+        await buildSchedule(assetId,target.orgId,author,target.bookId);
+        const result = await runDepreciation(target.orgId,'2026-07-31',author,assetId);
+        assert.equal(result.posted,1,JSON.stringify(result.problems));
+        await assert.rejects(db.execute(sql`delete from depreciation_schedule_lines where org_id=${target.orgId}
+          and journal_entry_id is not null`), error => errorChainMatches(error,/Posted depreciation evidence is immutable/));
+      });
+    });
     const snapshot = (id: string) => withMaintenanceTransaction(null, async () => retirementFingerprint(await loadCatalog(), id), { isolationLevel: "REPEATABLE READ" });
     const beforeTarget = await snapshot(target.orgId);
     const beforeRetained = await snapshot(retained.orgId);
@@ -73,6 +96,7 @@ test("bounded native retirement keeps complete journal entries and restores all 
       await db.execute(sql`set constraints all deferred`);
       const removed = await deleteRetiredTenantRows(await loadCatalog(), target.orgId, { batchSize: 1 });
       assert.equal(removed.journal_lines, expectedLines, "complete entries pass the unchanged balance and FX statement guards");
+      assert.ok(BigInt(removed.depreciation_schedule_lines ?? "0") > 0n, "the exact retirement claim removes posted depreciation evidence");
       assert.equal(removed.orgs, "1");
       assert.equal((await db.execute(sql`select id from orgs where id=${target.orgId}`)).rows.length, 0);
       throw new Error("Roll back every completed deletion batch");
@@ -82,7 +106,7 @@ test("bounded native retirement keeps complete journal entries and restores all 
   } finally {
     if (admission) await releaseTenantRetirement({ runId: admission.runId, orgId: target.orgId,
       planDigest: admission.digest, actorId: actor, reason: "Release the intact native batch fixture for exact reviewed cleanup" });
-    assert.equal(await retireSampleFixtureCompanies(anchor.orgId, [target.orgId, retained.orgId]), true);
+    await retireSampleFixtureCompanies(anchor.orgId, [target.orgId, retained.orgId]);
     await withBypass(() => dropScratchOrg(anchor.orgId));
   }
 });

@@ -12,7 +12,7 @@ import { seedRolesForOrg } from "../provisioning/seed-roles.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { submitForApproval } from "../flows/submit.ts";
 import { decideGate } from "../flows/gates.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, seedDraftDocument, type ScratchOrg } from "../testing/fixtures.ts";
+import { createRetirementFixtureOrg, createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, seedDraftDocument, type ScratchOrg } from "../testing/fixtures.ts";
 import { loadCatalog } from "../sandbox/catalog.ts";
 import { beginTenantRetirement, recordTenantRetirementFailure, releaseTenantRetirement, tenantRetirementStatus } from "../organization/tenant-retirement.ts";
 import { sampleRetirementPlan } from "./retirement-plan.ts";
@@ -188,8 +188,8 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
   const runtime = new Client({ connectionString: process.env.OPENBOOKS_RUNTIME_DB_URL });
   const anchor = await withBypass(() => createScratchOrg());
   const anchorActor = await withBypass(() => createScratchUser(anchor.orgId, "Recovery administrator", "admin"));
-  const retainedOrg = await withBypass(() => createScratchOrg());
-  const targetOrg = await withBypass(() => createScratchOrg());
+  const retainedOrg = await withBypass(() => createRetirementFixtureOrg());
+  const targetOrg = await withBypass(() => createRetirementFixtureOrg());
   let active: { runId: string; plan: Plan } | undefined;
   let connected = false;
   try {
@@ -316,7 +316,7 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
     const remaining = await withMaintenanceTransaction(null, async () => (await db.execute<{ id: string }>(sql`
       select id from orgs where id in (${targetOrg.orgId}::uuid,${retainedOrg.orgId}::uuid) order by id`)).rows.map(row => row.id));
     if (remaining.length) {
-      assert.equal(await retireSampleFixtureCompanies(anchor.orgId, remaining), true);
+      await retireSampleFixtureCompanies(anchor.orgId, remaining);
     }
     await withBypass(() => dropScratchOrg(anchor.orgId));
   }

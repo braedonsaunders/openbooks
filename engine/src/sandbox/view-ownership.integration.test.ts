@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
-import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+import { applyChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 for (const table of ["saved_views", "list_views", "saved_reports"] as const) {
@@ -47,7 +47,6 @@ for (const table of ["saved_views", "list_views", "saved_reports"] as const) {
         assert.equal(items.length, 1);
         assert.equal(items[0]!.payload[field], owner);
         await reviewChangeSet(change.changeSetId, actors[1]);
-        await approveChangeSet(change.changeSetId, actors[2]);
         await applyChangeSet(change.changeSetId, actors[3]);
         await deleteSandbox(sandbox.sandboxId);
         sandbox = undefined;
@@ -75,7 +74,6 @@ test("a previously captured sandbox owner is refused at application without chan
     const change = await buildChangeSet(sandbox.sandboxId, "Old payload", actors[0]);
     await db.execute(sql`update change_set_items set payload=jsonb_set(payload,'{owner_id}',to_jsonb(${copied.owner_id}::text)) where change_set_id=${change.changeSetId} and table_name='saved_views'`);
     await reviewChangeSet(change.changeSetId, actors[1]);
-    await approveChangeSet(change.changeSetId, actors[2]);
     await assert.rejects(applyChangeSet(change.changeSetId, actors[3]), /user reference must belong to production/);
     assert.deepEqual((await db.execute(sql`select owner_id,name from saved_views where org_id=${org.orgId} and id=${view}`)).rows, [{ owner_id: actors[0], name: "Owner guard" }]);
     assert.equal((await db.execute(sql`select status from change_sets where org_id=${org.orgId} and id=${change.changeSetId}`)).rows[0]!.status, "approved");

@@ -1,3 +1,4 @@
+import { installEngineSeams } from "../composition/install.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
@@ -13,6 +14,7 @@ export async function seedApprovedBankAccountFixture(input: {
   lastFour: string; sealedAccount?: string | null;
 }): Promise<string> {
   await assertFixtureDatabase();
+  installEngineSeams();
   return withOrgTransaction(input.orgId, async () => {
     const party = (await db.execute<{ subsidiary_id: string | null }>(sql`
       select subsidiary_id from parties where org_id=${input.orgId} and id=${input.partyId} and is_active for share`)).rows[0];

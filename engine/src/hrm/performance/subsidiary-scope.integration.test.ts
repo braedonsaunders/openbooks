@@ -1,3 +1,4 @@
+import { calibrateReviewFixture as calibrateReview } from "../../testing/performance.ts";
 import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { sql, type SQL } from "drizzle-orm";
@@ -9,7 +10,7 @@ import { HrmAuthorizationError } from "../authorization.ts";
 import { createPosition } from "../positions.ts";
 import { HrmPerformanceError } from "./errors.ts";
 import { closeCycle, createCycle, moveToCalibrating, openCycle } from "./review-cycles.ts";
-import { acknowledgeReview, calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
+import { acknowledgeReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
 import {
   addCompetencyLevel, competencyProfileForEmployment, createCompetency, createFramework,
   getFramework, linkCompetency, listFrameworks, setFrameworkActive, setSectionCompetency,

@@ -1,10 +1,13 @@
+import { installEngineSeams } from "../composition/install.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
-import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+import { applyChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+
+installEngineSeams();
 
 for (const scenario of ["foreign view owner", "foreign report owner", "foreign list owner", "admin foreign list owner", "built-in report delete", "built-in report identity", "disabled scripts"] as const) {
   test(`promotion record controls: ${scenario}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -43,7 +46,6 @@ for (const scenario of ["foreign view owner", "foreign report owner", "foreign l
       else await db.execute(sql`update ${tableSql} set name='Unapproved domain change' where org_id=${sandbox.sandboxOrgId}`);
       const change = await buildChangeSet(sandbox.sandboxId, "Record controls", actors[0]);
       await reviewChangeSet(change.changeSetId, actors[1]);
-      await approveChangeSet(change.changeSetId, actors[2]);
       await assert.rejects(applyChangeSet(change.changeSetId, applier), scenario === "disabled scripts" ? /scripts feature is disabled/ : scenario.startsWith("built-in") ? /built-in|report identity/i : /owner|own/i);
       assert.deepEqual((await db.execute(sql`select to_jsonb(r) as value from ${tableSql} r where org_id=${org.orgId}`)).rows, before);
       assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`)).rows[0]!.status, "approved");
@@ -86,7 +88,6 @@ for (const table of ["saved_views", "saved_reports", "list_views"] as const) {
         const change = await buildChangeSet(sandbox.sandboxId, scenario, actors[0]);
         assert.equal(change.itemCount, 1);
         await reviewChangeSet(change.changeSetId, actors[1]);
-        await approveChangeSet(change.changeSetId, actors[2]);
         if (scenario === "take ownership" || scenario === "give ownership") {
           await assert.rejects(applyChangeSet(change.changeSetId, applier), /record owner/);
           assert.deepEqual((await db.execute(sql`select to_jsonb(r) as value from ${identifier} r where org_id=${org.orgId}`)).rows, before);
@@ -123,7 +124,6 @@ test("a later ownership denial rolls back earlier authorized changes and audit r
     // Fix item order before immutable review to exercise a late rejection.
     await db.execute(sql`update change_set_items set created_at=case when table_name='custom_field_defs' then '2026-01-01'::timestamptz else '2026-01-02'::timestamptz end where change_set_id=${change.changeSetId}`);
     await reviewChangeSet(change.changeSetId, actors[1]);
-    await approveChangeSet(change.changeSetId, actors[2]);
     await assert.rejects(applyChangeSet(change.changeSetId, applier), /record owner/);
     assert.equal((await db.execute(sql`select label from custom_field_defs where org_id=${org.orgId} and key='atomic_control'`)).rows[0]!.label, "Original");
     assert.equal((await db.execute(sql`select name from saved_views where org_id=${org.orgId}`)).rows[0]!.name, "Original");

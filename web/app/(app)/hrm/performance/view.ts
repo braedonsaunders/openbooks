@@ -228,7 +228,6 @@ export interface PerformancePageData {
     shareLabel: string
     acknowledgeLabel: string
     calibrateLabel: string
-    calibrateRatingLabel: string
     reasonLabel: string
     reopenLabel: string
     answerRatingLabel: string
@@ -820,8 +819,9 @@ export async function loadPerformancePage(
         canAcknowledge: isSubject && full.review.status === 'shared',
         canCalibrate:
           canManage &&
-          (full.review.status === 'submitted' ||
-            full.review.status === 'calibrated'),
+          full.review.kind === 'manager' &&
+          full.review.status === 'submitted' &&
+          (full.review.cycleStatus === 'open' || full.review.cycleStatus === 'calibrating'),
         canReopen:
           canManage &&
           (full.review.status === 'submitted' ||
@@ -830,7 +830,6 @@ export async function loadPerformancePage(
         shareLabel: t('performance.shareReview'),
         acknowledgeLabel: t('performance.acknowledgeReview'),
         calibrateLabel: t('performance.calibrateReview'),
-        calibrateRatingLabel: t('performance.calibrateRating'),
         reasonLabel: t('performance.reason'),
         reopenLabel: t('performance.reopenReview'),
         answerRatingLabel: t('performance.answerRating'),

@@ -1,3 +1,4 @@
+import { installEngineSeams } from "../composition/install.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -9,7 +10,9 @@ import { createSandbox, deleteSandbox, rebaseSandboxControlAccounts, refreshSand
 import { rebaseClonedJsonReferences } from "./json-references.ts";
 import { declaredRemittanceVendorSettingsKeys } from "../payroll/packs.ts";
 import { PAYROLL_ACCOUNT_SETTING_KEYS } from "../payroll/settings-references.ts";
-import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+import { applyChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+
+installEngineSeams();
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 async function fixture(run: (org: Awaited<ReturnType<typeof createScratchOrg>>, actors: string[], child: string) => Promise<void>) {
@@ -190,7 +193,6 @@ test("role scope promotion compares and writes production identities while prese
   assert.equal(items.length, 1);
   assert.deepEqual(items[0]!.payload.subsidiary_restriction, { mode: "subtree", subsidiaryId: child });
   await reviewChangeSet(change.changeSetId, actors[1]);
-  await approveChangeSet(change.changeSetId, actors[2]);
   await applyChangeSet(change.changeSetId, actors[3]);
   assert.deepEqual((await db.execute(sql`select subsidiary_restriction from app_roles where org_id=${org.orgId} and key='scoped_tree'`)).rows[0]!.subsidiary_restriction, { mode: "subtree", subsidiaryId: child });
   assert.equal((await db.execute(sql`select id from role_assignments where org_id=${org.orgId}`)).rows.length, 6);
@@ -202,7 +204,6 @@ test("promotion refuses a captured role scope whose production subsidiary was de
   await db.execute(sql`update app_roles set name='Changed scoped role' where org_id=${sandbox.sandboxOrgId} and key='scoped_list'`);
   const change = await buildChangeSet(sandbox.sandboxId, "Stale scope", actors[0]);
   await reviewChangeSet(change.changeSetId, actors[1]);
-  await approveChangeSet(change.changeSetId, actors[2]);
   await db.execute(sql`delete from subsidiaries where org_id=${org.orgId} and id=${child}`);
   await assert.rejects(applyChangeSet(change.changeSetId, actors[3]), /no counterpart in the target organization/);
   assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`)).rows[0]!.status, 'approved');

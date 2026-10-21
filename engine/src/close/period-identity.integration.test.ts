@@ -51,10 +51,8 @@ async function waitForFenceState(
 }
 
 /**
- * A close run driven straight to `approved`, plus the ledger subject for the
- * race. Approval is stamped directly because the serialization contract under
- * test lives between an approved run's final refresh and its lock writes —
- * the approval-routing flow is different machinery.
+ * A native zero-gate close submission and the draft ledger subject used to
+ * verify serialization between the final refresh and period locking.
  */
 async function seedApprovedCloseRun(org: ScratchOrg): Promise<{
   runId: string;

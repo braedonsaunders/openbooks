@@ -329,6 +329,39 @@ async function seedFx(page: Page): Promise<FxSeed> {
   return seed;
 }
 
+async function settleFxOpenItems(page: Page, seed: FxSeed, date: string): Promise<void> {
+      const leftovers = await apiOk(page, 'GET', `/api/payments/open-items?partyId=${seed.eurCustomerId}&side=ar`);
+      for (const item of (leftovers.items as Json[])) {
+        const txnOpen = toCents4(str((item as Json).transactionOpen, 'leftover txn open'));
+        const baseOpen = toCents4(str((item as Json).open, 'leftover base open'));
+        if (txnOpen === 0n) continue;
+        const payDraft = await apiOk(page, 'POST', '/api/payments/draft', { kind: 'customer_payment' });
+        const payId = str(payDraft.id, 'settle payment id');
+        const payCurrent = await apiOk(page, 'GET', `/api/payments/${payId}`);
+        // Settle in full in company currency at the carrying rate: pays the
+        // exact base open so no new gain or loss can arise here.
+        const baseStr = `${(baseOpen / 100n).toString()}.${(baseOpen % 100n).toString().padStart(2, '0')}`;
+        const txnStr = `${(txnOpen / 100n).toString()}.${(txnOpen % 100n).toString().padStart(2, '0')}`;
+        expect(baseOpen > 0n, 'the native open has a positive carrying amount').toBe(true);
+        const scaledRate = (txnOpen * 20_000_000_000n / baseOpen + 1n) / 2n;
+        const rate = `${scaledRate / 10_000_000_000n}.${(scaledRate % 10_000_000_000n).toString().padStart(10, '0')}`;
+        await apiOk(page, 'PATCH', `/api/payments/${payId}`, {
+          partyId: seed.eurCustomerId, bankAccountId: seed.bankId, documentDate: date,
+          expectedUpdatedAt: str(docOf(payCurrent).updated_at, 'settle revision'),
+          allocations: [{
+            openLineId: str((item as Json).lineId, 'leftover line'),
+            sourceTransactionAmount: baseStr, targetTransactionAmount: txnStr,
+            settlementRate: rate, settlementRateSource: 'manual', settlementRateReference: `${tag('W4FX')} retry settle`,
+          }],
+        });
+        const payRefreshed = await apiOk(page, 'GET', `/api/payments/${payId}`);
+        await apiOk(page, 'POST', '/api/payments/post-with-applications', {
+          documentId: payId, expectedUpdatedAt: str(docOf(payRefreshed).updated_at, 'settle post revision'),
+        });
+      }
+
+}
+
 test.describe('fx and tax lifecycle', () => {
   test.describe.configure({ mode: 'serial', timeout: 240_000 });
 
@@ -502,40 +535,16 @@ test.describe('fx and tax lifecycle', () => {
 
   test('period-end revaluation posts the unrealized gain once and reverses it next period', async ({ browser, baseURL }) => {
     const { context, page } = await freshPage(browser, baseURL);
+    let cleanupSeed: FxSeed | undefined;
     try {
       const seed = await seedFx(page);
+      cleanupSeed = seed;
       const { fx, m2 } = seed;
 
       // Defensive settle: if the realized test failed before paying, its
       // invoice is still open and this period's revaluation would measure it.
       // On the happy path this is a no-op (no open items remain).
-      const leftovers = await apiOk(page, 'GET', `/api/payments/open-items?partyId=${seed.eurCustomerId}&side=ar`);
-      for (const item of (leftovers.items as Json[])) {
-        const txnOpen = toCents4(str((item as Json).transactionOpen, 'leftover txn open'));
-        const baseOpen = toCents4(str((item as Json).open, 'leftover base open'));
-        if (txnOpen === 0n) continue;
-        const payDraft = await apiOk(page, 'POST', '/api/payments/draft', { kind: 'customer_payment' });
-        const payId = str(payDraft.id, 'settle payment id');
-        const payCurrent = await apiOk(page, 'GET', `/api/payments/${payId}`);
-        // Settle in full in company currency at the carrying rate: pays the
-        // exact base open so no new gain or loss can arise here.
-        const baseStr = `${(baseOpen / 100n).toString()}.${(baseOpen % 100n).toString().padStart(2, '0')}`;
-        const txnStr = `${(txnOpen / 100n).toString()}.${(txnOpen % 100n).toString().padStart(2, '0')}`;
-        const rate = (Number(txnStr) / Number(baseStr)).toFixed(10);
-        await apiOk(page, 'PATCH', `/api/payments/${payId}`, {
-          partyId: seed.eurCustomerId, bankAccountId: seed.bankId, documentDate: isoDate(m2, 2),
-          expectedUpdatedAt: str(docOf(payCurrent).updated_at, 'settle revision'),
-          allocations: [{
-            openLineId: str((item as Json).lineId, 'leftover line'),
-            sourceTransactionAmount: baseStr, targetTransactionAmount: txnStr,
-            settlementRate: rate, settlementRateSource: 'manual', settlementRateReference: `${tag('W4FX')} retry settle`,
-          }],
-        });
-        const payRefreshed = await apiOk(page, 'GET', `/api/payments/${payId}`);
-        await apiOk(page, 'POST', '/api/payments/post-with-applications', {
-          documentId: payId, expectedUpdatedAt: str(docOf(payRefreshed).updated_at, 'settle post revision'),
-        });
-      }
+      await settleFxOpenItems(page, seed, isoDate(m2, 2));
 
       // Second invoice, 500.00 foreign at the 1.2000 spot: 600.00 base. It
       // stays unpaid, so period-end must restate it to the 1.3000 spot.
@@ -596,7 +605,8 @@ test.describe('fx and tax lifecycle', () => {
       const unrealRow = findRow(rows, `${tag('W4FX')} FX Unrealized`);
       expect(unrealRow).toContain(fmtUSD(-unrealizedGain));
     } finally {
-      await context.close();
+      try { if (cleanupSeed) await settleFxOpenItems(page, cleanupSeed, monthEnd(cleanupSeed.m2)); }
+      finally { await context.close(); }
     }
   });
 
@@ -951,7 +961,8 @@ async function windowTax(page: Page, seed: TaxSeed, from: string, to: string, co
       await dismissSetupWizard(page);
       // A single-book org renders no per-row book picker (the picker appears
       // only with 2+ books); the operator just starts the primary-book close.
-      const row = page.locator('tr', { hasText: periodName }).first();
+      const periodLabel = new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(YEAR, seed.mC - 1, 1)));
+      const row = page.locator('tr', { hasText: periodLabel }).first();
       await expect(row).toBeVisible({ timeout: 30000 });
       const resume = row.getByRole('link', { name: 'Resume' });
       let runId: string;

@@ -13,14 +13,14 @@ import { inputGuards } from "../input-guards.ts";
 import { assertRatingInScale, parseRatingScale } from "./performance-math.ts";
 
 /**
- * Governed HRM reviews (0196, HR-7): submit, calibrate, share, acknowledge,
+ * Governed HRM reviews (0196, HR-7): submit, share, acknowledge,
  * reopen. Every transition appends its review event in the SAME transaction
  * as the status write, so a partial effect cannot exist; every conditional
  * write asserts its affected row count.
  *
  * Authorship is identity, never input: the actor's party comes from
  * users.party_id on the transaction runner. Only the reviewer submits
- * their review; only HR (hrm.performance.manage) calibrates; the reviewer
+ * their review; calibration publishes through native sessions; the reviewer
  * or HR shares a manager or peer review to the subject; only the subject
  * acknowledges; only HR reopens a submitted or calibrated review with a
  * reason. A self review is already the subject's — sharing it is refused
@@ -381,83 +381,6 @@ export async function saveReviewDraft(args: {orgId:string;actorId:string;reviewI
   return writeReviewAnswers({...args,draft:true});
 }
 
-/**
- * Calibrate a review: HR sets the calibrated rating beside the original
- * (never overwriting it) with a reason. Only hrm.performance.manage.
- */
-export async function calibrateReview(args: {
-  orgId: string;
-  actorId: string;
-  reviewId: string;
-  calibratedRating: string | number;
-  reason: string;
-}): Promise<ReviewDTO> {
-  const orgId = requireUuid(args.orgId, "orgId");
-  const actorId = requireUuid(args.actorId, "actorId");
-  const reviewId = requireUuid(args.reviewId, "reviewId");
-  const rating = String(args.calibratedRating ?? "").trim();
-  if (rating.length === 0) {
-    throw new HrmPerformanceError("INVALID_INPUT", "calibratedRating must be a decimal rating");
-  }
-  if (typeof args.reason !== "string" || args.reason.trim().length === 0) {
-    throw new HrmPerformanceError(
-      "REFUSED",
-      `calibrating review ${reviewId} needs a reason — it is recorded beside the calibrated rating`,
-    );
-  }
-  return withOrgTransaction(orgId, async () => {
-    await assertPerformanceFeature(db, orgId);
-    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
-    const stored = await loadReview(db, orgId, reviewId);
-    assertReviewInScope(allowed, stored);
-    const review = toReviewDTO(stored);
-    if (review.status !== "submitted" && review.status !== "calibrated") {
-      throw new HrmPerformanceError(
-        "BAD_STATE",
-        `review ${reviewId} is ${review.status} — only a submitted review calibrates`,
-      );
-    }
-    const template = (await db.execute<{ ratingScale: unknown }>(sql`
-      select c.rating_scale_snapshot as "ratingScale"
-        from hrm_review_templates t
-        join hrm_review_cycles c on c.org_id = t.org_id and c.template_id = t.id
-       where c.org_id = ${orgId} and c.id = ${review.cycleId}
-    `)).rows[0];
-    if (!template) {
-      throw new HrmPerformanceError(
-        "TEMPLATE_NOT_FOUND",
-        `review ${reviewId} names a template that is not visible in this organization — ask HR to fix the cycle`,
-      );
-    }
-    mathRefusal("REFUSED", () => assertRatingInScale(mathRefusal("REFUSED", () => parseRatingScale(template.ratingScale)), rating, "calibrated rating"));
-    const moved = (await db.execute(sql`
-      update hrm_reviews
-         set revision=revision+1, status = 'calibrated', calibrated_rating = ${rating}::numeric,
-             calibration_reason = ${args.reason.trim()},
-             updated_at = now(), updated_by = ${actorId}
-       where org_id = ${orgId} and id = ${reviewId}
-         and status in ('submitted', 'calibrated')
-    `)).rowCount ?? 0;
-    if (moved !== 1) {
-      throw new HrmPerformanceError(
-        "BAD_STATE",
-        `review ${reviewId} moved while calibrating — re-read it and retry`,
-      );
-    }
-    await db.execute(sql`
-      insert into hrm_review_events (org_id, review_id, kind, actor_user_id, reason)
-      values (${orgId}, ${reviewId}, 'calibrated', ${actorId}, ${args.reason.trim()})
-    `);
-    return toReviewDTO(await loadReview(db, orgId, reviewId));
-  });
-}
-
-/**
- * Share a manager or peer review with its subject. Refused before the
- * calibration round closes: while the cycle calibrates, nothing leaks to
- * subjects. A self review is already the subject's — sharing it is refused
- * as meaningless. The reviewer or HR shares.
- */
 export async function shareReview(args: {
   orgId: string;
   actorId: string;

@@ -113,10 +113,20 @@ test.describe.serial("close to reporting", () => {
       //    controls, and the Projects parent gate the profitability report requires.
       ok(
         await api(req, origin, "PUT", "/api/admin/setup/features", {
-          features: { multiSubsidiary: true, advancedClose: true, projects: true, fixedAssets: true },
+          features: { multiSubsidiary: true, advancedClose: true, projects: true, fixedAssets: true, flows: true },
         }),
         "features",
       );
+
+      const approvalSetup = ok(await api(req, origin, "GET", "/api/admin/flows/quick-approval?subjectKind=close_run"), "close approval setup");
+      const reviewer = (approvalSetup.users as { id: string; email: string }[]).find(user => user.email === APPROVER_EMAIL);
+      expect(reviewer, "the tenant's selected close approver is active").toBeTruthy();
+      for (const subjectKind of ["close_run", "close_reopen_request"]) {
+        ok(await api(req, origin, "POST", "/api/admin/flows/quick-approval", {
+          name: `Independent ${subjectKind} review`, subjectKind,
+          approver: { type: "user", userId: reviewer!.id }, preventSelfApproval: true,
+        }), "configure tenant close approval");
+      }
 
       // 3. Second subsidiary (child of root) and the adjusting book.
       // The root subsidiary id is what a fresh draft defaults to.

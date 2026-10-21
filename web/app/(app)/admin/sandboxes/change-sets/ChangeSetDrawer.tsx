@@ -44,10 +44,8 @@ function pickLabel<T extends string>(
 
 export function ChangeSetDrawer({
   detail,
-  actorId,
 }: {
   detail: ChangeSetDetail
-  actorId: string
 }) {
   const { dateTime } = useViewerFormat()
   const t = useTranslations('admin')
@@ -58,7 +56,7 @@ export function ChangeSetDrawer({
   const [error, setError] = useState<string | null>(null)
   const [itemId, setItemId] = useState<string | null>(null)
   const item = detail.items.find((row) => row.id === itemId)
-  const next = promotionNextStep(detail, actorId)
+  const next = promotionNextStep(detail)
   const columns: PagedColumn<ChangeSetItem>[] = [
     {
       key: 'type',

@@ -125,8 +125,10 @@ async function mkSubsidiary(orgId: string, name: string, parentId: string): Prom
 }
 
 async function mkWorker(orgId: string, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`
+  const id=(await db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name) values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id
+  assert.equal((await db.execute(sql`insert into employee_roles(org_id,party_id) values(${orgId},${id}) returning party_id`)).rows.length,1)
+  return id
 }
 
 async function mkEmployment(orgId: string, workerId: string, subsidiaryId: string): Promise<string> {

@@ -60,7 +60,7 @@ export async function loadChangeSets(
     description: t('sandboxes.changeSets.listDescription'),
     sp,
     drawer: selected
-      ? { remountKey: selected.id, detail: selected, actorId: authz.user.id }
+      ? { remountKey: selected.id, detail: selected }
       : null,
   }
 }

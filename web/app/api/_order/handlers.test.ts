@@ -668,7 +668,7 @@ function fulfilledResponse(result: PromiseSettledResult<Response>, label: string
   assert.equal(
     result.status,
     'fulfilled',
-    `${label} rejected: ${result.status === 'rejected' ? String(result.reason) : ''}`,
+    `${label} rejected: ${result.status === 'rejected' ? result.reason instanceof Error ? result.reason.stack : String(result.reason) : ''}`,
   )
   return result.value
 }
@@ -826,6 +826,12 @@ class IssuePoolHarness {
       const [name,orgId,kind,id]=JSON.parse(String(params[0])) as string[]
       assert.equal(name,'openbooks:flow-subject-decision');assert.equal(orgId,ORG_ID);assert.equal(kind,'quote')
       assert.ok(this.requireTransaction().lockedDocumentIds.has(id!), 'the subject fence joins the owned document transaction')
+      return this.result([])
+    }
+    if (normalized.startsWith('select id from role_assignments') || normalized.startsWith('select id from app_roles') || normalized.startsWith('select id from user_permission_overrides')) {
+      this.requireTransaction()
+      assert.ok(normalized.endsWith('for share'), 'command authorization stays locked on the issue transaction')
+      assert.equal(params[0], ORG_ID)
       return this.result([])
     }
     if(normalized==='lock table flows in share mode'||normalized.includes('from flows')){
@@ -1220,6 +1226,8 @@ const poolHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (isEngineModuleImport(specifier, context.parentURL, '@openbooks/engine/platform/db')) return {url:'pool:db',shortCircuit:true};
     if (isEngineModuleImport(specifier, context.parentURL, '@openbooks/engine/organization/actor-permissions')) return {url:new URL('../../../../engine/src/organization/actor-permissions.ts?order-issue-pool-contention-test',import.meta.url).href,shortCircuit:true}
+    if (isEngineModuleImport(specifier, context.parentURL, '@openbooks/engine/organization/actor-command-authority')) return {url:new URL('../../../../engine/src/organization/actor-command-authority.ts?order-issue-pool-contention-test',import.meta.url).href,shortCircuit:true}
+    if (isEngineModuleImport(specifier, context.parentURL, '@openbooks/engine/organization/actor-subsidiaries')) return {url:new URL('../../../../engine/src/organization/actor-subsidiaries.ts?order-issue-pool-contention-test',import.meta.url).href,shortCircuit:true}
     if (specifier === 'drizzle-orm') return { url: realDrizzleUrl, shortCircuit: true }
     if (specifier === '@openbooks/engine/platform/db') return { url: 'pool:db', shortCircuit: true }
     if (specifier === '@openbooks/engine/flows/module') {

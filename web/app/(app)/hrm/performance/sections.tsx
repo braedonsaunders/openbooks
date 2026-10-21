@@ -182,7 +182,6 @@ export function ReviewDrawerBody({ review }: { review: NonNullable<PerformancePa
         shareLabel={review.shareLabel}
         acknowledgeLabel={review.acknowledgeLabel}
         calibrateLabel={review.calibrateLabel}
-        calibrateRatingLabel={review.calibrateRatingLabel}
         reasonLabel={review.reasonLabel}
         reopenLabel={review.reopenLabel}
         failed={review.failed}

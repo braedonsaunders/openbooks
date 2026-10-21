@@ -7,7 +7,7 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /**
  * Review lifecycle actions beside the answer form: share with the subject,
- * acknowledge as the subject, calibrate with a rating and reason (HR), or
+ * acknowledge as the subject, open native calibration (HR), or
  * reopen with a reason (HR). Each action posts to PATCH
  * /api/hrm/reviews/[id]; refusals render as the error. Buttons render only
  * for transitions the loader resolved as available.
@@ -22,7 +22,6 @@ export function ReviewActions({
   shareLabel,
   acknowledgeLabel,
   calibrateLabel,
-  calibrateRatingLabel,
   reasonLabel,
   reopenLabel,
   failed,
@@ -36,13 +35,11 @@ export function ReviewActions({
   shareLabel: string
   acknowledgeLabel: string
   calibrateLabel: string
-  calibrateRatingLabel: string
   reasonLabel: string
   reopenLabel: string
   failed: string
 }) {
   const router = useRouter()
-  const [rating, setRating] = useState('')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -84,24 +81,9 @@ export function ReviewActions({
         </Button>
       ) : null}
       {canCalibrate ? (
-        <div className="space-y-2">
-          <div>
-            <Label htmlFor="calibrate-rating">{calibrateRatingLabel}</Label>
-            <Input id="calibrate-rating" value={rating} onChange={(e) => setRating(e.target.value)} />
-          </div>
-          <div>
-            <Label htmlFor="calibrate-reason">{reasonLabel}</Label>
-            <Input id="calibrate-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy || rating.trim().length === 0 || reason.trim().length === 0}
-            onClick={() => act({ action: 'calibrate', calibratedRating: rating.trim(), reason: reason.trim() })}
-          >
-            {calibrateLabel}
-          </Button>
-        </div>
+        <Button type="button" variant="outline" onClick={() => router.push(`/hrm/performance?tab=calibration&cycle=${encodeURIComponent(cycleId)}`)}>
+          {calibrateLabel}
+        </Button>
       ) : null}
       {canReopen ? (
         <div className="space-y-2">

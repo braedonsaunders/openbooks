@@ -2,14 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
-// The customers-home "Days sales out" tile must read the ONE org DSO — the
-// settlement-weighted trailing mean from paymentStats that the cash cockpit,
-// cashflow analytics, MCP cashflow tool, get_vitals, and customer
-// intelligence all quote. It ran its own DSO-lite SQL, which diverged three
-// ways: (1) no settlements read null ("—") while every other surface reads
-// the documented 45-day default; (2) party-less settlements counted here but
-// are excluded from the engine rollup by design; (3) only the invoice leg was
-// subsidiary-scoped while the engine scopes both legs.
+// The customer cockpit reads the native settlement-weighted DSO. Missing
+// settlement history remains unknown, and party-less settlements are excluded.
 const { sql } = await import('drizzle-orm');
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
@@ -48,11 +42,11 @@ async function pay(org: { orgId: string; subsidiaryId: string; bookId: string; p
     values (${org.orgId},${lineId},${billLine},${total},${total},${total},'CAD',${total},'CAD',1,'same_currency','DSO home probe',${paidOn},${actor},${actor})`);
 }
 
-test('customers-home DSO reads the documented 45-day default with no settlements', { skip: !DB }, async () => {
+test('customers-home DSO remains unknown when there are no settlements', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const home = await withOrgContext(org.orgId, () => customersHome(org.orgId));
-    assert.equal(home.dso, 45, 'empty history must read the single DSO default, not null');
+    assert.equal(home.dso, null, 'empty history cannot supply a measured DSO');
   } finally {
     await dropScratchOrg(org.orgId);
   }

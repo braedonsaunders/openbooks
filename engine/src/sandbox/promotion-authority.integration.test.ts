@@ -13,7 +13,7 @@ import { db } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
-import { applyChangeSet, approveChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
+import { applyChangeSet, buildChangeSet, reviewChangeSet } from "./promote.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 const manager = ["admin.sandboxes.manage", "admin.roles.manage"];
@@ -52,7 +52,6 @@ for (const scenario of ["no sandbox authority", "no role authority", "outside ce
       await db.execute(sql`update app_roles set permissions=${JSON.stringify(requested)}::jsonb,name=name||' promoted' where org_id=${sandbox.sandboxOrgId} and key=${key}`);
       const change = await buildChangeSet(sandbox.sandboxId, "Role authority test", actors[0]);
       await reviewChangeSet(change.changeSetId, actors[1]);
-      await approveChangeSet(change.changeSetId, actors[2]);
       const allowed = ["within ceiling", "remove higher grant", "super admin"].includes(scenario);
       if (allowed) {
         await applyChangeSet(change.changeSetId, applier);
@@ -96,7 +95,6 @@ test("role promotion checks the actor's raw subsidiary grant coverage", enabled,
        where org_id=${sandbox.sandboxOrgId} and key='manager'`);
     const change = await buildChangeSet(sandbox.sandboxId, "Role grant coverage", creator);
     await reviewChangeSet(change.changeSetId, reviewer);
-    await approveChangeSet(change.changeSetId, approver);
 
     // A second, unrestricted role lets the actor pass the effective-scope
     // check, but malformed stored scope evidence must still fail the raw

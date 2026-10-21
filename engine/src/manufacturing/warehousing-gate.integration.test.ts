@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { approveFixtureRouting, createManufacturingOperator } from "../testing/manufacturing.ts";
@@ -18,8 +18,8 @@ import { issueMaterials } from "./materials.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-  return withBypassContext(() => db.transaction(work));
+function run<T>(orgId: string, work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+  return withOrgTransaction(orgId, () => work(db));
 }
 
 async function setFeatures(orgId: string, patch: Record<string, boolean>): Promise<void> {
@@ -94,28 +94,28 @@ test("single-warehouse production releases and completes with Warehousing off", 
     );
     await setFeatures(f.org.orgId, { warehousing: false });
 
-    const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+    const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
       code: `WC-${randomUUID()}`, name: "Assembly center", kind: "machine",
       capacityHoursPerDay: "8", efficiencyPct: "100", departmentId: f.departmentId, absorbsOverhead: false,
     }));
-    const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
+    const routing = await run(f.org.orgId, (tx) => createRouting(tx, f.org.orgId, f.actorId, {
       producedItemId: f.org.items.assembly, code: `RT-${randomUUID()}`, name: "Assembly route", effectiveFrom: "2026-01-01",
       defaultIssueLocationId: house.id, defaultReceiptLocationId: house.id, overheadBasis: "units",
     }));
-    await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
+    await run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
       sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "1",
     }));
     await approveFixtureRouting(f.org.orgId, f.actorId, String(routing.id));
-    const draft = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
+    const draft = await run(f.org.orgId, (tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
       producedItemId: f.org.items.assembly, quantityOrdered: "1", subsidiaryId: f.org.subsidiaryId,
       issueLocationId: house.id, receiptLocationId: house.id, plannedStart: f.org.date,
     }));
-    const released = await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
+    const released = await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
     assert.equal(released.status, "released");
     const material = (await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
       select id from mfg_wo_materials where org_id = ${f.org.orgId} and work_order_id = ${draft.id}`)).rows))[0]!.id;
-    await run((tx) => issueMaterials(tx, f.org.orgId, f.actorId, draft.id, [{ materialId: material, quantity: "2" }]));
-    const completed = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, draft.id, { quantity: "1" }));
+    await run(f.org.orgId, (tx) => issueMaterials(tx, f.org.orgId, f.actorId, draft.id, [{ materialId: material, quantity: "2" }]));
+    const completed = await run(f.org.orgId, (tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, draft.id, { quantity: "1" }));
     assert.equal(completed.quantityCompleted, "1.0000");
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
@@ -148,19 +148,19 @@ test("multi-location operations refuse consistently with Warehousing off", { ski
     );
     await withBypassContext(() => activateWarehouse(f.org.orgId, f.actorId, { warehouseId: first.id }));
     await withBypassContext(() => activateWarehouse(f.org.orgId, f.actorId, { warehouseId: second.id }));
-    const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+    const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
       code: `WC-${randomUUID()}`, name: "Assembly center", kind: "machine",
       capacityHoursPerDay: "8", efficiencyPct: "100", departmentId: f.departmentId, absorbsOverhead: false,
     }));
-    const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
+    const routing = await run(f.org.orgId, (tx) => createRouting(tx, f.org.orgId, f.actorId, {
       producedItemId: f.org.items.assembly, code: `RT-${randomUUID()}`, name: "Assembly route", effectiveFrom: "2026-01-01",
       defaultIssueLocationId: first.id, defaultReceiptLocationId: first.id, overheadBasis: "units",
     }));
-    await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
+    await run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(routing.id), {
       sequence: 10, name: "Assemble", workCenterId: String(center.id), setupMinutes: "0", runMinutesPerUnit: "1",
     }));
     await approveFixtureRouting(f.org.orgId, f.actorId, String(routing.id));
-    const draft = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
+    const draft = await run(f.org.orgId, (tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
       producedItemId: f.org.items.assembly, quantityOrdered: "1", subsidiaryId: f.org.subsidiaryId,
       issueLocationId: first.id, receiptLocationId: first.id, plannedStart: f.org.date,
     }));
@@ -205,7 +205,7 @@ test("multi-location operations refuse consistently with Warehousing off", { ski
       "warehouse-scoped availability refuses while Warehousing is off",
     );
     await assert.rejects(
-      run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)),
+      run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)),
       warehousingRefusal,
       "manufacturing release refuses while Warehousing is off for a multi-warehouse org",
     );

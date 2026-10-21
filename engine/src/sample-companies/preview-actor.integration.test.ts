@@ -10,7 +10,7 @@ import { BUILT_IN_ROLES } from "../organization/permissions.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createTrainingCourse, listTrainingCourses } from "../hrm/training/store.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
-import { createScratchOrg, createScratchUser, dropSampleCloneOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createRetirementFixtureOrg, createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { cloneSampleCompanyTemplate, createSampleCompany, SampleCompanyProvisioningError } from "./service.ts";
 import { retireSampleFixtureCompanies } from "./retirement-test-fixtures.ts";
 
@@ -35,7 +35,7 @@ function assertInheritedAuthority(before: AuthoritySnapshot, after: AuthoritySna
 
 test("an ordinary member receives a fresh local preview administrator while inherited grants and resumed identities remain unchanged", enabled, async () => {
   const home = await withBypass(() => createScratchOrg());
-  const source = await withBypass(() => createScratchOrg());
+  const source = await withBypass(() => createRetirementFixtureOrg());
   let previewId: string | undefined;
   try {
     const memberUserId = await withBypass(() => createScratchUser(home.orgId, "Ordinary preview member", "viewer"));
@@ -136,10 +136,7 @@ test("an ordinary member receives a fresh local preview administrator while inhe
     assertInheritedAuthority(inherited, await authoritySnapshot(orgId));
   } finally {
     const targets = [...(previewId ? [previewId] : []), source.orgId];
-    if (!await retireSampleFixtureCompanies(home.orgId, targets)) {
-      if (previewId) await withBypass(() => dropSampleCloneOrg(previewId!));
-      await withBypass(() => dropScratchOrg(source.orgId));
-    }
+    await retireSampleFixtureCompanies(home.orgId, targets);
     await withBypass(() => dropScratchOrg(home.orgId));
   }
 });

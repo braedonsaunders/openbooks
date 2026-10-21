@@ -161,9 +161,9 @@ async function assertCapturedSandboxReady(sandboxOrgId: string | null, productio
 /** Resolve the lock key before each change-set transition, then revalidate the
  * sandbox under that lock and inside the transition transaction. Deletion and
  * refresh use this same key, so a vanished sandbox cannot race review/apply. */
-async function withChangeSetSandboxLock<T>(changeSetId: string, work: () => Promise<T>): Promise<T> {
+async function withChangeSetSandboxLock<T>(changeSetId: string, work: (productionOrgId: string) => Promise<T>): Promise<T> {
   // bypass: cross-org-by-design — a change set links a production organization to its sandbox copy.
-  const sandboxId = await withBypassContext(async () => {
+  const target = await withBypassContext(async () => {
     const changeSet = (await db.execute<{ org_id: string; sandbox_org_id: string | null }>(sql`
       select org_id, sandbox_org_id from change_sets where id = ${changeSetId}`)).rows[0];
     if (!changeSet) throw new Error(`change set not found: ${changeSetId}`);
@@ -172,9 +172,9 @@ async function withChangeSetSandboxLock<T>(changeSetId: string, work: () => Prom
       select id from sandboxes
        where org_id = ${changeSet.sandbox_org_id} and production_org_id = ${changeSet.org_id}`)).rows[0];
     if (!sandbox) throw new Error("change set's sandbox is gone — recapture from a live sandbox before reviewing or applying");
-    return sandbox.id;
+    return { sandboxId: sandbox.id, productionOrgId: changeSet.org_id };
   });
-  return withSandboxRefreshLock(assertUuid(sandboxId), work);
+  return withSandboxRefreshLock(assertUuid(target.sandboxId), () => work(assertUuid(target.productionOrgId)));
 }
 
 /** Freeze the lifecycle actor's sandbox-management authority. Review and
@@ -404,8 +404,8 @@ export async function reviewChangeSet(
 ): Promise<void> {
   const id = assertUuid(changeSetId);
   const actor = requireActor(reviewerId, "change-set review");
-  await withChangeSetSandboxLock(id, () =>
-    withMaintenanceTransaction(null, async () => {
+  await withChangeSetSandboxLock(id, (productionOrgId) =>
+    withMaintenanceTransaction(productionOrgId, async () => {
       const identity = (
         await db.execute<{ org_id: string }>(
           sql`select org_id from change_sets where id=${id}`,
@@ -438,21 +438,6 @@ export async function reviewChangeSet(
       await auditChangeSetTransition(id, prod, actor, "review", c);
       await approveChangeSetInTransaction(id, actor);
     }),
-  );
-}
-
-/** Submit the reviewed capture to the production tenant’s Flow policy. */
-export async function approveChangeSet(
-  changeSetId: string,
-  approverId?: string | null,
-  approvalRunId?: string,
-): Promise<void> {
-  const id = assertUuid(changeSetId),
-    actor = requireActor(approverId, "change-set submission");
-  await withChangeSetSandboxLock(id, () =>
-    withMaintenanceTransaction(null, () =>
-      approveChangeSetInTransaction(id, actor, approvalRunId),
-    ),
   );
 }
 
