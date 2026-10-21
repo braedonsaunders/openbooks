@@ -608,6 +608,24 @@ async function activateBenefitEnrollment(
   );
 }
 
+/** Submit an existing election using its current employment scope and tenant Flow policy. */
+export async function submitEnrollment(query: {orgId:string;actorId:string;enrollmentId:string}): Promise<EnrollmentDTO> {
+  const orgId=requireOrgId(query.orgId),actorId=requireActorId(query.actorId),enrollmentId=requireId(query.enrollmentId,"enrollmentId");
+  return withOrgTransaction(orgId,async () => {
+    await assertHrmEnabled(db,orgId);
+    const candidate=await loadEnrollment(db,orgId,enrollmentId);
+    await lockEmploymentsForScope(db,[candidate.employmentId],{orgId,actorId});
+    await lockEnrollmentPlanAdmission(db,orgId,candidate.employmentId,candidate.planId);
+    await lockApprovalSubject(orgId,BENEFIT_ENROLLMENT_SUBJECT_KIND,enrollmentId);
+    const enrollment=await loadEnrollment(db,orgId,enrollmentId);
+    const subject=await requireHrmBenefitsManageOnEmployment(db,orgId,actorId,enrollment.employmentId);
+    if(enrollment.status!=="elected")throw new BenefitsError("BAD_STATE","Only an editable election can be submitted through its native Flow policy");
+    await requireActivePlanInScope(db,orgId,subject,enrollment.planId,enrollment.effectiveFrom);
+    await submitBenefitEnrollment(orgId,actorId,enrollmentId);
+    return loadEnrollment(db,orgId,enrollmentId);
+  });
+}
+
 async function submitBenefitEnrollment(
   orgId: string,
   actorId: string,

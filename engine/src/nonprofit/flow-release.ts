@@ -18,6 +18,7 @@ export async function releaseFundReleaseFlowApproval(
     subjectId: args.subjectId,
     outcome: args.outcome,
     comment: args.comment,
+    approvalRunId: args.approvalRunId,
     ctx: args.ctx,
   });
 }

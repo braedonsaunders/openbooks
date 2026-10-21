@@ -295,7 +295,7 @@ test("a scheduled null-actor post:true that fails approval routing is rejected w
         },
         { post: true },
       ),
-      /approval could not be routed/,
+      /approval flow.*failed.*zero assignees/,
     );
     const r = (await db.execute<{ docs: string; lines: string; gates: string; runs: string }>(sql`
       select (select count(*) from documents where org_id = ${org.orgId})::text as docs,

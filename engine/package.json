@@ -823,6 +823,7 @@
     "./tax/tax": "./src/tax/tax.ts",
     "./testing/billing/entitlements": "./src/billing/entitlements.ts",
     "./testing/budgets": "./src/testing/budgets.ts",
+    "./testing/bank-accounts": "./src/testing/bank-accounts.ts",
     "./testing/close": "./src/testing/close.ts",
     "./testing/close/defaults": "./src/close/defaults.ts",
     "./testing/commerce/account-maps": "./src/commerce/account-maps.ts",

@@ -162,12 +162,14 @@ export const fundReleasesFlowAdapter: FlowSubjectAdapter = {
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
   ): Promise<void> {
     await releaseFlowApproval({
       subjectKind: FUND_RELEASE_SUBJECT_KIND,
       subjectId,
       outcome,
       comment: detail?.comment,
+      approvalRunId: run?.id,
       ctx,
     });
   },

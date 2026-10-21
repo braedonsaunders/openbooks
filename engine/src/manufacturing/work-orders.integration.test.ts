@@ -173,7 +173,9 @@ const cases: Case[] = [
     assert.equal(held.pendingApproval, true);
     await refuse(run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id, { approvalRunId: randomUUID() })),
       "work_order_approval_required", "configured work-order approval gate");
-    assert.equal((await run(f.org.orgId, tx => getWorkOrder(tx, f.org.orgId, draft.id))).status, "draft");
+    const persisted = await run(f.org.orgId, tx => getWorkOrder(tx, f.org.orgId, draft.id));
+    assert.ok(persisted);
+    assert.equal(persisted.status, "draft");
   } },
   { name: "parent cancellation refuses a started child by number", run: async (f) => {
     await route(f, f.org.items.assembly);

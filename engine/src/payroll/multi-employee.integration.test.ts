@@ -1,3 +1,4 @@
+import { submitBenefitEnrollmentFixture } from "../testing/benefit-fixtures.ts";
 import { seedPayrollAccountingConfiguration, seedPayrollStatutoryTreatment } from '../testing/fixtures.ts';
 import { validateBenefitContributionConfiguration } from "../hrm/benefits/contributions.ts";
 import {
@@ -69,10 +70,8 @@ test('native recurring elections produce taxable non-cash, employer cost and emp
         values(${termId},${fx.orgId},${enrollmentId},${ruleId},'fixed',${rate},'2026-01-01',${rate},'{"source":"approved payroll election"}'::jsonb)`);
       rules.set(code,ruleId);
     }
-    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
-      submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
-      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
-      where org_id=${fx.orgId} and id=${enrollmentId}`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${fx.orgId}`);
+    await submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,enrollmentId);
     const source = await recurringBenefitSource(db, { orgId: fx.orgId, employmentId,
       subsidiaryId: fx.subsidiaryId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
     assert.deepEqual(source.currencyPrecisions, [{ code: 'CAD', minor_units: 2 }],
@@ -164,8 +163,8 @@ test('unpaid employer coverage enters the native owe bank and recovers two actua
         values(${fx.orgId},${enrollment},${rule},'fixed',${rate},'2026-01-01')`);
       if (kind!=='employee_deduction') await db.execute(sql`insert into hrm_benefit_recovery_sources(org_id,plan_id,rule_id,premium_rule_id) values(${fx.orgId},${plan},${recovery},${rule})`);
     }
-    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),
-      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active',updated_by=${fx.actorId} where org_id=${fx.orgId} and id=${enrollment}`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${fx.orgId}`);
+    await submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,enrollment);
     const calculate=async(start:string,end:string)=>{
       const run=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,periodStart:start,periodEnd:end,employeePartyIds:[worker]});
       assert.deepEqual((await calculatePayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId})).errors,[]);
@@ -187,8 +186,8 @@ test('unpaid employer coverage enters the native owe bank and recovers two actua
     await db.execute(sql`insert into hrm_benefit_enrollment_terms(org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from)
       select org_id,${successorEnrollment},case when rule_id=${recovery} then ${successorRule}::uuid else rule_id end,election_mode,elected_rate,'2026-07-26'
       from hrm_benefit_enrollment_terms where org_id=${fx.orgId} and enrollment_id=${enrollment}`);
-    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),
-      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active',updated_by=${fx.actorId} where org_id=${fx.orgId} and id=${successorEnrollment}`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${fx.orgId}`);
+    await submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,successorEnrollment);
     assert.equal(await balance(),'-114.0000','an effective-dated successor inherits the native bank without changing prior debt');
     await hours(fx,worker,'2026-07-28','40');
     const returned=await calculate('2026-07-26','2026-08-01');

@@ -421,7 +421,7 @@ test("quote discounts use only the tenant's configured Flow gates",DB,async()=>{
   await withDeal(async(org,actor,seed)=>{
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,flows}','true'::jsonb) where id=${org.orgId}`);
     const reviewer=await createScratchUser(org.orgId,"Quote reviewer","quote_reviewer");
-    await grantScratchPermissions(org.orgId,reviewer,["estimates.read","estimates.approve"]);
+    await grantScratchPermissions(org.orgId,reviewer,["estimates.read","ar.approve"]);
     for(let index=0;index<10;index++)await seedApprovalFlow(org.orgId,{subjectKind:"quote",assignees:[{type:"user",userId:reviewer}],mode:"all",condition:{field:"subscriptionDiscountPercent",op:"gt",value:10}});
     assert.deepEqual(await send(org,actor,seed),{status:"pending_approval"});
     assert.equal((await db.execute(sql`select id from signature_requests where org_id=${org.orgId} and subject_id=${seed.quoteId}`)).rows.length,0);

@@ -7,7 +7,7 @@ import { env } from '@openbooks/engine/platform/db'
 /**
  * An invoice with no org-authored PDF template still prints: the record-PDF
  * route falls back to the native starter design (template id/revision null,
- * content hash present) instead of 404ing. Only the render step is doubled —
+ * content hash present) instead of 404ing. Only request cookies and rendering are doubled —
  * template resolution, record values and the subsidiary fence all run for
  * real, so a regression in the default chain fails here, not in production.
  */
@@ -17,14 +17,10 @@ const state = { renders: [] as unknown[] }
 
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'next-intl/server') return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key};export async function getLocale(){return 'en'}" }
-  // Off-request locale resolution is anonymous by contract (no cookie store
-  // outside a request scope), so the auth module behind it is doubled to its
-  // off-request shape instead of loading the session graph.
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/locale.ts')) {
+  // Script only the request-cookie identity boundary; native permissions,
+  // record ownership, locale and subsidiary authorization read real storage.
+  if (/(?:^|\/)auth(?:\.ts)?$/.test(specifier) && context.parentURL?.includes('/web/') && !context.parentURL.endsWith('/web/lib/auth.ts')) {
     return { shortCircuit: true, url: 'mock:record-pdf-starter-locale-auth' }
-  }
-  if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('record-pdf')) {
-    return { shortCircuit: true, url: 'mock:record-pdf-starter-authz' }
   }
   if (specifier === '../../../../../lib/pdf-templates/render' && context.parentURL?.includes('record-pdf')) {
     return { shortCircuit: true, url: 'mock:record-pdf-starter-render' }
@@ -33,17 +29,9 @@ registerHooks({ resolve(specifier, context, next) {
 }, load(url, context, nextLoad) {
   if (url === 'mock:record-pdf-starter-locale-auth') {
     return { format: 'module', shortCircuit: true, source: `
-      export async function currentUser() { return null }
-      export async function currentSession() { return null }
-    ` }
-  }
-  if (url === 'mock:record-pdf-starter-authz') {
-    return { format: 'module', shortCircuit: true, source: `
       const state = globalThis[Symbol.for('openbooks.record-pdf-starter-test')]
-      export async function guardPermission() {
-        return { user: state.authz.user, permissions: new Set(['ar.read']), allowedSubsidiaryIds: null }
-      }
-      export function guardSubsidiaryScope() { return null }
+      export async function currentUser() { return state.authz?.user ?? null }
+      export async function currentSession() { return null }
     ` }
   }
   if (url === 'mock:record-pdf-starter-render') {
@@ -60,7 +48,7 @@ registerHooks({ resolve(specifier, context, next) {
 
 const { sql } = await import('drizzle-orm')
 const { db, withOrgContext, withBypass} = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, dropScratchOrg, createScratchUser, grantScratchPermissions } = await import('@openbooks/engine/testing/fixtures')
 const { GET } = await import('./route')
 
 const needsDb = { skip: !env.OPENBOOKS_DB_URL }
@@ -68,7 +56,11 @@ const needsDb = { skip: !env.OPENBOOKS_DB_URL }
 test('an invoice with no custom template prints with the native starter design', needsDb, async () => {
   const org = await withBypass(() => createScratchOrg())
   try {
-    ;(state as { authz?: unknown }).authz = { user: { id: randomUUID(), orgId: org.orgId } }
+    const userId = await withBypass(() => createScratchUser(org.orgId, "Invoice reader", "invoice_reader"))
+    await grantScratchPermissions(org.orgId, userId, ['ar.read'])
+    ;(state as { authz?: unknown }).authz = { user: { id:userId, orgId:org.orgId,
+      name:"Invoice reader",email:`reader-${userId}@scratch.test`,roles:[{key:"invoice_reader",name:"Invoice reader"}],
+      isSuperAdmin:false,envKind:"sandbox",productionOrgId:org.orgId,homeUserId:userId,homeOrgId:org.orgId } }
     const invoiceId = randomUUID()
     await withBypass(() => db.execute(sql`
       insert into documents (id, org_id, kind, document_number, document_date, currency, subsidiary_id)

@@ -18,6 +18,7 @@ import {
 import {
   createScratchOrg,
   createScratchUser,
+  grantScratchPermissions,
   dropScratchOrgReporting,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -244,6 +245,7 @@ test(
 
       // ---- Interactive scheduling attributes the real operator ---------------
       const operatorId = await createScratchUser(orgId, "Operator", "admin");
+      await grantScratchPermissions(orgId, operatorId, ["ar.create"]);
       const priorB = new Set(
         (await db.execute<{ id: string }>(sql`
           select id::text as id from lease_schedule_lines

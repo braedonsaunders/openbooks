@@ -455,7 +455,7 @@ function main(ctx) {
   if (mode === "load") return ob.record.load("accounts", ob.search("accounts", { number: "5100" })[0].id);
   if (mode === "search") return ob.search("accounts", { number: "5100" });
   if (mode === "payroll") return ob.query("select count(*)::int as n from pay_stubs");
-  return ob.query("select count(*)::int as n from journal_lines");
+  return ob.query("select count(*)::int as n from accounts where id is null");
 }
 `;
 

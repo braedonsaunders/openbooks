@@ -311,8 +311,8 @@ test("mixed legacy and normalized rows refuse by name instead of reading ready",
     assert.equal(state.state, "refused");
     assert.ok(state.failure && state.failure.includes("mixes"), `the failure must name the mix, got: ${state.failure}`);
     assert.ok(
-      state.remedy && state.remedy.includes("different authorized approver"),
-      "a refused month names the request and distinct-approval remedy",
+      state.remedy && state.remedy.includes("complete any tenant Flow gates"),
+      "a refused month names the native request and tenant Flow remedy",
     );
     assert.equal(state.request, null);
   });
@@ -348,7 +348,7 @@ test("an unsupported version outranks multiple currencies by name", { skip: !DB 
       `the version refusal must outrank the currency mix, got: ${state.failure}`,
     );
     assert.ok(state.remedy && state.remedy.includes("Company Setup → SaaS Metrics"));
-    assert.ok(state.remedy && state.remedy.includes("different authorized approver"));
+    assert.ok(state.remedy && state.remedy.includes("complete any tenant Flow gates"));
   });
 });
 
@@ -627,7 +627,7 @@ test("ordinary v1 rows with a hand-edited row hash refuse with no request", { sk
       `the failure must name the hash disagreement, got: ${state.failure}`,
     );
     assert.ok(state.remedy && state.remedy.includes("Company Setup → SaaS Metrics"));
-    assert.ok(state.remedy && state.remedy.includes("different authorized approver"));
+    assert.ok(state.remedy && state.remedy.includes("complete any tenant Flow gates"));
     assert.equal(state.request, null);
   });
 });

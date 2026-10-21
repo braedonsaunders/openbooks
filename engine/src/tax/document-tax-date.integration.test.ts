@@ -18,7 +18,7 @@ test("a credit correcting an earlier invoice is taxed on the invoice's date", { 
     await db.execute(sql`insert into tax_codes (id, org_id, code, name, country) values (${codeId}, ${org.orgId}, 'GST-X', 'GST', 'CA')`);
     await db.execute(sql`insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, effective_to)
       values (${org.orgId}, ${codeId}, '5', '2026-01-01', '2026-06-30'), (${org.orgId}, ${codeId}, '7', '2026-07-01', null)`);
-    const document = async (kind: string, number: string, date: string, status: string, ratePercent: string) => {
+    const document = async (kind: string, number: string, date: string, ratePercent: string) => {
       const id = randomUUID();
       const lineId = randomUUID();
       await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate, subtotal, tax_total, total)
@@ -27,11 +27,10 @@ test("a credit correcting an earlier invoice is taxed on the invoice's date", { 
         values (${lineId}, ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, '1', '100', '100', ${ratePercent})`);
       await db.execute(sql`insert into document_line_tax_components (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount, tax_amount, recoverable_amount, calculation_type)
         values (${org.orgId}, ${lineId}, ${codeId}, 1, ${ratePercent}, '100', ${ratePercent}, ${ratePercent}, 'standard')`);
-      if (status !== "draft") await db.execute(sql`update documents set status = ${status} where id = ${id} and org_id = ${org.orgId}`);
       return { id, lineId };
     };
-    const invoice = await document("customer_invoice", "INV-JUNE", "2026-06-15", "posted", "5");
-    const credit = await document("customer_credit", "CM-JULY", "2026-07-10", "draft", "7");
+    const invoice = await document("customer_invoice", "INV-JUNE", "2026-06-15", "5");
+    const credit = await document("customer_credit", "CM-JULY", "2026-07-10", "7");
 
     assert.equal(await documentTaxDate(db, org.orgId, credit.id, "2026-07-10"), "2026-07-10");
     assert.equal(await staleTaxRateLine(db, org.orgId, credit.id, "2026-07-10"), undefined);

@@ -1,3 +1,4 @@
+import { hasEphemeralDatabaseMarker } from "@openbooks/engine/testing/fixtures";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -12,7 +13,6 @@ test("financial policy migration refuses drift and a runtime bypass setting cann
   skip:!process.env.OPENBOOKS_TEST_ADMIN_DB_URL || !process.env.OPENBOOKS_RUNTIME_DB_URL,
 },async()=>{
   const adminUrl=process.env.OPENBOOKS_TEST_ADMIN_DB_URL!;
-  assert.match(new URL(adminUrl).pathname,/^\/ob_/);
   const admin=new pg.Client({connectionString:adminUrl});
   const runtime=new pg.Client({connectionString:process.env.OPENBOOKS_RUNTIME_DB_URL});
   const first=await withBypassContext(()=>createScratchOrg());
@@ -20,7 +20,10 @@ test("financial policy migration refuses drift and a runtime bypass setting cann
   const preflight=readFileSync("schema/migrations/preflight/0707_financial_policy_bypass_predicate.sql","utf8");
   const migration=readFileSync("schema/migrations/generated/0707_financial_policy_bypass_predicate.sql","utf8");
   try {
-    await admin.connect();await runtime.connect();
+    await admin.connect();
+    const marker=(await admin.query("select shobj_description(oid,'pg_database') as marker from pg_database where datname=current_database()")).rows[0]?.marker;
+    assert.ok(hasEphemeralDatabaseMarker(marker,process.env.OPENBOOKS_TEST_DB_MARKER),"policy changes require the exact owned disposable database marker");
+    await runtime.connect();
     assert.deepEqual((await admin.query(preflight)).rows,[]);
     const policies=(await admin.query(`select tablename,qual,with_check from pg_policies
       where schemaname='public' and tablename=any($1::text[]) order by tablename`,[tables])).rows;

@@ -327,17 +327,16 @@ test("fixed_query allocation evidence resolves stored period presets", async () 
   }
 });
 
-test("report runner honors the feature parent gate (projects off disables timeTracking)", async () => {
+test("report runner refuses time evidence when Time tracking is disabled", async () => {
   const org = await createScratchOrg();
   try {
     const actor = await seedReportsReader(org.orgId);
     const definitionId = await seedTimesheetSource(org.orgId, org.subsidiaryId, org.date);
-    // A stale stored true must not override the disabled parent: the report
-    // routes refuse this entity, so the driver runner must too.
+    // Driver evidence follows the same authoritative feature gate as reports.
     await db.execute(sql`
       update orgs
          set settings = jsonb_set(settings, '{features}',
-               coalesce(settings->'features', '{}'::jsonb) || '{"timeTracking": true, "projects": false}'::jsonb)
+               coalesce(settings->'features', '{}'::jsonb) || '{"timeTracking": false, "projects": true}'::jsonb)
        where id = ${org.orgId}`);
     await assert.rejects(
       runDriverReport({

@@ -1,3 +1,4 @@
+import { submitBenefitEnrollmentFixture } from "../testing/benefit-fixtures.ts";
 import { validateBenefitContributionConfiguration } from "../hrm/benefits/contributions.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { seedHourlyPayrollOrg as payrollOrg, seedHourlyPayrollEmployee as employee, type HourlyPayrollFixture as Fixture } from "../testing/payroll-hourly-fixture.ts";
@@ -73,10 +74,8 @@ test('selected-components hours count signed earning hours and ignore quantity u
     }
     await assert.rejects(() => validateBenefitContributionConfiguration(db, fx.orgId, 'benefit-contribution-rule-components',
       { planId, ruleId: cashRuleId, payComponentId: cashComponentId }), /cannot count its own output hours.*original earning components/);
-    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
-      submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
-      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
-      where org_id=${fx.orgId} and id=${enrollmentId}`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${fx.orgId}`);
+    await submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,enrollmentId);
     const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
     // 30 regular + 6 overtime + 4 double-time + 8 stat − 10 banked away; 3
     // trips carry money but no hours and are never counted.
@@ -133,8 +132,7 @@ test('a selected-components rule with no listed components refuses with its reme
   const fx = await payrollOrg();
   try {
     await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
-    const { partyId, employmentId } = await employee(fx, 'Unlisted Hours Employee');
-    const regular = await earningComponent(fx, 'REGULAR2');
+    const { employmentId } = await employee(fx, 'Unlisted Hours Employee');
     const planId = randomUUID(), enrollmentId = randomUUID(), ruleId = randomUUID(), termId = randomUUID();
     await db.execute(sql`insert into hrm_benefit_plans(id,org_id,code,name,kind,currency,employer_subsidiary_id,effective_from)
       values(${planId},${fx.orgId},'PENSION2','Pension plan','retirement','CAD',${fx.subsidiaryId},'2026-01-01')`);
@@ -146,16 +144,12 @@ test('a selected-components rule with no listed components refuses with its reme
       values(${ruleId},${fx.orgId},${planId},'PENSION2_ER','Pension employer','employer_contribution',${componentId},'per_hour',0,'elected_rate','selected_components','none','2026-01-01','all_pay_runs')`);
     await db.execute(sql`insert into hrm_benefit_enrollment_terms(id,org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from,source_decimal,provenance)
       values(${termId},${fx.orgId},${enrollmentId},${ruleId},'fixed','1.54','2026-01-01','1.54','{"source":"approved payroll election"}'::jsonb)`);
-    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
-      submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
-      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
-      where org_id=${fx.orgId} and id=${enrollmentId}`);
-    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
-    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,hours)
-      values(${fx.orgId},${run.documentId},${partyId},'line',${regular},'900','30')`);
-    const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
-    assert.equal(result.errors.length, 1);
-    assert.match(result.errors[0]!.message, /PENSION2_ER.*counts selected components but none are listed/);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${fx.orgId}`);
+    await assert.rejects(submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,enrollmentId),
+      /PENSION2_ER.*counts selected components but lists none.*list the earning components/);
+    assert.equal((await db.execute<{status:string}>(sql`select status from hrm_benefit_enrollments
+      where org_id=${fx.orgId} and id=${enrollmentId}`)).rows[0]?.status,'elected');
+    assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${fx.orgId} and subject_id=${enrollmentId}`)).rows.length,0);
     // Setup refuses the non-earning link by name before the run ever sees it.
     const deductionId = await earningComponent(fx, 'DUESX');
     await db.execute(sql`update pay_components set kind='deduction' where org_id=${fx.orgId} and id=${deductionId}`);
@@ -204,10 +198,8 @@ test('period-end hourly policy counts paid units once while default coverage ret
     await assert.rejects(() => db.transaction(async tx => {
       await tx.execute(sql`update hrm_benefit_contribution_rules set basis='per_period' where org_id=${fx.orgId} and id=${rules[1]!.id}`);
     }), error => errorChainMatches(error, /hrm_benefit_contribution_hours_coverage/));
-    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
-      submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
-      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
-      where org_id=${fx.orgId} and id=${enrollmentId}`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${fx.orgId}`);
+    await submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,enrollmentId);
     const submission = (await db.execute<{ source: { contributions: { hoursCoverage: string }[] } }>(sql`select submission_snapshot as source from hrm_benefit_enrollments where org_id=${fx.orgId} and id=${enrollmentId}`)).rows[0]!.source;
     assert.deepEqual(submission.contributions.map(row => row.hoursCoverage).sort(), ['earned_dates', 'pay_period_end'], 'Native approval evidence includes the selected hour eligibility');
     await assert.rejects(() => db.transaction(async tx => {

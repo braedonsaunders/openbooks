@@ -6,6 +6,9 @@ import { decideGate } from "../flows/gates.ts";
 import { getBenefitAward } from "../hrm/benefits/awards.ts";
 import { activateBenefitProgram, addProgramMembership, createBenefitProgram, type CreateBenefitProgramQuery } from "../hrm/benefits/programs.ts";
 import { mkHr } from "./hrm-harness.ts";
+import { installEngineSeams } from "../composition/install.ts";
+import { submitEnrollment } from "../hrm/benefits/enrollments.ts";
+import { assertFixtureDatabase, grantScratchPermissions } from "./fixtures.ts";
 
 interface BenefitFixtureContext {
   orgId: string;
@@ -79,4 +82,13 @@ export async function seedCommittedBenefitRunWithoutStubs(orgId: string, documen
       returning document_id`)).rows;
     assert.deepEqual(updated.map(row => row.document_id), [documentId]);
   });
+}
+
+/** Payroll scenarios submit their seeded election through real tenant routing. */
+export async function submitBenefitEnrollmentFixture(orgId:string,actorId:string,enrollmentId:string): Promise<void> {
+  await assertFixtureDatabase();
+  installEngineSeams();
+  await grantScratchPermissions(orgId,actorId,["hrm.benefits.manage"]);
+  const result=await submitEnrollment({orgId,actorId,enrollmentId});
+  assert.equal(result.status,"active","the fixture's explicit zero-gate tenant policy must activate its election");
 }

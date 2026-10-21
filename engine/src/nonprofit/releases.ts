@@ -1,4 +1,6 @@
 import { routeSubjectSubmission } from "../flows/submission-policy.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { lockApprovalSubject, readNativeApprovalDecision } from "../platform/approval-routing.ts";
 import { sql } from "drizzle-orm";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
@@ -929,7 +931,10 @@ export async function submitFundRelease(input: {
   requireActor(input.actorId);
   return withOrgTransaction(input.orgId, () =>
     inDbTransaction(async (tx) => {
+      await lockApprovalSubject(input.orgId, "fund_release", input.releaseId);
       await assertFeatureLocked(tx, input.orgId);
+      const posting = await selectedPostingContext(tx, input.orgId);
+      await lockActorCommandAuthority(tx, input.orgId, input.actorId, posting.subsidiaryId, "funds.manage");
       const row = await loadRelease(tx, input.orgId, input.releaseId, true);
       const release = toFundRelease(row);
       if (release.status !== "draft") {
@@ -1102,10 +1107,12 @@ export async function releaseFundReleaseApproval(input: {
   subjectId: string;
   outcome: "approved" | "rejected";
   comment?: string | null;
+  approvalRunId?: string;
   ctx: { orgId: string; userId?: string | null };
 }): Promise<void> {
   await withOrgTransaction(input.ctx.orgId, () =>
     inDbTransaction(async (tx) => {
+      await lockApprovalSubject(input.ctx.orgId, "fund_release", input.subjectId);
       await assertFeatureLocked(tx, input.ctx.orgId);
       const row = await loadRelease(tx, input.ctx.orgId, input.subjectId, true);
       const release = toFundRelease(row);
@@ -1126,6 +1133,13 @@ export async function releaseFundReleaseApproval(input: {
             "Have an authorized approver decide the release through Flows.",
           status: 409,
         });
+      }
+      const posting = await selectedPostingContext(tx, input.ctx.orgId);
+      await lockActorCommandAuthority(tx, input.ctx.orgId, input.ctx.userId, posting.subsidiaryId, "funds.manage");
+      if (!(await readNativeApprovalDecision({ orgId:input.ctx.orgId,actorId:input.ctx.userId,
+        subjectKind:"fund_release",subjectId:input.subjectId,outcome:input.outcome,approvalRunId:input.approvalRunId }))) {
+        throw refusal({ message:"Complete the current fund release's configured native Flow gates before release.",
+          code:"fund_release_flow_decision_required",status:409,remedy:"Decide the assigned gates in My approvals." });
       }
       if (input.outcome === "rejected") {
         const comment = input.comment?.trim() || "Approval was rejected.";

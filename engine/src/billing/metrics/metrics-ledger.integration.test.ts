@@ -8,7 +8,7 @@ import { runScenario } from "../../golden/scenario.ts";
 import { cancelRevenueRecognitionForInvoice } from "../../ledger/revenue-recognition-cancellation.ts";
 import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
 import { runRevenueRecognition } from "../../revenue/recognition.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } from "../../testing/fixtures.ts";
 import { createSubscriptionInvoice } from "../subscription-billing.ts";
 import { UsageBillingError } from "../usage/errors.ts";
 import { recomputeSaasMetrics } from "./metrics-ledger.ts";
@@ -295,6 +295,7 @@ test("closed SaaS metrics months freeze after their first computation", { skip: 
 test("voided subscription invoices preserve closed-month metrics and reverse in the void month", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withOrgTransaction(org.orgId, () => createScratchUser(org.orgId, "Metrics void controller", "admin"));
+  await grantScratchPermissions(org.orgId,actorId,["ar.create","ar.post"]);
   try {
     const subscriptionId = randomUUID(), planId = randomUUID();
     await withOrgTransaction(org.orgId, async () => {
@@ -331,6 +332,7 @@ test("voided subscription invoices preserve closed-month metrics and reverse in 
 test("normalized SaaS metrics translate every measure to org base with v1 evidence", { skip: !DB }, async (t) => {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withOrgTransaction(org.orgId, () => createScratchUser(org.orgId, "Metrics normalization controller", "admin"));
+  await grantScratchPermissions(org.orgId,actorId,["ar.create","ar.post"]);
   const eurSubId = org.subsidiaryId;
   const gbpSubId = randomUUID();
   const gbpCustomerId = randomUUID();
@@ -656,6 +658,7 @@ test("normalized SaaS metrics translate every measure to org base with v1 eviden
 test("normalized SaaS metrics refuse cross-subsidiary attribution before aggregation", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withOrgTransaction(org.orgId, () => createScratchUser(org.orgId, "Metrics attribution controller", "admin"));
+  await grantScratchPermissions(org.orgId,actorId,["ar.create","ar.post"]);
   try {
     const subscriptionId = randomUUID(), planId = randomUUID();
     const secondSubsidiaryId = randomUUID(), secondCustomerId = randomUUID();
@@ -825,7 +828,7 @@ test("legacy and unsupported history denominations refuse with the normalization
         && error.code === "saas_metrics_history_denomination_unknown"
         && (error.message as string).includes(legacyId)
         && /submit a normalization request for 2026-07-01/.test(error.remedy)
-        && /different authorized approver/.test(error.remedy)
+        && /complete any tenant Flow gates/.test(error.remedy)
         && /never reversed or rewritten/.test(error.remedy),
       "a legacy row without denomination evidence refuses with the controlled request/approval remedy",
     );

@@ -4,9 +4,14 @@ import test from 'node:test';
 import type { SessionUser } from '../auth';
 
 const { sql } = await import('drizzle-orm');
-const { withBypassContext, db, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { withBypassContext, db, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/platform/db');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
 const { executeAssistantTool } = await import('./registry');
+const { installEngineSeams } = await import('@openbooks/engine/composition/install');
+const { createWorkOperator } = await import('@openbooks/engine/testing/manufacturing');
+const { createSubcontract, addSubcontractSovLine, submitSubcontract, createSubcontractChangeOrder,
+  approveSubcontractChangeOrder, createVendorPayApplication, updateVendorPayApplicationLines,
+  submitVendorPayApplication, generateVendorPayApplicationBill } = await import('@openbooks/engine/projects/subcontracts');
 
 const PERMS = ['assistant.use', 'ap.read', 'projects.read', 'reports.read'];
 
@@ -32,11 +37,14 @@ test('subcontract and wip reads: commitments, pay apps, prebills, isolation', { 
   const hidden = randomUUID();
   const projectId = randomUUID();
   const hiddenProjectId = randomUUID();
-  const contractId = randomUUID();
   const prebillId = randomUUID();
   try {
-    await withOrgContext(org.orgId, async () => {
+    installEngineSeams();
+    const operator = await createWorkOperator(org.orgId, "Subcontract author", ["ap.create"]);
+    const contractId = await withOrgTransaction(org.orgId, async () => {
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":true,"preBilling":true}'::jsonb) where id=${org.orgId}`);
+      assert.equal((await db.execute(sql`insert into vendor_roles(org_id,party_id,currency,is_active)
+        values(${org.orgId},${org.vendorId},'CAD',true)`)).rowCount,1);
       await db.execute(sql`
         insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
         values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden site','CAD','CA',true,false)
@@ -46,28 +54,32 @@ test('subcontract and wip reads: commitments, pay apps, prebills, isolation', { 
         values (${projectId},${org.orgId},'Visible tower',${org.subsidiaryId},${org.customerId}),
                (${hiddenProjectId},${org.orgId},'Hidden annex',${hidden},${org.customerId})
       `);
-      await db.execute(sql`
-        insert into subcontracts(id,org_id,project_id,vendor_id,number,title,status,currency,original_commitment,default_retainage_percent)
-        values (${contractId},${org.orgId},${projectId},${org.vendorId},'SC-0001','Concrete frame','active','CAD','10000','10'),
-               (${randomUUID()},${org.orgId},${hiddenProjectId},${org.vendorId},'SC-0002','Hidden steel','active','CAD','50000','10')
-      `);
-      await db.execute(sql`
-        insert into subcontract_sov_lines(id,org_id,subcontract_id,item_no,description,scheduled_value,sort_order)
-        values (${randomUUID()},${org.orgId},${contractId},1,'Frame pour','10000',1)
-      `);
-      await db.execute(sql`
-        insert into subcontract_change_orders(id,org_id,subcontract_id,number,status,amount)
-        values (${randomUUID()},${org.orgId},${contractId},'CO-001','approved','1000')
-      `);
-      await db.execute(sql`
-        insert into vendor_pay_applications(id,org_id,subcontract_id,application_number,period_end,status,default_retainage_percent,gross_this_period,retainage_this_period,net_due)
-        values (${randomUUID()},${org.orgId},${contractId},1,${org.date},'billed','10','2000','200','1800')
-      `);
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,retainagePayable}',to_jsonb(${org.accounts.deferred}::text)) where id=${org.orgId}`);
+      const contract = await createSubcontract({ orgId:org.orgId,userId:operator,projectId,vendorId:org.vendorId,
+        number:"SC-0001",title:"Concrete frame",originalCommitment:"10000",defaultRetainagePercent:"10" });
+      const contractId = contract.id;
+      const line = await addSubcontractSovLine({ orgId:org.orgId,userId:operator,subcontractId:contractId,
+        description:"Frame pour",scheduledValue:"10000",expenseAccountId:org.accounts.cogs,sortOrder:1 });
+      await submitSubcontract(org.orgId,operator,contractId);
+      const hiddenContract = await createSubcontract({ orgId:org.orgId,userId:operator,projectId:hiddenProjectId,
+        vendorId:org.vendorId,number:"SC-0002",title:"Hidden steel",originalCommitment:"50000",defaultRetainagePercent:"10" });
+      await addSubcontractSovLine({orgId:org.orgId,userId:operator,subcontractId:hiddenContract.id,
+        description:"Hidden steel",scheduledValue:"50000",expenseAccountId:org.accounts.cogs,sortOrder:1});
+      await submitSubcontract(org.orgId,operator,hiddenContract.id);
+      const change = await createSubcontractChangeOrder({orgId:org.orgId,userId:operator,subcontractId:contractId,
+        number:"CO-001",amount:"1000",targetSovLineId:line.id});
+      await approveSubcontractChangeOrder(org.orgId,operator,change.id,org.date);
+      const application = await createVendorPayApplication({orgId:org.orgId,userId:operator,subcontractId:contractId,periodEnd:org.date});
+      await updateVendorPayApplicationLines({orgId:org.orgId,userId:operator,payApplicationId:application.id,
+        expectedRevision:1,lines:[{sovLineId:line.id,workCompletedThisPeriod:"2000",materialsStoredCurrent:"0"}]});
+      await submitVendorPayApplication(org.orgId,operator,application.id);
+      await generateVendorPayApplicationBill(org.orgId,operator,application.id);
       await db.execute(sql`
         insert into prebills(id,org_id,project_id,worksheet_number,period_end,status,original_bill_amount,proposed_bill_amount,cost_amount,adjustment_amount)
         values (${prebillId},${org.orgId},${projectId},'WS-0001',${org.date},'draft','3000','2800','1500','-200'),
                (${randomUUID()},${org.orgId},${hiddenProjectId},'WS-0002',${org.date},'draft','9000','9000','4000','0')
       `);
+      return contractId;
     });
 
     const restricted = reader(org.orgId, new Set([org.subsidiaryId]));

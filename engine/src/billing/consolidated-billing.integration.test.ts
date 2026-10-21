@@ -22,7 +22,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function grantConsolidationOperator(orgId: string, actorId: string): Promise<void> {
   const result = await db.execute(sql`
-    update app_roles set permissions='["documents.manage","ar.post"]'::jsonb,
+    update app_roles set permissions='["documents.manage","ar.create","ar.post"]'::jsonb,
       subsidiary_restriction='{"mode":"all"}'::jsonb
     where org_id=${orgId} and id in
       (select role_id from role_assignments where org_id=${orgId} and user_id=${actorId}) returning id
@@ -540,7 +540,7 @@ test("consolidation rechecks current unrestricted operator and posting authority
     await refuse({ actorId, allowedSubsidiaryIds: new Set([org.subsidiaryId]) });
     await refuse({ actorId: "" });
     await refuse({ autoPost: true });
-    await changeAuthority(["documents.manage","ar.post"], {mode:"list",subsidiaryIds:[org.subsidiaryId]});
+    await changeAuthority(["documents.manage","ar.create","ar.post"], {mode:"list",subsidiaryIds:[org.subsidiaryId]});
     await refuse({ actorId, allowedSubsidiaryIds: null });
     await changeAuthority(["documents.manage"], {mode:"all"});
     await refuse({ actorId, autoPost: true });

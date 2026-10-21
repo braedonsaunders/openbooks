@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test, { after } from "node:test";
+import { stubModules } from "../../../../testing/stub-modules.ts";
+
+stubModules({ intl: true });
 
 // A8 options endpoint: one picker payload, gated, subsidiary-scoped.
 

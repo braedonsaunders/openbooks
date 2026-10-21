@@ -1,3 +1,4 @@
+import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -14,7 +15,6 @@ import { cancelPaymentRun, PAYMENT_RUN_INTERNAL_CANCEL_REASONS, PAYMENT_RUN_SYST
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
 import { createPaymentRun } from "./run-creation.ts";
 import { payeeBankStateSql } from "./payee-bank-account.ts";
-import { paymentRunReadiness } from "./run-readiness.ts";
 import { PaymentError, PaymentRevisionConflictError } from "../payments-core/payment-errors.ts";
 import { postPaymentRun } from "./run-posting.ts";
 import { markAutomaticRemittanceEnqueueFailed, settleAutomaticRemittanceEnqueueError } from "./run-remittance.ts";
@@ -815,53 +815,31 @@ test("an open item can be reserved by only one live payment run at a time", { sk
   }
 });
 
-test("a payee bank account with no approval date is never pinned to a run, and is reported as undated until it is dated", { skip: !DB }, async () => {
+test("a payee bank account requires native approval evidence before a payment run can pin it", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const options = await seedPaymentRunSelectionFixture(org);
     const bankId = randomUUID();
-
-    await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`
-        insert into party_bank_accounts
-          (id, org_id, party_id, bank_name, country, currency, routing,
-           approval_status, is_active, approved_at, created_by, updated_by)
-        values (${bankId}, ${org.orgId}, ${org.vendorId}, 'Vendor bank', 'CA', 'CAD',
-                '{"routingNumber":"021000021"}'::jsonb, 'approved', true, null,
-                ${options.actorId}, ${options.actorId})`);
-
-      const stateOf = async () => (await db.execute<{ state: string }>(sql`
-        select ${payeeBankStateSql(sql`${org.vendorId}::uuid`, sql`${org.orgId}::uuid`)} as state`)).rows[0]!.state;
-      const pinnedBankOf = async (runId: string) => (await db.execute<{ bank: string | null }>(sql`
-        select payee_bank_account_id as bank from payment_instructions
-         where payment_run_id = ${runId} and org_id = ${org.orgId}`)).rows[0]?.bank ?? null;
-      const createRun = () => createPaymentRun({ allowedSubsidiaryIds: null,
-        orgId: org.orgId,
-        createdBy: options.actorId,
-        paymentBankProfileId: options.profileId,
-        billDocumentIds: [options.billId],
-        scheduledFor: org.date,
-      });
-
-      assert.equal(await stateOf(), "undated");
-      const undatedRun = await createRun();
-      assert.equal(await pinnedBankOf(undatedRun.id), null, "an undated approval is not pinned to the instruction");
-      const blocked = (await paymentRunReadiness(undatedRun.id, org.orgId)).blockers.find((b) => b.source === "bank");
-      assert.match(blocked?.reason ?? "", /approved without an approval date; save them again to re-approve/);
-      await cancelPaymentRun(undatedRun.id, org.orgId, options.actorId, "release before the approval is dated");
-
-      const dated = await db.execute(sql`
-        update party_bank_accounts set approved_at = ${org.date}::date
-         where id = ${bankId} and org_id = ${org.orgId} and approval_status = 'approved'`);
-      assert.equal(dated.rowCount, 1, "the approval date is written to exactly the approved row");
-
-      assert.equal(await stateOf(), "approved");
-      const datedRun = await createRun();
-      assert.equal(await pinnedBankOf(datedRun.id), bankId, "a dated approval is pinned to the new instruction");
+    await assert.rejects(withOrgContext(org.orgId, () => db.execute(sql`
+      insert into party_bank_accounts
+        (id,org_id,party_id,bank_name,country,currency,routing,approval_status,is_active,approved_at,created_by,updated_by)
+      values(${bankId},${org.orgId},${org.vendorId},'Vendor bank','CA','CAD','{"routingNumber":"021000021"}'::jsonb,
+        'approved',true,null,${options.actorId},${options.actorId})`)),
+      error => error instanceof Error && error.cause instanceof Error && /pending native Flow routing/.test(error.cause.message));
+    assert.equal((await db.execute(sql`select id from party_bank_accounts where org_id=${org.orgId} and id=${bankId}`)).rows.length,0);
+    await grantScratchPermissions(org.orgId,options.actorId,["parties.manage"]);
+    await seedApprovedBankAccountFixture({orgId:org.orgId,actorId:options.actorId,partyId:org.vendorId,id:bankId,
+      bankName:'Vendor bank',country:'CA',currency:'CAD',routing:{routingNumber:'021000021'},lastFour:'0021'});
+    await withOrgContext(org.orgId,async () => {
+      const state=(await db.execute<{state:string}>(sql`select ${payeeBankStateSql(sql`${org.vendorId}::uuid`,sql`${org.orgId}::uuid`)} as state`)).rows[0];
+      assert.equal(state?.state,'approved');
+      const run=await createPaymentRun({allowedSubsidiaryIds:null,orgId:org.orgId,createdBy:options.actorId,
+        paymentBankProfileId:options.profileId,billDocumentIds:[options.billId],scheduledFor:org.date});
+      const instruction=(await db.execute<{bank:string|null}>(sql`select payee_bank_account_id as bank from payment_instructions
+        where org_id=${org.orgId} and payment_run_id=${run.id}`)).rows[0];
+      assert.equal(instruction?.bank,bankId);
     });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
+  } finally {await dropScratchOrg(org.orgId);}
 });
 
 /** The duplicate-bill refusal must name the bill and the live run

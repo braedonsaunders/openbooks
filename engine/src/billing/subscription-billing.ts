@@ -990,6 +990,7 @@ async function createSubscriptionInvoiceInTransaction(
       kind,
       invoiceId,
       spec.actorId,
+      { source: spec.actorId === null ? "schedule" : "api" },
     );
     if (submission.flowError) {
       throw new SubscriptionError(`approval could not be routed: ${submission.flowError}`);

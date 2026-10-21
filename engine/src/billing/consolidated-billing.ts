@@ -770,7 +770,8 @@ export async function runConsolidationGroup(
 
       let posted = false;
       if (opts.autoPost) {
-        const submission = await submitAndReleaseIfUngated("customer_invoice", invoiceId, actorId);
+        const submission = await submitAndReleaseIfUngated("customer_invoice", invoiceId, actorId,
+          { source: actorId === null ? "schedule" : "api" });
         if (submission.flowError) {
           throw new ConsolidatedBillingError(`approval could not be routed: ${submission.flowError}`);
         }

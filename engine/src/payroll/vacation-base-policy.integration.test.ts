@@ -1,3 +1,4 @@
+import { submitBenefitEnrollmentFixture } from "../testing/benefit-fixtures.ts";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -5,7 +6,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { dropScratchOrgReporting } from '../testing/fixtures.ts';
 import { seedHourlyPayrollOrg, seedHourlyPayrollEmployee } from '../testing/payroll-hourly-fixture.ts';
-import { createPayRun } from './run-lifecycle.ts';
+import { createPayRun, discardPayRun } from './run-lifecycle.ts';
 import { calculatePayRun } from './run-calculation.ts';
 import { commitPayRun } from './run-commit.ts';
 import { mutatePayRunAdjustment } from './run-adjustments.ts';
@@ -40,10 +41,8 @@ test('a recurring earning changes vacation bases at pay date while retaining nat
       (id,org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from,source_decimal,provenance)
       values(${randomUUID()},${f.orgId},${enrollmentId},${ruleId},'fixed','5','2026-01-01','5',
         '{"source":"approved hourly premium election"}'::jsonb)`);
-    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${f.actorId},submitted_at=now(),
-      submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${f.actorId},
-      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
-      where org_id=${f.orgId} and id=${enrollmentId}`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${f.orgId}`);
+    await submitBenefitEnrollmentFixture(f.orgId,f.actorId,enrollmentId);
     const baseId = (await db.execute<{ id: string }>(sql`select id from pay_components
       where org_id=${f.orgId} and system_key='base_pay' and kind='earning'`)).rows[0]!.id;
     const vacationPlan = (await db.execute<{ payout_component_id: string }>(sql`select payout_component_id from entitlement_plans
@@ -94,6 +93,8 @@ test('a recurring earning changes vacation bases at pay date while retaining nat
         await db.execute(sql`update pay_component_statutory_treatments set vacationable=false
           where org_id=${f.orgId} and id=${treatmentId}`);
         await assert.rejects(commitPayRun(command), /recalculate|changed|stale/i);
+      } else {
+        await discardPayRun({...command,reason:'Complete the earlier pay-date calculation comparison'});
       }
     }
   } finally { await dropScratchOrgReporting(f.orgId); }

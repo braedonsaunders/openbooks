@@ -1,3 +1,4 @@
+import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
@@ -68,12 +69,10 @@ async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
       await seedPayrollWage(org.orgId, employee.id, actorId, { currency: "CAD", rate: "30", basis: "hour", annualHours: "2080", effectiveFrom: "2026-01-01" });
       await seedPayrollProfile(org.orgId, employee.id, employmentId, scheduleId, actorId, { country: "CA", province: "ON",
         payBasis: "hourly", federalClaimCode: 1, provincialClaimCode: 1, paymentMethod: employee.method }, { percentFloor: "4", method: "accrue" });
-      await db.execute(sql`insert into party_bank_accounts (org_id, party_id, bank_name, country, currency, routing,
-        account_number_encrypted, account_last_four, approval_status, is_active, approved_at, approved_by, created_by, updated_by)
-        values (${org.orgId}, ${employee.id}, 'Canadian recipient bank', 'CA', 'CAD',
-          ${JSON.stringify({ institution: employee.institution, transit: employee.transit })}::jsonb,
-          ${encryptAccountNumber(employee.bank, { orgId: org.orgId })}, ${employee.bank.slice(-4)}, 'approved', true,
-          '2026-07-01', ${actorId}, ${actorId}, ${actorId})`);
+      await seedApprovedBankAccountFixture({orgId:org.orgId,actorId,partyId:employee.id,
+        bankName:"Canadian recipient bank",country:"CA",currency:"CAD",
+        routing:{institution:employee.institution,transit:employee.transit},
+        sealedAccount:encryptAccountNumber(employee.bank,{orgId:org.orgId}),lastFour:employee.bank.slice(-4)});
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await seedPayrollTime(org.orgId, employee.id, actorId, { workedOn, hours: "20", status: "approved",
           isBillable: false, billingStatus: "unbilled", costingBasis: "actual" });

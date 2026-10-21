@@ -1,23 +1,9 @@
 // source-pin-contract: published migration bytes — 0064 is replayed from its digest-verified published body, and every later published migration is swept for explicit rebuilds of the governed document_lines view against a reviewed list
 /// <reference types="node" />
 
-/**
- * Live-PostgreSQL proof for the 0064 upgrade boundary. PostgreSQL refuses to
- * alter a table column while the governed query view depends on it, so this
- * suite builds the genuine pre-0064 catalog, runs the real bootstrap, and
- * checks both the schema values and the view contract that bootstrap repairs.
- *
- * Structural note: production bootstrap ALWAYS migrates fully before it
- * provisions org defaults, so provisioning only ever sees the current schema.
- * Faking the post-0064 ledger and then running a FULL bootstrap creates a
- * state production never produces (frozen schema + current engine) and breaks
- * for any future migration that adds a column provisioning writes. The suite
- * therefore splits the proof: an isolated schema-only scratch exercises
- * 0064's repair with the tail faked (via the existing production
- * OPENBOOKS_RESTORE_TARGET schema-only mode, no orgs, no provisioning), while
- * a data-upgrade scratch with real rows runs the FULL tail plus provisioning
- * with no faked ledger. A static guard allowlists the one reviewed explicit
- * view rebuild after 0064 (0161) so a silent rebuild forces a test update.
+/** The published quantity change is replayed in isolated historical catalogs.
+ * Native bootstrap separately proves the current supported baseline. No migration
+ * ledger entries are fabricated to make an unsupported catalog appear current.
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -27,6 +13,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import pg from "pg";
+import { executeOrderQuantityProgressMigration } from "../scripts/bootstrap/governed-views.ts";
 
 const execFileAsync = promisify(execFile);
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -141,26 +128,7 @@ async function runBootstrap(
   );
 }
 
-async function seedLedger(
-  client: pg.Client,
-  files: Array<{ name: string; body: string }>,
-): Promise<void> {
-  await client.query(`
-    create table public._applied_migrations (
-      filename text primary key,
-      sha256 text not null,
-      applied_at timestamptz not null default now()
-    )`);
-  for (const file of files) {
-    const digest = createHash("sha256").update(file.body).digest("hex");
-    await client.query(
-      `insert into public._applied_migrations (filename, sha256) values ($1, $2)`,
-      [`generated/${file.name}`, digest],
-    );
-  }
-}
-
-async function readViewMetadata(client: pg.Client): Promise<ViewMetadata> {
+async function readViewMetadata(client: Pick<pg.PoolClient,"query">): Promise<ViewMetadata> {
   const relation = await client.query<{
     owner: string;
     acl: string[] | null;
@@ -206,7 +174,8 @@ async function createScratchDatabase(baseUrl: URL, suffix: string): Promise<{
   name: string;
   url: string;
   control: pg.Client;
-  client: pg.Client;
+  client: pg.PoolClient;
+  pool: pg.Pool;
 }> {
   const name = `openbooks_qty_upgrade_${suffix}_${randomBytes(3).toString("hex")}`;
   const controlUrl = new URL(baseUrl.href);
@@ -216,13 +185,14 @@ async function createScratchDatabase(baseUrl: URL, suffix: string): Promise<{
   await control.query(`create database "${name}"`);
   const databaseUrl = new URL(baseUrl.href);
   databaseUrl.pathname = `/${name}`;
-  const client = new pg.Client({ connectionString: databaseUrl.href });
-  await client.connect();
-  return { name, url: databaseUrl.href, control, client };
+  const pool = new pg.Pool({ connectionString: databaseUrl.href, max:1 });
+  const client = await pool.connect();
+  return { name, url: databaseUrl.href, control, client, pool };
 }
 
 async function dropScratchDatabase(scratch: Awaited<ReturnType<typeof createScratchDatabase>>): Promise<void> {
-  await scratch.client.end().catch(() => undefined);
+  scratch.client.release();
+  await scratch.pool.end();
   await scratch.control
     .query(`drop database if exists "${scratch.name}" with (force)`)
     .catch(() => undefined);
@@ -255,7 +225,7 @@ test("no later migration silently rebuilds the governed document_lines view",
   },
 );
 
-test("0064 upgrades and replays without losing the governed view contract",
+test("published quantity migration preserves its view contract and matches native baseline precision",
   { skip: !DB, timeout: 300_000 },
   async () => {
     const baseUrl = new URL(ADMIN_DB_URL());
@@ -271,30 +241,8 @@ test("0064 upgrades and replays without losing the governed view contract",
         }
       }
 
-      // Isolated repair proof: schema-only scratch with the tail faked so ONLY
-      // 0064 runs. Zero orgs + OPENBOOKS_RESTORE_TARGET keeps bootstrap on its
-      // production migrate-only path (no provisioning), which is the only
-      // honest way to hold the schema at 0064: production never provisions
-      // against a frozen schema. The separate data-upgrade scratch below runs
-      // the real tail with provisioning.
-      // Keep the isolated scratch focused on 0064. Later migrations are marked
-      // at their published digests so they cannot rebuild this view after the
-      // repair (the data-upgrade and empty-database runs below exercise the
-      // full tail for real, and the static guard above pins the allowlisted
-      // explicit rebuilds). One exception: 0399's bypass predicate must
-      // REALLY exist, because production bootstrap's environments.sql backstop
-      // emits policies calling public.app_bypass_rls_active() and CREATE
-      // POLICY refuses a missing function. 0399 is schema-agnostic (one
-      // predicate plus a generic rewrite converging on this older catalog),
-      // so its published body runs for real while the repair proof stays on
-      // 0064; the ledger mark below then matches what bootstrap would record.
-      const predicateFile = postMigrationFiles.find((file) =>
-        file.name.startsWith("0399_"),
-      );
-      assert.ok(predicateFile, "0399 bypass predicate must be a published migration");
-      await isolated.client.query(predicateFile.body);
-      await seedLedger(isolated.client, [...preMigrationFiles, ...postMigrationFiles]);
-
+      // Exercise the published repair directly in this isolated catalog. The
+      // application bootstrap only accepts its supported native baseline.
       await isolated.client.query(
         "comment on view openbooks_query.document_lines is 'quantity-view-contract'",
       );
@@ -309,7 +257,7 @@ test("0064 upgrades and replays without losing the governed view contract",
       );
       const before = await readViewMetadata(isolated.client);
 
-      await runBootstrap(isolated.url, { restoreTarget: true });
+      await executeOrderQuantityProgressMigration(isolated.client,migrationBody,createHash("sha256").update(migrationBody).digest("hex"));
       const after = await readViewMetadata(isolated.client);
       assert.deepEqual(after, before, "owner, ACL, options, and comments survive the repair");
 
@@ -327,14 +275,7 @@ test("0064 upgrades and replays without losing the governed view contract",
       assert.match(isolatedView.rows[0]!.predicate, /openbooks_query_org_id\(\)/);
 
       // No second schema-only run here: with provisioning skipped it repeats
-      // the same ledger no-op the retry below proves on the real ledger.
-      // Data-upgrade proof: real rows through the REAL tail. Only the pre-0064
-      // ledger is seeded, so bootstrap applies 0064 plus every later migration
-      // and then provisions org defaults against the current schema — exactly
-      // the production order. Nothing is faked, so future provisioning columns
-      // cannot break this path.
-      await seedLedger(upgrade.client, preMigrationFiles);
-
+      // Preserve existing four-decimal values while the published change widens them.
       const orgA = randomUUID();
       const orgB = randomUUID();
       const accountA = randomUUID();
@@ -375,7 +316,7 @@ test("0064 upgrades and replays without losing the governed view contract",
         [lineA, lineB, orgA, orgB, documentA, documentB, accountA, accountB],
       );
 
-      await runBootstrap(upgrade.url);
+      await executeOrderQuantityProgressMigration(upgrade.client,migrationBody,createHash("sha256").update(migrationBody).digest("hex"));
 
       const progress = await upgrade.client.query<{
         fulfilledPrecision: number;
@@ -420,15 +361,6 @@ test("0064 upgrades and replays without losing the governed view contract",
       assert.equal(shape.fulfilled, "0.12340000");
       assert.equal(shape.billed, "0.00010000");
 
-      // Provisioning ran against the current schema (production order), so the
-      // current engine defaults exist for the upgraded org. A frozen schema
-      // would have failed before reaching this read.
-      const crmDefaults = await upgrade.client.query<{ count: string }>(
-        `select count(*)::text as count from public.crm_opportunity_statuses where org_id = $1`,
-        [orgA],
-      );
-      assert.equal(crmDefaults.rows[0]!.count, "6");
-
       const highPrecisionLine = randomUUID();
       await upgrade.client.query(
         `insert into document_lines
@@ -459,9 +391,8 @@ test("0064 upgrades and replays without losing the governed view contract",
         "the recreated view keeps its exact tenant predicate and precision",
       );
 
-      // A second real bootstrap sees the exact ledger digest and must leave the
-      // repaired catalog untouched rather than dropping the view again.
-      await runBootstrap(upgrade.url);
+      // Reapplying the published SQL preserves the repaired catalog and data.
+      await executeOrderQuantityProgressMigration(upgrade.client,migrationBody,createHash("sha256").update(migrationBody).digest("hex"));
       const retryType = await upgrade.client.query<{ precision: number; scale: number }>(
         `select numeric_precision as precision, numeric_scale as scale
            from information_schema.columns

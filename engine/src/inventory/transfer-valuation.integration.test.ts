@@ -283,7 +283,7 @@ test("transfer receipt refuses replacement transit stock and rolls back earlier 
     await assert.rejects(issueInventory(org.orgId, actor, {
       itemId: org.items.movingAvg, stockLocationId: transitId, quantity: "1",
       subsidiaryId: org.subsidiaryId, date: org.date,
-    }), /quarantined, held, externally owned, or unavailable/);
+    }), /Stock is held, unavailable, externally owned, or in vendor custody.*release the hold/);
     // Withdraw through a governed transfer: transit stock cannot be picked or sold.
     await transferInventory(org.orgId, actor, {
       itemId: org.items.movingAvg, fromStockLocationId: transitId,

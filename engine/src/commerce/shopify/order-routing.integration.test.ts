@@ -13,9 +13,14 @@ import { receiveInventory } from "../../inventory/movements.ts";
 import {
   createScratchOrg,
   createScratchUser,
+  grantScratchPermissions,
+  seedApprovalFlow,
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+
+import { installEngineSeams } from "../../composition/install.ts";
+import { decideGate } from "../../flows/gates.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -208,3 +213,29 @@ test(
     }
   },
 );
+
+test("unattended Shopify sync retains its source and waits for the tenant's configured cash-sale gate", {skip:!DB}, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    installEngineSeams();
+    const author = await createScratchUser(org.orgId,"Storefront connector operator","shopify_operator");
+    const reviewer = await createScratchUser(org.orgId,"Storefront reviewer","shopify_reviewer");
+    await grantScratchPermissions(org.orgId,reviewer,["cash_sales.post"]);
+    const channelId = await setupShop(org,author);
+    await seedApprovalFlow(org.orgId,{subjectKind:"cash_sale",assignees:[{type:"user",userId:reviewer}],mode:"all"});
+    const adapter=channelAdapter("shopify");
+    const pending=await adapter.handleEvent(delivery(org.orgId,channelId,"orders/create",shopifyOrder()));
+    const ref=pending.resultRef as {postingStatus:string;documentId:string};
+    assert.equal(ref.postingStatus,"pending");assert.ok(ref.documentId);
+    const receipt=(await db.execute<{actor_id:string|null;source:string}>(sql`select actor_id,context->>'event_source' as source
+      from flow_submissions where org_id=${org.orgId} and subject_id=${ref.documentId}`)).rows[0];
+    assert.deepEqual(receipt,{actor_id:null,source:"sync"});
+    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${ref.documentId}`)).rows.length,0);
+    const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${ref.documentId} and status='pending'`)).rows[0];
+    assert.ok(gate);await decideGate({gateId:gate.id,userId:reviewer,decision:"approved"});
+    const posted=await adapter.handleEvent(delivery(org.orgId,channelId,"orders/create",shopifyOrder()));
+    assert.equal((posted.resultRef as {postingStatus:string}).postingStatus,"posted");
+    await adapter.handleEvent(delivery(org.orgId,channelId,"orders/create",shopifyOrder()));
+    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${ref.documentId}`)).rows.length,1);
+  } finally {await dropScratchOrg(org.orgId);}
+});

@@ -1,3 +1,4 @@
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { lockApprovalSubject } from "../platform/approval-routing.ts";
 import { randomUUID } from "node:crypto";
@@ -14,6 +15,25 @@ import { runRecordFlows, type RecordFlowsResult } from "./run.ts";
 
 import type { FlowSubmissionPolicy } from "../platform/flow-submission-policy.ts";
 export type SubmissionPolicy = FlowSubmissionPolicy;
+
+/** Unattended channel receipts name their active source instead of impersonating a user. */
+export async function assertSystemSubmissionSource(input: {
+  orgId: string; subjectKind: string; subjectId: string; source: FlowEventSource;
+}): Promise<void> {
+  if (input.source === "schedule") return;
+  if (input.source === "sync" && ["cash_sale", "cash_refund"].includes(input.subjectKind)) {
+    if (!(await lockAndCheckOrgFeature(db,input.orgId,"salesChannels")) ||
+        !(await lockAndCheckOrgFeature(db,input.orgId,"cashSales")))
+      throw new FlowDispatchError("Enable Sales Channels and Cash sales in Company Settings → Features before submitting channel records.");
+    const channel = await db.execute(sql`select c.id from sales_channels c join documents d
+      on d.org_id=c.org_id and d.source_channel_id=c.id and d.external_source=c.kind
+      where d.org_id=${input.orgId} and d.id=${input.subjectId} and d.kind=${input.subjectKind}
+        and nullif(btrim(d.external_ref),'') is not null and c.status='active'
+      for share of c`);
+    if (channel.rows.length === 1) return;
+  }
+  throw new FlowDispatchError("The submission requires an authorized actor or its native unattended source.");
+}
 
 export async function routeSubjectSubmission(input: {
   orgId: string;
@@ -37,10 +57,8 @@ export async function routeSubjectSubmission(input: {
     );
   }
   const source = input.event?.source ?? input.source ?? "ui";
-  if (input.actorId === null && source !== "schedule")
-    throw new FlowDispatchError(
-      "Interactive submission requires an authorized acting user.",
-    );
+  if (input.actorId === null)
+    await assertSystemSubmissionSource({ ...input, source });
   await lockApprovalSubject(input.orgId, input.subjectKind, input.subjectId);
   const actor = input.actorId === null ? null : await lockActorIdentity(db,input.orgId,input.actorId);
   if(input.actorId !== null && !actor)

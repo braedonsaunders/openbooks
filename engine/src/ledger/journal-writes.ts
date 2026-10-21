@@ -572,11 +572,10 @@ export async function createScriptJournal(
     const submission = await submitAndReleaseIfUngated(
       "journal",
       docId.id,
-      // A null submitter is a system submission. The flow engine retains null
-      // rather than inventing an identity, and any submitter-based approval
-      // target resolves empty so the submission fails closed.
+      // Unattended script runs retain system provenance and the schedule
+      // source. Tenant gates still apply; no human identity is invented.
       actorId,
-      { source: "script" },
+      { source: actorId === null ? "schedule" : "script" },
     );
     if (submission.flowError) {
       throw new JournalWriteError(`approval could not be routed: ${submission.flowError}`);

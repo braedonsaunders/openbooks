@@ -194,12 +194,14 @@ export const prebillsFlowAdapter: FlowSubjectAdapter =
       outcome: "approved" | "rejected",
       ctx: FlowExecCtx,
       detail?: { comment?: string | null },
+      run?: { id: string; dispatchValues: Record<string, unknown> | null },
     ): Promise<void> {
       await releaseFlowApproval({
         subjectKind: PREBILL_SUBJECT_KIND,
         subjectId,
         outcome,
         comment: detail?.comment,
+        approvalRunId: run?.id,
         ctx,
       });
     },

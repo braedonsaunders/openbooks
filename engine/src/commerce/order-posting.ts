@@ -960,7 +960,7 @@ export async function postCashSaleDraft(
   }
   const submission = approved
     ? { gated: false, flowError: null }
-    : await submitAndReleaseIfUngated("cash_sale", documentId, actor);
+    : await submitAndReleaseIfUngated("cash_sale", documentId, actor, { source: "sync" });
   if (submission.gated) {
     // An approval policy holds the draft: the operator approves in the
     // document workflow, then replays the order to post the approved draft.

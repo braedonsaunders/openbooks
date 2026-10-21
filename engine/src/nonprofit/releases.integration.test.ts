@@ -10,7 +10,7 @@ import { createFund, setFundPair } from "./funds.ts";
 import { NonprofitError, NonprofitPostingError } from "./errors.ts";
 import { setFramework } from "./frameworks.ts";
 import { provisionFundAccounting } from "./provision.ts";
-import { createFundRelease, getFundRelease, listFundReleases, submitFundRelease, voidFundRelease } from "./releases.ts";
+import { createFundRelease, getFundRelease, listFundReleases, submitFundRelease, voidFundRelease, releaseFundReleaseApproval } from "./releases.ts";
 import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg, seedApprovalFlow } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -88,6 +88,11 @@ test("fund releases route approval, post and reverse, and refuse unsafe class or
     });
     const pending = await submitFundRelease({ orgId: org.orgId, releaseId: gatedDraft.id, actorId: drafter });
     assert.equal(pending.status, "pending_approval");
+    for (const outcome of ["approved", "rejected"] as const) {
+      await assert.rejects(releaseFundReleaseApproval({subjectId:gatedDraft.id,outcome,ctx:{orgId:org.orgId,userId:approver}}),
+        error => error instanceof NonprofitError && error.code === "fund_release_flow_decision_required");
+      assert.equal((await withOrgContext(org.orgId,()=>getFundRelease({orgId:org.orgId,releaseId:gatedDraft.id})))?.status,"pending_approval");
+    }
     const gate = await withOrgContext(org.orgId, async () =>
       (await db.execute<{ id: string; assignee: string }>(sql`
         select id, assignee_user_id::text as assignee from flow_gates
@@ -215,6 +220,7 @@ test("a closed-period fund release refusal keeps the typed reopen scope", { skip
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Release Drafter", "accountant"));
+    await grantScratchPermissions(org.orgId, actor, ["funds.manage"]);
     installEngineSeams();
     await withOrgContext(org.orgId, () => db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',

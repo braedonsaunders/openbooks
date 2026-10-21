@@ -6,6 +6,7 @@ import type { SessionUser } from '../auth';
 const { sql } = await import('drizzle-orm');
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures');
+const { approveBudgetScenarioFixture } = await import('@openbooks/engine/testing/budgets');
 const { executeAssistantTool } = await import('./registry');
 const { applicationTool, executeApplicationTool } = await import('../application/tool-catalog.ts');
 type ApplicationContext = import('../application/context.ts').ApplicationContext;
@@ -37,14 +38,9 @@ async function seedScenario(
       values (${id}, ${orgId}, ${bookId}, 2026, ${`Plan ${status}`}, 'budget', 'draft')
     `);
     if (status !== 'draft') {
-      // The scenario guard requires approved scenarios to carry lines, each
-      // flip must bump the revision by exactly one, and approval runs through
-      // pending_approval (draft -> pending_approval -> approved).
       await seedLines(orgId, id, subsidiaryId, revenueId, cogsId, periodId);
-      for (const next of ['pending_approval', status]) {
-        await db.execute(sql`update budget_scenarios set status = ${next}, revision = revision + 1 where id = ${id} and org_id = ${orgId}`);
-        if (next === status) break;
-      }
+      assert.equal(status, 'approved', 'this fixture declares either draft or native released budgets');
+      await approveBudgetScenarioFixture(orgId, id);
     }
   });
   return id;

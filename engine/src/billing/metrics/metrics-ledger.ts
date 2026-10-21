@@ -412,8 +412,8 @@ function attributedBucket<Bucket extends { subsidiary_id: string; entry_ids: str
  *
  * The remedy is the release's controlled normalization workflow, not an
  * ordinary recompute: the operator opens Company Setup → SaaS Metrics,
- * submits a normalization request for the source month, and a different
- * authorized approver approves it before the current month is recomputed.
+ * submits a normalization request for the source month, and completes any
+ * tenant Flow gates before the current month is recomputed.
  * Closed periods remain closed throughout; legacy rows stay frozen until
  * the approved correction succeeds.
  */

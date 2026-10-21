@@ -178,6 +178,7 @@ test(
           subjectKind: "pick_list",
           assignees: [{ type: "submitter" }],
           mode: "any",
+          preventSelfApproval: false,
         }),
       );
       const gated = await releasePickWave(org.orgId, actor, {

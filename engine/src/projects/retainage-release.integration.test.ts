@@ -4,8 +4,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
-import { createPayApplication, generatePayApplicationInvoice, releaseRetainage, voidPayApplication } from "./construction-billing.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrgReporting, grantScratchPermissions } from "../testing/fixtures.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
+import { createPayApplication, generatePayApplicationInvoice, releaseRetainage, submitPayApplication } from "./construction-billing.ts";
 import { deleteDocument } from "../ledger/document-delete.ts";
 import { releaseBillingProvenance } from "../ledger/billing-provenance.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
@@ -19,7 +20,10 @@ async function fixture(run: (f: {
 }) => Promise<void>) {
   const org = await createScratchOrg();
   try {
+    const { installEngineSeams } = await import("../composition/install.ts");
+    installEngineSeams();
     const actor = await createScratchUser(org.orgId, "Retainage controller", "admin");
+    await grantScratchPermissions(org.orgId, actor, ["ar.create"]);
     const project = randomUUID(), type = randomUUID();
     await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`);
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('retainageReceivable',${org.accounts.invAsset}::text)) where id=${org.orgId}`);
@@ -135,7 +139,7 @@ test("controlled void cancels a release reservation and permits replacement", en
 test("ordinary progress applications preserve their lines and regenerate after deletion", enabled, async () => fixture(async ({ org, actor, project }) => {
   const app = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "10", null));
   await db.execute(sql`update pay_application_lines set this_period_completed=100 where org_id=${org.orgId} and pay_application_id=${app.id}`);
-  await db.execute(sql`update pay_applications set status='approved' where org_id=${org.orgId} and id=${app.id}`);
+  await submitPayApplication(org.orgId, actor, app.id, [], null);
   const first = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
   await withOrgTransaction(org.orgId, () => deleteDocument(first.invoiceId, actor, org.orgId, { reason: "Correct progress invoice", allowedSubsidiaryIds: null }));
   assert.equal((await db.execute(sql`select status from pay_applications where org_id=${org.orgId} and id=${app.id}`)).rows[0]!.status, "approved");
@@ -195,11 +199,10 @@ test("a later retainage-release period does not block an earlier progress draw",
   assert.equal(progress.applicationNumber, 2);
 }));
 
-test("legacy stranded release applications get an actionable recovery error and can be voided", enabled, async () => fixture(async ({ org, actor, project }) => {
+test("retainage release applications cannot fabricate approval evidence", enabled, async () => fixture(async ({ org, actor, project }) => {
   const app = randomUUID();
-  await db.execute(sql`insert into pay_applications(id,org_id,project_id,application_number,period_end,kind,status,retainage_percent)
-    values(${app},${org.orgId},${project},1,${org.date},'retainage_release','approved',0)`);
-  await assert.rejects(withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app, null)), /Void this release application.*new retainage release/);
-  await withOrgTransaction(org.orgId, () => voidPayApplication(org.orgId, actor, app, null));
-  assert.equal((await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "10", null))).applicationNumber, 2);
+  await assert.rejects(db.execute(sql`insert into pay_applications(id,org_id,project_id,application_number,period_end,kind,status,retainage_percent)
+    values(${app},${org.orgId},${project},1,${org.date},'retainage_release','approved',0)`), error => errorChainMatches(error, /native draft|native Flow/));
+  assert.equal((await db.execute(sql`select id from pay_applications where org_id=${org.orgId} and id=${app}`)).rows.length,0);
+  assert.equal((await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "10", null))).applicationNumber, 1);
 }));

@@ -1,3 +1,4 @@
+import { hasEphemeralDatabaseMarker } from "@openbooks/engine/testing/fixtures";
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -8,14 +9,15 @@ test('statement-scoped policy checks preserve runtime isolation and are evaluate
   skip: !process.env.OPENBOOKS_TEST_ADMIN_DB_URL || !process.env.OPENBOOKS_RUNTIME_DB_URL,
 }, async () => {
   const adminUrl = process.env.OPENBOOKS_TEST_ADMIN_DB_URL!
-  assert.match(new URL(adminUrl).pathname, /^\/ob_/, 'policy conformance must use a disposable test database')
   const admin = new pg.Client({ connectionString: adminUrl })
   const runtime = new pg.Client({ connectionString: process.env.OPENBOOKS_RUNTIME_DB_URL })
   const table = `audit_policy_${randomUUID().replaceAll('-', '')}`
   const orgA = randomUUID(), orgB = randomUUID()
   const migration = readFileSync('schema/migrations/generated/0467_statement_scoped_tenant_policy_checks.sql', 'utf8')
   try {
-    await admin.connect()
+    await admin.connect();
+    const marker=(await admin.query("select shobj_description(oid,'pg_database') as marker from pg_database where datname=current_database()")).rows[0]?.marker;
+    assert.ok(hasEphemeralDatabaseMarker(marker,process.env.OPENBOOKS_TEST_DB_MARKER),"policy changes require the exact owned disposable database marker");
     await runtime.connect()
     const role = (await runtime.query('select current_user as role')).rows[0].role as string
     assert.match(role, /^[a-z_][a-z0-9_]*$/)

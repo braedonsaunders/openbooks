@@ -33,7 +33,7 @@ import {
   dispatchFailureReason,
   findGatingRun,
 } from "./dispatch-result.ts";
-import { routeSubjectSubmission } from "./submission-policy.ts";
+import { assertSystemSubmissionSource, routeSubjectSubmission } from "./submission-policy.ts";
 
 /**
  * Submit a draft record for approval — the sole approval-routing entry point.
@@ -129,6 +129,16 @@ async function submitForApprovalLocked(
   if (!doc) throw new Error("target document not found");
   if (doc.status !== "draft")
     throw new SubmitError(`document is ${doc.status}, not draft`);
+  const submitter = actorId ?? null;
+  if (submitter === null) {
+    if (!options.source) throw new SubmitError("A named authorized operator must submit this document.");
+    await assertSystemSubmissionSource({ orgId, subjectKind:doc.kind, subjectId:doc.id, source:options.source });
+  }
+  if (submitter !== null) {
+    const authority = documentKindPermissions(doc.kind);
+    if (!authority) throw new ScopeNotFoundError();
+    await lockActorCommandAuthority(db, orgId, submitter, doc.subsidiaryId, authority.edit);
+  }
   const consolidationRefusal = await consolidationSourceRefusal(
     db,
     orgId,
@@ -253,11 +263,6 @@ async function submitForApprovalLocked(
   // pending_approval and the flow run id stands in for the request id (the
   // caller only round-trips it as an opaque string). A flow that matched but
   // created no gates (pure automation) already ran its actions.
-  const submitter = actorId ?? doc.createdBy;
-  if (!submitter)
-    throw new SubmitError(
-      "A named authorized operator must submit this document.",
-    );
   let flowResult;
   try {
     flowResult = (
@@ -301,9 +306,9 @@ async function submitForApprovalLocked(
       .update(schema.documents)
       .set({
         status: "pending_approval",
-        submittedBy: actorId ?? doc.createdBy,
+        submittedBy: submitter,
         submittedAt: new Date(),
-        updatedBy: actorId ?? doc.createdBy,
+        updatedBy: submitter,
         updatedAt: new Date(),
       })
       .where(
@@ -327,9 +332,9 @@ async function submitForApprovalLocked(
   const updated = await db
     .update(schema.documents)
     .set({
-      submittedBy: actorId ?? doc.createdBy,
+      submittedBy: submitter,
       submittedAt: new Date(),
-      updatedBy: actorId ?? doc.createdBy,
+      updatedBy: submitter,
       updatedAt: new Date(),
     })
     .where(

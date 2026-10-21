@@ -1,3 +1,4 @@
+import { submitBenefitEnrollmentFixture } from "../testing/benefit-fixtures.ts";
 import { dropScratchOrgReporting, seedPayrollComponent } from "../testing/fixtures.ts";
 import { seedHourlyPayrollTime as hours, seedHourlyPayrollOrg as payrollOrg, seedHourlyPayrollEmployee as employee, type HourlyPayrollFixture as Fixture } from "../testing/payroll-hourly-fixture.ts";
 import assert from "node:assert/strict";
@@ -778,10 +779,8 @@ test('a per-hour contribution counts bank-funded hours once and outside cash at 
     }
     await db.execute(sql`insert into hrm_benefit_enrollment_terms(id,org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from,source_decimal,provenance)
       values(${randomUUID()},${fx.orgId},${enrollmentId},${ruleId},'fixed','2','2026-01-01','2','{"source":"approved payroll election"}'::jsonb)`);
-    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
-      submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
-      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
-      where org_id=${fx.orgId} and id=${enrollmentId}`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${fx.orgId}`);
+    await submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,enrollmentId);
     const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
       periodStart: '2026-07-12', periodEnd: '2026-07-18' });
     await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,hours)

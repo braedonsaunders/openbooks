@@ -1,4 +1,7 @@
 import { routeSubjectSubmission } from '@openbooks/engine/flows/submission-policy'
+import { completedGateDecisionPolicy } from '@openbooks/engine/flows/approval-decision-policy'
+import { lockActorCommandAuthority } from '@openbooks/engine/organization/actor-command-authority'
+import { lockApprovalSubject } from '@openbooks/engine/platform/approval-routing'
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
@@ -274,23 +277,28 @@ export async function releasePrebillApproval(
   id: string,
   outcome: 'approved' | 'rejected',
   comment?: string | null,
+  approvalRunId?: string,
 ) {
-  return db.transaction(async (tx) => {
+  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    await lockApprovalSubject(orgId, PREBILL_SUBJECT_KIND, id);
     await assertPreBillingEnabledTx(tx, orgId)
+    const scope = await lockActorCommandAuthority(tx, orgId, actorId, null, 'ar.approve');
+    await lockPrebillForLifecycle(tx, orgId, id, scope);
+    if (!(await completedGateDecisionPolicy(tx, {orgId,actorId,subjectKind:PREBILL_SUBJECT_KIND,
+      subjectId:id,outcome,approvalRunId}))) throw new PreBillingError('Complete the current worksheet’s configured native Flow gates before release',409);
     if (outcome === 'approved') {
-      // Flows has already authorized the approver against the subject's
-      // scope; the release acts under that grant, unrestricted by sentinel.
-      await approvePrebillInTx(tx, orgId, actorId, id, 'flows', null)
+      await approvePrebillInTx(tx, orgId, actorId, id, 'flows', scope)
       return
     }
-    const header = await lockPrebillForLifecycle(tx, orgId, id, null)
+    const header = await lockPrebillForLifecycle(tx, orgId, id, scope)
     if (header.status !== 'review')
       throw new PreBillingError(`Cannot return a ${header.status} prebill`)
     const reason = comment?.trim() || 'Returned in approval flow'
-    await tx.execute(sql`
+    const returned = await tx.execute(sql`
       update prebills set status = 'draft', updated_at = now(), updated_by = ${actorId}
-       where org_id = ${orgId} and id = ${id}
+       where org_id = ${orgId} and id = ${id} and status='review' returning id
     `)
+    if(returned.rowCount!==1)throw new PreBillingError('The worksheet changed during its Flow decision. Reload it before retrying.',409);
     await appendEvent(tx, orgId, id, actorId, 'returned', {
       source: 'flows',
       reason,
@@ -300,7 +308,7 @@ export async function releasePrebillApproval(
       after: { status: 'draft' },
       reason,
     })
-  })
+  }))
 }
 
 export async function transitionPrebill(

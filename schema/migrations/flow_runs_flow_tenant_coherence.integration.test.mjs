@@ -130,7 +130,8 @@ test("same-org flow run can name its flow; cross-tenant insert and update are re
           [orgB.flowId, sameOrgRun],
         ),
         (error) => {
-          assert.equal(postgresCode(error), "23503");
+          assert.equal(postgresCode(error), "23514");
+          assert.match(String(error), /submitted Flow identity, policy and record facts are immutable/);
           return true;
         },
       );

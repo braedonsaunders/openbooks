@@ -18,6 +18,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
+const { seedApprovedBankAccountFixture } = await import('@openbooks/engine/testing/bank-accounts')
 const { GET, POST } = await import('./route.ts')
 const { PATCH } = await import('./[id]/route.ts')
 
@@ -33,7 +34,8 @@ test('payment mandate list hides mandates for parties outside the caller scope',
       for (const [partyId, suffix] of [[org.customerId, 'visible'], [hiddenParty, 'hidden']] as const) {
         const bankId = randomUUID(), mandateId = randomUUID()
         if (suffix === 'hidden') { hiddenBankId = bankId; hiddenMandateId = mandateId }
-        await db.execute(sql`insert into party_bank_accounts (id, org_id, party_id, bank_name, country, currency, routing, account_last_four, approved_at, approved_by, created_by, updated_by) values (${bankId}, ${org.orgId}, ${partyId}, ${suffix}, 'CA', 'CAD', '{}'::jsonb, ${suffix === 'visible' ? '1111' : '2222'}, ${org.date}, ${actorId}, ${actorId}, ${actorId})`)
+        await seedApprovedBankAccountFixture({orgId:org.orgId,actorId,partyId,id:bankId,
+          bankName:suffix,country:'CA',currency:'CAD',routing:{},lastFour:suffix==='visible'?'1111':'2222'})
         await db.execute(sql`insert into payment_mandates (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference, status, signed_on, valid_from, created_by, updated_by) values (${mandateId}, ${org.orgId}, ${partyId}, ${bankId}, 'nacha', ${`MANDATE-${suffix}`}, 'active', ${org.date}, ${org.date}, ${actorId}, ${actorId})`)
       }
     })

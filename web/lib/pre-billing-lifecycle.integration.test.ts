@@ -155,9 +155,9 @@ test('pre-billing approval runs through Flows with separation of duties', enable
     try {
       const actors = await seedFlowActors(org.orgId)
       const project = await billableProject(org)
-      // The preparer is an administrator, who may act on any gate — so only
-      // separation of duties stands between them and their own worksheet.
-      await seedApprovalFlow(org.orgId, { subjectKind: 'prebill', assignees: [{ type: 'role', role: 'approver' }], mode: 'any' })
+      // The tenant assigns this worksheet to its named reviewer; administrator
+      // status does not grant a decision on someone else's gate.
+      await seedApprovalFlow(org.orgId, { subjectKind: 'prebill', assignees: [{ type: 'user', userId: actors.approver1Id }], mode: 'any' })
       const created = await wip.createPrebill(org.orgId, actors.adminId, { projectId: project, periodEnd: org.date })
       const gateFor = async () => (await db.execute<{ id: string }>(sql`
         select id from flow_gates where org_id = ${org.orgId} and subject_kind = 'prebill'
@@ -165,6 +165,10 @@ test('pre-billing approval runs through Flows with separation of duties', enable
 
       await wip.transitionPrebill(org.orgId, actors.adminId, created.id, 'submit')
       assert.equal((await status(org.orgId, created.id)).status, 'review')
+      for (const outcome of ['approved','rejected'] as const) {
+        await assert.rejects(wip.releasePrebillApproval(org.orgId,actors.approver1Id,created.id,outcome,'Review the current worksheet'),/configured native Flow gates/)
+        assert.equal((await status(org.orgId,created.id)).status,'review')
+      }
       await assert.rejects(wip.transitionPrebill(org.orgId, actors.adminId, created.id, 'void', 'Not needed'), /awaiting approval in Inbox/)
 
       const first = await gateFor()

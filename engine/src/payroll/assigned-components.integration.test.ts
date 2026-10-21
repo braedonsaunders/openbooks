@@ -1,4 +1,5 @@
-import { dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { submitBenefitEnrollmentFixture } from "../testing/benefit-fixtures.ts";
+import { seedPayrollStatutoryTreatment, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { seedHourlyPayrollTime as hours, seedHourlyPayrollOrg as payrollOrg, seedHourlyPayrollEmployee as employee, type HourlyPayrollFixture as Fixture } from "../testing/payroll-hourly-fixture.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -6,7 +7,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { calculatePayRun } from "./run-calculation.ts";
-import { createPayRun } from "./run-lifecycle.ts";
+import { createPayRun, discardPayRun } from "./run-lifecycle.ts";
 import { validateEmployeePayComponentAssignment } from "./assigned-components.ts";
 
 /** Recurring per-employee pay-component assignments: write-time refusals and run pricing. */
@@ -18,6 +19,8 @@ async function userComponent(fx: Fixture, code: string, kind: string, basis = 'f
   await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,
     tax_treatment,payment_kind,basis,value,expense_account_id,liability_account_id)
     values(${id},${fx.orgId},${code},${code},${kind},'CA',true,true,true,false,'none','cash',${basis},${value},${fx.accounts.burdenExpense},${fx.accounts.otherPayable})`);
+  await seedPayrollStatutoryTreatment(fx.orgId,id,{effectiveFrom:"2026-01-01",programExclusions:[],vacationable:false,
+    createdBy:fx.actorId,updatedBy:fx.actorId});
   return id;
 }
 
@@ -82,6 +85,8 @@ test('effective rate-card assignments price qualifying facts without a recurring
         from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
         where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${incentive}`)).rows[0]!.amount;
       assert.equal(total, expected);
+      await discardPayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId,
+        reason:"Complete the independent rate-card period comparison"});
     }
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
@@ -128,10 +133,8 @@ test('assignment writes refuse statutory components, overlaps, and Benefits-deli
       values(${ruleId},${fx.orgId},${planId},'DUES_RULE','Dues rule','employee_deduction',${dues},'per_period',0,'elected_rate','none','2026-01-01','all_pay_runs')`);
     await db.execute(sql`insert into hrm_benefit_enrollment_terms(id,org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from,source_decimal,provenance)
       values(${randomUUID()},${fx.orgId},${enrollmentId},${ruleId},'fixed','10','2026-01-01','10','{"source":"approved payroll election"}'::jsonb)`);
-    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
-      submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
-      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
-      where org_id=${fx.orgId} and id=${enrollmentId}`);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${fx.orgId}`);
+    await submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,enrollmentId);
     await assert.rejects(
       () => validateEmployeePayComponentAssignment(db, fx.orgId, {
         employeePartyId: partyId, employmentId, componentId: dues, value: '10', effectiveFrom: '2026-07-01', effectiveTo: null,

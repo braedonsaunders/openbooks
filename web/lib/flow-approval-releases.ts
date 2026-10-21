@@ -69,7 +69,7 @@ export async function registerFlowApprovalReleaseHandlers(): Promise<void> {
   // approver's reason attached.
   registerFlowApprovalReleaseHandler(
     'prebill',
-    async ({ subjectId, outcome, comment, ctx }) => {
+    async ({ subjectId, outcome, comment, approvalRunId, ctx }) => {
       if (!ctx.userId)
         throw new Error('pre-billing approval needs an acting user')
       const { releasePrebillApproval } = await import('./pre-billing')
@@ -79,6 +79,7 @@ export async function registerFlowApprovalReleaseHandlers(): Promise<void> {
         subjectId,
         outcome,
         comment,
+        approvalRunId,
       )
     },
   )

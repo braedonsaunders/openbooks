@@ -1,3 +1,6 @@
+import { seedCanadianFilingAccountForTest } from "./filing-test-fixtures.ts";
+import { commitPayRun } from "./run-commit.ts";
+import { submitBenefitEnrollmentFixture } from "../testing/benefit-fixtures.ts";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -19,6 +22,19 @@ test('regular-only benefit premiums exclude supplemental and one-off runs while 
       await enableFeatures(fx.orgId, ['payroll', 'hrm']);
       await grantPermissions(fx.orgId, fx.actorId, ['hrm.benefits.manage']);
       const { partyId, employmentId } = await seedHourlyPayrollEmployee(fx, 'Benefit Premium Employee');
+      const filingAccountId=await seedCanadianFilingAccountForTest(fx.orgId,fx.actorId,{subsidiaryId:fx.subsidiaryId,
+        accountNumber:"123456789RP0001",name:"Benefit-premium employer",effectiveFrom:"2026-01-01",eiEmployerMultiplier:"1.4"});
+      assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+        where org_id=${fx.orgId} and employee_party_id=${partyId} returning employee_party_id`)).rows.length,1);
+      const base=(await db.execute<{id:string}>(sql`select id from pay_components where org_id=${fx.orgId} and system_key='base_pay' and kind='earning'`)).rows[0]!;
+      const prior=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,
+        periodStart:"2026-06-28",periodEnd:"2026-07-04",runType:"regular",employeePartyIds:[partyId]});
+      const priorCommand={orgId:fx.orgId,actorId:fx.actorId,documentId:prior.documentId};
+      await mutatePayRunAdjustment({...priorCommand,mutation:{action:"add",employeePartyId:partyId,
+        componentId:base.id,amount:"1000",replaceComponent:true}});
+      assert.deepEqual((await calculatePayRun(priorCommand)).errors,[]);
+      await commitPayRun(priorCommand);
+
       const planId = randomUUID(), enrollmentId = randomUUID();
       await db.execute(sql`insert into hrm_benefit_plans(id,org_id,code,name,kind,currency,employer_subsidiary_id,effective_from)
         values(${planId},${fx.orgId},'PREMIUM','Employer premiums','other','CAD',${fx.subsidiaryId},'2026-01-01')`);
@@ -41,12 +57,8 @@ test('regular-only benefit premiums exclude supplemental and one-off runs while 
           values(${randomUUID()},${fx.orgId},${enrollmentId},${ruleId},'fixed','10','2026-01-01','10',
             '{"source":"approved employer premium"}'::jsonb)`);
       }
-      await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
-        submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
-        decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
-        where org_id=${fx.orgId} and id=${enrollmentId}`);
-      const base = (await db.execute<{ id: string }>(sql`select id from pay_components
-        where org_id=${fx.orgId} and system_key='base_pay' and kind='earning'`)).rows[0]!;
+      await submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,enrollmentId);
+
       for (const runType of ['regular', 'supplemental', 'bonus', 'retro'] as const) {
         const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
           periodStart: '2026-07-12', periodEnd: '2026-07-18', runType, employeePartyIds: [partyId] });
