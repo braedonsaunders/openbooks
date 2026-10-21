@@ -100,15 +100,6 @@ test('unmeasurable annuals refuse by name instead of annualising blindly', { ski
   try {
     const calId = randomUUID()
     await withBypassContext(async () => {
-      // The scratch monthly calendar steps aside for a non-monthly default
-      // whose periods end in 2025, leaving July 2026 uncovered.
-      await db.execute(sql`update fiscal_calendars set is_default = false where org_id = ${org.orgId}`)
-      await db.execute(sql`insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone, adjustment_period_enabled, is_default, is_active, config)
-        values (${calId}, ${org.orgId}, 'Ops', 'four_four_five', 2, 1, 'UTC', false, true, true, '{}'::jsonb)`)
-      for (const [n, from, to] of [[1, '2025-02-01', '2025-03-01'], [2, '2025-03-02', '2025-03-29'], [3, '2025-03-30', '2025-04-26']] as const) {
-        await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-          values (${randomUUID()}, ${org.orgId}, 2025, ${n}, ${'P' + n}, ${from}, ${to}, false, ${calId})`)
-      }
       const zombie = randomUUID()
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
         values (${zombie}, ${org.orgId}, 'vendor', 'Flatline Co', ${org.subsidiaryId}, true, '{}'::jsonb)`)
@@ -118,18 +109,37 @@ test('unmeasurable annuals refuse by name instead of annualising blindly', { ski
       // window itself must span the six months.)
       for (let month = 2; month <= 7; month++) {
         const day = `2026-0${month}-10`
+        const periodId = month === 7 ? org.periodId : randomUUID()
+        if (month !== 7) await db.execute(sql`
+          insert into accounting_periods
+            (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+          select ${periodId}, ${org.orgId}, 2026, ${month}, ${`2026-0${month}`},
+                 date_trunc('month', ${day}::date)::date,
+                 (date_trunc('month', ${day}::date) + interval '1 month - 1 day')::date,
+                 false, fiscal_calendar_id
+            from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`)
         const docId = randomUUID()
         const entry = randomUUID()
         await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
           values (${docId}, ${org.orgId}, 'vendor_bill', ${'ZOMBIE-' + month}, ${zombie}, ${org.subsidiaryId}, ${day}, ${day}, 'CAD', 1, 'draft', 100, 0, 100, 100)`)
         await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
-          values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${'ZOMBIE-' + month}, ${day}, ${org.periodId}, 'draft', 'manual', ${docId})`)
+          values (${entry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${'ZOMBIE-' + month}, ${day}, ${periodId}, 'draft', 'manual', ${docId})`)
         await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
           values (${randomUUID()}, ${org.orgId}, ${entry}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${zombie}, false, '100', 'CAD', '100', 1),
                  (${randomUUID()}, ${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${zombie}, false, '-100', 'CAD', '-100', 1)`)
         await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`)
-        await db.execute(sql`update documents set status = 'posted', posted_entry_id = ${entry}, posting_period_id = ${org.periodId} where id = ${docId}`)
+        await db.execute(sql`update documents set status = 'posted', posted_entry_id = ${entry}, posting_period_id = ${periodId} where id = ${docId}`)
       }
+      // The scratch monthly calendar steps aside for a non-monthly default
+      // whose periods end in 2025, leaving July 2026 uncovered.
+      await db.execute(sql`update fiscal_calendars set is_default = false where org_id = ${org.orgId}`)
+      await db.execute(sql`insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone, adjustment_period_enabled, is_default, is_active, config)
+        values (${calId}, ${org.orgId}, 'Ops', 'four_four_five', 2, 1, 'UTC', false, true, true, '{}'::jsonb)`)
+      for (const [n, from, to] of [[1, '2025-02-01', '2025-03-01'], [2, '2025-03-02', '2025-03-29'], [3, '2025-03-30', '2025-04-26']] as const) {
+        await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+          values (${randomUUID()}, ${org.orgId}, 2025, ${n}, ${'P' + n}, ${from}, ${to}, false, ${calId})`)
+      }
+
     })
     const window = { from: '2026-02-01', to: '2026-07-31', label: 'Feb–Jul 2026' }
     const ctx = {
