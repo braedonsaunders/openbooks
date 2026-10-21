@@ -366,11 +366,24 @@
         "revision": "修订版本",
         "commandAction": "操作",
         "month": "报告月份",
-        "commandReason": "更正原因",
+        "commandReason": "原因",
         "cutoffOn": "截止日期",
         "startsOn": "开始日期",
         "endsOn": "结束日期",
-        "allowance": "津贴"
+        "allowance": "津贴",
+        "coverageAmount": "保障金额",
+        "evidenceRequired": "需要凭证",
+        "issuer": "签发方",
+        "itemCount": "变更数量",
+        "periodEnd": "期间结束日期",
+        "policyNumber": "保单编号",
+        "provider": "服务提供商",
+        "reason": "原因",
+        "returnKind": "退回类型",
+        "side": "协议方",
+        "throughDate": "截止日期",
+        "version": "版本号",
+        "workstream": "工作类别"
       },
       "currentTerms": "当前内容"
     }

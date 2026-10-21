@@ -22,6 +22,7 @@ test('native request reads preserve tenant and legal-entity scope without exposi
   const ownId=randomUUID(),foreignId=randomUUID()
   try{
     await withBypassContext(async()=>{
+      await db.execute(sql`update app_roles set permissions='["parties.read"]'::jsonb where org_id=${org.orgId} and key='admin'`)
       for(const [owner,id,author] of [[org,ownId,actor],[foreign,foreignId,foreignActor]] as const){
         await db.execute(sql`update parties set subsidiary_id=${owner.subsidiaryId} where org_id=${owner.orgId} and id=${owner.customerId}`)
         await db.execute(sql`insert into party_bank_accounts(id,org_id,party_id,bank_name,country,currency,
@@ -41,6 +42,9 @@ test('native request reads preserve tenant and legal-entity scope without exposi
       assert.equal((await read(ownId)).status,404)
       state.authz={...state.authz!,allowedSubsidiaryIds:null,permissions:new Set()}
       assert.equal((await read(ownId)).status,404)
+      state.authz={...state.authz!,permissions:new Set(['parties.read'])}
+      await withBypassContext(()=>db.execute(sql`update app_roles set permissions='[]'::jsonb where org_id=${org.orgId}`))
+      assert.equal((await read(ownId)).status,404,'a stale session grant cannot disclose a record after native authority is revoked')
     })
   }finally{
     state.authz=null

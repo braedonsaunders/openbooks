@@ -9,6 +9,7 @@ import { LOCALES } from '../i18n/config.ts'
 import { allReportEntities } from '@openbooks/reports'
 import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/payroll/packs'
 import { COUNTRY_TAX_PACKS } from '@openbooks/engine/country-tax-packs'
+import { getFlowAdapter, listFlowSubjectProfiles } from '@openbooks/engine/flows/registry'
 import {
   flattenCatalog,
   generateFallbackManifest,
@@ -4750,4 +4751,21 @@ test('every pack-declared tax filing notice has an English message', () => {
     return !value || !value.trim()
   })
   assert.deepEqual(missing, [], `pack-declared filing notices with no English message:\n  ${sample(missing)}`)
+})
+
+
+test('native approval request display fields have labels in every shipped locale', () => {
+  const fields = new Set(['commandReason'])
+  for (const profile of listFlowSubjectProfiles()) {
+    const adapter = getFlowAdapter(profile.subjectKind)
+    if (!adapter?.deepLink('00000000-0000-4000-8000-000000000001').startsWith('/inbox?reviewKind=')) continue
+    for (const field of profile.fields) {
+      if (field.type !== 'user' && field.key !== 'id' && !/Id$/.test(field.key) && field.key !== 'event_source') fields.add(field.key)
+    }
+  }
+  assert.ok(fields.size > 1, 'native approval subjects must be registered')
+  for (const catalog of CATALOGS) for (const key of fields) {
+    assert.ok(catalog.leaves.has(`common.approvalFlow.recordReview.fields.${key}`) || catalog.leaves.has(`common.labels.${key}`),
+      `${catalog.code}: approval request field ${key} needs a native display label`)
+  }
 })

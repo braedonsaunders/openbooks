@@ -366,11 +366,24 @@
         "revision": "Revisão",
         "commandAction": "Ação",
         "month": "Mês do relatório",
-        "commandReason": "Motivo da correção",
+        "commandReason": "Motivo",
         "cutoffOn": "Data limite",
         "startsOn": "Início",
         "endsOn": "Fim",
-        "allowance": "Auxílio"
+        "allowance": "Auxílio",
+        "coverageAmount": "Valor da cobertura",
+        "evidenceRequired": "Evidência obrigatória",
+        "issuer": "Emissor",
+        "itemCount": "Quantidade de alterações",
+        "periodEnd": "Fim do período",
+        "policyNumber": "Número da apólice",
+        "provider": "Provedor",
+        "reason": "Motivo",
+        "returnKind": "Tipo de devolução",
+        "side": "Parte do acordo",
+        "throughDate": "Data de corte",
+        "version": "Número da versão",
+        "workstream": "Frente de trabalho"
       },
       "currentTerms": "Dados atuais"
     }

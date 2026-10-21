@@ -366,11 +366,24 @@
         "revision": "リビジョン",
         "commandAction": "操作",
         "month": "報告月",
-        "commandReason": "訂正理由",
+        "commandReason": "理由",
         "cutoffOn": "締切日",
         "startsOn": "開始日",
         "endsOn": "終了日",
-        "allowance": "手当"
+        "allowance": "手当",
+        "coverageAmount": "補償額",
+        "evidenceRequired": "証拠が必要",
+        "issuer": "発行者",
+        "itemCount": "変更件数",
+        "periodEnd": "期間末日",
+        "policyNumber": "証券番号",
+        "provider": "決済事業者",
+        "reason": "理由",
+        "returnKind": "返却種別",
+        "side": "契約上の立場",
+        "throughDate": "基準日",
+        "version": "バージョン番号",
+        "workstream": "作業区分"
       },
       "currentTerms": "現在の内容"
     }

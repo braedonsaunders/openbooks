@@ -366,11 +366,24 @@
         "revision": "Revisión",
         "commandAction": "Acción",
         "month": "Mes del informe",
-        "commandReason": "Motivo de la corrección",
+        "commandReason": "Motivo",
         "cutoffOn": "Fecha límite",
         "startsOn": "Inicio",
         "endsOn": "Fin",
-        "allowance": "Asignación"
+        "allowance": "Asignación",
+        "coverageAmount": "Importe de cobertura",
+        "evidenceRequired": "Se requiere evidencia",
+        "issuer": "Emisor",
+        "itemCount": "Número de cambios",
+        "periodEnd": "Fin del período",
+        "policyNumber": "Número de póliza",
+        "provider": "Proveedor",
+        "reason": "Motivo",
+        "returnKind": "Tipo de devolución",
+        "side": "Parte del acuerdo",
+        "throughDate": "Fecha de corte",
+        "version": "Número de versión",
+        "workstream": "Área de trabajo"
       },
       "currentTerms": "Datos actuales"
     }

@@ -366,11 +366,24 @@
         "revision": "Révision",
         "commandAction": "Action",
         "month": "Mois du rapport",
-        "commandReason": "Motif de correction",
+        "commandReason": "Motif",
         "cutoffOn": "Date limite",
         "startsOn": "Début",
         "endsOn": "Fin",
-        "allowance": "Indemnité"
+        "allowance": "Indemnité",
+        "coverageAmount": "Montant de la couverture",
+        "evidenceRequired": "Justificatif requis",
+        "issuer": "Émetteur",
+        "itemCount": "Nombre de modifications",
+        "periodEnd": "Fin de période",
+        "policyNumber": "Numéro de police",
+        "provider": "Prestataire",
+        "reason": "Motif",
+        "returnKind": "Type de retour",
+        "side": "Partie à l’accord",
+        "throughDate": "Date de fin",
+        "version": "Numéro de version",
+        "workstream": "Volet de travail"
       },
       "currentTerms": "Conditions actuelles"
     }

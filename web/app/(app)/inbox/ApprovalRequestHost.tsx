@@ -64,7 +64,7 @@ export function ApprovalRequestHost() {
   const fieldLabel = (field: ApprovalRequestDetail['fields'][number]) => {
     if (t.has(`approvalFlow.recordReview.fields.${field.key}`)) return t(`approvalFlow.recordReview.fields.${field.key}`)
     if (t.has(`labels.${field.key}`)) return t(`labels.${field.key}`)
-    return field.label
+    return t(`approvalFlow.recordReview.fields.${field.key}`)
   }
   const fieldValue = (field: ApprovalRequestDetail['fields'][number]) => {
     if (field.value === null) return t('labels.notSet')

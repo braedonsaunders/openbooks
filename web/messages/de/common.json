@@ -366,11 +366,24 @@
         "revision": "Revisionsnummer",
         "commandAction": "Aktion",
         "month": "Berichtsmonat",
-        "commandReason": "Korrekturgrund",
+        "commandReason": "Begründung",
         "cutoffOn": "Stichtag",
         "startsOn": "Beginn",
         "endsOn": "Ende",
-        "allowance": "Zulage"
+        "allowance": "Zulage",
+        "coverageAmount": "Deckungssumme",
+        "evidenceRequired": "Nachweis erforderlich",
+        "issuer": "Aussteller",
+        "itemCount": "Anzahl der Änderungen",
+        "periodEnd": "Periodenende",
+        "policyNumber": "Versicherungsnummer",
+        "provider": "Anbieter",
+        "reason": "Begründung",
+        "returnKind": "Rückgabeart",
+        "side": "Vertragsseite",
+        "throughDate": "Stichtag",
+        "version": "Versionsnummer",
+        "workstream": "Arbeitsbereich"
       },
       "currentTerms": "Aktuelle Angaben"
     }

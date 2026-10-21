@@ -366,11 +366,24 @@
         "revision": "Revision",
         "commandAction": "Command",
         "month": "Reporting month",
-        "commandReason": "Correction reason",
+        "commandReason": "Reason",
         "cutoffOn": "Cutoff",
         "startsOn": "Starts",
         "endsOn": "Ends",
-        "allowance": "Allowance"
+        "allowance": "Allowance",
+        "coverageAmount": "Coverage amount",
+        "evidenceRequired": "Evidence required",
+        "issuer": "Issuer",
+        "itemCount": "Change count",
+        "periodEnd": "Period end",
+        "policyNumber": "Policy number",
+        "provider": "Provider",
+        "reason": "Reason",
+        "returnKind": "Return type",
+        "side": "Agreement side",
+        "throughDate": "Through date",
+        "version": "Version number",
+        "workstream": "Workstream"
       },
       "currentTerms": "Current terms"
     }

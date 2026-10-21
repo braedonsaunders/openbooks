@@ -6,3 +6,6 @@ export { paymentRunSubjectKind } from "./payment-runs-adapter.ts";
 export { runRecordFlows } from "./run.ts";
 /** The Flows approval subject a pre-billing worksheet approves under. */
 export { PREBILL_SUBJECT_KIND } from "./prebills-adapter.ts";
+
+/** Scoped, retained terms for native approval review. */
+export { loadApprovalRequestDetail, type ApprovalRequestDetail } from './submission-review.ts';
