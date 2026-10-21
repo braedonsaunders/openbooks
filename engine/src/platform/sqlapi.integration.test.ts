@@ -329,7 +329,7 @@ test('governed SQL redacts private CRM bodies and time-entry memos after repeate
         from time_entries
         where id in ('${privateTimeEntryId}', '${publicTimeEntryId}')
         order by hours desc`,
-      { orgId: org.orgId },
+      { orgId: org.orgId, payrollRead: true },
     )
     assert.deepEqual(timeEntries.rows, [
       { id: privateTimeEntryId, hours: '2.5000', memo: null, memo_is_private: true },

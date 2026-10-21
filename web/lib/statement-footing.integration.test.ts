@@ -968,8 +968,8 @@ const consolidatedRows = [
                   const usdSets = view.subsidiary.rates.filter((r) => r.subsidiaryId === usdId);
                   assert.deepEqual(
                     usdSets.map((r) => [r.periodFrom, r.periodTo]),
-                    [["2026-12-01", "2026-12-31"]],
-                    "only the regular period supplies a rate window; the adjustment period never overlaps it",
+                    [["2026-11-01", "2026-11-30"], ["2026-12-01", "2026-12-31"]],
+                    "comparative and current regular periods supply nonoverlapping windows; the adjustment period supplies none",
                   );
                   const opts = { orgId: org.orgId, subsidiary: view.subsidiary };
                   const period = { from: "2026-12-01", to: "2026-12-31" };
@@ -1174,7 +1174,20 @@ const consolidatedRows = [
                           );
                         }
                       });
+                      const { recordHistoricalContributionFixture } = await import('@openbooks/engine/testing/historical-translations');
+                      const { createScratchUser } = await import('@openbooks/engine/testing/fixtures');
+                      const actorId = await withBypass(() => createScratchUser(org.orgId, 'Contribution accountant', 'admin'));
+                      await withBypass(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+                        coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`));
+                      const source = (await withBypass(() => db.execute<{ id: string }>(sql`select l.id from journal_lines l
+                        join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
+                        where l.org_id=${org.orgId} and l.account_id=${equity} and e.posting_date='2026-07-01'`))).rows;
+                      assert.equal(source.length, 1);
+                      await recordHistoricalContributionFixture({ orgId: org.orgId, actorId,
+                        sourceLineId: source[0]!.id, measurementCurrency: 'USD', presentationCurrency: 'CAD',
+                        historicalDate: '2026-07-01', amount: '-1000', rate: '0.9' });
                       const subsidiary: StatementSubsidiaryContext = {
+                        presentationCurrency: 'CAD',
                         ids: [org.subsidiaryId, child],
                         rates: [
                           {
@@ -1600,8 +1613,8 @@ test(
         // identical activity in both books must never fuse into one total.
         const taxBookId = randomUUID();
         await db.execute(sql\`
-          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`);
+          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode)
+          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true, 'full')\`);
 
         const departmentId = randomUUID();
         await db.execute(sql\`
@@ -1979,8 +1992,8 @@ const consolidatedRows = [
               try {
                 const taxBookId = randomUUID();
                 await db.execute(sql\`
-                  insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-                  values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`);
+                  insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode)
+                  values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true, 'full')\`);
 
                 // A July fiscal year makes the June summary row prior-year P&L. The
                 // accounts list, the COA balance AND the GL opening must all exclude
@@ -1996,9 +2009,17 @@ const consolidatedRows = [
                 await db.execute(sql\`
                   update fiscal_calendars set is_default = false
                    where org_id = \${scratch.orgId} and is_default\`);
+                const julyCalendarId = randomUUID();
                 await db.execute(sql\`
                   insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, is_default, is_active)
-                  values (\${randomUUID()}, \${scratch.orgId}, 'July fiscal year', 'monthly', 7, true, true)\`);
+                  values (\${julyCalendarId}, \${scratch.orgId}, 'July fiscal year', 'monthly', 7, true, true)\`);
+                const { generateAccountingPeriods } = await import('./engine/src/close/calendar.ts');
+                await generateAccountingPeriods(scratch.orgId, julyCalendarId, 2027, null);
+                const generated = (await db.execute(sql\`select id from accounting_periods
+                  where org_id=\${scratch.orgId} and fiscal_calendar_id=\${julyCalendarId}
+                    and not is_adjustment and starts_on<=\${scratch.date} and ends_on>=\${scratch.date}\`)).rows;
+                assert.equal(generated.length, 1);
+                scratch.periodId = generated[0].id;
                 await db.execute(sql\`
                   insert into gl_month_activity
                     (org_id, account_id, book_id, month, subsidiary_id, debit_total, credit_total, line_count)

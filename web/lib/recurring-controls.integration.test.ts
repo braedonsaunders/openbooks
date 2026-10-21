@@ -139,7 +139,7 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
           return;
         }
         if (operation === "authorized lifecycle") {
-          await db.execute(sql`update app_roles set permissions='["documents.manage","ar.manage","ar.read","gl.post"]'::jsonb
+          await db.execute(sql`update app_roles set permissions='["documents.manage","ar.create","ar.read","gl.post"]'::jsonb
             where org_id=${org.orgId} and key='recurring_manager'`);
           const created = await collection.POST(request("POST", { templateDocumentId: templates[0], cadence: "monthly", nextRunOn: org.date, autoPost: true, name: "Authorized recurrence" }));
           assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));

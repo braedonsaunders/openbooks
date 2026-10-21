@@ -841,6 +841,7 @@
     "./testing/flows/pay-runs-adapter": "./src/flows/pay-runs-adapter.ts",
     "./testing/flows/payment-runs-adapter": "./src/flows/payment-runs-adapter.ts",
     "./testing/hrm": "./src/testing/public-hrm.ts",
+    "./testing/historical-translations": "./src/testing/historical-translations.ts",
     "./testing/hrm-harness": "./src/testing/hrm-harness.ts",
     "./testing/hrm/compensation/band-headcounts": "./src/hrm/compensation/band-headcounts.ts",
     "./testing/hrm/org-chart-layout-schema": "./src/hrm/org-chart-layout-schema.ts",

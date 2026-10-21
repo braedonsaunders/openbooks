@@ -15,6 +15,7 @@ registerHooks({
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { approveBudgetScenarioFixture } = await import('@openbooks/engine/testing/budgets')
 const { healthData } = await import('./health-data')
 // health-data pulls in web/lib/auth, whose request-org module registers its
 // Next request-store RLS resolver at import time — after the runner's trusted
@@ -30,6 +31,7 @@ async function seedTwoCurrencyHealth() {
   const org = await withBypass(() => createScratchOrg())
   const usSub = randomUUID()
   const dept = randomUUID()
+  const scenario = randomUUID()
   await withBypass(async () => {
     await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
@@ -71,15 +73,14 @@ async function seedTwoCurrencyHealth() {
                (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${sub}, ${department}, ${contra}, ${cur}, ${contra}, '1')`)
       await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
     }
-    const scenario = randomUUID()
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}', coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`)
     await db.execute(sql`insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, status)
       values (${scenario}, ${org.orgId}, ${org.bookId}, 2026, 'W2 health', 'draft')`)
     await db.execute(sql`insert into budget_lines (id, org_id, scenario_id, account_id, period_id, subsidiary_id, amount)
       values (${randomUUID()}, ${org.orgId}, ${scenario}, ${org.accounts.cogs}, ${org.periodId}, ${org.subsidiaryId}, '1000'),
              (${randomUUID()}, ${org.orgId}, ${scenario}, ${org.accounts.cogs}, ${org.periodId}, ${usSub}, '1000')`)
-    await db.execute(sql`update budget_scenarios set status = 'pending_approval', revision = revision + 1 where id = ${scenario}`)
-    await db.execute(sql`update budget_scenarios set status = 'approved', revision = revision + 1 where id = ${scenario}`)
   })
+  await withOrgContext(org.orgId, () => approveBudgetScenarioFixture(org.orgId, scenario))
   return org
 }
 

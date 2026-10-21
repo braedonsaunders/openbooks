@@ -94,7 +94,7 @@ test('contract value is controlled by change orders once billing begins', enable
     assert.equal(refused.status, 422)
     const body = await refused.json() as { error: string; code: string }
     assert.equal(body.code, 'contract_value_controlled')
-    assert.match(body.error, /Record a change order under Change orders on the project’s Billing tab/)
+    assert.match(body.error, /Record it under Change orders on the project’s Billing tab and submit it through the tenant’s Flows/)
     assert.equal(await contractValue(billed), '1000.0000')
 
     // Autosave resends the unchanged value: that is not a change.

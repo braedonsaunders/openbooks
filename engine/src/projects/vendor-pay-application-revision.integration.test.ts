@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 /**
  * Vendor pay-application optimistic concurrency — DB integration.
  *
@@ -19,8 +21,10 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrgReporting,
+  seedApprovalFlow,
 } from "../testing/fixtures.ts";
 import {
+  submitSubcontract,
   approveSubcontractChangeOrder,
   approveVendorPayApplication,
   addSubcontractSovLine,
@@ -58,12 +62,12 @@ async function setupDraft(): Promise<{
     values(${project},${org.orgId},${org.subsidiaryId},'REV','Revision job',${org.customerId},${type},'active')`);
   await db.execute(sql`insert into vendor_roles(org_id,party_id) values(${org.orgId},${org.vendorId})`);
   await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,default_retainage_percent,status)
-    values(${subcontract},${org.orgId},${project},${org.vendorId},'SC-REV','Revision scope','CAD','5000','0','draft')`);
+    values(${subcontract},${org.orgId},${project},${org.vendorId},'SC-REV','Revision scope','CAD','2000','0','draft')`);
   const sov = (await withOrgTransaction(org.orgId, () => addSubcontractSovLine({
     orgId: org.orgId, userId: actor, subcontractId: subcontract,
     description: "Work", scheduledValue: "2000", sortOrder: 1,
   }))).id;
-  await db.execute(sql`update subcontracts set status = 'active' where org_id = ${org.orgId} and id = ${subcontract}`);
+  await withOrgTransaction(org.orgId, () => submitSubcontract(org.orgId, actor, subcontract));
   const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({
     orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: org.date,
   }));
@@ -151,6 +155,8 @@ test("change orders wait for open vendor applications and approval revalidates t
       expectedRevision: 1,
       lines: [{ sovLineId: f.sov, workCompletedThisPeriod: "900", materialsStoredCurrent: "0" }],
     }));
+    await seedApprovalFlow(f.orgId, { subjectKind: "vendor_pay_application", mode: "any",
+      assignees: [{ type: "user", userId: f.other }], preventSelfApproval: true });
     await withOrgTransaction(f.orgId, () => submitVendorPayApplication(f.orgId, f.actor, f.appId));
     await assert.rejects(approveChange(), /Complete or void the open vendor application/);
 

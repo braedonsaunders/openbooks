@@ -59,3 +59,8 @@ test('an unexpected driver failure becomes a stable code with no echo', () => {
   assert.ok(!JSON.stringify(mapped.body).includes('Failed query'), 'no driver text escapes')
   assert.ok(!JSON.stringify(mapped.body).includes(leakedUuid), 'no internal id escapes')
 })
+
+test('payroll population scope refusals preserve the uniform missing-record response', () => {
+  assert.deepEqual(toActionFailure(new PayrollError('pay run not found')),
+    { status: 404, body: { error: 'not_found' } })
+})

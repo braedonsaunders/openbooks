@@ -19,14 +19,10 @@ test("bulk journal inserts maintain exact summaries with one write per group and
         from gl_month_activity where org_id=${org.orgId}
        order by account_id`)).rows;
     await withMaintenanceTransaction(null, async () => {
-      // The same native maintenance flags used for retained history permit
-      // posted INSERTs; account, tenant and deferred balance guards still run.
-      await db.execute(sql`select set_config('openbooks.migration','on',true),
-        set_config('openbooks.amend','on',true),set_config('openbooks.clone','on',true)`);
       await db.execute(sql`insert into journal_entries
         (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,posted_at)
         values(${entryId},${org.orgId},${org.bookId},${org.subsidiaryId},${`BULK-${entryId}`},
-          ${org.date},${org.periodId},'posted','manual',now())`);
+          ${org.date},${org.periodId},'draft','manual',null)`);
       const writes = async () => {
         await db.execute(sql`select pg_stat_clear_snapshot()`);
         const row = (await db.execute<{ inserted: string; updated: string }>(sql`
@@ -42,7 +38,10 @@ test("bulk journal inserts maintain exact summaries with one write per group and
       await db.execute(sql`insert into journal_lines
         (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
         values ${sql.join(values,sql`,`)}`);
-      assert.equal(await writes() - beforeWrites, 2n, "bulk load must not rewrite a summary for every line");
+      assert.equal(await writes(), beforeWrites, "draft rows never enter posted summaries");
+      await db.execute(sql`update journal_entries set status='posted',posted_at=now()
+        where org_id=${org.orgId} and id=${entryId}`);
+      assert.equal(await writes() - beforeWrites, 2n, "posting a batch must write once per account group");
       const afterWrites = await writes();
       await db.execute(sql`insert into journal_lines
         (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
@@ -59,10 +58,16 @@ test("bulk journal inserts maintain exact summaries with one write per group and
       const sentinel = new Error("Roll back an inserted journal batch");
       await assert.rejects(withTransactionSavepoint(db, async () => {
         await db.execute(sql`set constraints all deferred`);
+        const rollbackId = randomUUID();
+        await db.execute(sql`insert into journal_entries
+          (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
+          values(${rollbackId},${org.orgId},${org.bookId},${org.subsidiaryId},${rollbackId},${org.date},${org.periodId},'draft','manual')`);
         await db.execute(sql`insert into journal_lines
           (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
-          values(${org.orgId},${entryId},25,${org.accounts.bank},${org.subsidiaryId},2,'CAD',2,1),
-                (${org.orgId},${entryId},26,${org.accounts.revenue},${org.subsidiaryId},-2,'CAD',-2,1)`);
+          values(${org.orgId},${rollbackId},1,${org.accounts.bank},${org.subsidiaryId},2,'CAD',2,1),
+                (${org.orgId},${rollbackId},2,${org.accounts.revenue},${org.subsidiaryId},-2,'CAD',-2,1)`);
+        await db.execute(sql`update journal_entries set status='posted',posted_at=now()
+          where org_id=${org.orgId} and id=${rollbackId}`);
         assert.notDeepEqual(await summary(), expected);
         throw sentinel;
       }), (error: unknown) => error === sentinel);

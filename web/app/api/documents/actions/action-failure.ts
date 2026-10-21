@@ -17,7 +17,10 @@ import { SubmitError } from '@openbooks/engine/flows/submit'
  * assembler (which pulls PDF rendering this route must not load), so it is
  * matched by its stable code, not by instanceof.
  */
-export function toActionFailure(error: unknown): { status: 403 | 422 | 500; body: { error?: string; code?: string; remedy?: string } } {
+export function toActionFailure(error: unknown): { status: 403 | 404 | 422 | 500; body: { error?: string; code?: string; remedy?: string } } {
+  if (error instanceof PayrollError && error.message === 'pay run not found') {
+    return { status: 404, body: { error: 'not_found' } }
+  }
   // A stock movement touching another legal entity's stock is an
   // authorization boundary, not a validation miss.
   if (error instanceof InventoryOwnershipError) {

@@ -235,9 +235,19 @@ test("0326 records the six legacy classes and nothing else, idempotently", { ski
 
     // Same pinned transaction: a nested withBypass would open a second
     // connection and wait forever on this transaction's locks.
+    const recordedCutoffs = new Set((await db.execute<{ filename: string }>(sql`
+      select filename from public._applied_migrations where filename in
+        ('generated/0298_item_rate_version_profile_pins.sql','generated/0274_retention_action_completion_snapshot.sql')
+    `)).rows.map(row => row.filename));
+    const unknownPinCutoff = !recordedCutoffs.has('generated/0298_item_rate_version_profile_pins.sql');
+    const unknownRetentionCutoff = !recordedCutoffs.has('generated/0274_retention_action_completion_snapshot.sql');
     const rows = await provenance(org.orgId);
     const marked = new Map(rows.map((row) => [`${row.migration}/${row.table_name}/${row.row_id}`, row.note]));
-    assert.equal(rows.length, 8, `expected 8 legacy rows, got ${JSON.stringify(rows.map((r) => [r.migration, r.row_id]))}`);
+    // The immutable migration refuses to invent historical timestamps. A
+    // baseline-only ledger has no individual cutoffs, so its unknown past
+    // remains explicitly marked, including these two timestamp-only controls.
+    assert.equal(rows.length, 8 + Number(unknownPinCutoff) + Number(unknownRetentionCutoff),
+      `unexpected provenance subjects: ${JSON.stringify(rows.map(row => [row.migration, row.row_id]))}`);
 
     const expectMarked = (migration: string, table: string, rowId: string, note: string) => {
       assert.equal(
@@ -262,7 +272,9 @@ test("0326 records the six legacy classes and nothing else, idempotently", { ski
       "0298_item_rate_version_profile_pins", "item_rate_version_profiles", oldPin,
       "rate pin backfilled from the live profile; governing policy at version time unrecorded — unverified legacy",
     );
-    expectAbsent("item_rate_version_profiles", newPin);
+    if (unknownPinCutoff) expectMarked("0298_item_rate_version_profile_pins", "item_rate_version_profiles", newPin,
+      "rate pin backfilled from the live profile; governing policy at version time unrecorded — unverified legacy");
+    else expectAbsent("item_rate_version_profiles", newPin);
     expectMarked(
       "0292_lien_waiver_executed_snapshot", "lien_waivers", signedWaiver,
       "executed before execution snapshots existed; print image not frozen at signing — unverified legacy",
@@ -276,7 +288,9 @@ test("0326 records the six legacy classes and nothing else, idempotently", { ski
       "0274_retention_action_completion_snapshot", "hrm_documents", legacyDoc,
       "retention action inherited from the live schedule; governing action at completion unrecorded — unverified legacy",
     );
-    expectAbsent("hrm_documents", freshDoc);
+    if (unknownRetentionCutoff) expectMarked("0274_retention_action_completion_snapshot", "hrm_documents", freshDoc,
+      "retention action inherited from the live schedule; governing action at completion unrecorded — unverified legacy");
+    else expectAbsent("hrm_documents", freshDoc);
     expectAbsent("hrm_documents", openDoc);
     expectMarked(
       "0293_stock_count_line_subject_unique", "stock_count_lines", dupA,

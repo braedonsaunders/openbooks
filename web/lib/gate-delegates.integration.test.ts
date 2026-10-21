@@ -1,44 +1,39 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install"
+installEngineSeams()
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 
-// The Delegate picker beside a pending gate in a record drawer follows the
-// native hand-off rule: the gate's direct assignee or an organization admin
-// may delegate it; a reviewer holding flows.manage alone is offered nothing.
+// The picker uses the native hand-off authority: an authorized direct
+// assignee or an operator holding flows.manage may delegate a live gate.
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting, grantScratchPermissions } = await import('@openbooks/engine/testing/fixtures')
+const { db, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting, grantScratchPermissions, seedDraftDocument, seedApprovalFlow } = await import('@openbooks/engine/testing/fixtures')
+const { submitForApproval } = await import('@openbooks/engine/flows/submit')
 const { gateDelegateOptions } = await import('./gate-delegates.ts')
 
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function pendingChangeGate(orgId: string, subsidiaryId: string, submitterId: string, assignee: { userId?: string; role?: string }): Promise<string> {
-  const changeId = randomUUID()
-  await db.execute(sql`
-    insert into financial_changes
-      (id, org_id, subsidiary_id, domain, subject_id, operation, effective_on, reason, idempotency_key, payload, before_state, submitted_by, created_by, updated_by)
-    values (${changeId}, ${orgId}, ${subsidiaryId}, 'asset', ${randomUUID()}, 'revaluation', '2026-07-15', 'Year-end revaluation', ${`delegate-${changeId}`},
-            '{}'::jsonb, '{}'::jsonb, ${submitterId}, ${submitterId}, ${submitterId})`)
-  await db.execute(sql`update financial_changes set status = 'pending' where org_id = ${orgId} and id = ${changeId}`)
-  const flowId = randomUUID()
-  await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph) values (${flowId}, ${orgId}, 'Accounting event approval', 'financial_change', true, '{}'::jsonb)`)
-  const runId = randomUUID()
-  await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status, created_by)
-    values (${runId}, ${orgId}, ${flowId}, 'financial_change', ${changeId}, 'on_submit', 'waiting', ${submitterId})`)
-  const gateId = randomUUID()
-  await db.execute(sql`insert into flow_gates
-    (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key, quorum, status, assignee_user_id, assignee_role)
-    values (${gateId}, ${orgId}, ${flowId}, ${runId}, 'gate', 'financial_change', ${changeId}, 'Approve the revaluation', 'gate', 'any', 'pending',
-            ${assignee.userId ?? null}, ${assignee.role ?? null})`)
+  await grantScratchPermissions(orgId, submitterId, ['ar.create'])
+  const documentId = await seedDraftDocument(orgId, { kind: 'customer_invoice', createdBy: submitterId })
+  await db.execute(sql`update documents set subsidiary_id=${subsidiaryId} where org_id=${orgId} and id=${documentId}`)
+  const { flowId } = await seedApprovalFlow(orgId, { subjectKind: 'customer_invoice', mode: 'any',
+    assignees: assignee.userId ? [{ type: 'user', userId: assignee.userId }] : [{ type: 'role', role: assignee.role! }] })
+  await withOrgTransaction(orgId, () => submitForApproval('customer_invoice', documentId, submitterId))
+  const gates = (await db.execute<{ id: string }>(sql`select id from flow_gates
+    where org_id=${orgId} and flow_id=${flowId} and subject_id=${documentId} and status='pending'`)).rows
+  assert.equal(gates.length, 1)
+  const gateId = gates[0]!.id
   return gateId
 }
 
-test('only the direct assignee or an organization admin is offered Delegate on a pending gate', { skip: !DB }, async () => {
+test('authorized direct assignees and Flow managers are offered Delegate on a pending gate', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const { submitter, assignee, reviewer, admin, direct, byRole } = await withBypassContext(async () => {
       const submitter = await createScratchUser(org.orgId, 'Asset Accountant', 'asset_accountant')
       const assignee = await createScratchUser(org.orgId, 'Controller', 'controller')
+      await grantScratchPermissions(org.orgId, assignee, ['ar.approve'])
       const reviewer = await createScratchUser(org.orgId, 'Flow Manager', 'flow_manager')
       await grantScratchPermissions(org.orgId, reviewer, ['flows.manage', 'flows.approve'])
       const admin = await createScratchUser(org.orgId, 'Organization Admin', 'admin')
@@ -53,9 +48,9 @@ test('only the direct assignee or an organization admin is offered Delegate on a
     assert.ok(offered.length > 0, 'the direct assignee may hand the gate on')
     assert.ok(!offered.includes('Controller'), 'never to themselves')
     assert.ok((await names(admin, direct)).length > 0, 'an organization admin may delegate it')
-    assert.deepEqual(await names(reviewer, direct), [], 'flows.manage alone does not make a hand-off the delegate path accepts')
+    assert.ok((await names(reviewer, direct)).length > 0, 'the native Flow-management grant authorizes hand-off')
     assert.deepEqual(await names(submitter, direct), [])
-    // A role-held gate has no direct assignee: only an admin may delegate it.
+    // A role-held gate needs Flow-management authority to delegate.
     assert.deepEqual(await names(assignee, byRole), [])
     assert.ok((await names(admin, byRole)).length > 0)
     assert.deepEqual(await names(admin, null), [], 'no pending gate, no picker')
