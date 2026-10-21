@@ -439,6 +439,12 @@ for (const boundary of [
                 'deleting an opportunity leaves audit evidence',
               )
             } else if (boundary === 'CRM estimate permission') {
+              await db.execute(sql`
+                insert into crm_opportunity_lines
+                  (org_id, opportunity_id, line_number, item_id, description, quantity,
+                   unit, unit_price, amount, expected_amount, created_by, updated_by)
+                values (${org.orgId}, ${id}, 1, ${org.items.service}, 'Scoped service',
+                        '1', 'each', '100', '100', '100', ${actor}, ${actor})`)
               // AR-only users (no crm.* keys) must not create estimates: the
               // estimate copies CRM data onto a quote and mutates CRM links.
               await restrict(org.orgId, null)

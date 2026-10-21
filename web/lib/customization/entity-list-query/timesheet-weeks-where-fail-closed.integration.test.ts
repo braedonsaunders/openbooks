@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 
 // The timesheet-week list interpolates the employee_party_id structured
@@ -22,7 +23,7 @@ async function weekCount(
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
   const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries tw
+    await db.execute<{ n: number }>(sql`select count(*)::int as n from timesheet_weeks tw
       where ${timesheetWeekWhere({ ...defaultListView("timesheet_week"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`)
   ).rows;
   return rows[0]!.n;
@@ -31,7 +32,15 @@ async function weekCount(
 test("malformed timesheet-week filters match nothing instead of throwing", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    assert.ok((await weekCount(org.orgId)) >= 0, "baseline counts without throwing");
+    const employeeId = randomUUID();
+    await db.execute(sql`insert into parties (id,org_id,kind,display_name,is_active)
+      values (${employeeId},${org.orgId},'person','Timesheet filter employee',true)`);
+    await db.execute(sql`insert into employee_roles(org_id,party_id,hired_on,is_active)
+      values (${org.orgId},${employeeId},'2026-01-01',true)`);
+    await db.execute(sql`insert into timesheet_weeks(org_id,employee_party_id,week_start,status)
+      values (${org.orgId},${employeeId},'2026-07-12','draft')`);
+    assert.equal(await weekCount(org.orgId), 1, "the unfiltered register contains the native week");
+    assert.equal(await weekCount(org.orgId, [], { employee_party_id: employeeId }), 1, "a valid employee filter retains the week");
     assert.equal(
       await weekCount(org.orgId, [{ key: "employee_party_id", operator: "eq", value: "not-a-uuid" }]),
       0,

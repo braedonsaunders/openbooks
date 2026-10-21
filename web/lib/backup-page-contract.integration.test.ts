@@ -9,7 +9,7 @@ import { stubModules } from '../testing/stub-modules.ts'
 // the page gate and the translation framework are seammed; the loader, the
 // timestamp normalization, and the database are real.
 stubModules({
-  intl: `export async function getTranslations(namespace) { return (key) => namespace + '.' + key }`,
+  intl: `export async function getLocale() { return 'en' } export async function getTranslations(namespace) { return (key) => namespace + '.' + key }`,
   navigation: false,
   authz: false,
   features: false,

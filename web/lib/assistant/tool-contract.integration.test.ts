@@ -108,7 +108,7 @@ const EMPTY_STORE: Record<string, string> = {
   // HR-19: the survey read refuses an unknown survey by name, and the
   // refusal reaches the caller through hrmRefusal unchanged.
   hrm_survey_results: "survey is not visible in this organization",
-  hrm_explain_pay: "payslip for this employment matched no visible row — it is missing, outside this organization, or outside your legal-entity scope; reload and retry",
+  hrm_explain_pay: "no calculated payslip exists for this employment yet — explanations appear after the first pay run calculates",
   get_resourcing_assignment: "resourcing_assignment_not_found: the assignment is unavailable or outside your subsidiary scope",
 };
 

@@ -116,9 +116,9 @@ async function seedWorkforce(orgId: string, actorId: string, scheduleId: string,
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id, country, province,
                                            pay_basis, federal_claim_code, provincial_claim_code,
-                                           is_active, created_by, updated_by)
+                                           wcb_exempt, wcb_exempt_reason, is_active, created_by, updated_by)
     values (${orgId}, ${employeeId}, ${amyEmploymentId}, ${scheduleId}, 'CA', 'ON', 'hourly', 1, 1,
-            true, ${actorId}, ${actorId})`);
+            true, 'Owner excluded from workers-compensation coverage.', true, ${actorId}, ${actorId})`);
   await seedVacationTerms(orgId, amyEmploymentId, actorId, '4', 'accrue');
   await db.execute(sql`
     insert into time_entries (org_id, employee_party_id, worked_on, hours, project_id, status,

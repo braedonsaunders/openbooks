@@ -75,8 +75,8 @@ async function fixture(action: (org: Fixture, book: string, authz: import('./aut
       await db.execute(sql`update app_roles set permissions='["reports.read","gl.read"]'::jsonb where org_id=${org.orgId} and key='book_reader'`)
       state.user = { id: uid, orgId: org.orgId, isSuperAdmin: false, name: 'Book reader', email: 'reader@example.test',
         roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: uid }
-      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
-        values(${book},${org.orgId},'TAX','Tax book',false,true,true)`)
+      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl,replication_mode,replication_from)
+        values(${book},${org.orgId},'TAX','Tax book',false,true,true,'full',${org.date})`)
       for (const [id, amount, tag] of [[org.bookId, '100', 'PRIMARY'], [book, '700', 'SELECTED']] as const) {
         const entry = randomUUID()
         await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)

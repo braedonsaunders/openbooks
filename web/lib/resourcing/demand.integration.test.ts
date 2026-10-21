@@ -18,17 +18,17 @@ test('demand expands visible weeks and weights live CRM opportunities', { skip: 
       await db.execute(sql`insert into crm_opportunity_statuses(id,org_id,key,name,sequence,probability,is_closed,is_won,is_active) values
         (${ids.openStatus},${org.orgId},'demand-open','Open',10,40,false,false,true),
         (${ids.wonStatus},${org.orgId},'demand-won','Won',20,100,true,true,true)`)
-      await db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,status_id,forecast_category,probability,currency,is_active) values
-        (${ids.openOpp},${org.orgId},'DEMAND-OPEN','Open consulting work',${ids.openStatus},'upside',40,'CAD',true),
-        (${ids.wonOpp},${org.orgId},'DEMAND-WON','Won consulting work',${ids.wonStatus},'upside',100,'CAD',true),
-        (${ids.omittedOpp},${org.orgId},'DEMAND-OMITTED','Omitted consulting work',${ids.openStatus},'omitted',40,'CAD',true)`)
+      await db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,status_id,forecast_category,probability,currency,subsidiary_id,closed_at,is_active) values
+        (${ids.openOpp},${org.orgId},'DEMAND-OPEN','Open consulting work',${ids.openStatus},'upside',40,'CAD',${org.subsidiaryId},null,true),
+        (${ids.wonOpp},${org.orgId},'DEMAND-WON','Won consulting work',${ids.wonStatus},'upside',100,'CAD',${org.subsidiaryId},'2026-04-10T12:00:00Z',true),
+        (${ids.omittedOpp},${org.orgId},'DEMAND-OMITTED','Omitted consulting work',${ids.openStatus},'omitted',40,'CAD',${org.subsidiaryId},null,true)`)
       await db.execute(sql`insert into res_demand_lines(id,org_id,department_id,job_title,first_week,last_week,hours_per_week,opportunity_id) values
         (${ids.manualLine},${org.orgId},${ids.visibleDept},'Analyst','2026-04-05','2026-04-19','10.0000',null),
         (${ids.pipelineLine},${org.orgId},${ids.visibleDept},'Consultant','2026-04-12','2026-04-12','10.0000',${ids.openOpp}),
         (${ids.wonLine},${org.orgId},${ids.visibleDept},'Consultant','2026-04-12','2026-04-12','10.0000',${ids.wonOpp}),
         (${ids.omittedLine},${org.orgId},${ids.visibleDept},'Consultant','2026-04-12','2026-04-12','10.0000',${ids.omittedOpp}),
         (${ids.hiddenLine},${org.orgId},${ids.hiddenDept},'Analyst','2026-04-12','2026-04-12','10.0000',null)`)
-      const off = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"resourcing":false}'::jsonb,true) where id=${org.orgId} returning id`)
+      const off = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"resourcing":false}'::jsonb,true) where id=${org.orgId} returning id`)
       assert.equal(off.rows.length, 1)
     })
     const window = { firstSunday: '2026-04-12', lastSunday: '2026-04-19' }
@@ -37,7 +37,7 @@ test('demand expands visible weeks and weights live CRM opportunities', { skip: 
       (error: unknown) => typeof error === 'object' && error !== null && 'digest' in error && error.digest === 'NEXT_HTTP_ERROR_FALLBACK;404',
     )
     await withBypassContext(async () => {
-      const on = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"resourcing":true}'::jsonb,true) where id=${org.orgId} returning id`)
+      const on = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"resourcing":true}'::jsonb,true) where id=${org.orgId} returning id`)
       assert.equal(on.rows.length, 1)
     })
     const rows = await withOrgContext(org.orgId, () => loadDemandWeeks(org.orgId, new Set([org.subsidiaryId]), window))

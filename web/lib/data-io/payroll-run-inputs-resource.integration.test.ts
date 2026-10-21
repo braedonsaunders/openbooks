@@ -81,7 +81,8 @@ test('pay run input preview and apply refuse the same invalid amounts, hours, po
       [{ hours: '-2' }, /non-negative/],
       [{ replaceComponent: 'perhaps' }, /must be a boolean/],
       [{ note: '' }, /reason or source reference/],
-      [{ component: 'TAX' }, /component cannot be adjusted/],
+      [{ component: 'TAX' }, /Additional income tax.*positive amount.*without hours or dates.*supporting reason/],
+      [{ component: 'CPP' }, /component cannot be adjusted/],
       [{ employee: randomUUID() }, /Employee not found/],
     ] as const) {
       const preview = await fx.resource.write([{ ...fx.row, ...overrides }], 'insert', { ...fx.context, dryRun: true })

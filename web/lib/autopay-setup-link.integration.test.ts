@@ -75,7 +75,7 @@ test("a setup link offers only the customer's addresses and enabled currencies, 
     if (!options.emailConfigured) {
       const noTransport = await start({ currency: "CAD", recipientEmail: "Dana@Northwind.test" });
       assert.equal(noTransport.status, 422);
-      assert.match((await noTransport.json()).error, /Administration → Email/);
+      assert.match((await noTransport.json()).error, /Admin → Email/);
     }
 
     assert.equal(await pendingRows(), 0, "a refused setup never mints a pending payment method");

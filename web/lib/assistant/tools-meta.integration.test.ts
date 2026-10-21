@@ -37,7 +37,7 @@ function userFor(orgId: string, tag: string): SessionUser {
   };
 }
 
-type CapabilityGroup = { module: string; tools: { name: string; blurb: string }[] };
+type CapabilityGroup = { module: string; tools: Array<string | { name: string; blurb: string }> };
 type CapabilityData = {
   groups: CapabilityGroup[];
   featuresOff: string[];
@@ -45,7 +45,7 @@ type CapabilityData = {
 };
 
 function toolNames(data: CapabilityData): Set<string> {
-  return new Set(data.groups.flatMap((g) => g.tools.map((t) => t.name)));
+  return new Set(data.groups.flatMap((g) => g.tools.map((t) => typeof t === 'string' ? t : t.name)));
 }
 
 test('describe_capabilities answers from the live catalog for a minimal reader', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -93,8 +93,15 @@ test('describe_capabilities groups featureless assistant and application tools b
       assert.ok(result.ok, JSON.stringify(result));
       if (!result.ok) return;
       const groups = (result.data as CapabilityData).groups;
-      assert.ok(groups.find((group) => group.module === 'setup')?.tools.some((tool) => tool.name === 'get_company_settings'));
-      assert.ok(groups.find((group) => group.module === 'close')?.tools.some((tool) => tool.name === 'request_period_reopen'));
+      for (const [module, name] of [['setup', 'get_company_settings'], ['close', 'request_period_reopen']]) {
+        assert.ok(groups.find((group) => group.module === module)?.tools.some((tool) => (typeof tool === 'string' ? tool : tool.name) === name));
+        const detail = await executeAssistantTool(authz, 'describe_capabilities', { module });
+        assert.ok(detail.ok, JSON.stringify(detail));
+        const detailed = (detail.data as CapabilityData).groups;
+        assert.equal(detailed.length, 1);
+        assert.equal(detailed[0]!.module, module);
+        assert.ok(detailed[0]!.tools.some(tool => typeof tool === 'object' && tool.name === name && tool.blurb.length > 0));
+      }
     });
   } finally {
     await dropScratchOrg(org.orgId);

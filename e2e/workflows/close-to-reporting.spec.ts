@@ -402,7 +402,8 @@ test.describe.serial("close to reporting", () => {
       // would target December of the prior year, so pin it explicitly.
       await page.goto(`/close?fy=${P.name.slice(0, 4)}`);
       await dismissSetupWizard(page);
-      const row = page.locator("tr", { hasText: `P${P.from.slice(5, 7)} FY${P.from.slice(0, 4)}` }).first();
+      const periodName = `P${P.from.slice(5, 7)} FY${P.from.slice(0, 4)}`;
+      const row = page.locator("tr", { hasText: periodName }).first();
       await expect(row).toBeVisible();
       // The book picker is a custom listbox over a native select: read the
       // options (values are book ids) from any unstarted row, untouched —
@@ -896,9 +897,10 @@ test.describe.serial("close to reporting", () => {
       // Request a controlled reopen for GL from the period drawer.
       await page.goto(`/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`);
       await dismissSetupWizard(page);
-      const row = page.locator("tr", { hasText: `P${P.from.slice(5, 7)} FY${P.from.slice(0, 4)}` }).first();
+      const periodName = `P${P.from.slice(5, 7)} FY${P.from.slice(0, 4)}`;
+      const row = page.locator("tr", { hasText: periodName }).first();
       await expect(row).toBeVisible();
-      await row.getByRole("link", { name: `Manage ${P.name}` }).click();
+      await row.getByRole("link", { name: `Manage ${periodName}` }).click();
       await page.waitForURL(/period=/);
       const glRow = page
         .locator("div")
@@ -916,7 +918,7 @@ test.describe.serial("close to reporting", () => {
       await expectOkResponse(await requested, "request approval");
       // The request appears in the reopen list; follow it for its id.
       await page.goto(`/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`);
-      const request = page.getByRole("link", { name: new RegExp(`${P.name}.*Primary`) }).first();
+      const request = page.getByRole("link", { name: new RegExp(`${periodName}.*Primary`) }).first();
       await expect(request).toBeVisible();
       await request.click();
       await page.waitForURL(/reopen=/);
@@ -933,7 +935,7 @@ test.describe.serial("close to reporting", () => {
       expect(loginRes.ok(), await loginRes.text()).toBe(true);
       await apage.goto(page.url());
       const decided = apage.waitForResponse(
-        (r) => r.url().endsWith("/api/admin/close") && r.request().method() === "POST",
+        (r) => r.url().endsWith("/api/flows/gates/decide") && r.request().method() === "POST",
       );
       await apage.getByRole("button", { name: "Approve" }).click();
       expect((await decided).status()).toBe(200);

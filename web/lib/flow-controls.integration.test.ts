@@ -52,8 +52,8 @@ for (const scenario of scenarios) {
       if (scenario.includes('stale')) await db.execute(sql`update flows set name='Concurrent editor',updated_at=updated_at+interval '1 microsecond' where id=${id}`);
       if (['execution history','open gate','gate race'].includes(scenario)) {
         const runId = randomUUID(), subjectId = randomUUID();
-        await db.execute(sql`insert into flow_runs(id,org_id,flow_id,subject_kind,subject_id,trigger,status,context) values (${runId},${org.orgId},${id},'vendor_bill',${subjectId},'on_submit','completed','{"evidence":"retained"}'::jsonb)`);
-        const insertGate = () => writer.query("insert into flow_gates(org_id,flow_id,run_id,node_id,subject_kind,subject_id,title,assignee_user_id,group_key,status) values ($1,$2,$3,'gate','vendor_bill',$4,'Pending approval',$5,'group','pending')", [org.orgId,id,runId,subjectId,actor]);
+        await db.execute(sql`insert into flow_runs(id,org_id,flow_id,subject_kind,subject_id,trigger,status,context) values (${runId},${org.orgId},${id},'vendor_bill',${subjectId},'on_submit','completed',${JSON.stringify({ evidence: "retained", submissionPolicy: { flowId: id, graph } })}::jsonb)`);
+        const insertGate = () => writer.query("insert into flow_gates(org_id,flow_id,run_id,node_id,subject_kind,subject_id,title,assignee_user_id,group_key,status) values ($1,$2,$3,'gate','vendor_bill',$4,'Pending approval',$5,$6,'pending')", [org.orgId,id,runId,subjectId,actor,`${runId}:gate`]);
         await writer.connect(); connected = true;
         await writer.query('begin'); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
         if (scenario === 'gate race') {

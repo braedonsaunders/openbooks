@@ -15,6 +15,7 @@ const { db, withBypassContext, withOrg, withOrgContext } = await import(
   "@openbooks/engine/platform/db"
 );
 const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+const { submitAndReleaseIfUngated } = await import("@openbooks/engine/flows/submit");
 const { loadDocument, loadDocumentEditCurrent } = await import(
   "@openbooks/engine/ledger/document-service"
 );
@@ -864,6 +865,7 @@ const consolidatedRows = [
         async function fixture(): Promise<Fixture> {
           const org = await createScratchOrg();
           const actor = await createScratchUser(org.orgId, "Entry allocation keeper", "entry_alloc_keeper");
+          await (await import("@openbooks/engine/testing/fixtures")).grantScratchPermissions(org.orgId, actor, ["ap.create", "ap.post"]);
           await enableEntryAllocations(org.orgId);
           const expenseAccount = randomUUID();
           await db.execute(sql`insert into accounts
@@ -2138,12 +2140,10 @@ async function issue(orgId: string, orderId: string, actorId: string, creditOver
 
 async function approveAndPost(org: ScratchOrg, actorId: string, invoiceId: string): Promise<void> {
   await withBypassContext(async () => {
-    await db.execute(sql`
-      update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
-       where id = ${invoiceId} and org_id = ${org.orgId}`);
+    assert.equal((await submitAndReleaseIfUngated("customer_invoice", invoiceId, actorId)).autoApproved, true);
     await postDocument(invoiceId, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-    });
+    }, { audit: { actorId, source: "ui" } });
   });
 }
 
@@ -2185,9 +2185,7 @@ async function payInFull(
       org.orgId,
       { allowedSubsidiaryIds: null },
     );
-    await db.execute(sql`
-      update documents set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
-       where id = ${receipt.id} and org_id = ${org.orgId}`);
+    assert.equal((await submitAndReleaseIfUngated("customer_payment", receipt.id, actorId)).autoApproved, true);
     await postPaymentWithApplications(receipt.id, undefined, actorId);
   });
 }
@@ -2259,6 +2257,7 @@ test(
       const actorId = await withBypassContext(() =>
         createScratchUser(org.orgId, "Currency exposure clerk", "currency_exposure_clerk"),
       );
+      await grantRolePermissions(org.orgId, "currency_exposure_clerk", ["ar.create", "ar.post"]);
       await enableSalesFx(org.orgId, org.date);
       await seedCustomerRole(org, actorId);
 
@@ -2356,6 +2355,7 @@ test(
       const actorId = await withBypassContext(() =>
         createScratchUser(org.orgId, "Currency remedy clerk", "currency_remedy_clerk"),
       );
+      await grantRolePermissions(org.orgId, "currency_remedy_clerk", ["ar.create", "ar.post"]);
       const approverId = await withBypassContext(() =>
         createScratchUser(org.orgId, "Currency remedy approver", "currency_remedy_approver"),
       );
@@ -2427,6 +2427,7 @@ test(
       const actorId = await withBypassContext(() =>
         createScratchUser(org.orgId, "Legacy exposure clerk", "legacy_exposure_clerk"),
       );
+      await grantRolePermissions(org.orgId, "legacy_exposure_clerk", ["ar.create", "ar.post"]);
       await enableSalesFx(org.orgId, org.date);
       await seedCustomerRole(org, actorId);
 
@@ -2576,12 +2577,10 @@ const consolidatedRows = [
 
         async function approveAndPost(org: ScratchOrg, actorId: string, invoiceId: string): Promise<void> {
           await withBypassContext(async () => {
-            await db.execute(sql`
-              update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
-               where id = ${invoiceId} and org_id = ${org.orgId}`);
+            assert.equal((await submitAndReleaseIfUngated("customer_invoice", invoiceId, actorId)).autoApproved, true);
             await postDocument(invoiceId, {
               control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-            });
+            }, { audit: { actorId, source: "ui" } });
           });
         }
 
@@ -2623,9 +2622,7 @@ const consolidatedRows = [
               org.orgId,
               { allowedSubsidiaryIds: null },
             );
-            await db.execute(sql`
-              update documents set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
-               where id = ${receipt.id} and org_id = ${org.orgId}`);
+            assert.equal((await submitAndReleaseIfUngated("customer_payment", receipt.id, actorId)).autoApproved, true);
             await postPaymentWithApplications(receipt.id, undefined, actorId);
           });
         }
@@ -2697,6 +2694,7 @@ const consolidatedRows = [
               const actorId = await withBypassContext(() =>
                 createScratchUser(org.orgId, "Party exposure clerk", "party_exposure_clerk"),
               );
+              await grantRolePermissions(org.orgId, "party_exposure_clerk", ["ar.create", "ar.post"]);
               await enableSalesFx(org.orgId, org.date);
               await seedCustomerRole(org, actorId);
               const otherParty = await seedOtherCustomer(org, actorId);
@@ -2796,6 +2794,7 @@ const consolidatedRows = [
               const actorId = await withBypassContext(() =>
                 createScratchUser(org.orgId, "Party remedy clerk", "party_remedy_clerk"),
               );
+              await grantRolePermissions(org.orgId, "party_remedy_clerk", ["ar.create", "ar.post"]);
               const approverId = await withBypassContext(() =>
                 createScratchUser(org.orgId, "Party remedy approver", "party_remedy_approver"),
               );
@@ -2868,6 +2867,7 @@ const consolidatedRows = [
               const actorId = await withBypassContext(() =>
                 createScratchUser(org.orgId, "Legacy party clerk", "legacy_party_clerk"),
               );
+              await grantRolePermissions(org.orgId, "legacy_party_clerk", ["ar.create", "ar.post"]);
               await enableSalesFx(org.orgId, org.date);
               await seedCustomerRole(org, actorId);
               const otherParty = await seedOtherCustomer(org, actorId);

@@ -28,8 +28,8 @@ test(
     try {
       await withBypass(() =>
         db.execute(sql`
-          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-          values (${taxBookId}, ${org.orgId}, 'TAX', 'Tax book', false, true, true)
+          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode, replication_from)
+          values (${taxBookId}, ${org.orgId}, 'TAX', 'Tax book', false, true, true, 'full', ${org.date})
         `),
       )
       const postMirror = (entryId: string, bookId: string, tag: string) =>
