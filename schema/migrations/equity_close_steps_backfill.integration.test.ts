@@ -13,7 +13,7 @@ import test from "node:test";
 import pg from "pg";
 import { ensureCloseDefaults } from "@openbooks/engine/testing/close/defaults";
 import { withBypassContext } from "@openbooks/engine/platform/db";
-import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
+import { assertFixtureDatabase, createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const migration = readFileSync("schema/migrations/generated/0757_equity_close_steps_on_default_checklists.sql", "utf8");
 const EQUITY_STEPS = ["equity-compensation-posted", "equity-interest-accrued"];
@@ -22,7 +22,8 @@ test("existing standard close checklists gain the equity period steps; custom ch
   skip: !process.env.OPENBOOKS_TEST_ADMIN_DB_URL,
 }, async () => {
   const adminUrl = process.env.OPENBOOKS_TEST_ADMIN_DB_URL!;
-  assert.match(new URL(adminUrl).pathname, /^\/ob_/);
+  await assertFixtureDatabase();
+  assert.equal(new URL(adminUrl).pathname, new URL(process.env.OPENBOOKS_DB_URL!).pathname, "the migration connection must target the admitted disposable database");
   const admin = new pg.Client({ connectionString: adminUrl });
   const org = await withBypassContext(() => createScratchOrg());
   try {

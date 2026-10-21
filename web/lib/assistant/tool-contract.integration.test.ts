@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { registerHooks } from "node:module";
+import { createTranslator, type AbstractIntlMessages } from "next-intl";
+import messages from "../../messages/en/index.ts";
+
+Object.assign(globalThis, { __assistantContractTranslations: (input: string | { namespace?: string }) =>
+  createTranslator({ locale: "en", messages: messages as AbstractIntlMessages, namespace: typeof input === "string" ? input : input?.namespace }) });
+registerHooks({ resolve(specifier, context, next) {
+  if (specifier === "next-intl/server") return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
+    'export async function getTranslations(input){return globalThis.__assistantContractTranslations(input)}; export async function getLocale(){return "en"}'
+  ) };
+  return next(specifier, context);
+} });
 import type { Authz } from "../authz";
 import type { SessionUser } from "../auth";
 
@@ -8,7 +20,7 @@ import type { SessionUser } from "../auth";
 // server-only and the transitively imported app modules use the `@/` alias.
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { ASSISTANT_TOOLS, executeAssistantTool } = await import("./registry");
 const { MAX_ROW_STRING } = await import("./tools-shared");
 const { SETUP_ENTITY_BY_KEY } = await import("../setup/registry");
@@ -96,11 +108,8 @@ const EMPTY_STORE: Record<string, string> = {
   // HR-19: the survey read refuses an unknown survey by name, and the
   // refusal reaches the caller through hrmRefusal unchanged.
   hrm_survey_results: "survey is not visible in this organization",
-  // Payroll is on in every scratch org, so the payroll-owned AI tools reach
-  // their services, which refuse the harness reader (no user row, so no
-  // held grant) by name.
-  hrm_explain_pay: "Self-service requires the hrm.self.read permission — ask an administrator to grant it in /admin/roles.",
-  payroll_anomalies: "running payroll checks needs the payroll manager — ask a payroll administrator to run the scan",
+  hrm_explain_pay: "payslip for this employment matched no visible row — it is missing, outside this organization, or outside your legal-entity scope; reload and retry",
+  get_resourcing_assignment: "resourcing_assignment_not_found: the assignment is unavailable or outside your subsidiary scope",
 };
 
 const FEATURE_OFF = new Set([
@@ -208,6 +217,11 @@ const HARNESS_FEATURES = [
   "multiCurrency",
   "multiSubsidiary",
   "apiAccess",
+  "resourcing",
+  "resourceRequests",
+  "retainerBilling",
+  "revenueRecognition",
+  "flows",
 ];
 
 test("assistant read-tool contract harness", DB_ONLY, async (t) => {
@@ -223,6 +237,10 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
       where id = ${org.orgId}
     `));
     const authz = readerAuthz(org.orgId);
+    await withBypassContext(async () => {
+      await createScratchUser(org.orgId, "Contract reader", "contract-reader", authz.user.id);
+      await grantScratchPermissions(org.orgId, authz.user.id, [...READER_PERMS]);
+    });
     await withOrgContext(org.orgId, async () => {
       // Resolve seed-dependent ids from the scratch org's own list tools.
       const accounts = await executeAssistantTool(authz, "find_accounts", {});
@@ -320,6 +338,12 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         list_fx_rates: { fromCurrency: "USD", toCurrency: "CAD" },
         get_consolidation_view: { periodId: randomUUID() },
         get_budget_workspace: { scenarioId: randomUUID() },
+        resolve_scan_value: { field: "item", value: "CONTRACT-UNKNOWN-ITEM" },
+        list_customer_item_numbers: { customerId: partyId },
+        get_resourcing_assignment: { assignmentId: randomUUID() },
+        get_staffing_demand: { firstSunday: "2026-07-05", lastSunday: "2026-07-26" },
+        get_staffing_board: { firstSunday: "2026-07-05", lastSunday: "2026-07-26" },
+        get_bench_summary: { firstSunday: "2026-07-05", lastSunday: "2026-07-26" },
       };
 
       assert.ok(READ_TOOLS.length > 0, "the contract harness covers the read tools; an empty selection would vacate every tool check");
@@ -459,13 +483,18 @@ interface SetupEntityItem {
 }
 
 async function listSetupEntityItems(authz: Authz, orgId: string): Promise<SetupEntityItem[]> {
-  const result = await withOrgContext(orgId, () => executeAssistantTool(authz, "list_setup_entities", {}));
-  if (!result.ok) assert.fail(`list_setup_entities refused: ${JSON.stringify(result)}`);
-  const data = result.data as { truncated: boolean; items: SetupEntityItem[] };
-  // The probe registers last: a truncated listing could drop it silently, so
-  // the tests below only read the probe from a complete listing.
-  assert.equal(data.truncated, false, "setup entity listing truncated; the probe below would be unreadable");
-  return data.items;
+  const items: SetupEntityItem[] = [];
+  let offset = 0;
+  for (;;) {
+    const result = await withOrgContext(orgId, () => executeAssistantTool(authz, "list_setup_entities", { offset }));
+    if (!result.ok) assert.fail(`list_setup_entities refused: ${JSON.stringify(result)}`);
+    assert.ok(Buffer.byteLength(JSON.stringify(result)) <= OUTPUT_BUDGET_BYTES);
+    const data = result.data as { nextOffset: number | null; items: SetupEntityItem[] };
+    items.push(...data.items);
+    if (data.nextOffset === null) return items;
+    assert.ok(data.nextOffset > offset, "the catalog page must advance");
+    offset = data.nextOffset;
+  }
 }
 
 test("setup assistant tools honor an any-of descriptor through the shared gate", DB_ONLY, async () => {

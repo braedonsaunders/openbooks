@@ -5,7 +5,7 @@ import test from 'node:test';
 registerHooks({resolve(specifier,context,next){if(specifier==='server-only')return{shortCircuit:true,url:'data:text/javascript,export {}'};return next(specifier,context)}});
 const {sql}=await import('drizzle-orm');
 const {db}=await import('@openbooks/engine/platform/db');
-const {createScratchOrg,dropScratchOrg,seedFlowActors}=await import('@openbooks/engine/testing/fixtures');
+const {createScratchOrg,dropScratchOrg,seedFlowActors,seedPayrollSettings}=await import('@openbooks/engine/testing/fixtures');
 const {setupResource}=await import('./setup-resources.ts');
 const {SETUP_ENTITY_BY_KEY}=await import('../setup/registry.ts');
 
@@ -102,6 +102,7 @@ for (const channel of ['interactive', 'import'] as const) {
    try {
     const actorId=(await seedFlowActors(org.orgId)).adminId;
     auth.gate={user:{orgId:org.orgId,id:actorId}};
+    await seedPayrollSettings(org.orgId, { features: { payroll: true }, payroll: { countries: ['CA'] } });
     const body={code:'DEDUCTION-MEMBERSHIP',name:'Reviewed deduction',kind:'deduction',country:'CA',value:'10',
       ...(declaredMembership===undefined?{}:{includeInDisposableEarnings:declaredMembership}),reason:'Approved protected-base classification'};
     if(channel==='interactive') {

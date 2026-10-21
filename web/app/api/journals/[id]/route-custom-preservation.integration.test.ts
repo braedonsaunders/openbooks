@@ -124,6 +124,7 @@ test(
       const attempt = patchRequest(documentId, {
         expectedUpdatedAt: token,
         custom: { optional_note: "updated" },
+        lines: [{ accountId: org.accounts.cogs, amount: "100" }, { accountId: org.accounts.bank, amount: "-100" }],
       });
       // The handler reads through the ambient scope, which the route import
       // above left RLS-enforced: establish the caller's tenant explicitly.

@@ -51,8 +51,8 @@ test('a retainage-bearing pay application is billable once the receivable contro
       values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`)
     await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
       values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'retainage fixture')`)
-    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
-      values (${project},${org.orgId},${org.subsidiaryId},'RET','Retainage control job',${org.customerId},${typeId},'active',true)`)
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,contract_value)
+      values (${project},${org.orgId},${org.subsidiaryId},'RET','Retainage control job',${org.customerId},${typeId},'active',true,'180000')`)
     // Manual lines carry an explicit 0% — the finding's $100k/$80k lines.
     for (const [id, description, value] of [[lineA, 'Structure', '100000'], [lineB, 'Envelope', '80000']] as const) {
       await db.execute(sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,retainage_percent,income_account_id,sort_order)
@@ -79,8 +79,6 @@ test('a retainage-bearing pay application is billable once the receivable contro
         { sovLineId: coLine.id, thisPeriodCompleted: '12000' },
       ],
     }), 'submitPayApp')
-    asUser(org.orgId, approver)
-    await okJson(await post(construction.POST, org.orgId, { action: 'approvePayApp', payApplicationId: appId }), 'approvePayApp')
 
     // 1. Without the control account the refusal names the missing setup.
     asUser(org.orgId, preparer)

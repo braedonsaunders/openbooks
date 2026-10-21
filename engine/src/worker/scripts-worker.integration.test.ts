@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } from "../testing/fixtures.ts";
 import { scriptOccurrenceKey } from "../scheduling/scheduler.ts";
 import { bulkRunIdempotencyScope } from "../scripting/bulk-run-claim.ts";
 import { processScriptJobData, scheduledScopeFromJob } from "./scripts-worker.ts";
@@ -34,15 +34,17 @@ function postingSource(date: string): string {
 
 async function seedPostingScript(orgId: string, date: string): Promise<string> {
   const scriptId = randomUUID();
+  const runAsUserId = await createScratchUser(orgId, "Scheduled journal operator", "scheduled_journal_operator");
+  await grantScratchPermissions(orgId, runAsUserId, ["gl.post"]);
   await db.execute(sql`
     update orgs
        set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,scripts}', 'true'::jsonb)
      where id = ${orgId}
   `);
   await db.execute(sql`
-    insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
+    insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active, run_as_user_id)
     values (${scriptId}, ${orgId}, ${`Scratch occurrence ${scriptId.slice(0, 8)}`}, 'scheduled',
-            ${postingSource(date)}, '*/5 * * * *', ${new Date(Date.now() + 3_600_000)}, 2000, true)
+            ${postingSource(date)}, '*/5 * * * *', ${new Date(Date.now() + 3_600_000)}, 2000, true, ${runAsUserId})
   `);
   return scriptId;
 }

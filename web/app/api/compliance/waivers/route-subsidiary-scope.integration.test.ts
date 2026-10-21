@@ -38,6 +38,8 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+installEngineSeams();
 const { POST } = await import("./route.ts");
 
 async function fixture() {
@@ -45,6 +47,8 @@ async function fixture() {
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   state.orgId = org.orgId;
   state.actorId = actorId;
+  await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"subcontractorCompliance":true}'::jsonb) where id=${org.orgId}`));
   const branchId = randomUUID();
   const hiddenPartyId = randomUUID();
   const visiblePartyId = randomUUID();
@@ -68,8 +72,8 @@ async function fixture() {
     values (${hiddenProjectId},${org.orgId},${branchId},'HID','Hidden project',${org.customerId},'active',true,'{}'::jsonb),
            (${visibleProjectId},${org.orgId},${org.subsidiaryId},'VIS','Visible project',${org.customerId},'active',true,'{}'::jsonb)`));
   const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-    insert into compliance_requirements (org_id, code, name, category, enforcement, created_by, updated_by)
-    values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', 'block_payment', ${actorId}, ${actorId})
+    insert into compliance_requirements (org_id, class_id, code, name, category, enforcement, created_by, updated_by)
+    values (${org.orgId}, ${scopeClassId}, 'COI', 'Certificate of insurance', 'insurance', 'block_payment', ${actorId}, ${actorId})
     returning id`))).rows[0]!.id;
   return { org, hiddenPartyId, visiblePartyId, hiddenProjectId, visibleProjectId, requirementId };
 }
@@ -128,7 +132,7 @@ test("waiver creation still files in-scope exception requests", async () => {
     const response = await post({ partyId: visiblePartyId, projectId: visibleProjectId, requirementId, ...VALID });
     const json = (await response.json().catch(() => null)) as { status?: string } | null;
     assert.equal(response.status, 200, JSON.stringify(json));
-    assert.equal(json?.status, "pending_approval");
+    assert.equal(json?.status, "approved", "the tenant configured no approval gate");
     assert.equal(await waiverCount(org.orgId), 1);
   } finally {
     state.allowedSubsidiaryIds = null;

@@ -259,10 +259,7 @@ async function pendingGateId(subjectId: string): Promise<string> {
 /** A calculated run submitted and approved by the second user, as production does it. */
 async function approvedPayRun(fx: Awaited<ReturnType<typeof seedAdoption>>) {
   const actors = await payrollReviewActors(fx.orgId);
-  await db.execute(sql`
-    insert into user_permission_overrides (org_id, user_id, permission, effect)
-    values (${fx.orgId}, ${actors.submitterId}, 'payroll.run', 'grant'),
-           (${fx.orgId}, ${actors.submitterId}, 'payroll.manage', 'grant')`);
+  await grantScratchPermissions(fx.orgId, actors.submitterId, ["payroll.run"]);
   await seedApprovalFlow(fx.orgId, {
     subjectKind: "pay_run",
     assignees: [{ type: "user", userId: actors.approver1Id }],

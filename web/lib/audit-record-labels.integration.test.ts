@@ -29,9 +29,19 @@ test('every audit label source reads columns the schema has', { skip: !DB }, asy
 
 test('the audit log names equity records by their number, code and legal entity, within the organization', { skip: !DB }, async () => {
   const { setupEquityWorld, seedHolder } = await import('@openbooks/engine/testing/equity-world')
-  const { issueSecurity } = await import('@openbooks/engine/equity')
-  const w = await withBypassContext(() => setupEquityWorld())
+  const { issueSecurity, recordEquityAccountPolicy } = await import('@openbooks/engine/equity')
+  const w = await withBypassContext(() => setupEquityWorld({ policy: false }))
   try {
+    const policy = await recordEquityAccountPolicy({
+      orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId,
+      effectiveFrom: '2026-01-01', commonStockAccountId: w.accounts.common,
+      preferredStockAccountId: w.accounts.preferred, apicAccountId: w.accounts.apic,
+      apicShareBasedAccountId: w.accounts.apicShareBased, compensationExpenseAccountId: w.accounts.expense,
+      treasuryStockAccountId: w.accounts.treasury, convertibleInstrumentsAccountId: w.accounts.convertible,
+      reason: 'Configure equity posting accounts',
+    })
+    assert.equal(policy.status, 'applied')
+    assert.ok(policy.id)
     const issued = await issueSecurity({
       orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, kind: 'share', holderPartyId: w.holderId,
       issueDate: '2026-07-01', shareClassId: w.commonClassId, quantity: '1000', pricePerShare: '0.0001', considerationAccountId: w.org.accounts.bank,

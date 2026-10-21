@@ -1246,6 +1246,7 @@ function mapWorklistRow(
  * subsidiary subjects the same way.
  */
 const WORKLIST_SUBJECT_JOINS = sql`
+      left join budget_scenarios bs on bs.id = g.subject_id and bs.org_id = g.org_id and g.subject_kind = 'budget_scenario'
       left join financial_changes fc on fc.id = g.subject_id and fc.org_id = g.org_id and g.subject_kind = 'financial_change'
       left join items fci on fci.id = fc.subject_id and fci.org_id = fc.org_id and fc.domain = 'manufacturing'
         and fc.operation in (${MANUFACTURING_BOM_APPROVAL_OPERATION}, ${MANUFACTURING_STANDARD_ROLLUP_OPERATION})
@@ -1267,7 +1268,9 @@ const WORKLIST_SUBJECT_JOINS = sql`
       left join worker_employments hce on hce.id = hcr.employment_id and hce.org_id = hcr.org_id
       left join parties hcp on hcp.id = hce.worker_party_id and hcp.org_id = hce.org_id`;
 const WORKLIST_SUBJECT_LABEL = sql`
-      case when cp.id is not null then ${canonicalPeriodLabelSql("cp")} || ' close'
+      case when d.id is not null then d.document_number
+           when bs.id is not null then bs.name
+           when cp.id is not null then ${canonicalPeriodLabelSql("cp")} || ' close'
            when g.subject_kind = 'hrm_employment_change_request' then hcp.display_name
            when g.subject_kind = 'equity_action' then ear.subject_label
            when g.subject_kind = 'financial_change' then case

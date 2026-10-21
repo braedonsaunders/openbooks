@@ -29,6 +29,7 @@ import {
   ScopeNotFoundError,
   subsidiaryScopeAllows,
 } from "../organization/subsidiary-scope.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import {
   applyStandaloneCredits,
@@ -216,8 +217,8 @@ interface InvoiceRow extends Record<string, unknown> {
 
 /**
  * Write off the open balance of a posted customer invoice, in one transaction.
- * Subsidiary scope is enforced on the invoice; the permissions (ar.post to create
- * and post the credit memo, ar.pay to settle) are gated by the calling route.
+ * The native credit permissions (ar.create, ar.post and ar.pay) and subsidiary
+ * scope are pinned inside the command as well as checked by its callers.
  */
 export async function writeOffInvoice(
   orgId: string,
@@ -281,6 +282,9 @@ export async function writeOffInvoiceInTransaction(
         !subsidiaryScopeAllows(allowedSubsidiaryIds, invoice.subsidiaryId))
     ) {
       throw new ScopeNotFoundError();
+    }
+    for (const permission of ["ar.create", "ar.post", "ar.pay"]) {
+      await lockActorCommandAuthority(db, orgId, userId, invoice.subsidiaryId, permission);
     }
     if (invoice.kind !== "customer_invoice") {
       throw new PaymentError("Only a customer invoice can be written off");

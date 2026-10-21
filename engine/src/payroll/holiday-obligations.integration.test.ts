@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withMaintenanceTransaction, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { createCabinetFile } from "../platform/file-ingestion.ts";
-import { seedApprovalFlow, seedFlowActors, dropScratchOrg } from "../testing/fixtures.ts";
+import { seedApprovalFlow, seedFlowActors, dropScratchOrg, grantScratchPermissions } from "../testing/fixtures.ts";
 import { seedAdoption, calculatedRun } from "./filing-test-fixtures.ts";
 import { proposeHolidayObligation, applyHolidayObligation } from "./holiday-obligations.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
@@ -23,8 +23,7 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
     const actors = await seedFlowActors(fx.orgId);
     await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{features,payroll}','true'),'{payroll,statutoryHolidayPay}','true') where id=${fx.orgId}`);
     for (const actor of [fx.actorId, actors.approver1Id]) {
-      await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-        values(${fx.orgId},${actor},'payroll.run','grant') on conflict(user_id,permission) do update set effect='grant'`);
+      await grantScratchPermissions(fx.orgId, actor, ["payroll.run", "payroll.manage"]);
     }
     await seedApprovalFlow(fx.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: approvalMode === "solo" ? fx.actorId : actors.approver1Id }], mode: "any", preventSelfApproval: approvalMode !== "solo" });
     const folderId = randomUUID();
@@ -78,17 +77,19 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
     assert.equal(recalculated.length, 1);
     assert.deepEqual({ ...recalculated[0], lineId: null }, { ...initial[0], lineId: null });
     assert.ok(recalculated[0]!.lineId);
-    await commitPayRun(runInput);
-    const committed = await settlement();
-    assert.equal(committed.length, 1);
-    assert.equal(committed[0]!.status, "committed");
-    assert.equal(committed[0]!.amount, "240.0000");
     await withOrgContext(fx.orgId, async () => {
       await seedApprovalFlow(fx.orgId, { subjectKind: "pay_run", assignees: [{ type: "user", userId: actors.approver1Id }], mode: "any", preventSelfApproval: true });
       await submitForApproval("pay_run", runInput.documentId, fx.actorId);
       const payGate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${fx.orgId} and subject_id=${runInput.documentId} and status='pending'`)).rows[0]!;
       assert.ok(payGate);
       await decideGate({ gateId: payGate.id, decision: "approved", userId: actors.approver1Id });
+    });
+    await commitPayRun(runInput);
+    const committed = await settlement();
+    assert.equal(committed.length, 1);
+    assert.equal(committed[0]!.status, "committed");
+    assert.equal(committed[0]!.amount, "240.0000");
+    await withOrgContext(fx.orgId, async () => {
       const accounts = (await db.execute<{ id: string; type: string }>(sql`select id,type from accounts where org_id=${fx.orgId}`)).rows;
       const account = (type: string) => {
         const id = accounts.find(row => row.type === type)?.id;

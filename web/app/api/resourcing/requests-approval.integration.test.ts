@@ -141,8 +141,15 @@ test('resource requests submit and resolve through subsidiary-scoped Flows', ena
     const outsideCreated = await call(createRequest, '/api/resourcing/requests', 'POST', requestBody(setup.projectB, { jobTitle: 'Consultant' }, { engagement_code: 'OTHER' }), { 'Idempotency-Key': randomUUID() })
     assert.equal(outsideCreated.status, 201, JSON.stringify(outsideCreated.json))
     const outsideId = String(outsideCreated.json.id)
+    await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb
+      where org_id=${org.orgId} and key='approver' returning id`))
     const outsideSubmitted = await call(submitRequest, `/api/resourcing/requests/${outsideId}/submit`, 'POST', undefined, {}, outsideId)
     assert.equal(outsideSubmitted.status, 200, JSON.stringify(outsideSubmitted.json))
+    // The assignee was eligible when routed; a later scope restriction hides
+    // the retained gate and prevents a decision through the native boundary.
+    await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=
+      ${JSON.stringify({mode:'list',subsidiaryIds:[org.subsidiaryId]})}::jsonb
+      where org_id=${org.orgId} and key='approver' returning id`))
     await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction = jsonb_build_object('mode', 'list', 'subsidiaryIds', ${JSON.stringify([org.subsidiaryId])}::jsonb) where org_id = ${org.orgId} and key = 'accountant' returning id`))
     setSessionUser(setup.submitterId, 'accountant')
     const hiddenStatus = await call(submitRequest, `/api/resourcing/requests/${outsideId}/submit`, 'POST', undefined, {}, outsideId)

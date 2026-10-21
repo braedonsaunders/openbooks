@@ -12,7 +12,8 @@ import { sql } from "drizzle-orm";
 const stateKey = Symbol.for("openbooks.parties-create-integration");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { orgId: string; id: string; roles: { key: string }[] };
+    permissions: Set<string>;
     allowedSubsidiaryIds: null;
   } | null;
 }
@@ -80,7 +81,7 @@ test(
     const org = await createScratchOrg();
     try {
       const { adminId } = await seedFlowActors(org.orgId);
-      routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+      routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [] }, permissions: new Set(["parties.manage"]), allowedSubsidiaryIds: null };
 
       const key = randomUUID();
       const subsidiaryId = randomUUID().replace(/^(.{14})./, "$1f");
@@ -146,14 +147,14 @@ test(
       const { adminId: adminA } = await seedFlowActors(orgA.orgId);
       const { adminId: adminB } = await seedFlowActors(orgB.orgId);
 
-      routeState.authz = { user: { orgId: orgA.orgId, id: adminA }, allowedSubsidiaryIds: null };
+      routeState.authz = { user: { orgId: orgA.orgId, id: adminA, roles: [] }, permissions: new Set(["parties.manage"]), allowedSubsidiaryIds: null };
       const key = randomUUID();
       const created = await POST(postRequest(key, { displayName: "Acme Corp" }));
       assert.equal(created.status, 201);
 
       // Org B replays org A's key with the same body: no same-org row sits
       // behind it there, so the key reads as foreign, not as a replay.
-      routeState.authz = { user: { orgId: orgB.orgId, id: adminB }, allowedSubsidiaryIds: null };
+      routeState.authz = { user: { orgId: orgB.orgId, id: adminB, roles: [] }, permissions: new Set(["parties.manage"]), allowedSubsidiaryIds: null };
       const claimed = await POST(postRequest(key, { displayName: "Acme Corp" }));
       assert.equal(claimed.status, 409);
       assert.deepEqual(await claimed.json(), {
@@ -181,7 +182,7 @@ test(
     const org = await createScratchOrg();
     try {
       const { adminId } = await seedFlowActors(org.orgId);
-      routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+      routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [] }, permissions: new Set(["parties.manage"]), allowedSubsidiaryIds: null };
 
       // A non-commercial person (owner/partner) and company register with a
       // base kind and no roles — the New person / New company path.
@@ -228,7 +229,7 @@ test(
     const org = await createScratchOrg();
     try {
       const { adminId } = await seedFlowActors(org.orgId);
-      routeState.authz = { user: { orgId: org.orgId, id: adminId }, allowedSubsidiaryIds: null };
+      routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [] }, permissions: new Set(["parties.manage"]), allowedSubsidiaryIds: null };
       const net30 = randomUUID();
       const net15 = randomUUID();
       await db.execute(sql`

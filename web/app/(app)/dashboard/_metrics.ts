@@ -897,7 +897,7 @@ async function readDashboardMetrics(
         targetId: item.subjectId,
         amount: item.document?.total ?? null,
         currency: item.document?.currency ?? null,
-        title: item.title,
+        title: item.subjectLabel ?? item.title,
         createdAt: unionRequestedAt(item),
       }
     })

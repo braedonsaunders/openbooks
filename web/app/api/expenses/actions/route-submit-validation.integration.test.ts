@@ -42,6 +42,8 @@ const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/tes
 installTrustedTestDatabaseBypass()
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { installEngineSeams } = await import('@openbooks/engine/composition/install')
+installEngineSeams()
 const { POST } = await import('./route.ts')
 
 async function post(body: unknown): Promise<{ status: number; json: unknown }> {
@@ -70,7 +72,7 @@ async function setup(): Promise<{ orgId: string; employeeId: string; date: strin
     await db.transaction(async (tx) => {
       const role = (await tx.execute<{ id: string }>(sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions)
-        values (${org.orgId}, 'clerk', 'clerk', false, '[]'::jsonb)
+        values (${org.orgId}, 'clerk', 'clerk', false, '["expenses.create","ap.post"]'::jsonb)
         on conflict (org_id, key) do update set updated_at = now()
         returning id`))
       await tx.execute(sql`

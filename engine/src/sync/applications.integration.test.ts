@@ -1,5 +1,3 @@
-import { installEngineSeams } from "../composition/install.ts";
-import { requestPeriodReopen, recloseApprovedReopen } from "../close/reopening.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -1779,12 +1777,13 @@ test("authenticated source settlement replay reverses and replaces FX evidence w
     await db.execute(sql`insert into period_locks(org_id,period_id,book_id,subsidiary_id,module,state,reason)
       values(${org.orgId},${org.periodId},${org.bookId},null,'ar','closed','Controller close'),
         (${org.orgId},${org.periodId},${org.bookId},null,'gl','closed','Controller close')`);
-    await assert.rejects(() => reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],{...snapshot,syncRunId:runId}),
+    const locks = (await db.execute(sql`select * from period_locks where org_id=${org.orgId} order by id`)).rows;
+    const originalLines = (await db.execute(sql`select * from journal_lines
+      where org_id=${org.orgId} and entry_id=${before[0]!.fx_gain_loss_entry_id} order by line_number`)).rows;
+    await assert.rejects(() => reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],snapshot),
       error => errorChainMatches(error,/period is closed for AR posting/));
-    assert.deepEqual(await settlementSnapshot(org.orgId),before,"source replay cannot bypass a controller's close");
-    installEngineSeams();
-    const reopenId = await requestPeriodReopen({orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,
-      actorId,modules:["ar","gl"],hours:1,reason:"Correct the authenticated source settlement through a controlled reopen"});
+    assert.deepEqual(await settlementSnapshot(org.orgId),before,"unauthenticated reconciliation cannot release a closed-period allocation");
+    assert.equal((await db.execute(sql`select id from connector_replay_authorizations where org_id=${org.orgId}`)).rows.length,0);
     const result=await reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],{...snapshot,syncRunId:runId});
     assert.equal(result.released,1);
     assert.equal(result.insertedAmount,"55.0000");
@@ -1799,7 +1798,16 @@ test("authenticated source settlement replay reverses and replaces FX evidence w
     const replay=await reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],{...snapshot,syncRunId:runId});
     assert.equal(replay.released,0);assert.equal(replay.inserted,0);
     assert.deepEqual(await settlementSnapshot(org.orgId),after);
-    await recloseApprovedReopen({orgId:org.orgId,requestId:reopenId,actorId,reason:"Authenticated source settlement correction completed"});
+    assert.deepEqual((await db.execute(sql`select * from period_locks where org_id=${org.orgId} order by id`)).rows,locks);
+    assert.deepEqual((await db.execute(sql`select * from journal_lines
+      where org_id=${org.orgId} and entry_id=${before[0]!.fx_gain_loss_entry_id} order by line_number`)).rows,originalLines);
+    const grants = (await db.execute<{authorized_by:string;connection_id:string;period_from_id:string;period_to_id:string}>(sql`
+      select * from connector_replay_authorizations where org_id=${org.orgId}`)).rows;
+    assert.equal(grants.length,1,"replaying the same correction does not mint another authorization");
+    assert.equal(grants[0]!.authorized_by,actorId);
+    assert.equal(grants[0]!.connection_id,snapshot.connectionId);
+    assert.equal(grants[0]!.period_from_id,org.periodId);
+    assert.equal(grants[0]!.period_to_id,org.periodId);
   } finally { await dropScratchOrg(org.orgId); }
 });
 

@@ -41,8 +41,12 @@ registerHooks({
 })
 const { sql } = await import('drizzle-orm')
 const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, grantScratchPermissions } = await import('@openbooks/engine/testing/fixtures')
 const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
+const { installEngineSeams } = await import('@openbooks/engine/composition/install')
+const { submitAndReleaseIfUngated } = await import('@openbooks/engine/flows/submit')
+const { decideGate } = await import('@openbooks/engine/testing/flows/gates')
+installEngineSeams()
 const { POST } = await import('./route.ts')
 // The route's web/lib chain (documents → org-scope → auth → request-org)
 // registers the app RLS resolver at import time, replacing the preloaded
@@ -94,21 +98,17 @@ async function submittedReport(orgId: string, submitterId: string, scratch: { da
     values (${employeeId}, ${orgId}, 'employee', 'Sammy Sloppy', true, '{}'::jsonb)`)
   await db.execute(sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${employeeId})`)
   const id = randomUUID()
+  await grantScratchPermissions(orgId, submitterId, ['expenses.create', 'ap.post'])
   await db.execute(sql`
-    insert into documents (id, org_id, kind, status, document_number, document_date, party_id, subsidiary_id, currency, subtotal, tax_total, total, custom, created_by, submitted_by, submitted_at)
-    values (${id}, ${orgId}, 'expense_report', ${status}, ${'EXP-' + id.slice(0, 8)}, ${scratch.date}, ${employeeId}, ${scratch.subsidiaryId}, 'CAD', '875.50', '0', '875.50', '{}'::jsonb, ${submitterId}, ${submitterId}, now())`)
-  const runId = randomUUID()
-  const gateId = randomUUID()
-  const flowId = randomUUID()
-  await db.execute(sql`
-    insert into flows (id, org_id, name, subject_kind, enabled, graph, created_by)
-    values (${flowId}, ${orgId}, 'Expense approval', 'expense_report', true, '{"nodes":[],"edges":[]}'::jsonb, ${submitterId})`)
-  await db.execute(sql`
-    insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status, context, created_by)
-    values (${runId}, ${orgId}, ${flowId}, 'expense_report', ${id}, 'on_submit', 'waiting', '{}'::jsonb, ${submitterId})`)
-  await db.execute(sql`
-    insert into flow_gates (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key, status, assignee_role)
-    values (${gateId}, ${orgId}, ${flowId}, ${runId}, 'gate-1', 'expense_report', ${id}, 'Manager approval', ${runId + ':gate-1'}, 'pending', 'approver')`)
+    insert into documents (id, org_id, kind, status, document_number, document_date, party_id, subsidiary_id, currency, subtotal, tax_total, total, custom, created_by)
+    values (${id}, ${orgId}, 'expense_report', 'draft', ${'EXP-' + id.slice(0, 8)}, ${scratch.date}, ${employeeId}, ${scratch.subsidiaryId}, 'CAD', '875.50', '0', '875.50', '{}'::jsonb, ${submitterId})`)
+  await seedApprovalFlow(orgId, { subjectKind: 'expense_report', assignees: [{ type: 'user', userId: submitterId }], mode: 'any', preventSelfApproval: false })
+  const submitted = await submitAndReleaseIfUngated('expense_report', id, submitterId)
+  assert.equal(submitted.gated, true)
+  const gate = (await db.execute<{ id: string; run_id: string }>(sql`select id,run_id from flow_gates
+    where org_id=${orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+  const gateId=gate.id, runId=gate.run_id
+  if (status === 'approved') await decideGate({ gateId, userId: submitterId, decision: 'approved' })
   return { id, runId, gateId }
 }
 
@@ -117,17 +117,8 @@ async function fixture(): Promise<{ orgId: string; submitterId: string; scratch:
   state.orgId = org.orgId
   const submitterId = await createScratchUser(org.orgId, 'Sammy Sloppy', 'accountant')
   const scratch = { date: org.date, subsidiaryId: org.subsidiaryId }
-  const cleanup = async () => {
-    // Role rows predate the wipe's table list; user rows are referenced by
-    // documents/flows FKs, so park + unassign first, wipe the org (which
-    // clears every referencing row), then delete the users and roles.
-    await db.execute(sql`delete from employee_roles where org_id = ${org.orgId}`)
-    await db.execute(sql`update users set is_active = false where org_id = ${org.orgId}`)
-    await db.execute(sql`delete from role_assignments where org_id = ${org.orgId}`)
-    await dropScratchOrg(org.orgId)
-    await db.execute(sql`delete from users where org_id = ${org.orgId}`)
-    await db.execute(sql`delete from app_roles where org_id = ${org.orgId}`)
-  }
+  const cleanup = () => dropScratchOrg(org.orgId)
+
   return { orgId: org.orgId, submitterId, scratch, cleanup }
 }
 
@@ -202,8 +193,6 @@ test('recall keeps decided gates as history when reopening an approved report', 
   try {
     as(submitterId, [{ key: 'accountant', name: 'accountant' }])
     const { id, runId, gateId } = await submittedReport(orgId, submitterId, scratch, 'approved')
-    await db.execute(sql`update flow_gates set status = 'approved', decided_by = ${submitterId}, decided_at = now() where id = ${gateId}`)
-    await db.execute(sql`update flow_runs set status = 'completed', finished_at = now() where id = ${runId}`)
     const response = await post({ action: 'recall', documentId: id, expectedUpdatedAt: await revision(id) })
     assert.equal(response.status, 200, JSON.stringify(response.json))
     assert.equal(response.json?.cancelledGates, 0)

@@ -103,18 +103,27 @@ test('bank-feed routes reject malformed ids as client errors', { skip: !enabled 
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
 })
 
-// The picker and the API must agree on what a feed can attach
-// to — a reconcilable BANK account. A reconcilable non-bank account (or an
-// inactive one) used to sail through POST and strand statements where no
-// banking surface can reconcile them.
-test('bank-feed POST refuses a reconcilable non-bank account', { skip: !enabled }, async () => {
+// Feed creation uses the same active, statement-capable account policy as the picker.
+test('bank-feed POST refuses a reconcilable account that cannot carry statements', { skip: !enabled }, async () => {
   const org = await fixture()
   try {
     await withBypassContext(() => (db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
-      where org_id=${org.orgId} and id=${org.accounts.clearing}`)))
-    const refused = await post({ name: 'Clearing feed', provider: 'manual', accountId: org.accounts.clearing })
+      where org_id=${org.orgId} and id=${org.accounts.cogs}`)))
+    const refused = await post({ name: 'Expense feed', provider: 'manual', accountId: org.accounts.cogs })
     assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
     assert.deepEqual(await refused.json(), { error: 'not a reconcilable account' })
+  } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
+})
+
+test('bank-feed POST accepts a reconcilable liability account with bank statements', { skip: !enabled }, async () => {
+  const org = await fixture()
+  try {
+    await withBypassContext(() => db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
+      where org_id=${org.orgId} and id=${org.accounts.clearing}`))
+    const created = await post({ name: 'Liability statement feed', provider: 'manual', accountId: org.accounts.clearing })
+    assert.equal(created.status, 201, JSON.stringify(await created.clone().json()))
+    const { id } = await created.json() as { id: string }
+    assert.equal((await feedRow(org.orgId, id)).name, 'Liability statement feed')
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
 })
 

@@ -40,6 +40,8 @@ async function postWriteOff(request: Request) {
   if (!parsed.ok) return parsed.response
   const gate = await guardPermission('ar.post')
   if (gate instanceof NextResponse) return gate
+  const createGate = await guardPermission('ar.create')
+  if (createGate instanceof NextResponse) return createGate
   const settleGate = await guardPermission('ar.pay')
   if (settleGate instanceof NextResponse) return settleGate
 
@@ -78,7 +80,7 @@ async function postWriteOff(request: Request) {
   }
 }
 
-const writeOffFeature = { none: 'Invoice write-offs are gated by the AR post and pay permissions.' } as const
+const writeOffFeature = { none: 'Invoice write-offs are gated by the AR create, post and pay permissions.' } as const
 export const POST = defineRoute({
   authorize: () => guardPermission('ar.post'),
   feature: writeOffFeature,

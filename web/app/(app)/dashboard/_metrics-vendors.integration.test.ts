@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
-import { db, withBypass, withOrgContext } from '@openbooks/engine/platform/db'
+import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
 import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { vendorData } from '@/lib/analytics/vendor-data.ts'
 import { spendVelocityData } from '@/lib/analytics/spend-velocity-data.ts'
@@ -18,7 +18,7 @@ const DB = env.OPENBOOKS_DB_URL ?? ''
  * same loader. Any divergence between the two is a second source of truth.
  */
 test('vendor widget metrics equal the vendor dashboard figures', { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg())
+  const org = await withBypassContext(() => createScratchOrg())
   try {
     const window = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
     const ctx = {
@@ -40,7 +40,7 @@ test('vendor widget metrics equal the vendor dashboard figures', { skip: !DB }, 
     )
     assert.equal(empty.concentrationBand, null)
     const vend = randomUUID()
-    await withBypass(async () => {
+    await withBypassContext(async () => {
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
         values (${vend}, ${org.orgId}, 'vendor', 'Widget Vendor', ${org.subsidiaryId}, true, '{}'::jsonb)`)
@@ -84,7 +84,7 @@ test('vendor widget metrics equal the vendor dashboard figures', { skip: !DB }, 
     )
     assert.deepEqual(spendWidgets.spendSavingsPotential, { available: true, value: spendDashboard.summary.savingsPotential })
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
 
@@ -96,15 +96,15 @@ test('vendor widget metrics equal the vendor dashboard figures', { skip: !DB }, 
  * named reason instead of annualising by twelve or reading $0.
  */
 test('unmeasurable annuals refuse by name instead of annualising blindly', { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg())
+  const org = await withBypassContext(() => createScratchOrg())
   try {
     const calId = randomUUID()
-    await withBypass(async () => {
+    await withBypassContext(async () => {
       // The scratch monthly calendar steps aside for a non-monthly default
       // whose periods end in 2025, leaving July 2026 uncovered.
       await db.execute(sql`update fiscal_calendars set is_default = false where org_id = ${org.orgId}`)
       await db.execute(sql`insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone, adjustment_period_enabled, is_default, is_active, custom)
-        values (${calId}, ${org.orgId}, 'Ops', '445', 2, 1, 'UTC', false, true, true, '{}'::jsonb)`)
+        values (${calId}, ${org.orgId}, 'Ops', 'four_four_five', 2, 1, 'UTC', false, true, true, '{}'::jsonb)`)
       for (const [n, from, to] of [[1, '2025-02-01', '2025-03-01'], [2, '2025-03-02', '2025-03-29'], [3, '2025-03-30', '2025-04-26']] as const) {
         await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
           values (${randomUUID()}, ${org.orgId}, 2025, ${n}, ${'P' + n}, ${from}, ${to}, false, ${calId})`)
@@ -155,6 +155,6 @@ test('unmeasurable annuals refuse by name instead of annualising blindly', { ski
       'an unknown savings figure must name its reason',
     )
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
+    await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })

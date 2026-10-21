@@ -29,7 +29,7 @@ registerHooks({
     if (specifier === '../../../../lib/authz') return virtual(`
       export async function getAuthz() {
         const s = globalThis.__cashSummaryRouteState;
-        return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(s.permissions), allowedSubsidiaryIds: null };
+        return { user: { orgId: s.orgId, id: s.actorId, roles: [], isSuperAdmin: false }, permissions: new Set(s.permissions), allowedSubsidiaryIds: null };
       }
       export { can, guardSubsidiaryScope, subsidiariesInScope } from '${root}web/lib/authz.ts'
     `)

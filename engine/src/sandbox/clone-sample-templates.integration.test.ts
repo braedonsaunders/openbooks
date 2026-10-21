@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { prepareAllSampleCompanyTemplates } from "../sample-companies/service.ts";
+import { prepareIndustryDemo } from "../sample-companies/service.ts";
 import { SAMPLE_COMPANY_PROFILES } from "../sample-companies/catalog.ts";
 import { deleteSandbox, createSandbox } from "./lifecycle.ts";
 import { assertUuid, loadCatalog, PARENT_FILTER } from "./catalog.ts";
@@ -27,14 +27,11 @@ async function countRows(table: { name: string; hasOrgId: boolean }, orgId: stri
   `)).rows[0]!.n;
 }
 
-test("every simulator-provisioned sample company template clones with matching table counts", { skip: !DB }, async () => {
-  // This registry-driven path provisions the same complete SIM data used to
-  // prepare product sample templates, rather than hand-seeding a narrow shape.
-  const templates = await prepareAllSampleCompanyTemplates();
-  assert.deepEqual(
-    templates.map((template) => template.industryKey).sort(),
-    SAMPLE_COMPANY_PROFILES.map((profile) => profile.industryKey).sort(),
-  );
+for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.industryKey} simulator template clones with matching table counts`, { skip: !DB }, async () => {
+  const template = await prepareIndustryDemo(profile.industryKey);
+  assert.equal(template.industryKey, profile.industryKey);
+  assert.equal(template.profileId, profile.profileId);
+  const templates = [template];
   // Ordinary active-level creation must still open its normal activation
   // period; only runClone's controlled replay suppresses this trigger side
   // effect so it can copy the exact source history below.

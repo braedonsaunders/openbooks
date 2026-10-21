@@ -290,7 +290,7 @@ test("setup deletes write their audit event in the same transaction", { skip: !D
     const unitId = randomUUID(); await db.execute(sql`insert into equipment_units (id,org_id,subsidiary_id,unit_number,name,status,purchase_price) values (${unitId},${f.orgId},${foreign},'FOREIGN','Foreign unit','active','1')`);
     assert.deepEqual(await loadEntityOptions("equipment-units", f.orgId, new Set([main])), []);
     const rule = await POST(postRequest("pay-derived-rules", { code: `SCOPED-${randomUUID()}`, name: "Foreign unit rule", componentId: f.componentId, trigger: "distinct_day", effectiveFrom: "2026-01-01", rateMode: "fixed_per_unit", rateValue: "1", quantityMode: "count", costingMode: "source", billableOnly: false, equipmentUnitId: unitId, includedJobTitles: [], excludedJobTitles: [], sequence: 50, isActive: true }), call("pay-derived-rules"));
-    assert.deepEqual([rule.status, await rule.json()], [403, { error: "equipment unit is outside your allowed subsidiary scope" }]);
+    assert.deepEqual([rule.status, await rule.json()], [403, { error: "The owning record is outside your allowed employer scope" }]);
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);

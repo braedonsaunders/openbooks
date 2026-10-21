@@ -37,6 +37,9 @@ async function setup(run: (org: ScratchOrg, actor: string) => Promise<void>): Pr
     await withOrgContext(org.orgId, async () => {
       const result = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || '{"subscriptionBilling":true,"usageBilling":true}'::jsonb, true) where id = ${org.orgId}`);
       assert.equal(result.rowCount, 1);
+      const customerRole = await db.execute(sql`insert into customer_roles (org_id,party_id,is_active)
+        values (${org.orgId},${org.customerId},true) returning id`);
+      assert.equal(customerRole.rowCount,1);
       await db.execute(sql`insert into psp_provider_configs (org_id,provider,display_name,is_enabled,acceptance_enabled,default_bank_account_id,secrets,created_by,updated_by) values (${org.orgId},'stripe','Stripe',true,true,${org.accounts.bank},${sealJson({ apiKey: "sk_test_skip_triage" }, { orgId: org.orgId, purpose: "payment.provider.secrets" })},${actor},${actor})`);
     });
     await run(org, actor);

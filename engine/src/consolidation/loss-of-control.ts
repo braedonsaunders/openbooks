@@ -1226,6 +1226,7 @@ export async function applyLossOfControl(
     );
     let retainedInterestId: string | null = null;
     if (input.retainedMethod === "equity") {
+      // IFRS 10.25: the consolidated fair value becomes the retained associate’s initial cost.
       retainedInterestId = randomUUID();
       const next = new Date(
         Date.parse(input.effectiveOn + "T00:00:00Z") + 86400000,
@@ -1233,7 +1234,7 @@ export async function applyLossOfControl(
         .toISOString()
         .slice(0, 10);
       await tx.execute(
-        sql`insert into subsidiary_ownership_interests(id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,investment_account_id,equity_income_account_id,distribution_account_id,distribution_income_account_id,last_change_id,created_by,updated_by) values(${retainedInterestId},${orgId},${s.parent.id},${s.interest.subsidiary_id},${next},${input.retainedPercent},'equity',${next},${input.parentRetainedCarrying},0,${input.parentToGroupRate},'proportionate',${input.retainedAccountId},${input.equityIncomeAccountId},${input.distributionAccountId},${input.distributionIncomeAccountId},${changeId},${actorId},${actorId})`,
+        sql`insert into subsidiary_ownership_interests(id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,acquisition_date,acquisition_cost,fair_value_net_assets,acquisition_rate,nci_measurement,investment_account_id,equity_income_account_id,distribution_account_id,distribution_income_account_id,last_change_id,created_by,updated_by) values(${retainedInterestId},${orgId},${s.parent.id},${s.interest.subsidiary_id},${next},${input.retainedPercent},'equity',${next},${input.retainedFairValue},0,${input.parentToGroupRate},'proportionate',${input.retainedAccountId},${input.equityIncomeAccountId},${input.distributionAccountId},${input.distributionIncomeAccountId},${changeId},${actorId},${actorId})`,
       );
     }
     await tx.execute(

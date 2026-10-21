@@ -320,7 +320,7 @@ export async function loadArInvoices(
               ? creditApplicationsDrawer(openDoc.doc as Record<string, unknown>, { ar: can(authz, 'ar.pay'), ap: false })
               : null,
           invoiceWriteOff: openDoc && drawerKind === 'customer_invoice'
-            ? invoiceWriteOffDrawer(openDoc.doc as Record<string, unknown>, can(authz, 'ar.post') && can(authz, 'ar.pay'))
+            ? invoiceWriteOffDrawer(openDoc.doc as Record<string, unknown>, can(authz, 'ar.create') && can(authz, 'ar.post') && can(authz, 'ar.pay'))
             : null,
           returnAuthorizationHref:
             drawerKind === 'customer_invoice' && featureEnabled(featureState, 'returnAuthorizations') && can(authz, 'orders.fulfill')

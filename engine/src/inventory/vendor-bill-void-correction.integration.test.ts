@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -114,9 +116,9 @@ async function seedDrawerBill(seed: Seed, quantity: string): Promise<{ billId: s
 
 /** The double-receipt state through live documents: bill first, goods receipt after. */
 async function seedDoubleReceipt(seed: Seed, quantity: string) {
-  const po = await seedApprovedPo(seed, quantity);
   const bill = await seedDrawerBill(seed, quantity);
   await postDocument(bill.billId, { control: { ar: seed.ar, ap: seed.ap, bank: seed.bank } });
+  const po = await seedApprovedPo(seed, quantity);
   await receivePurchaseOrder(seed.orgId, seed.actorId, po.orderId, {
     receiptDate: seed.date,
     idempotencyKey: randomUUID(),

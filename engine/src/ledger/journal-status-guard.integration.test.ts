@@ -227,29 +227,20 @@ test("reversed entry accepts no further transition", { skip: !DB }, async () =>
     assert.equal(await statusOf(entry), "reversed");
   }));
 
-/**
- * Source-contract pin: every je_guard() branch is marked by name so no
- * future rewrite can silently drop one. The draft-post block interior
- * belongs to the source-module recheck and is pinned only by its marker
- * and its period fence, not by contents owned elsewhere.
- *
- * Append-only (0380) deliberately removed the same-status-amend branch, so
- * it is pinned by ABSENCE below rather than by name: a reintroduced amend
- * escape fails this test. That absence pin is load-bearing in the same way
- * the name pins are — it is the only evidence that the escape is gone.
- */
-test("je_guard source contract pins every branch by name", { skip: !DB }, async () =>
+/** The guard retains immutable journal states, scoped posting fences and
+ * authenticated connector replay admission. Corrections require mirror
+ * reversals and cannot introduce an amendment escape. */
+test("journal guard retains immutable history and connector admission predicates", { skip: !DB }, async () =>
   fixture(async () => {
     const r = await db.execute<{ definition: string }>(
       sql`select pg_get_functiondef('public.je_guard()'::regprocedure) as definition`,
     );
     const body = r.rows[0]!.definition;
-    assert.match(body, /Branch: journal-entry-delete/, "delete fence branch");
-    assert.match(body, /Branch: posted-immutability/, "posted-immutability branch");
-    assert.match(body, /Branch: reversal-evidence/, "reversal-evidence branch");
-    assert.match(body, /Branch: reversed-immutable/, "reversed-immutability branch");
-    assert.match(body, /Branch: draft-post/, "draft-post branch");
-    assert.match(body, /Branch: connector-replay-authorization/, "connector replay authorization branch");
+    assert.match(body, /if tg_op = 'DELETE' then/i, "delete fence");
+    assert.match(body, /old.status = 'posted' and new.status = 'posted'/, "posted immutability");
+    assert.match(body, /old.status = 'posted' and new.status = 'reversed'/, "reversal admission");
+    assert.match(body, /old.status = 'reversed'/, "reversed immutability");
+    assert.match(body, /old.status = 'draft' and new.status = 'posted'/, "draft posting admission");
     assert.match(body, /openbooks_connector_replay_authorized/, "replay authorization predicate");
     assert.match(body, /openbooks\.connector_replay_authorization/, "replay authorization grant pointer");
     assert.match(body, /openbooks_reversal_mirrors/, "mirror predicate");

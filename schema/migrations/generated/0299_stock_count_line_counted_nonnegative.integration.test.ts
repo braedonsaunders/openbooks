@@ -110,6 +110,8 @@ test("posted and cancelled negatives upgrade cleanly, keep their values, and sta
     // pool connection, which an uncommitted downgrade would block.
     const freshId = await openCount(org);
     await withCatalogRollback(rollback, async () => {
+      // Fixture evidence must satisfy deferred foreign keys before catalog DDL.
+      await rollback.query("set constraints all immediate");
       await rollback.query(`DO $$ BEGIN
         IF EXISTS (
           SELECT 1 FROM pg_constraint
@@ -229,6 +231,8 @@ test("open negatives refuse with the re-record remedy and mark nothing", async (
     await receiveTen(org);
     const countId = await openCount(org);
     await withCatalogRollback(rollback, async () => {
+      // Fixture evidence must satisfy deferred foreign keys before catalog DDL.
+      await rollback.query("set constraints all immediate");
       await rollback.query(`DO $$ BEGIN
         IF EXISTS (
           SELECT 1 FROM pg_constraint

@@ -129,10 +129,7 @@ test('an A-only caller cannot touch B’s pay-application lifecycle', async () =
       action: 'submitPayApp', payApplicationId: appId,
       lines: [{ sovLineId: f.lineB, thisPeriodCompleted: '5000', materialsStored: '0' }],
     })).status, 200)
-    f.asOwner2()
-    // Owner 2 approves (segregation of duties: the submitter cannot approve).
-    const approved = await f.post({ action: 'approvePayApp', payApplicationId: appId })
-    assert.equal(approved.status, 200)
+    // No gates are configured; native submission releases the application.
 
     f.asScoped()
     assert.equal((await f.post({ action: 'approvePayApp', payApplicationId: appId })).status, 404)

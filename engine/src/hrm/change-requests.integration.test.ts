@@ -1019,7 +1019,7 @@ test('a failed sibling workflow blocks direct application and leaves the canonic
     await db.execute(sql`insert into flows (org_id, name, subject_kind, enabled, graph) values (${h.org.orgId}, 'Invalid employment policy', 'hrm_employment_change_request', true, '{"schemaVersion":99}'::jsonb)`);
     const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false, employeeRole: true });
     const draft = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.submitterId, employmentId, payload: { kind: 'hire', status: 'active', effectiveFrom: '2026-09-01' } });
-    await assert.rejects(submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Hire' }), /Invalid employment policy/);
+    await assert.rejects(submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Hire' }), /invalid graph.*Open Flows/i);
     assert.equal(await requestStatus(draft.id), 'draft');
     assert.equal((await changeRows(employmentId)).length, 0);
     assert.equal((await db.execute(sql`select id from worker_employment_versions where employment_id = ${employmentId}`)).rows.length, 0);

@@ -1,6 +1,6 @@
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPayrollProfile, seedPayrollWage,
-  createScratchUser, dropScratchOrgReporting, seedWorkerEmployment,
+  createScratchUser, dropScratchOrgReporting, seedWorkerEmployment, seedPostingAccount,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -12,6 +12,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
+import { setPackSlotAccount } from "./packs.ts";
 import { reconcilePayrollFilingAccounts } from "./filing-reconciliation.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -41,6 +42,8 @@ type TwoEntityFixture = {
  */
 async function seedTwoEntities(): Promise<TwoEntityFixture> {
   const fx = await seedAdoption();
+  const ehtPayable = await seedPostingAccount(fx.orgId, "2330", "Ontario EHT payable", "liability_current");
+  await setPackSlotAccount(fx.orgId, fx.actorId, "CA", "eht", ehtPayable);
   const entityB = randomUUID();
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)

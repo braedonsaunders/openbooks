@@ -22,7 +22,7 @@ const hooks = registerHooks({
 });
 
 const { POST } = await import("./route.ts");
-const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { db, withBypassContext, withOrgTransaction } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { createWorkOrder } = await import("@openbooks/engine/manufacturing/work-orders");
 const { createWorkOperator } = await import("@openbooks/engine/testing/manufacturing");
@@ -36,9 +36,9 @@ test("work-order completion validates options before applying lifecycle rules", 
       update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb)
       where id=${org.orgId} returning id`));
     assert.equal(feature.rows.length, 1, "manufacturing feature setup must affect exactly one organization");
-    const order = await withBypassContext(() => db.transaction((tx) => createWorkOrder(tx, org.orgId, actorId, {
+    const order = await withOrgTransaction(org.orgId, (tx) => createWorkOrder(tx, org.orgId, actorId, {
       producedItemId: org.items.assembly, quantityOrdered: "1", subsidiaryId: org.subsidiaryId,
-    })));
+    }));
     gateState.authz = {
       user: { id: actorId, orgId: org.orgId, roles: [] },
       permissions: new Set(grants),

@@ -240,6 +240,7 @@ test(
       const savedHeader = patchRequest(documentId, {
         expectedUpdatedAt: await revisionToken(orgA.orgId, documentId),
         custom: { ref_party: orgA.customerId },
+        lines: [{ accountId: orgA.accounts.cogs, amount: "100" }, { accountId: orgA.accounts.bank, amount: "-100" }],
       });
       const headerResponse = await withOrgContext(orgA.orgId, () => PATCH(savedHeader.req, savedHeader.ctx));
       assert.equal(headerResponse.status, 200, await headerResponse.clone().text());
@@ -256,10 +257,10 @@ test(
       const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines where document_id = ${documentId} and org_id = ${orgA.orgId}
       `))).rows[0]!.n;
-      assert.equal(lines, 0, "refused line references store nothing");
+      assert.equal(lines, 2, "refused line references preserve the balanced saved journal");
       const savedLine = patchRequest(documentId, {
         expectedUpdatedAt: await revisionToken(orgA.orgId, documentId),
-        lines: [{ accountId: orgA.accounts.cogs, amount: "100", custom: { line_ref: orgA.customerId } }],
+        lines: [{ accountId: orgA.accounts.cogs, amount: "100", custom: { line_ref: orgA.customerId } }, { accountId: orgA.accounts.bank, amount: "-100" }],
       });
       assert.equal((await withOrgContext(orgA.orgId, () => PATCH(savedLine.req, savedLine.ctx))).status, 200, "own-org line reference must stay green");
     } finally {

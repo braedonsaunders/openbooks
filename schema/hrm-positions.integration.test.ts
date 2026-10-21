@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { migrationIdentityIsApplied } from "../scripts/migration-baseline-plan.mjs";
 import { sql } from "drizzle-orm";
 import type { PoolClient } from "pg";
 import { db, pool, withOrgContext } from "@openbooks/engine/platform/db";
@@ -63,10 +65,12 @@ async function hasPolicy(table: string, policy: string): Promise<boolean> {
   return (rows[0]?.n ?? 0) > 0;
 }
 
-test("fresh bootstrap carries the 0192 ordinal in its ledger", { skip }, async () => {
-  const rows = (await db.execute<{ filename: string }>(sql`
-    select filename from public._applied_migrations where filename = 'generated/0192_hrm_positions_headcount_plan.sql'`)).rows;
-  assert.equal(rows.length, 1, "the bootstrap ledger must carry the 0192 migration");
+test("fresh bootstrap retains verified position migration coverage", { skip }, async () => {
+  const rows = (await db.execute<{ filename: string; sha256: string }>(sql`
+    select filename, sha256 from public._applied_migrations`)).rows;
+  const baseline = JSON.parse(readFileSync("schema/migrations/baseline.json", "utf8"));
+  assert.equal(migrationIdentityIsApplied("generated/0192_hrm_positions_headcount_plan.sql", rows, baseline), true,
+    "the bootstrap ledger must retain the exact migration or its verified release baseline coverage");
 });
 
 test("position tables exist with enforced tenant RLS", { skip }, async () => {

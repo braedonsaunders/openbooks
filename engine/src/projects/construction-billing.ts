@@ -585,7 +585,7 @@ export async function submitPayApplication(
   });
 }
 
-/** Approve a submitted application under segregation of duties. */
+/** Route a submitted application through the tenant’s configured Flow policy. */
 export async function approvePayApplication(
   orgId: string,
   userId: string,

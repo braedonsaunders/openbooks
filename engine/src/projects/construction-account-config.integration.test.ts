@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
-import { approvePayApplication, ConstructionBillingError, createPayApplication, generatePayApplicationInvoice, submitPayApplication } from "./construction-billing.ts";
+import { ConstructionBillingError, createPayApplication, generatePayApplicationInvoice, submitPayApplication } from "./construction-billing.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 type Fixture = { org: Awaited<ReturnType<typeof createScratchOrg>>; actor: string; approver: string; sov: string; idleSov: string; app: string };
@@ -32,7 +32,6 @@ async function fixture(run: (f: Fixture) => Promise<void>) {
       (${idleSov},${org.orgId},${project},'Unbilled work','1000',2,null)`);
     const app = (await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "0", null))).id;
     await withOrgTransaction(org.orgId, () => submitPayApplication(org.orgId, actor, app, [{ sovLineId: sov, thisPeriodCompleted: "1000.1234", materialsStored: "0" }], null));
-    await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, app, null));
     await run({ org, actor, approver, sov, idleSov, app });
   } finally { await dropScratchOrgReporting(org.orgId); }
 }
@@ -75,17 +74,16 @@ test("construction invoice uses explicit SOV account and skips unconfigured zero
   await generatedWithAccount(f, f.org.accounts.revenue);
 }));
 
-test("construction invoice preserves explicit non-income account flexibility", enabled, async () => fixture(async (f) => {
-  // The construction API accepts any active, non-summary account in this org.
+test("construction invoice refuses a non-income account without writes", enabled, async () => fixture(async (f) => {
   await db.execute(sql`update sov_lines set income_account_id=${f.org.accounts.invAsset} where org_id=${f.org.orgId} and id=${f.sov}`);
-  await generatedWithAccount(f, f.org.accounts.invAsset);
+  await refusedWithoutWrites(f, /Configured work.*active Income or Other Income account available to the project's subsidiary/);
 }));
 
 for (const invalidity of ["inactive", "summary"] as const) {
   test(`construction invoice refuses ${invalidity} configured account without writes`, enabled, async () => fixture(async (f) => {
     if (invalidity === "inactive") await db.execute(sql`update accounts set is_active=false where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`);
     else await db.execute(sql`update accounts set is_summary=true where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`);
-    await refusedWithoutWrites(f, /Configured work.*active, non-summary account in this organization/);
+    await refusedWithoutWrites(f, /Configured work.*active Income or Other Income account available to the project's subsidiary/);
   }));
 }
 
@@ -94,7 +92,6 @@ test("construction invoice skips unconfigured unchanged stored materials with ze
   await db.execute(sql`update pay_application_lines set previous_completed='125.4321', previous_materials_stored='125.4321'
     where org_id=${f.org.orgId} and pay_application_id=${f.app} and sov_line_id=${f.idleSov}`);
   await withOrgTransaction(f.org.orgId, () => submitPayApplication(f.org.orgId, f.actor, f.app, [{ sovLineId: f.idleSov, thisPeriodCompleted: "0", materialsStored: "125.4321" }], null));
-  await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, f.app, null));
   await generatedWithAccount(f, f.org.accounts.revenue);
 }));
 
@@ -103,7 +100,7 @@ for (const invalidity of ["nonexistent", "foreign-organization"] as const) {
     const foreign = invalidity === "foreign-organization" ? await createScratchOrg() : null;
     try {
       await db.execute(sql`update sov_lines set income_account_id=${foreign?.accounts.revenue ?? randomUUID()} where org_id=${f.org.orgId} and id=${f.sov}`);
-      await refusedWithoutWrites(f, /Configured work.*active, non-summary account in this organization/);
+      await refusedWithoutWrites(f, /Configured work.*active Income or Other Income account available to the project's subsidiary/);
     } finally { if (foreign) await dropScratchOrgReporting(foreign.orgId); }
   }));
 }

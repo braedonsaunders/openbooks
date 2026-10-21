@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
+import { db, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -156,8 +156,8 @@ async function accountNumber(accountId: string): Promise<string> {
  * allowlist, and multi-script tests keep their explicit setup.
  */
 async function newPosterOrg(): Promise<{ org: ScratchOrg; actorId: string }> {
-  const org = await withBypass(() => createScratchOrg());
-  const actorId = await withBypass(() => createScratchUser(org.orgId, "Poster", "poster"));
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Poster", "poster"));
   await withOrgContext(org.orgId, async () => {
     await enableAllocScripting(org.orgId);
     await db.execute(sql`
@@ -248,7 +248,7 @@ test("custom_gl_lines land on the same journal entry with script stamps", { skip
     assert.equal(runs.rows[0]!.status, "ok");
     assert.match(JSON.stringify(runs.rows[0]!.logs), /kernel lines seen/);
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -295,7 +295,7 @@ test("unbalanced script lines refuse posting with no journal write", { skip: !DB
       run_status: "ok",
     });
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -327,7 +327,7 @@ test("ledger-scale script lines share the journal bound", { skip: !DB }, async (
     );
     assert.deepEqual(posted.rows.map((l) => l.amount), ["20000000000000.0000", "-20000000000000.0000"]);
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -364,7 +364,7 @@ test("oversize script lines are refused with the shared bound message", { skip: 
     );
     assert.equal(entries.rows[0]!.n, 0);
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -406,7 +406,7 @@ test("balanced script lines whose sides overflow the ledger are refused by name"
     );
     assert.equal(entries.rows[0]!.n, 0);
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -443,7 +443,7 @@ test("unknown accountCode is refused with no write", { skip: !DB }, async () => 
     );
     assert.equal(entries.rows[0]!.n, 0);
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -481,14 +481,14 @@ test("a script that mutates kernelLines fails and halts posting", { skip: !DB },
     );
     assert.equal(entries.rows[0]!.n, 0, "the mutating script halted posting with no write");
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
 test("gates off: scripts run nowhere when any gate in the chain is disabled", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Poster", "poster"));
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Poster", "poster"));
     await withOrgContext(org.orgId, async () => {
       await db.execute(sql`
         update app_roles set permissions = '["gl.post"]'::jsonb
@@ -531,15 +531,15 @@ test("gates off: scripts run nowhere when any gate in the chain is disabled", { 
     );
     assert.deepEqual(check.rows[0], { lines: 6, runs: 0 }, "kernel lines only, no script evidence");
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
 test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const clerkId = await withBypass(() => createScratchUser(org.orgId, "Clerk", "clerk"));
-    const posterId = await withBypass(() => createScratchUser(org.orgId, "Poster", "poster"));
+    const clerkId = await withBypassContext(() => createScratchUser(org.orgId, "Clerk", "clerk"));
+    const posterId = await withBypassContext(() => createScratchUser(org.orgId, "Poster", "poster"));
     await withOrgContext(org.orgId, async () => {
       await enableAllocScripting(org.orgId);
       await db.execute(sql`
@@ -554,7 +554,7 @@ test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !
       seedBalancedDraftJournal(org, "JE-CGL-NOPERM", clerkId),
     );
     await withOrgContext(org.orgId, () =>
-      submitAndReleaseIfUngated("journal", refused, clerkId),
+      submitAndReleaseIfUngated("journal", refused, posterId),
     );
     await assert.rejects(
       withOrgContext(org.orgId, () =>
@@ -594,7 +594,7 @@ test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !
     );
     assert.equal(afterSystem.rows[0]!.n, 4, "the run-as user's authority covers the system posting");
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -631,7 +631,7 @@ test("ob.journal.create is refused inside custom_gl_lines", { skip: !DB }, async
       /journal\.create is not available in custom_gl_lines/,
     );
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -668,7 +668,7 @@ test("more than 200 contributed lines are refused", { skip: !DB }, async () => {
       /max 200/,
     );
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -692,7 +692,7 @@ test("documentKind narrowing: a vendor_bill script does not fire on a journal", 
     );
     assert.equal(runs.rows[0]!.n, 0);
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -724,7 +724,7 @@ test("the trigger is deterministic: clock access fails the run", { skip: !DB }, 
       /custom_gl_lines script/,
     );
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -766,14 +766,14 @@ test("the first error halts the chain: later scripts never run", { skip: !DB }, 
     assert.equal(runs.rows.length, 1, "only the first script ran");
     assert.notEqual(runs.rows[0]!.script_id, secondId);
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
 test("an attributed custom_gl_lines run cannot stamp a subsidiary outside the actor allowlist", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Poster", "poster"));
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Poster", "poster"));
     const childId = randomUUID();
     await withOrgContext(org.orgId, async () => {
       await enableAllocScripting(org.orgId);
@@ -810,7 +810,7 @@ test("an attributed custom_gl_lines run cannot stamp a subsidiary outside the ac
           audit: { actorId, source: "test" },
         }),
       ),
-      /subsidiary not found/,
+      /subsidiary is outside the script owner's allowed scope/,
     );
     const after = await withOrgContext(org.orgId, () =>
       db.execute<{ entries: number; scripted: number }>(sql`
@@ -819,7 +819,7 @@ test("an attributed custom_gl_lines run cannot stamp a subsidiary outside the ac
     );
     assert.deepEqual(after.rows[0], { entries: 0, scripted: 0 });
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
@@ -885,7 +885,7 @@ test("a refused attempt keeps its error evidence and a fixed retry posts once wi
     assert.deepEqual(retried.rows[0]!.statuses, ["error", "ok"]);
     assert.equal(retried.rows[0]!.entries, 1);
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 

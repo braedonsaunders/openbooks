@@ -95,7 +95,7 @@ test("a restricted actor cannot re-home a correction into an out-of-scope subsid
       assert.deepEqual(await documentCounts(org.orgId), before);
       assert.equal((await db.execute(sql`select 1 from documents where id = ${sourceId} and status = 'posted' and void_requested_at is null`)).rows.length, 1);
 
-      // In-scope re-home (and an omitted id) still proceeds through the same path.
+      // An in-scope metadata correction retains the posted source and records the change.
       const inScope = await correctPostedDocument(context(new Set([org.subsidiaryId])), {
         documentId: sourceId,
         correction: { amendmentReason: "correct the source evidence", expectedUpdatedAt: revision, subsidiaryId: org.subsidiaryId, memo: "Corrected source evidence" },
@@ -103,8 +103,10 @@ test("a restricted actor cannot re-home a correction into an out-of-scope subsid
       });
       assert.equal(inScope.replayed, false);
       const after = await documentCounts(org.orgId);
-      assert.equal(after.bills, before.bills + 1);
-      assert.ok(after.statuses.some((s) => s === `draft:${org.subsidiaryId}`), JSON.stringify(after));
+      assert.equal((inScope.result as { correctionOutcome: string }).correctionOutcome, "metadata-correction");
+      assert.deepEqual(after, before);
+      const saved = (await db.execute<{ memo: string }>(sql`select memo from documents where org_id=${org.orgId} and id=${sourceId} and status='posted'`)).rows[0];
+      assert.equal(saved?.memo, "Corrected source evidence");
     });
   } finally {
     await dropScratchOrg(org.orgId);

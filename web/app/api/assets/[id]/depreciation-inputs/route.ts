@@ -10,32 +10,22 @@ import {
   buildAllSchedules,
   recordDepreciationInput,
 } from "@openbooks/engine/assets/depreciation";
-import { normalizeMoney } from "@openbooks/engine/money/money";
+import { fitsLedgerRange } from "@openbooks/engine/money/money";
 import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
 import { isUuid } from "../../../../../lib/list-params";
-import { canonicalDecimal } from "../../../../../lib/exact-decimal";
-import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
 import { exactMoney, isoDate } from "../../../../../lib/api/json";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({
   effectiveDate: isoDate("effectiveDate must be a valid calendar date"),
   kind: z.enum(["manual", "production_usage"]),
-  value: exactMoney("value must be a decimal string; JSON numbers are refused"),
+  value: exactMoney("value must be a decimal string; JSON numbers are refused")
+    .refine(fitsLedgerRange, "value must fit within 15 whole digits and 4 decimal places"),
   memo: z.string().trim().max(2000),
   evidenceFileId: uuidString("evidenceFileId must be a valid id"),
   bookId: uuidString("bookId must be a valid id").optional(),
 });
 
 export const runtime = "nodejs";
-
-interface Body {
-  effectiveDate?: unknown;
-  kind?: unknown;
-  value?: unknown;
-  memo?: unknown;
-  evidenceFileId?: unknown;
-  bookId?: unknown;
-}
 
 export const POST = defineRoute({
   permission: "assets.manage",
@@ -48,43 +38,7 @@ export const POST = defineRoute({
     if (!isUuid(id))
       return notFound("record");
 
-    const body = routeBody as Body;
-    const effectiveDate =
-      typeof body.effectiveDate === "string" ? body.effectiveDate : "";
-    const kind =
-      body.kind === "manual" || body.kind === "production_usage"
-        ? body.kind
-        : null;
-    const valueRaw = canonicalDecimal(body.value, 4);
-    const memo = typeof body.memo === "string" ? body.memo : "";
-    const evidenceFileId =
-      typeof body.evidenceFileId === "string" ? body.evidenceFileId : "";
-    if (
-      body.bookId !== undefined &&
-      (typeof body.bookId !== "string" || !isUuid(body.bookId))
-    ) {
-      return NextResponse.json(
-        { error: "book id is invalid" },
-        { status: 422 },
-      );
-    }
-    const bookId = typeof body.bookId === "string" ? body.bookId : undefined;
-    if (!kind || !effectiveDate || !isUuid(evidenceFileId)) {
-      return NextResponse.json(
-        {
-          error:
-            "method, effective date, value, and attached evidence file are required",
-        },
-        { status: 422 },
-      );
-    }
-    if (valueRaw === null) {
-      return NextResponse.json(
-        { error: moneyRefusal("Value", body.value) },
-        { status: 422 },
-      );
-    }
-    const value = normalizeMoney(valueRaw);
+    const { effectiveDate, kind, value, memo, evidenceFileId, bookId } = routeBody;
 
     const visible = await db.execute(sql`
     select 1 from fixed_assets where id = ${id} and org_id = ${gate.user.orgId}

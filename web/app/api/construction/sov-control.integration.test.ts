@@ -14,6 +14,8 @@ const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { randomUUID } = await import('node:crypto')
+const { installEngineSeams } = await import('@openbooks/engine/composition/install')
+installEngineSeams()
 const construction = await import('./route')
 
 const post = (handler: (req: Request) => Promise<Response>, orgId: string, body: Record<string, unknown>) =>
@@ -35,7 +37,7 @@ test('updateSov refuses a change-order-controlled schedule line', async () => {
     session.user = { id: actor, orgId: org.orgId, name: 'Billing controller', email: 'billing@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
 
     const sov = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'schedule_of_values')!
-    const typeId = randomUUID(), project = randomUUID(), plain = randomUUID(), coLine = randomUUID(), co = randomUUID()
+    const typeId = randomUUID(), project = randomUUID(), plain = randomUUID(), co = randomUUID()
     await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
       values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`)
     await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
@@ -43,17 +45,17 @@ test('updateSov refuses a change-order-controlled schedule line', async () => {
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
       values (${project},${org.orgId},${org.subsidiaryId},'SOV','SOV control job',${org.customerId},${typeId},'active',true)`)
     await db.execute(sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,sort_order) values (${plain},${org.orgId},${project},'Direct line','1000',1)`)
-    // The exact state an approved unallocated change order leaves behind: the
-    // contract value moved with it and the created line carries its id.
-    await db.execute(sql`insert into change_orders(id,org_id,project_id,number,description,amount,status,approved_on,approved_by,created_by,updated_by)
-      values (${co},${org.orgId},${project},'CO-1','Extra scope','5000','approved',${org.date},${actor},${actor},${actor})`)
-    await db.execute(sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,sort_order,change_order_id) values (${coLine},${org.orgId},${project},'CO-1','5000',2,${co})`)
-    await db.execute(sql`update projects set contract_value='5000' where org_id=${org.orgId} and id=${project}`)
+    await db.execute(sql`update projects set contract_value='1000' where org_id=${org.orgId} and id=${project}`)
+    await db.execute(sql`insert into change_orders(id,org_id,project_id,number,description,amount,status,income_account_id,created_by,updated_by)
+      values (${co},${org.orgId},${project},'CO-1','Extra scope','5000','draft',${org.accounts.revenue},${actor},${actor})`)
+    const released = await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: co, approvedOn: org.date })
+    assert.equal(released.status, 200, await released.clone().text())
+    const releasedLine = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${org.orgId} and change_order_id=${co}`)).rows[0]!
 
-    const refused = await post(construction.POST, org.orgId, { action: 'updateSov', id: coLine, description: 'Repriced', scheduledValue: '10000' })
+    const refused = await post(construction.POST, org.orgId, { action: 'updateSov', id: releasedLine.id, description: 'Repriced', scheduledValue: '10000' })
     assert.equal(refused.status, 422)
     assert.match((await refused.json()).error, /change order/i)
-    assert.equal((await db.execute<{ v: string }>(sql`select scheduled_value::text as v from sov_lines where id=${coLine}`)).rows[0]!.v, '5000.0000')
+    assert.equal((await db.execute<{ v: string }>(sql`select scheduled_value::text as v from sov_lines where id=${releasedLine.id}`)).rows[0]!.v, '5000.0000')
 
     // Ordinary lines stay editable before billing begins.
     const allowed = await post(construction.POST, org.orgId, { action: 'updateSov', id: plain, description: 'Renamed', scheduledValue: '1200' })
@@ -288,6 +290,7 @@ test('approving an unallocated change order carries the pinned income account', 
       values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'co carry fixture')`)
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
       values (${project},${org.orgId},${org.subsidiaryId},'CO-CARRY','CO carry job',${org.customerId},${typeId},'active',true)`)
+    await db.execute(sql`update projects set contract_value='0' where org_id=${org.orgId} and id=${project}`)
     const revenue = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${org.orgId} and number='4000'`)).rows[0]!.id
 
     session.user = user(preparer, 'CO preparer', 'preparer@scratch.test')
@@ -315,13 +318,9 @@ test('approving an unallocated change order carries the pinned income account', 
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
 
-/**
- * A change order saved without an account (including rows predating the
- * income column) resolves through the org project-revenue default at
- * approval time, so the created line still bills. With no default
- * configured the line keeps NULL, exactly like a hand-added SOV line.
- */
-test('approving an account-less change order falls back to the org default', async () => {
+/** An explicit Project Revenue policy supplies unallocated change orders;
+ * missing policy refuses before changing either contract or schedule. */
+test('change orders use configured Project Revenue and refuse missing configuration', async () => {
   const org = await createScratchOrg()
   try {
     const preparer = await createScratchUser(org.orgId, 'CO preparer', 'reviewer')
@@ -337,9 +336,10 @@ test('approving an account-less change order falls back to the org default', asy
     await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
       values (${typeId},${org.orgId},'schedule_of_values','Schedule of Values','fixed_price',${JSON.stringify(sov.invoicingProfile)}::jsonb,${JSON.stringify(sov.backupProfile)}::jsonb)`)
     await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
-      values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'co fallback fixture')`)
+      values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(sov.financialProfile)}::jsonb,'project revenue policy fixture')`)
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
-      values (${project},${org.orgId},${org.subsidiaryId},'CO-FALLBACK','CO fallback job',${org.customerId},${typeId},'active',true)`)
+      values (${project},${org.orgId},${org.subsidiaryId},'CO-POLICY','Project revenue policy job',${org.customerId},${typeId},'active',true)`)
+    await db.execute(sql`update projects set contract_value='0' where org_id=${org.orgId} and id=${project}`)
     const revenue = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${org.orgId} and number='4000'`)).rows[0]!.id
     await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', ${JSON.stringify(revenue)}::jsonb) where id=${org.orgId}`)
 
@@ -357,7 +357,7 @@ test('approving an account-less change order falls back to the org default', asy
       select income_account_id from sov_lines where org_id=${org.orgId} and change_order_id=${coId}
     `)).rows[0]!.income_account_id, revenue)
 
-    // No default configured: the line keeps NULL, like a hand-added SOV line.
+    // Removing the policy cannot release an unconfigured change order.
     await db.execute(sql`update orgs set settings = settings #- '{controlAccounts,projectRevenue}' where id=${org.orgId}`)
     session.user = user(preparer, 'CO preparer', 'preparer@scratch.test')
     const createdBare = await post(construction.POST, org.orgId, {
@@ -367,9 +367,10 @@ test('approving an account-less change order falls back to the org default', asy
     const bareId = (await createdBare.json()).id as string
     session.user = user(approver, 'CO approver', 'approver@scratch.test')
     const approvedBare = await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: bareId, approvedOn: org.date })
-    assert.equal(approvedBare.status, 200, await approvedBare.clone().text())
-    assert.equal((await db.execute<{ income_account_id: string | null }>(sql`
-      select income_account_id from sov_lines where org_id=${org.orgId} and change_order_id=${bareId}
-    `)).rows[0]!.income_account_id, null)
+    assert.equal(approvedBare.status, 422, await approvedBare.clone().text())
+    assert.match((await approvedBare.json()).error, /income account|Project Revenue/)
+    assert.equal((await db.execute(sql`select id from sov_lines where org_id=${org.orgId} and change_order_id=${bareId}`)).rows.length, 0)
+    assert.equal((await db.execute<{ status: string }>(sql`select status from change_orders where org_id=${org.orgId} and id=${bareId}`)).rows[0]!.status, 'draft')
+    assert.equal((await db.execute<{ value: string }>(sql`select contract_value::text as value from projects where org_id=${org.orgId} and id=${project}`)).rows[0]!.value, '500.0000')
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })

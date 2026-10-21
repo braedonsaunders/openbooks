@@ -367,7 +367,7 @@ export async function listOpenDocumentCandidates(
     documents,
     unappliedCredits,
     exchangeRates,
-    canWriteOff: line.side === 'ar' ? can(viewer, 'ar.post') : true,
+    canWriteOff: line.side === 'ar' ? can(viewer, 'ar.create') && can(viewer, 'ar.post') : true,
   }
 }
 
@@ -440,11 +440,12 @@ export async function recordPaymentAndMatch(
   // Re-resolved per request, never a cached grant: a revocation fails closed.
   const actor = await resolveAuthzByUserId(orgId, userId)
   if (actor === null || !can(actor, permission)) throw permissionRefusal(preflight.side)
-  // A customer-side write-off posts a credit memo, which needs ar.post as on
-  // the invoice write-off action; a bill payment's discount is part of the
-  // payment ap.pay already covers.
-  if (input.writeOff && preflight.side === 'ar' && !can(actor, 'ar.post')) {
-    throw new SettlementMatchRefusal('missing permission: ar.post — writing off a short-paid invoice balance posts a credit memo, which needs ar.post', 403, 'Ask a user who can post customer credits to record it, or record the receipt without the write-off.')
+  // A customer write-off creates and posts a native credit memo. A vendor
+  // payment discount remains part of the payment authorized by ap.pay.
+  if (input.writeOff && preflight.side === 'ar') {
+    for (const required of ['ar.create', 'ar.post']) {
+      if (!can(actor, required)) throw new SettlementMatchRefusal(`missing permission: ${required} — writing off a short-paid invoice balance creates and posts a credit memo`, 403, 'Ask a user who can create and post customer credits to record it, or record the receipt without the write-off.')
+    }
   }
   const kind: PaymentKind = preflight.side === 'ar' ? 'customer_payment' : 'vendor_payment'
 

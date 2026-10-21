@@ -3,6 +3,11 @@ import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
+import { createTranslator, type AbstractIntlMessages } from 'next-intl'
+import messages from '../../../../../messages/en/index.ts'
+
+Object.assign(globalThis, { __internalReportTranslations: (input: string | { namespace?: string }) =>
+  createTranslator({ locale: 'en', messages: messages as AbstractIntlMessages, namespace: typeof input === 'string' ? input : input?.namespace }) })
 
 const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href
@@ -14,7 +19,7 @@ registerHooks({
         url:
           'data:text/javascript,' +
           encodeURIComponent(
-            'export async function getTranslations(){const t=(s)=>s;t.has=()=>false;return t;}' +
+            'export async function getTranslations(input){return globalThis.__internalReportTranslations(input)}' +
               'export async function getLocale(){return "en";}',
           ),
       }

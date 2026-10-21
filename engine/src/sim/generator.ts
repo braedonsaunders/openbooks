@@ -315,7 +315,7 @@ async function generateExpenseReports(ctx: SimContext, rng: SimContext["rng"], w
       partyId: emp.id,
       documentDate: ctx.simDate,
       dueDate: addCalendarDays(ctx.simDate, 14),
-      createdBy: ctx.world.actors.apClerk,
+      createdBy: ctx.world.actors.admin,
       currency: ctx.world.currency,
       memo: `Expense report — ${emp.name}`,
       custom: { sim: { source: "generator", expense: true, projectId: job.id } },

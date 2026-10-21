@@ -41,12 +41,15 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { db, withBypassContext, withOrgContext, withOrgTransaction } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { randomUUID } = await import("node:crypto");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
+const { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow } = await import(
   "@openbooks/engine/testing/fixtures"
 );
+const { installEngineSeams } = await import('@openbooks/engine/composition/install');
+const { routeSubjectSubmission } = await import('@openbooks/engine/flows/submission-policy');
+installEngineSeams();
 const { POST } = await import("./withdraw/route.ts");
 
 const post = (body: Record<string, unknown>) =>
@@ -73,8 +76,7 @@ async function seedSubmittedWeek(status: "submitted" | "approved" | "draft" = "s
   const employeeId = randomUUID();
   const headerId = randomUUID();
   const timeEntryId = randomUUID();
-  const flowId = randomUUID();
-  const runId = randomUUID();
+  let runId = "";
   await withBypassContext(async () => {
     await db.execute(sql`
       insert into parties
@@ -111,21 +113,16 @@ async function seedSubmittedWeek(status: "submitted" | "approved" | "draft" = "s
          '4.0000', ${status === "draft" ? "draft" : status}, null, null, false, 'actual',
          '{}'::jsonb, ${actorId}, ${actorId})
     `);
-    if (status === "submitted") {
-      await db.execute(sql`
-        insert into flows (id, org_id, subject_kind, graph)
-        values (${flowId}, ${org.orgId}, 'timesheet_week', '{}'::jsonb)
-      `);
-      await db.execute(sql`
-        insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
-        values (${runId}, ${org.orgId}, ${flowId}, 'timesheet_week', ${headerId}, 'on_submit', 'waiting')
-      `);
-      await db.execute(sql`
-        insert into flow_gates (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key, status)
-        values (${randomUUID()}, ${org.orgId}, ${flowId}, ${runId}, 'approve', 'timesheet_week', ${headerId}, 'Approve week', ${`${runId}:approve`}, 'pending')
-      `);
-    }
+
   });
+  if (status === "submitted") {
+    await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: 'timesheet_week',
+      assignees: [{ type: 'user', userId: actorId }], mode: 'any', preventSelfApproval: false }));
+    await withOrgTransaction(org.orgId, () => routeSubjectSubmission({ orgId: org.orgId, actorId,
+      subjectKind: 'timesheet_week', subjectId: headerId, event: { kind: 'on_submit', source: 'api' } }));
+    runId = (await withBypassContext(() => db.execute<{ run_id: string }>(sql`select run_id from flow_gates
+      where org_id=${org.orgId} and subject_id=${headerId} and status='pending'`))).rows[0]!.run_id;
+  }
   return { org, actorId, employeeId, headerId, timeEntryId, runId };
 }
 

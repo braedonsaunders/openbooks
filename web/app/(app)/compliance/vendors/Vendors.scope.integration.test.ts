@@ -58,9 +58,9 @@ async function seedVendors() {
     }
     await db.execute(sql`
       insert into compliance_requirements
-        (id, org_id, code, name, category, enforcement, requires_verification, created_by, updated_by)
+        (id, org_id, class_id, code, name, category, enforcement, requires_verification, created_by, updated_by)
       values
-        (${requirementId}, ${org.orgId}, 'GL', 'General Liability', 'insurance', 'block_payment', false, ${actor}, ${actor})`)
+        (${requirementId}, ${org.orgId}, ${classId}, 'GL', 'General Liability', 'insurance', 'block_payment', false, ${actor}, ${actor})`)
     for (const partyId of [org.vendorId, hiddenVendor]) {
       await db.execute(sql`
         insert into compliance_records
@@ -70,9 +70,9 @@ async function seedVendors() {
     }
     await db.execute(sql`
       insert into compliance_waivers
-        (org_id, party_id, requirement_id, reason, effective_from, expires_on)
+        (org_id, party_id, requirement_id, reason, effective_from, expires_on, approved_by, approved_at)
       values
-        (${org.orgId}, ${hiddenVendor}, ${requirementId}, 'owner form accepted', '2026-01-01', '2026-12-31')`)
+        (${org.orgId}, ${hiddenVendor}, ${requirementId}, 'owner form accepted', '2026-01-01', '2026-12-31', null, null)`)
   })
   return { org, hiddenVendor, requirementId }
 }

@@ -29,8 +29,8 @@ async function seedRevokedWaiver(orgId: string, actorId: string, partyId: string
     coalesce(settings->'features','{}'::jsonb)||'{"subcontractorCompliance":true}'::jsonb) where id=${orgId}`);
   const waiver = (await db.execute<{ id: string }>(sql`
     insert into compliance_waivers
-      (org_id,party_id,requirement_id,reason,effective_from,expires_on,created_by,updated_by)
-    values (${orgId},${partyId},${requirementId},'Bounded exception window','2026-06-01','2026-08-01',${actorId},${actorId}) returning id`)).rows[0]!;
+      (org_id,party_id,requirement_id,reason,effective_from,expires_on,created_by,updated_by,requested_by,approved_by,approved_at)
+    values (${orgId},${partyId},${requirementId},'Bounded exception window','2026-06-01','2026-08-01',${actorId},${actorId},${actorId},null,null) returning id`)).rows[0]!;
   const released=await submitComplianceWaiver({orgId,actorId,id:waiver.id});
   assert.equal(released.status,'approved');
   await db.execute(sql`update compliance_waivers set revoked_at=${revokedAt}::timestamptz,
@@ -65,8 +65,8 @@ test(
         const req = (
           await db.execute<{ id: string }>(sql`
             insert into compliance_requirements
-              (org_id, code, name, category, enforcement, requires_verification, created_by, updated_by)
-            values (${org.orgId}, 'GL', 'General Liability', 'insurance', 'block_payment', false, ${actorId}, ${actorId})
+              (org_id, class_id, code, name, category, enforcement, requires_verification, created_by, updated_by)
+            values (${org.orgId}, ${cls}, 'GL', 'General Liability', 'insurance', 'block_payment', false, ${actorId}, ${actorId})
             returning id`)
         ).rows[0]!.id;
         await seedRevokedWaiver(org.orgId, actorId, partyId, req, '2026-07-10T14:00:00Z');
@@ -121,8 +121,8 @@ test(
         const req = (
           await db.execute<{ id: string }>(sql`
             insert into compliance_requirements
-              (org_id, code, name, category, enforcement, requires_verification, created_by, updated_by)
-            values (${org.orgId}, 'GL', 'General Liability', 'insurance', 'block_payment', false, ${actorId}, ${actorId})
+              (org_id, class_id, code, name, category, enforcement, requires_verification, created_by, updated_by)
+            values (${org.orgId}, ${cls}, 'GL', 'General Liability', 'insurance', 'block_payment', false, ${actorId}, ${actorId})
             returning id`)
         ).rows[0]!.id;
         await seedRevokedWaiver(org.orgId, actorId, partyId, req, '2026-07-10T02:00:00Z');

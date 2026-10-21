@@ -48,7 +48,7 @@ const recordPaymentBody = z.object({
  * settling documents in another currency at their settlement rate —
  * and matches its bank line to the statement line in the same transaction.
  * Posting the payment additionally requires ar.pay or ap.pay for the line's
- * direction; a customer-side write-off also requires ar.post.
+ * direction; a customer-side write-off also requires ar.create and ar.post.
  */
 export const POST = defineRoute({
   permission: 'banking.reconcile',

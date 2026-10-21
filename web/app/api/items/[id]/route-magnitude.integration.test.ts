@@ -16,7 +16,7 @@ registerHooks({
         (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route'))) return virtual(`
       export async function guardPermission() {
         const s = globalThis.__itemPatchMagnitudeState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
+        return { user: { orgId: s.orgId, id: s.actorId, roles: [] }, permissions: [], allowedSubsidiaryIds: null };
       }
       // Catalog writes need unrestricted scope (1cb07bf7b); the scripted actor is unrestricted, so this passes.
       export function guardUnrestrictedScope() { return null; }
@@ -26,13 +26,14 @@ registerHooks({
 })
 const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { PATCH } = await import('./route.ts')
 
 async function fixture() {
   const org = await createScratchOrg()
   state.orgId = org.orgId
-  state.actorId = randomUUID()
+  state.actorId = await createScratchUser(org.orgId, "Item manager", "item_manager")
+  await grantScratchPermissions(org.orgId, state.actorId, ["items.manage"])
   await db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"revenueRecognition": true}'::jsonb)

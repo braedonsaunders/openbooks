@@ -33,7 +33,7 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 const { createEncumbrance } = await import('@openbooks/engine/nonprofit/encumbrances')
 const { getAuthz } = await import('../../../lib/authz.ts')
-const { nonprofitGroupTabs } = await import('../../../components/module-home/group-tabs.ts')
+const { resolveLocalNavigation } = await import('../../../lib/nav/local.ts')
 const { loadGrants, grantsSpec } = await import('./grants/view.ts')
 const { loadEncumbrances } = await import('./encumbrances/view.ts')
 // One shared restricted reader: Uptown is the only subsidiary outside Main Co,
@@ -116,7 +116,8 @@ test('production nonprofit tabs enforce permissions and effective feature depend
       const hrefs = await withOrgContext(org.orgId, async () => {
         const authz = await getAuthz()
         assert.ok(authz, `${label} authz`)
-        return (await nonprofitGroupTabs(authz, '/nonprofit')).map((tab) => tab.href)
+        return (await resolveLocalNavigation(authz)).groups.flatMap(group => group)
+          .filter(tab => tab.navigationSet === 'nonprofit').map(tab => tab.href)
       })
       assert.deepEqual(hrefs, expected, label)
     }

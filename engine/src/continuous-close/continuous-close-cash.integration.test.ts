@@ -21,8 +21,13 @@ import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const MS_DAY = 86_400_000;
 
-async function scan(orgId: string, threshold = "100.0000") {
-  return cashFindings(orgId, threshold, defaultContinuousCloseDetectors("cash"));
+async function scan(orgId: string, threshold = "100.0000", forecastWeeks?: number) {
+  const detectors = defaultContinuousCloseDetectors("cash");
+  if (forecastWeeks !== undefined) {
+    const forecast = detectors.find(detector => detector.detectorKey === "cash_forecast_shortfall")!;
+    forecast.parameters.forecastWeeks = forecastWeeks;
+  }
+  return cashFindings(orgId, threshold, detectors);
 }
 
 function fingerprints(findings: Awaited<ReturnType<typeof scan>>): string[] {
@@ -180,7 +185,8 @@ test(
         values (${org.orgId}, ${org.vendorId}, 'liability_payable', ${org.date}, 5, 450, 40500)`);
       await seedVendorBill(org, "BILL-FORECAST-1", "9000.0000", await daysFromToday(org.orgId, 9));
 
-      const findings = await scan(org.orgId);
+      // Include the statistical settlement week beyond the default 13-week horizon.
+      const findings = await scan(org.orgId, "100.0000", 16);
       const short = findings.filter((finding) => finding.findingType === "cash_forecast_shortfall");
       assert.equal(short.length, 1, `one shortfall finding, got ${fingerprints(findings)}`);
       const only = short[0]!;

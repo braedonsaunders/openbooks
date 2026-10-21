@@ -27,8 +27,8 @@ function signIn(orgId: string, actor: string): void {
 
 async function insertCard(orgId: string, actor: string, status = 'published'): Promise<string> {
   const id = randomUUID()
-  await db.execute(sql`insert into insight_cards (id, org_id, name, status, created_by, updated_by)
-    values (${id}, ${orgId}, ${'Card ' + id.slice(0, 8)}, ${status}, ${actor}, ${actor})`)
+  await db.execute(sql`insert into insight_cards (id, org_id, name, query, status, created_by, updated_by)
+    values (${id}, ${orgId}, ${'Card ' + id.slice(0, 8)}, '{"source":"ledger_lines"}'::jsonb, ${status}, ${actor}, ${actor})`)
   return id
 }
 

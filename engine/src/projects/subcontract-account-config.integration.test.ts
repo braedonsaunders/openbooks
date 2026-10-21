@@ -111,7 +111,7 @@ for (const source of ["SOV", "vendor"] as const) {
       await setAccounts(f, source === "SOV" ? f.org.accounts.cogs : null, source === "SOV" ? f.org.accounts.freight : f.org.accounts.cogs);
       if (invalidity === "inactive") await db.execute(sql`update accounts set is_active=false where org_id=${f.org.orgId} and id=${f.org.accounts.cogs}`);
       else await db.execute(sql`update accounts set is_summary=true where org_id=${f.org.orgId} and id=${f.org.accounts.cogs}`);
-      await refusedWithoutWrites(f, /active, non-summary account in this organization/);
+      await refusedWithoutWrites(f, /active, non-summary account available to the project's subsidiary/);
     }));
   }
 }

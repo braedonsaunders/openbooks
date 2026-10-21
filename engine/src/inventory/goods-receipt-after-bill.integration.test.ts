@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -180,10 +182,10 @@ test("a goods receipt may bring the remainder past a partial linked bill receipt
 test("a goods receipt after an unlinked bill receipt still posts", { skip: !DB }, async () => {
   const seed = await seedOrg();
   try {
-    const po = await seedApprovedPo(seed, "40");
     const bill = await seedDrawerBillFirst(seed, "40", "BILL-M51B-3");
     await postDocument(bill.billId, { control: { ar: seed.ar, ap: seed.ap, bank: seed.bank } });
     assert.equal(toUnits(await onHand(seed)), toUnits("40"));
+    const po = await seedApprovedPo(seed, "40");
 
     await receivePurchaseOrder(seed.orgId, seed.actorId, po.orderId, {
       receiptDate: seed.date,

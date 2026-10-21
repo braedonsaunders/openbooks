@@ -31,7 +31,9 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+installEngineSeams();
 const { PATCH } = await import("./route.ts");
 
 async function fixture() {
@@ -116,7 +118,11 @@ test("a stale revision is refused and the winner's write survives", async () => 
 test("verification names the revision it attested", async () => {
   const { org, recordId } = await fixture();
   try {
-    state.actorId = await withBypassContext(() => createScratchUser(org.orgId, "Verifier", "compliance_manager"));
+    state.actorId = await withBypassContext(async () => {
+      const verifier = await createScratchUser(org.orgId, "Verifier", "certificate_verifier");
+      await grantScratchPermissions(org.orgId, verifier, ["compliance.verify"]);
+      return verifier;
+    });
     const response = await patch(recordId, { action: "verify", revision: 1 });
     const json = (await response.json().catch(() => null)) as { revision?: number } | null;
     assert.equal(response.status, 200, JSON.stringify(json));

@@ -156,6 +156,22 @@ beforeEach(async () => {
 
 afterEach(async () => {
   assert.ok(catalogBefore, "the pre-test catalog snapshot is missing");
+  const expectedIndex = catalogBefore.indexes.find(index => index.name === "stock_count_lines_no_duplicate_subject");
+  assert.ok(expectedIndex, "the installed stock-count subject guard exists");
+  const restore = await connectMigrationClient();
+  try {
+    const current = (await restore.query<{ definition: string }>(
+      "select pg_get_indexdef('public.stock_count_lines_no_duplicate_subject'::regclass) as definition",
+    )).rows[0]?.definition;
+    // Later migrations extend the subject with serial identity. Replaying an
+    // older guard must restore that installed definition before returning.
+    if (current !== expectedIndex.definition) {
+      await restore.query("drop index public.stock_count_lines_no_duplicate_subject");
+      await restore.query(expectedIndex.definition);
+    }
+  } finally {
+    await releaseMigrationClient(restore);
+  }
   await assertTableCatalogMatches(
     snapshotQuery,
     catalogBefore,
@@ -362,7 +378,6 @@ test("an INVALID index left by a failed build is dropped and rebuilt valid", asy
   }
 });
 
-const REAL_FILENAME = "generated/0293_stock_count_line_subject_unique.sql";
 const OLD_DIGEST = "19b0e9b674360129aec13cb3c911de38dfd1cb86f1976cca3979c28521720c11";
 
 test("an install recorded at the old digest reapplies to the fresh catalog", async () => {
@@ -371,19 +386,8 @@ test("an install recorded at the old digest reapplies to the fresh catalog", asy
   // digest. The 0299 CHECK goes first — its staged form references the
   // marker, so it holds the column.
   const setup = await connectMigrationClient();
-  // The real ledger row returns to this digest in teardown, so a failure
-  // window never strands it at the old digest. Declared in the test body
-  // scope: a const inside the try block is not visible in the finally
-  // block, and the resulting ReferenceError stranded the downgrade client
-  // with the event loop parked and no output.
-  const ledgerBefore = (
-    await setup.query<{ sha256: string }>(
-      "select sha256 from public._applied_migrations where filename = $1",
-      [REAL_FILENAME],
-    )
-  ).rows[0]?.sha256;
-  assert.ok(ledgerBefore, "the real 0293 ledger row exists before the downgrade");
   try {
+    await clearProbeLedger();
     // The governed view selects the marker once a refresh has seen it; drop
     // it first so the column can return to its pre-guard absence, exactly as
     // on an install recorded at the old digest. The staged file's trailing
@@ -419,10 +423,16 @@ test("an install recorded at the old digest reapplies to the fresh catalog", asy
          ADD CONSTRAINT stock_count_lines_counted_nonnegative
          CHECK (counted_quantity IS NULL OR counted_quantity >= 0)`,
     );
-    await setup.query("update public._applied_migrations set sha256 = $2 where filename = $1", [
-      REAL_FILENAME,
-      OLD_DIGEST,
-    ]);
+    // The private attempt ledger models the old digest without changing a
+    // published migration row or requiring individual baseline ledger rows.
+    await executeMigrationAttempt(setup, {
+      filename: PROBE_FILENAME,
+      body: "select 1;",
+      transactional: false,
+      lock: migrationLockConfig({}),
+      digest: OLD_DIGEST,
+      executeBody: (migrationClient, body, step) => executeMigrationBody(migrationClient, body, step),
+    });
     const freshDigest = createHash("sha256").update(migrationSql).digest("hex");
 
     // The reapply: exactly the call applyTracked makes for a recorded
@@ -430,7 +440,7 @@ test("an install recorded at the old digest reapplies to the fresh catalog", asy
     const reapply = await connectMigrationClient();
     try {
       await executeMigrationAttempt(reapply, {
-        filename: REAL_FILENAME,
+        filename: PROBE_FILENAME,
         body: sanitizeMigrationContent(migrationSql),
         transactional: false,
         lock: migrationLockConfig({}),
@@ -446,7 +456,7 @@ test("an install recorded at the old digest reapplies to the fresh catalog", asy
     // Ledger advanced to the fresh digest.
     const ledger = await setup.query<{ sha256: string }>(
       "select sha256 from public._applied_migrations where filename = $1",
-      [REAL_FILENAME],
+      [PROBE_FILENAME],
     );
     assert.equal(ledger.rows.length, 1);
     assert.equal(ledger.rows[0]!.sha256, freshDigest, "the reapply advances the ledger");
@@ -491,7 +501,7 @@ test("an install recorded at the old digest reapplies to the fresh catalog", asy
     // Strict convergence from any failure window, unswallowed: the 0293
     // staged body first (it owns the marker column the 0299 CHECK
     // references), then the 0299 staged body, then the governed view
-    // refresh; the real ledger row returns to its pre-test digest last.
+    // refresh. Only the private attempt ledger is touched.
     const restore = await connectMigrationClient();
     try {
       await restore.query("delete from public._applied_migrations where filename = $1", [
@@ -522,11 +532,6 @@ test("an install recorded at the old digest reapplies to the fresh catalog", asy
         "generated/0999_g43_0299_probe.sql",
       ]);
       await restore.query("SELECT public.openbooks_refresh_query_catalog()");
-      const ledgerRestored = await restore.query(
-        "update public._applied_migrations set sha256 = $2 where filename = $1",
-        [REAL_FILENAME, ledgerBefore],
-      );
-      assert.equal(ledgerRestored.rowCount, 1, "the real ledger row returns to its pre-test digest");
     } finally {
       await releaseMigrationClient(restore);
     }

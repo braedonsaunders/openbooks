@@ -76,7 +76,7 @@ async function fixture(options: {
   const currency = options.currency ?? "CAD";
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Bank Reviewer", "bank_preparer"));
-  await withBypassContext(() => grantScratchPermissions(org.orgId, actorId, options.permissions ?? ["banking.reconcile", "gl.post", side === "ar" ? "ar.pay" : "ap.pay"]));
+  await withBypassContext(() => grantScratchPermissions(org.orgId, actorId, options.permissions ?? ["banking.reconcile", "gl.post", ...(side === "ar" ? ["ar.create", "ar.pay"] : ["ap.pay"])]));
   await withBypassContext(async () => {
     await db.execute(sql`
       insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2)
@@ -193,7 +193,7 @@ test("a deposit larger than the invoice settles it in full and keeps the excess 
 });
 
 test("a short-paid invoice is written off through the governed write-off in the same unit", { skip: !DB }, async () => {
-  const f = await fixture({ documentAmount: "1250.00", lineAmount: "1240.0000", permissions: ["banking.reconcile", "ar.pay", "ar.post"] });
+  const f = await fixture({ documentAmount: "1250.00", lineAmount: "1240.0000", permissions: ["banking.reconcile", "ar.create", "ar.pay", "ar.post"] });
   try {
     // Without the write-off account the whole settlement refuses and records nothing.
     await assert.rejects(
@@ -232,7 +232,17 @@ test("a customer write-off needs ar.post, and leftover cash refuses a write-off"
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
-  const g = await fixture({ documentAmount: "1250.00", lineAmount: "1240.0000", permissions: ["banking.reconcile", "ar.pay", "ar.post"] });
+  const missingCreate = await fixture({ documentAmount: "1250.00", lineAmount: "1240.0000", permissions: ["banking.reconcile", "ar.pay", "ar.post"] });
+  try {
+    await assert.rejects(
+      record(missingCreate, "1250.0000", { applied: { [missingCreate.openLineId]: "1240.0000" }, writeOff: { reason: "Short-paid bank charge" } }),
+      (error: unknown) => error instanceof SettlementMatchRefusal && error.status === 403 && /ar\.create/.test(error.message),
+    );
+    assert.equal(await paymentCount(missingCreate.org.orgId), 0);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(missingCreate.org.orgId));
+  }
+  const g = await fixture({ documentAmount: "1250.00", lineAmount: "1240.0000", permissions: ["banking.reconcile", "ar.create", "ar.pay", "ar.post"] });
   try {
     await assert.rejects(
       record(g, "1250.0000", { applied: { [g.openLineId]: "1200.0000" }, writeOff: { reason: "Short-paid bank charge" } }),
@@ -431,7 +441,7 @@ test("a party's unapplied credit is suggested beside the documents it could sett
 });
 
 test("a CAD deposit short-pays a USD invoice and the remainder is written off at the receivable's carrying rate", { skip: !DB }, async () => {
-  const f = await fixture({ documentAmount: "100.00", lineAmount: "108.0000", documentCurrency: "USD", documentFxRate: "1.30", permissions: ["banking.reconcile", "ar.pay", "ar.post"] });
+  const f = await fixture({ documentAmount: "100.00", lineAmount: "108.0000", documentCurrency: "USD", documentFxRate: "1.30", permissions: ["banking.reconcile", "ar.create", "ar.pay", "ar.post"] });
   try {
     await withBypassContext(() => db.execute(sql`
       insert into fx_rates (id, org_id, from_currency, to_currency, as_of, rate_type, rate, source)

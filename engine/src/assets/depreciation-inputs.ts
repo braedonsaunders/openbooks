@@ -3,7 +3,7 @@ import { assertLocalDepreciation } from "./depreciation-ownership.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { add, cmp, neg, normalizeMoney, toUnits } from "../money/money.ts";
+import { add, cmp, fitsLedgerRange, neg, normalizeMoney, toUnits } from "../money/money.ts";
 import { assetBasisDelta } from "./asset-basis.ts";
 import { CloseError, assertPeriodModulesOpen, canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { DepreciationRefusalError } from "./depreciation-errors.ts";
@@ -15,6 +15,9 @@ import { isUuid } from "../platform/uuid.ts";
 function persistDepreciationInputValue(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
   if (exact === null) throw new DepreciationRefusalError("depreciation value must be an exact decimal");
+  if (!fitsLedgerRange(exact)) {
+    throw new DepreciationRefusalError("depreciation value must fit within 15 whole digits and 4 decimal places");
+  }
   try {
     return normalizeMoney(exact);
   } catch {

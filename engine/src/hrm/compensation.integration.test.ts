@@ -354,14 +354,10 @@ test("HR-12 cycle approval runs through Flows and push writes each wage once", {
     assert.equal(link?.status, "pushed");
     // A second push of the round is refused (the round already moved payroll)...
     await assert.rejects(pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id }), /cannot push/);
-    // ...and the line-level link makes re-push a skip, never a double:
-    // rewind only the cycle (a crash between the line writes and the
-    // cycle flip); the pushed line is verified org-scoped and skipped.
-    await db.execute(sql`
-      update hrm_comp_cycles set status = 'approved' where org_id = ${org.orgId} and id = ${cycle.id}`);
-    const repushed = await pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
-    assert.equal(repushed.pushed, 0);
-    assert.equal(repushed.skipped, 1);
+    // Completed payroll history cannot be rewound into another approved push.
+    await assert.rejects(db.execute(sql`
+      update hrm_comp_cycles set status = 'approved' where org_id = ${org.orgId} and id = ${cycle.id}`));
+    await assert.rejects(pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id }), /cannot push/);
     const wagesAfter = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from labor_cost_rates
        where org_id = ${org.orgId} and employee_party_id = ${emp.workerPartyId} and is_active`)).rows[0];

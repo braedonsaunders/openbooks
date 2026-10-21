@@ -63,7 +63,13 @@ export const CONTROLS_WIDGETS = {
    * EntityListView renders. A list page that wants a filter reaches for this
    * rather than dropping a lone `filter-chips` above a bare table.
    */
-  'list-toolbar': (props, scope) => <ListToolbar {...resolveListToolbarProps(props, scope)} />,
+  'list-toolbar': (props, scope) => <ListToolbar {...resolveListToolbarProps({
+    basePath: props.basePath,
+    currentParams: props.currentParams,
+    search: props.search,
+    filters: props.filters,
+    date: props.date,
+  }, scope)} />,
   'filter-chips': (props) => (
     <FilterChips
       basePath={str(props, 'basePath')}

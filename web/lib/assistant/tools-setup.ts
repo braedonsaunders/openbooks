@@ -5,7 +5,6 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { FEATURES, featureEnabled, resolvedFeatureState } from "../features";
 import {
-  SETUP_ENTITIES,
   SETUP_ENTITY_BY_KEY,
   resolveSetupEntityGate,
   setupEntityForFeatureState,
@@ -29,15 +28,21 @@ import { setupEntityHasSubsidiaryAnchor, setupEntitySubsidiaryFilter } from "../
 const listSetupEntitiesTool: AssistantToolDef = {
   name: "list_setup_entities",
   description:
-    "Every Setup-registry entity: key, group, backing table, placement, feature gate, enabled state for this org. Read-only.",
+    "Browse Setup-registry entities by key or group, with backing table, placement, feature gate and enabled state. Follow nextOffset for more results. Read-only.",
   category: "read",
   // Which modules are on is not sensitive; every assistant user may ask.
   gate: { mode: "public" },
-  inputSchema: z.object({}),
-  execute: async (_raw, authz): Promise<ToolResult> => {
+  inputSchema: z.object({
+    query: z.string().max(120).optional().describe("Match entity key or group"),
+    offset: z.number().int().min(0).optional(),
+    limit: z.number().int().min(1).max(50).optional().describe("Page size, default 50"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const { query, offset = 0, limit = 50 } = raw as { query?: string; offset?: number; limit?: number };
     const features = await resolvedFeatureState(authz.user.orgId);
-    const { items, truncated } = capList(
-      SETUP_ENTITIES.map((e) => ({
+    const matches = [...SETUP_ENTITY_BY_KEY.values()].filter((entity) =>
+      !query || `${entity.key} ${entity.groupKey}`.toLowerCase().includes(query.toLowerCase()));
+    const items = matches.slice(offset, offset + limit).map((e) => ({
         key: e.key,
         groupKey: e.groupKey,
         table: e.table,
@@ -48,11 +53,11 @@ const listSetupEntitiesTool: AssistantToolDef = {
         // One authoritative gate reports the enabled state — never a local check.
         enabled: resolveSetupEntityGate(e, features).enabled,
         hasActive: e.hasActive,
-      })),
-    );
+      }));
+    const nextOffset = offset + items.length < matches.length ? offset + items.length : null;
     return {
       ok: true,
-      data: { total: SETUP_ENTITIES.length, truncated, href: "/admin/setup/readiness", items },
+      data: { total: matches.length, truncated: nextOffset !== null, nextOffset, href: "/admin/setup/readiness", items },
     };
   },
 };

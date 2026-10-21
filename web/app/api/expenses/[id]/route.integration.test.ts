@@ -6,8 +6,8 @@ import test from 'node:test'
 import { PgDialect } from 'drizzle-orm/pg-core'
 
 const root = pathToFileURL(process.cwd() + '/').href
-const state: { orgId: string; actorId: string; allowed: Set<string> | null; afterRead: ((text: string) => Promise<void>) | null } = {
-  orgId: '', actorId: '', allowed: null, afterRead: null,
+const state: { orgId: string; actorId: string; afterRead: ((text: string) => Promise<void>) | null } = {
+  orgId: '', actorId: '', afterRead: null,
 }
 Object.assign(globalThis, { __expenseNativeState: state, __expenseSqlText: (query: Parameters<PgDialect["sqlToQuery"]>[0]) => new PgDialect().sqlToQuery(query).sql })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
@@ -20,14 +20,6 @@ registerHooks({
       }; }
     `)
     if (specifier === 'next-intl/server') return virtual('export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}')
-    // The route factory resolves the gate by @/ alias at request time; serve
-    // the same intended session for its literal as for the relative import.
-    if (specifier === '../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
-      export async function guardFeaturePermission() {
-        const s = globalThis.__expenseNativeState;
-        return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: s.allowed };
-      }
-    `)
     if (specifier === '@openbooks/engine/platform/db' && (context.parentURL?.endsWith('/web/lib/expenses.ts') || decodeURIComponent(context.parentURL ?? '').endsWith('/web/app/api/expenses/[id]/route.ts'))) return virtual(`
       import { db as realDb } from ${JSON.stringify(root + 'engine/src/platform/db.ts')};
       export const db = new Proxy(realDb, { get(target, key) {
@@ -56,7 +48,6 @@ async function fixture(work: (org: Awaited<ReturnType<typeof createScratchOrg>>,
   try {
     state.orgId = org.orgId
     state.actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Expense clerk', 'accountant'))
-    state.allowed = null
     await withBypassContext(() => grantScratchPermissions(org.orgId, state.actorId, ['expenses.read','expenses.create','ap.post']))
     const id = randomUUID()
     await withBypassContext(async () => {
@@ -68,7 +59,6 @@ async function fixture(work: (org: Awaited<ReturnType<typeof createScratchOrg>>,
     await work(org, id)
   } finally {
     state.afterRead = null
-    state.allowed = null
     await dropScratchOrg(org.orgId)
   }
 }
@@ -136,7 +126,9 @@ test('expense GET and PATCH scope checks cannot authorize a different subsidiary
   await fixture(async (org, id) => {
     const otherSub = randomUUID()
     await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country) values (${otherSub}, ${org.orgId}, ${org.subsidiaryId}, 'Other entity', 'CAD', 'CA')`))
-    state.allowed = new Set([org.subsidiaryId])
+    await withBypassContext(() => db.execute(sql`update app_roles
+      set subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:[org.subsidiaryId]})}::jsonb
+      where org_id=${org.orgId} and key='accountant'`))
     state.afterRead = async (text) => {
       if (!text.includes('from documents')) return
       state.afterRead = null

@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -242,9 +244,9 @@ test("guard and match dialog agree across partial and full receipts, then the bi
 
 /**
  * Ordered-but-unreceived quantity is not matchable: with no receipt behind
- * the order line the guard stays silent and the dialog offers nothing.
+ * the order line the dialog offers nothing; posting refuses until receipt.
  */
-test("ordered-but-unreceived order lines are invisible to the guard and the dialog", { skip: !DB }, async () => {
+test("ordered-but-unreceived order lines offer no match and block unmatched stock posting", { skip: !DB }, async () => {
   const seed = await seedOrg();
   try {
     await seedApprovedPo(seed, "PO-M38-02", seed.vendorId);
@@ -266,9 +268,15 @@ test("ordered-but-unreceived order lines are invisible to the guard and the dial
     await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${seed.orgId}`);
     const dialog = await withOrg(seed.orgId, () => billMatchCandidates(seed.orgId, billId));
     assert.deepEqual(candidateNumbers(dialog.lines, 1), [], "nothing received means nothing to match");
-    await postBill(seed, billId);
+    await assert.rejects(postBill(seed, billId), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal((error as Error & { code: string }).code, "BILL_LINES_UNMATCHED");
+      return true;
+    });
     const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${billId}`)).rows[0]!.status;
-    assert.equal(status, "posted", "with no matchable line the bill posts as its own receipt");
+    assert.equal(status, "approved", "the refused posting preserves the approved bill");
+    const movements = (await db.execute(sql`select id from inventory_movements where org_id=${seed.orgId}`)).rows;
+    assert.equal(movements.length, 0, "unreceived stock is not received through an unmatched bill");
   } finally {
     await dropScratchOrg(seed.orgId);
   }
@@ -310,9 +318,15 @@ test("another vendor's received cover is invisible to the guard and the dialog",
     await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${seed.orgId}`);
     const dialog = await withOrg(seed.orgId, () => billMatchCandidates(seed.orgId, billId));
     assert.deepEqual(candidateNumbers(dialog.lines, 1), [], "a different vendor's order is never offered");
-    await postBill(seed, billId);
+    await assert.rejects(postBill(seed, billId), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal((error as Error & { code: string }).code, "BILL_LINES_UNMATCHED");
+      return true;
+    });
     const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${billId}`)).rows[0]!.status;
-    assert.equal(status, "posted", "with no matchable line the bill posts as its own receipt");
+    assert.equal(status, "approved", "the refused posting preserves the approved bill");
+    const movements = (await db.execute(sql`select id from inventory_movements where org_id=${seed.orgId}`)).rows;
+    assert.equal(movements.length, 0, "unreceived stock is not received through an unmatched bill");
   } finally {
     await dropScratchOrg(seed.orgId);
   }

@@ -80,7 +80,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 }});
 const { applyDocumentEdit } = await import("../../../web/lib/documents.ts"), { loadDocumentEditCurrent } = await import("../ledger/document-service.ts");
-import { createPayApplication, submitPayApplication, approvePayApplication, generatePayApplicationInvoice, releaseRetainage } from "./construction-billing.ts";
+import { createPayApplication, submitPayApplication, generatePayApplicationInvoice, releaseRetainage } from "./construction-billing.ts";
 import { cmp, neg } from "../money/money.ts";
 import { assertGeneratedBillingEdit } from "./billing-source-integrity.ts";
 type Fixture = Parameters<Parameters<typeof fixture>[0]>[0];
@@ -143,7 +143,6 @@ async function customerProgress(f: Fixture, retainage = "10") {
   await withBypassContext(() => db.execute(sql`insert into sov_lines(id,org_id,project_id,description,scheduled_value,sort_order,income_account_id) values(${sov},${f.org.orgId},${f.project},'Customer work','1000',1,${f.org.accounts.revenue})`));
   const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, f.project, f.org.date, retainage, null));
   await withOrgTransaction(f.org.orgId, () => submitPayApplication(f.org.orgId, f.actor, app.id, [{ sovLineId: sov, thisPeriodCompleted: "500", materialsStored: "0" }], null));
-  await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id, null));
   return (await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id, null))).invoiceId;
 }
 
@@ -407,7 +406,6 @@ test("full retainage and multiple gross lines preserve exact source allocation",
     { sovLineId: first, thisPeriodCompleted: "200", materialsStored: "0" },
     { sovLineId: second, thisPeriodCompleted: "300", materialsStored: "0" },
   ], null));
-  await withOrgTransaction(f.org.orgId, () => approvePayApplication(f.org.orgId, f.approver, app.id, null));
   const id = (await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id, null))).invoiceId;
   const original = await lines(f, id);
   assert.equal(original.length, 3);
