@@ -129,6 +129,8 @@ async function importNativeActivities(orgId: string, actorId: string | null, cre
         if (!id) throw new Error('The imported CRM activity was not saved')
         return id
       })
+      // Re-import retains an existing link to the same native account.
+      // The unique activity/subject identity is a benign replay conflict.
       if (party) await db.execute(sql`insert into crm_activity_links(org_id,activity_id,subject_kind,subject_id,created_by,updated_by) values(${orgId},${activityId},'account',${party.id},${actorId},${actorId}) on conflict(activity_id,subject_kind,subject_id) do nothing`)
       imported++
     }
