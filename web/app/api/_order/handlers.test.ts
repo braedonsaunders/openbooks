@@ -16,11 +16,7 @@ const DOCUMENT_ID = '00000000-0000-4000-8000-000000000003'
 const PARTY_ID = '00000000-0000-4000-8000-000000000004'
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-interface SqlQuery {
-  readonly __orderTestSql: true
-  readonly strings: string[]
-  readonly values: unknown[]
-}
+type SqlQuery = SQL
 
 interface OrderDocument {
   id: string
@@ -137,14 +133,6 @@ class OrderRouteHarness {
     this.allowInventoryPost = true
     this.submitPause = null
     this.voidPause = null
-  }
-
-  sql(strings: TemplateStringsArray, values: unknown[]): SqlQuery {
-    return {
-      __orderTestSql: true,
-      strings: Array.from(strings),
-      values,
-    }
   }
 
   async execute(query: SqlQuery): Promise<{ rows: Record<string, unknown>[] }> {
@@ -399,33 +387,8 @@ class OrderRouteHarness {
   }
 
   private compile(query: SqlQuery): { text: string; params: unknown[] } {
-    if (!query.__orderTestSql) {
-      const native = new PgDialect().sqlToQuery(query as unknown as SQL)
-      return {text:native.sql,params:native.params}
-    }
-    const params: unknown[] = []
-    const render = (fragment: SqlQuery): string => {
-      let text = fragment.strings[0] ?? ''
-      for (let index = 0; index < fragment.values.length; index += 1) {
-        const value = fragment.values[index]
-        if (this.isSqlQuery(value)) {
-          text += render(value)
-        } else {
-          text += `__P${params.push(value) - 1}__`
-        }
-        text += fragment.strings[index + 1] ?? ''
-      }
-      return text
-    }
-    return { text: render(query), params }
-  }
-
-  private isSqlQuery(value: unknown): value is SqlQuery {
-    return Boolean(
-      value
-      && typeof value === 'object'
-      && (value as Partial<SqlQuery>).__orderTestSql,
-    )
+    const queryData = new PgDialect().sqlToQuery(query)
+    return { text: queryData.sql, params: queryData.params }
   }
 
   private matchesDocument(params: unknown[]): boolean {
@@ -487,10 +450,6 @@ const mockSources = new Map<string, string>([
         return new NextResponse(JSON.stringify(body), { ...init, headers })
       }
     }
-  `],
-  ['mock:drizzle', `
-    const state = ${stateExpression}
-    export function sql(strings, ...values) { return state.sql(strings, values) }
   `],
   ['mock:db', `
     const state = ${stateExpression}
@@ -612,7 +571,6 @@ const mockSources = new Map<string, string>([
 
 const resolutionMocks = new Map<string, string>([
   ['next/server', 'mock:next-server'],
-  ['drizzle-orm', 'mock:drizzle'],
   ['@openbooks/engine/platform/db', 'mock:db'],
   ['@openbooks/engine/ledger/document-delete', 'mock:document-delete'],
   ['../../../lib/feature-gates', 'mock:feature-gates'],
@@ -817,14 +775,6 @@ class IssuePoolHarness {
     this.governedRollbacks = 0
     this.readRoleSelections = 0
     this.lockWaiters.clear()
-  }
-
-  sql(strings: TemplateStringsArray, values: unknown[]): SqlQuery {
-    return { __orderTestSql: true, strings: Array.from(strings), values }
-  }
-
-  rawSql(text: string): SqlQuery {
-    return { __orderTestSql: true, strings: [text], values: [] }
   }
 
   activeTransaction(): PoolIssueTransaction | undefined {
@@ -1142,29 +1092,8 @@ class IssuePoolHarness {
   }
 
   private compile(query: SqlQuery): { text: string; params: unknown[] } {
-    if (!query.__orderTestSql) {
-      const native = new PgDialect().sqlToQuery(query as unknown as SQL)
-      return {text:native.sql,params:native.params}
-    }
-    const params: unknown[] = []
-    const render = (fragment: SqlQuery): string => {
-      let text = fragment.strings[0] ?? ''
-      for (let index = 0; index < fragment.values.length; index += 1) {
-        const value = fragment.values[index]
-        if (
-          value
-          && typeof value === 'object'
-          && (value as Partial<SqlQuery>).__orderTestSql
-        ) {
-          text += render(value as SqlQuery)
-        } else {
-          text += `__P${params.push(value) - 1}__`
-        }
-        text += fragment.strings[index + 1] ?? ''
-      }
-      return text
-    }
-    return { text: render(query), params }
+    const queryData = new PgDialect().sqlToQuery(query)
+    return { text: queryData.sql, params: queryData.params }
   }
 }
 
@@ -1178,18 +1107,6 @@ const poolScriptingUrl = new URL('../../../../engine/src/scripting/scripting.ts?
 const poolSqlapiUrl = new URL('../../../../engine/src/platform/sqlapi.ts?order-issue-pool-contention-test', import.meta.url).href
 
 const poolMockSources = new Map<string, string>([
-  ['pool:drizzle', `
-    const state = ${poolStateExpression}
-    export function sql(strings, ...values) { return state.sql(strings, values) }
-    sql.raw = (text) => state.rawSql(text)
-    export const and = (...values) => ({ op: 'and', values })
-    export const asc = (value) => ({ op: 'asc', value })
-    export const desc = (value) => ({ op: 'desc', value })
-    export const eq = (left, right) => ({ op: 'eq', left, right })
-    export const inArray = (column, values) => ({ op: 'inArray', column, values })
-    export const isNull = (value) => ({ op: 'isNull', value })
-    export const or = (...values) => ({ op: 'or', values })
-  `],
   ['pool:db', `
     import * as nativeSchema from '${realSchemaUrl}'
     export const env = {};
