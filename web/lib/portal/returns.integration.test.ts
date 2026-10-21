@@ -8,7 +8,7 @@ import { postDocument } from '@openbooks/engine/ledger/posting-document'
 import { receiveInventory } from '@openbooks/engine/inventory/movements'
 import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow, type ScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { PortalRefusal } from '@openbooks/engine/testing/portal/errors'
-import { consumePortalLink, requestPortalLink } from '@openbooks/engine/testing/portal/tokens'
+import { consumePortalLink, requestPortalLink, revokePortalSession } from '@openbooks/engine/testing/portal/tokens'
 import { readPortalSettings, savePortalSettings } from '@openbooks/engine/testing/portal/settings'
 import { portalReturnableSources, requestPortalReturn } from './returns.ts'
 
@@ -108,6 +108,25 @@ test('a portal return request creates an RMA through the standard pipeline', { s
     const pending = await withBypassContext(() => db.execute<{ status: string }>(sql`
       select status from documents where org_id=${org.orgId} and id=${gated.id}`))
     assert.equal(pending.rows[0]!.status, 'pending_approval')
+    const request = (await withBypassContext(() => db.execute<{ request: Record<string, unknown> }>(sql`
+      select custom->'portalRequest' as request from documents where org_id=${org.orgId} and id=${gated.id}`))).rows[0]!.request
+    const sourceValid = (subjectOrg: string, sourceRequest: Record<string, unknown>) => withOrg(org.orgId, async () =>
+      (await db.execute<{ valid: boolean }>(sql`select public.flow_portal_return_source_valid(
+        ${subjectOrg}::uuid,${gated.id}::uuid,${JSON.stringify(sourceRequest)}::jsonb) as valid`)).rows[0]!.valid)
+    assert.equal(await sourceValid(org.orgId, request), true)
+    assert.equal(await sourceValid(randomUUID(), request), false)
+    assert.equal(await sourceValid(org.orgId, { ...request, partyId: randomUUID() }), false)
+    assert.equal(await sourceValid(org.orgId, { ...request, linkId: randomUUID() }), false)
+    const receipt = (await withBypassContext(() => db.execute<{ actor_id: string | null; source: string }>(sql`
+      select actor_id,context->>'event_source' as source from flow_submissions
+      where org_id=${org.orgId} and subject_id=${gated.id}`))).rows[0]!
+    assert.equal(receipt.actor_id, null)
+    assert.equal(receipt.source, 'portal')
+    await revokePortalSession(token)
+    assert.equal(await sourceValid(org.orgId, request), false)
+    await assert.rejects(requestPortalReturn({ sessionToken: token, sourceDocumentId: sale.documentId,
+      reasonCode: 'damaged', resolution: 'refund', lines: [{ sourceIssueMovementId: sale.issueId, quantity: '1' }],
+    }), (error: unknown) => error instanceof PortalRefusal && error.code==='invalid_link')
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
 

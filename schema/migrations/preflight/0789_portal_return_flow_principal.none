@@ -1,0 +1,1 @@
+This migration adds a customer-session provenance predicate and extends the existing immutable receipt guard. It changes no recorded receipt, Flow decision or financial history.

@@ -12,7 +12,7 @@ import { stubModules } from '../testing/stub-modules.ts'
 const root = pathToFileURL(process.cwd() + "/").href;
 const state: { user: import("./auth").SessionUser | null } = { user: null };
 Object.assign(globalThis, { __pagedExportStreamState: state, __pagedExportIntl: { createTranslator, messages } });
-stubModules({ navigation: false, intl: 'export async function getTranslations(namespace){const {createTranslator,messages}=globalThis.__pagedExportIntl;return createTranslator({locale:"en",messages,namespace});};export async function getLocale(){return "en"}', authz: false, features: false });
+stubModules({ navigation: false, intl: 'export async function getTranslations(input){const {createTranslator,messages}=globalThis.__pagedExportIntl;const options=typeof input==="object"?input:{namespace:input};return createTranslator({locale:"en",messages,...options});};export async function getLocale(){return "en"}', authz: false, features: false });
 
 registerHooks({
   resolve(s, c, next) {
@@ -262,7 +262,7 @@ test("a row cap that cuts whole trailing sections still attributes the header an
     assert.equal(oldData.length, 1200);
     const oldKinds = [...new Set(oldData.map((l) => l.split(",")[5]))].sort();
     assert.deepEqual(oldKinds, ["issue", "receipt"]);
-    const sectionTitle = oldLines[1]!.split(",")[0]!;
+    const lastSectionTitle = oldLines.at(-1)!.split(",")[0]!;
     const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
       streamPagedReportCsv(fx.org.orgId, plan("kind"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, money: MONEY, rowCap: 10 })));
     assert.equal(streamed.truncated, true);
@@ -276,7 +276,7 @@ test("a row cap that cuts whole trailing sections still attributes the header an
     // The footer rides on the report's last section with the truncation
     // notice disclosed — never on the surviving prefix, never silent.
     const last = lines[lines.length - 1]!;
-    assert.ok(last.startsWith(`${sectionTitle},`), last);
+    assert.ok(last.startsWith(`${lastSectionTitle},`), last);
     assert.ok(last.includes("Showing the first"), last);
   } finally { await release(fx); }
 });

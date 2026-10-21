@@ -24,14 +24,10 @@ export async function assertSystemSubmissionSource(input: {
   if (input.source === "portal" && input.subjectKind === "rma") {
     if (!await lockAndCheckOrgFeature(db, input.orgId, "customerPortal"))
       throw new FlowDispatchError("Enable Customer portal in Company Settings → Features before submitting portal returns.");
-    const source = await db.execute(sql`select l.id from documents d
-      join customer_portal_links l on l.org_id=d.org_id and l.party_id=d.party_id
-        and l.id::text=d.custom->'portalRequest'->>'linkId'
-      where d.org_id=${input.orgId} and d.id=${input.subjectId} and d.kind='rma'
-        and d.custom->'portalRequest'->>'partyId'=d.party_id::text
-        and l.purpose='session' and l.consumed_at is null and l.expires_at>now()
-      for share of l`);
-    if (source.rows.length === 1) return;
+    const source = await db.execute<{ valid: boolean }>(sql`select public.flow_portal_return_source_valid(
+      d.org_id,d.id,d.custom->'portalRequest') as valid from documents d
+      where d.org_id=${input.orgId} and d.id=${input.subjectId}`);
+    if (source.rows[0]?.valid) return;
   }
   if (input.source === "sync" && ["cash_sale", "cash_refund"].includes(input.subjectKind)) {
     if (!(await lockAndCheckOrgFeature(db,input.orgId,"salesChannels")) ||

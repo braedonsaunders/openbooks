@@ -11,7 +11,7 @@ import { decodeEntityMappings, type ConnectionEntityMappings } from '@openbooks/
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { confirmDialog } from '../../../lib/confirm'
 import {
-  decodeConnectionMappings, resolveSyncSelection, SYNC_CONTENT_KEYS,
+  resolveSyncSelection, SYNC_CONTENT_KEYS,
   type MappingGroup, type SyncCapabilities,
 } from '@openbooks/engine/sync/connection-settings'
 
@@ -88,10 +88,9 @@ export function ConnectionMappings({ connectionId, groups, value, onChange, draf
   const id = useId()
   const [selected, setSelected] = useState(groups[0]?.key ?? '')
   const group = groups.find((group) => group.key === selected) ?? groups[0]
-  let mappings: Record<string, unknown>
-  try { mappings = decodeConnectionMappings(value) }
-  catch { return <div className="space-y-2"><p role="alert" className="text-sm text-red-600">{t('unreadable')}</p>
-    <Button variant="outline" onClick={async () => { if (await confirmDialog(t('resetConfirm'))) onChange({}) }}>{t('reset')}</Button></div> }
+  if (value != null && (typeof value !== 'object' || Array.isArray(value))) return <div className="space-y-2"><p role="alert" className="text-sm text-red-600">{t('unreadable')}</p>
+    <Button variant="outline" onClick={async () => { if (await confirmDialog(t('resetConfirm'))) onChange({}) }}>{t('reset')}</Button></div>
+  const mappings = (value ?? {}) as Record<string, unknown>
   const update = (key: string, value: unknown, clearChildren = false) => {
     const next = { ...mappings }
     if (value === '' || value == null || (typeof value === 'object' && !Object.keys(value).length)) delete next[key]
