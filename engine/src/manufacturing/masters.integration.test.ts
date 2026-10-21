@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { ManufacturingError } from "./errors.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { addWorkCenterRate, createWorkCenter, deactivateWorkCenter, endWorkCenterRate, reactivateWorkCenter, updateWorkCenter } from "./work-centers.ts";
@@ -22,7 +22,7 @@ async function setup(): Promise<Fixture> {
   });
   return { org, actorId };
 }
-function run<T>(orgId: string, fn: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>) {
+function run<T>(orgId: string, fn: (tx: SqlExecutor) => Promise<T>) {
   return withOrgTransaction(orgId, () => fn(db));
 }
 function center(f: Fixture, code = `WC-${randomUUID()}`, patch: Partial<Parameters<typeof createWorkCenter>[3]> = {}) {

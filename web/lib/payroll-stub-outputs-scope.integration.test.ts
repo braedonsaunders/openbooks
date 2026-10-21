@@ -138,10 +138,14 @@ async function opaqueFixture(commit = true) {
 
 function scopedGate(fx: { orgId: string; actorId: string; subsidiaryId: string }, permission: string): Authz {
   return {
-    user: { orgId: fx.orgId, id: fx.actorId, roles: [{key:"admin"}] },
+    user: {
+      orgId: fx.orgId, id: fx.actorId, name: 'Scoped payroll operator', email: 'scoped-payroll@example.test',
+      roles: [{ key: 'admin', name: 'Administrator' }], envKind: 'production', productionOrgId: fx.orgId,
+      isSuperAdmin: false, homeOrgId: fx.orgId, homeUserId: fx.actorId,
+    },
     permissions: new Set([permission, 'payroll.read']),
     allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
-  } as Authz;
+  };
 }
 
 test("stub PDF hides a run carrying an out-of-scope employee", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
