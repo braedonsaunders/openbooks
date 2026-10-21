@@ -9,7 +9,7 @@ export const NETSUITE_BRIDGE_SCHEMA_VERSION = 1;
  * change detection. Keep in step with BRIDGE_VERSION in
  * integrations/netsuite-bridge.
  */
-export const NETSUITE_BRIDGE_MIN_VERSION = "1.7.0";
+export const NETSUITE_BRIDGE_MIN_VERSION = "1.7.2";
 export const DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID = "customscript_openbooks_bridge_rl";
 export const DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID = "customdeploy_openbooks_bridge_rl";
 

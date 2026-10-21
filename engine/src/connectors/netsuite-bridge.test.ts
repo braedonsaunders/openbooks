@@ -19,7 +19,7 @@ const creds: NetSuiteCreds = {
   tokenSecret: "secret",
 };
 
-const compatibleHealth = (version = "1.7.0") => ({
+const compatibleHealth = (version = "1.7.2") => ({
   ok: true, schemaVersion: 1, bridgeVersion: version, accountId: "TEST", environment: "SANDBOX",
   role: { id: "3", name: "Administrator" }, serverTime: "2026-10-10 12:00:00", features: {}, remainingUsage: 5000,
 });
@@ -56,23 +56,54 @@ test("native CRM record extraction whitelists fields and preserves native dates"
   runInNewContext(readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js"), {
     Date,
     define: (_dependencies: string[], factory: (...modules: unknown[]) => typeof restlet) => {
-      restlet = factory({}, {}, {}, { load: () => ({ getValue: ({fieldId}: {fieldId:string}) => {
+      restlet = factory({}, {}, { runSuiteQLPaged: (input: {query:string;params:string[];pageSize:number}) => {
+        assert.equal(input.query,"select id from note where id > ? order by id");
+        assert.equal(input.params[0],"0");
+        assert.equal(input.pageSize,50);
+        return {pageRanges:[{index:0}],count:2,fetch:()=>({data:{asMappedResults:()=>[{id:"51"},{id:"3501"}]}})};
+      } }, { load: () => ({ getValue: ({fieldId}: {fieldId:string}) => {
         observed.push(fieldId);
         return fieldId === "notedate" ? new Date("2026-10-21T12:00:00Z") : "A complete source value";
       } }) }, {}, { Sort: {ASC:"ASC"}, createColumn: (value:unknown) => value,
-        create: () => ({ run: () => ({ getRange: () => [{id:"51"}] }) }) }, {});
+        create: (input:{type:string}) => {
+          assert.notEqual(input.type,"note","note search omits transaction-linked notes");
+          return { run: () => ({ getRange: () => [{id:"99"}] }) };
+        } }, {});
     },
   });
-  const page = JSON.parse(JSON.stringify(restlet!.post({action:"crmActivities",recordType:"note",afterId:"0"}))) as { rows: {fields: {notedate:string}}[] };
+  const page = JSON.parse(JSON.stringify(restlet!.post({action:"crmActivities",recordType:"note",afterId:"0"}))) as { rows: {id:string;fields: {notedate:string}}[] };
+  assert.deepEqual(page.rows.map(row=>row.id),["51","3501"],"transaction-linked notes use the complete source identity list");
   assert.equal(page.rows[0]!.fields.notedate,"2026-10-21T12:00:00.000Z");
   assert.ok(observed.includes("note"));
   assert.ok(!observed.includes("_eml_nkey_"));
+  const taskPage=JSON.parse(JSON.stringify(restlet!.post({action:"crmActivities",recordType:"task",afterId:"0"}))) as {rows:{id:string}[]};
+  assert.deepEqual(taskPage.rows.map(row=>row.id),["99"]);
   assert.equal((restlet!.post({action:"crmActivities",recordType:"employee"}) as {ok:boolean}).ok,false);
 });
 
 function readSuiteScript(path: string): string {
   return readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", path), "utf8");
 }
+
+test("targeted deletion evidence filters audit columns without unsupported search criteria", () => {
+  let restlet: {post:(input:Record<string,unknown>)=>unknown}|undefined;
+  const entries=["10","11"].map(id=>({id,getValue:({name}:{name:string})=>({recordid:id,recordtype:"Time",deleteddate:"10/20/2026 2:00 PM",name:"Source time"})[name as "recordid"]}));
+  let enumerations=0;
+  runInNewContext(readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js"),{
+    define:(_dependencies:string[],factory:(...modules:unknown[])=>typeof restlet)=>{
+      restlet=factory({}, {Type:{DATE:"DATE"},format:()=>"01/01/1970"}, {}, {}, {}, {
+        create:(input:{filters:unknown})=>{
+          assert.ok(!JSON.stringify(input.filters).includes("recordid"));
+          return {runPaged:()=>{enumerations++;return {pageRanges:[{index:0}],fetch:()=>({data:entries})};}};
+        },
+      },{});
+    },
+  });
+  const response=JSON.parse(JSON.stringify(restlet!.post({action:"deleted",since:"1970-01-01T00:00:00Z",recordIds:["10"]}))) as {rows:{internalId:string}[]};
+  assert.deepEqual(response.rows.map(row=>row.internalId),["10"]);
+  assert.equal(enumerations,1);
+  assert.equal((restlet!.post({action:"deleted",since:"1970-01-01",recordIds:["invalid"]}) as {ok:boolean}).ok,false);
+});
 
 test("NetSuite RESTlet scopes export status and cleanup to an exact job boundary", () => {
   const source = readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js");
@@ -584,7 +615,7 @@ test("an outdated installed bridge refuses before any export starts, naming its 
   });
   await assert.rejects(
     () => client.bulkQuery([{ id: "a", sql: "SELECT 1 AS id FROM DUAL" }]),
-    /version 1\.3\.0; this release requires 1\.7\.0 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
+    /version 1\.3\.0; this release requires 1\.7\.2 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
   );
   assert.deepEqual(actions, ["health"]);
 });

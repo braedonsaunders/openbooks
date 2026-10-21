@@ -5,7 +5,7 @@
  */
 define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
   (file, format, query, record, runtime, search, task) => {
-    const BRIDGE_VERSION = '1.7.0';
+    const BRIDGE_VERSION = '1.7.2';
     const SCHEMA_VERSION = 1;
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
     const EXPORT_SCRIPT_ID = 'customscript_openbooks_export_mr';
@@ -132,11 +132,17 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       assert(Object.prototype.hasOwnProperty.call(fieldsByType, recordType), 'unsupported CRM activity record type');
       const afterId = text(input.afterId || '0');
       assert(/^\d+$/.test(afterId), 'afterId must be a numeric source identity');
-      const rows = search.create({
+      // Note searches omit transaction-linked notes. SuiteQL enumerates their
+      // native identities; record reads retain the complete note content.
+      const identities = recordType === 'note' ? suiteql({
+        sql: 'select id from note where id > ? order by id',
+        params: [afterId], pageSize: 50, pageIndex: 0,
+      }).rows : search.create({
         type: recordType,
         filters: [['internalidnumber', 'greaterthan', afterId]],
         columns: [search.createColumn({ name: 'internalid', sort: search.Sort.ASC })],
-      }).run().getRange({ start: 0, end: 50 }).map((result) => {
+      }).run().getRange({ start: 0, end: 50 });
+      const rows = identities.map((result) => {
         const id = text(result.id);
         const loaded = record.load({ type: recordType, id, isDynamic: false });
         const fields = {};
@@ -157,16 +163,15 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       const localDate = format.format({ value: sinceDate, type: format.Type.DATE });
       const filters = [['deleteddate', 'onorafter', localDate]];
       if (input.recordType) filters.push('AND', ['recordtype', 'is', text(input.recordType)]);
+      let requestedIds;
       if (input.recordIds) {
         assert(Array.isArray(input.recordIds) && input.recordIds.length > 0 && input.recordIds.length <= 500, 'recordIds must contain 1 to 500 source identities');
-        const identities = [];
+        requestedIds = new Set();
         input.recordIds.forEach((value) => {
           const id = text(value);
           assert(/^\d+$/.test(id), 'recordIds must be numeric source identities');
-          if (identities.length) identities.push('OR');
-          identities.push(['recordid', 'equalto', id]);
+          requestedIds.add(id);
         });
-        filters.push('AND', identities);
       }
       const deleted = search.create({
         type: 'deletedrecord',
@@ -174,10 +179,15 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
         columns: ['recordid', 'deleteddate', 'recordtype', 'name'],
       });
       const rows = [];
-      deleted.runPaged({ pageSize: 1000 }).pageRanges.forEach((range) => {
-        deleted.runPaged({ pageSize: 1000 }).fetch({ index: range.index }).data.forEach((result) => {
+      const pages = deleted.runPaged({ pageSize: 1000 });
+      pages.pageRanges.forEach((range) => {
+        pages.fetch({ index: range.index }).data.forEach((result) => {
+          // The deletion audit exposes recordid as a column, not a search
+          // criterion. Limit returned evidence after reading its dated pages.
+          const id = text(result.getValue({ name: 'recordid' }) || result.id);
+          if (requestedIds && !requestedIds.has(id)) return;
           rows.push({
-            internalId: text(result.getValue({ name: 'recordid' }) || result.id),
+            internalId: id,
             deletedAt: text(result.getValue({ name: 'deleteddate' })),
             recordType: text(result.getValue({ name: 'recordtype' })),
             name: text(result.getValue({ name: 'name' })),

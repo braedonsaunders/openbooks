@@ -50,7 +50,7 @@ test(
       }
       if (target.includes('/app/site/hosting/restlet.nl')) {
         const params = JSON.parse(String(init?.body)) as { action: string; recordType: string }
-        if (params.action === 'health') return Response.json({ ok: true, schemaVersion: 1, bridgeVersion: '1.7.0', accountId: '123456' })
+        if (params.action === 'health') return Response.json({ ok: true, schemaVersion: 1, bridgeVersion: '1.7.2', accountId: '123456' })
         assert.equal(params.action, 'crmActivities')
         return Response.json({ schemaVersion: 1, recordType: params.recordType, hasMore: false,
           rows: params.recordType === 'note' ? [{ id: '1845', fields: { title: 'Plant visit', note: 'Meeting at the plant. Went on a site tour and left rate sheets.', entity: 'NS-CUST-1', notedate: '2024-05-03T16:30:00.000Z' } }] : [] })
