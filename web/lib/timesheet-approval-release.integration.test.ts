@@ -13,7 +13,7 @@ import {
   createScratchUser,
 } from "@openbooks/engine/testing/fixtures";
 import { routeSubjectSubmission } from "@openbooks/engine/flows/submission-policy";
-import { decideGate } from "@openbooks/engine/flows/gates";
+import { decideGate } from "@openbooks/engine/flows/module";
 import { registerFlowApprovalReleaseHandlers } from "./flow-approval-releases.ts";
 await registerFlowApprovalReleaseHandlers();
 
@@ -77,7 +77,7 @@ async function seedWeek(status: "submitted", entryHours: string) {
       values
         (${timeEntryId}, ${org.orgId}, ${employeeId}, '2026-07-15',
          ${entryHours}, ${status}, false, 'actual', '{}'::jsonb,
-         ${actorId}, ${actorId})
+         ${submitterId}, ${submitterId})
     `);
   });
   await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: "timesheet_week", mode: "any",

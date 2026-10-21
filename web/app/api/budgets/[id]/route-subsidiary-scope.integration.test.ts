@@ -36,7 +36,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, g
   await import('@openbooks/engine/testing/fixtures')
 const { GET, PATCH, DELETE } = await import('./route')
 const { submitBudgetScenario } = await import('@openbooks/engine/flows/budget-submission')
-const { decideGate } = await import('@openbooks/engine/flows/gates')
+const { decideGate } = await import('@openbooks/engine/flows/module')
 const { GET: exportScenario } = await import('./export/route')
 const { PATCH: saveLines } = await import('./lines/route')
 const { POST: importScenario } = await import('./import/route')

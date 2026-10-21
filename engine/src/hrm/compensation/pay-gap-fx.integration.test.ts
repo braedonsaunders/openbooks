@@ -98,7 +98,7 @@ test("F09 mixed currencies convert to the reporting currency before any statisti
       USD: { rate: "1.3500000000", as_of: "2024-01-01", source: "bank", inverse: false },
     });
     await seedFx(org.orgId, "USD", "CAD", "2024-05-01", "9.99", "late-arrival");
-    await setLaborCosting(org.orgId, { annualHours: 1000 });
+    await setLaborCosting(org.orgId, { annualHours: "1000" });
     const reread = await latestGapSnapshot({ orgId: org.orgId, actorId: h.hrId });
     assert.deepEqual(reread?.metrics, snapshot.metrics);
   });
@@ -179,7 +179,7 @@ test("F09 hour wages annualise with the wage row's own annual-hours", { skip: !D
     // Same hourly rate, different native annual-hours: 104000 vs 52000.
     // The org's current annualHours is deliberately set to a third
     // value, so any use of it would show.
-    await setLaborCosting(org.orgId, { annualHours: 1000 });
+    await setLaborCosting(org.orgId, { annualHours: "1000" });
     await seedPayGapWorker(org.orgId, h.hrId, org.subsidiaryId, levelId, "A", { wage: {
       rate: "50", currency: "CAD", basis: "hour", annualHours: "2080",
     } });

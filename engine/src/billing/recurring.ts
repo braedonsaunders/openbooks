@@ -1282,7 +1282,9 @@ async function generateFromTemplate(
 
   let posted = false;
   if (autoPost) {
-    const submission = await submitAndReleaseIfUngated(tpl.kind, newId, context.actorId);
+    const submission = await submitAndReleaseIfUngated(tpl.kind, newId, context.actorId, {
+      source: context.runSource === "scheduler" ? "schedule" : "api",
+    });
     if (submission.flowError) {
       throw new Error(`approval could not be routed: ${submission.flowError}`);
     }

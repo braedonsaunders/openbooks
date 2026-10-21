@@ -67,10 +67,10 @@ async function fixture() {
     (await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into compliance_waivers
         (org_id, party_id, requirement_id, project_id, reason, effective_from, expires_on,
-         requested_by, created_by, updated_by)
+         requested_by, approved_by, approved_at, created_by, updated_by)
       values (${org.orgId}, ${partyId}, ${requirementId}, ${projectId},
               'filed bounded exception', '2026-06-01', '2026-08-01',
-              ${actorId}, ${actorId}, ${actorId})
+              ${actorId}, null, null, ${actorId}, ${actorId})
       returning id`))).rows[0]!.id;
   return {
     org,

@@ -30,6 +30,10 @@ for (const operation of ["receipt", "issue", "adjustment", "transfer", "build", 
     const org = await createScratchOrg();
     try {
       const actorId = (await seedFlowActors(org.orgId)).adminId;
+      if (operation === "ship order" || operation === "receive order") {
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+          coalesce(settings->'features','{}'::jsonb)||'{"warehousing":true}'::jsonb) where id=${org.orgId}`);
+      }
       const input = { itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId,
         quantity: "1", unitCost: "5", date: org.date, offsetAccountId: org.accounts.clearing };
       await receiveInventory(org.orgId, actorId, { ...input, quantity: "10" });

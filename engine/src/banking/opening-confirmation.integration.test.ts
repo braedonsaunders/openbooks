@@ -191,7 +191,7 @@ test(
       assert.equal(confirmAudit.reason, CONFIRM_REASON);
       assert.equal(confirmAudit.bookBalance, "63412.5500");
 
-      assert.deepEqual(await markReconciled(recon.id, ctx), { journalLinesReconciled: 14 });
+      assert.deepEqual(await markReconciled(recon.id, ctx), { status: "signed_off", journalLinesReconciled: 14 });
       const signoff = (await db.execute<{ changes: { openingCarriedForward: string; openingCarryStartDate: string } }>(sql`
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'reconciliations' and row_id = ${recon.id}
@@ -249,7 +249,7 @@ test(
         unmatchedStatementLines: 0,
         matchedJournalLines: 1,
       });
-      assert.deepEqual(await markReconciled(recon2.id, ctx), { journalLinesReconciled: 1 });
+      assert.deepEqual(await markReconciled(recon2.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
     } finally {
       await dropScratchOrg(org.orgId);
     }

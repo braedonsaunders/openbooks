@@ -50,8 +50,8 @@ test('authorized direct assignees and Flow managers are offered Delegate on a pe
     assert.ok((await names(admin, direct)).length > 0, 'an organization admin may delegate it')
     assert.ok((await names(reviewer, direct)).length > 0, 'the native Flow-management grant authorizes hand-off')
     assert.deepEqual(await names(submitter, direct), [])
-    // A role-held gate needs Flow-management authority to delegate.
-    assert.deepEqual(await names(assignee, byRole), [])
+    // Role targeting resolves to a frozen user assignment in the native plan.
+    assert.ok((await names(assignee, byRole)).length > 0, 'the resolved role assignee may hand off their own gate')
     assert.ok((await names(admin, byRole)).length > 0)
     assert.deepEqual(await names(admin, null), [], 'no pending gate, no picker')
   } finally {

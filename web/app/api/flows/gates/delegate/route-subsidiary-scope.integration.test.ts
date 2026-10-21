@@ -1,20 +1,20 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
+import { createScratchOrg, createScratchUser, seedApprovalFlow, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
+import { routeSubjectSubmission } from "@openbooks/engine/flows/submission-policy";
 import { filterFlowRunSubjectsToScope, loadFlowSubjectSubsidiary, loadGateHeader, lockFlowSubjectScope } from "../../_lib.ts";
 
 test("allocation flow scope includes every subsidiary touched by the run", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const subB = randomUUID();
-    const flowId = randomUUID();
-    const flowRunId = randomUUID();
     const runId = randomUUID();
-    const gateId = randomUUID();
     const ruleId = randomUUID();
     const versionId = randomUUID();
     await withBypassContext(() => db.execute(sql`insert into subsidiaries
@@ -30,14 +30,15 @@ test("allocation flow scope includes every subsidiary touched by the run", async
       (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id, status, computation)
       values (${runId}, ${org.orgId}, ${ruleId}, ${versionId}, 'scope-test', ${org.periodId}, ${org.bookId},
         ${org.subsidiaryId}, 'pending_approval', ${JSON.stringify(computation)}::jsonb)`));
-    await withBypassContext(() => db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
-      values (${flowId}, ${org.orgId}, 'Allocation approvals', 'allocation_run', true, '{}'::jsonb)`));
-    await withBypassContext(() => db.execute(sql`insert into flow_runs
-      (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
-      values (${flowRunId}, ${org.orgId}, ${flowId}, 'allocation_run', ${runId}, 'on_submit', 'waiting')`));
-    await withBypassContext(() => db.execute(sql`insert into flow_gates
-      (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key, status)
-      values (${gateId}, ${org.orgId}, ${flowId}, ${flowRunId}, 'gate-1', 'allocation_run', ${runId}, 'Approve', 'gate-1', 'pending')`));
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, "Allocation reviewer", "admin"));
+    await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: "allocation_run", mode: "any",
+      assignees: [{ type: "user", userId: actor }], preventSelfApproval: false }));
+    await withOrgTransaction(org.orgId, () => routeSubjectSubmission({ orgId: org.orgId, actorId: actor,
+      subjectKind: "allocation_run", subjectId: runId }));
+    const gates = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from flow_gates
+      where org_id=${org.orgId} and subject_kind='allocation_run' and subject_id=${runId} and status='pending'`))).rows;
+    assert.equal(gates.length, 1);
+    const gateId = gates[0]!.id;
 
     const onlyA = new Set([org.subsidiaryId]);
     assert.equal(await loadGateHeader(gateId, org.orgId, onlyA), null);

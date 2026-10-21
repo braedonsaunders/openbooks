@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {db} from '../platform/db.ts';
 import {parseMoney} from '../money/brands.ts';
-import {dropScratchOrgReporting} from '../testing/fixtures.ts';
+import {dropScratchOrgReporting,seedPayrollStatutoryTreatment} from '../testing/fixtures.ts';
 import {seedHourlyPayrollOrg,seedHourlyPayrollEmployee,seedHourlyPayrollTime} from '../testing/payroll-hourly-fixture.ts';
 import {createPayRun,discardPayRun} from './run-lifecycle.ts';
 import {calculatePayRun,captureCalculatedStubs} from './run-calculation.ts';
@@ -49,9 +49,11 @@ test('derived rule quantities survive native recalculation and posted evidence c
    await seedHourlyPayrollTime(fx,partyId,['2026-07-13']);
    const componentId=randomUUID();
    await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,value,
-    taxable,pensionable,insurable,vacationable,expense_account_id,liability_account_id)
+    expense_account_id,liability_account_id)
     values(${componentId},${fx.orgId},'SITE','Site incentive','earning','CA',2,
-     true,true,true,false,${fx.accounts.wageExpense},${fx.accounts.netPayable})`);
+     ${fx.accounts.wageExpense},${fx.accounts.netPayable})`);
+   await seedPayrollStatutoryTreatment(fx.orgId,componentId,{effectiveFrom:'2026-01-01',
+    programExclusions:[],vacationable:false,createdBy:fx.actorId,updatedBy:fx.actorId});
    await db.execute(sql`insert into pay_derived_rules(id,org_id,code,name,component_id,trigger,
     quantity_mode,rate_mode,rate_value,costing_mode,effective_from,is_active)
     values(${randomUUID()},${fx.orgId},'SITE','Site incentive',${componentId},'distinct_day',

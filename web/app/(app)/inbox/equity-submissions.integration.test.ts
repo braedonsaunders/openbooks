@@ -88,15 +88,19 @@ registerScopedHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { db, withBypassContext, withOrgContext, withOrgTransaction } = await import("@openbooks/engine/platform/db");
 const { installEngineSeams } = await import("@openbooks/engine/composition/install");
-const { createScratchUser, dropScratchOrgReporting, seedApprovalFlow } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchUser, dropScratchOrgReporting, seedApprovalFlow, grantScratchPermissions } = await import("@openbooks/engine/testing/fixtures");
 const { setupEquityWorld } = await import("@openbooks/engine/testing/equity-world");
 const { changePlanReserve, createPlan } = await import("@openbooks/engine/equity");
 const { worklistApprovalsPage } = await import("@openbooks/engine/flows/approval-worklist");
 const { loadApprovals } = await import("./view.ts");
 const { inboxContext, inboxCounts } = await import("../../../lib/inbox-context");
 const { resolveApprovalSubjects } = await import("../../../lib/approval-subjects");
+const { postEntry } = await import('@openbooks/engine/testing/journal/post-entry');
+const { proposeHistoricalContributionFixture } = await import('@openbooks/engine/testing/historical-translations');
+const { submitFinancialChange } = await import('@openbooks/engine/flows/financial-changes-adapter');
+const { routeSubjectSubmission } = await import('@openbooks/engine/flows/submission-policy');
 const { financialChangeEventLabel } = await import("@openbooks/engine/platform/financial-changes");
 type Authz = import("@/lib/authz.ts").Authz;
 
@@ -171,29 +175,46 @@ test("a pending equity action is the requester's submission and the equity appro
 
 /** A pending accounting-event approval held by a live Flow run, assigned to a role. */
 async function pendingFinancialChangeGate(orgId: string, subsidiaryId: string, submitterId: string, role: string): Promise<{ changeId: string; gateId: string }> {
-  return withBypassContext(async () => {
-    const changeId = randomUUID();
-    await db.execute(sql`
-      insert into financial_changes
-        (id, org_id, subsidiary_id, domain, subject_id, operation, effective_on, reason,
-         idempotency_key, payload, before_state, submitted_by, created_by, updated_by)
-      values (${changeId}, ${orgId}, ${subsidiaryId}, 'asset', ${randomUUID()}, 'revaluation',
-        '2026-07-15', 'Year-end revaluation', ${`all-approvals-${changeId}`},
-        ${JSON.stringify({ estimate: "1500.00", currency: "CAD" })}::jsonb, '{}'::jsonb,
-        ${submitterId}, ${submitterId}, ${submitterId})`);
-    await db.execute(sql`update financial_changes set status = 'pending' where org_id = ${orgId} and id = ${changeId}`);
-    const flowId = randomUUID();
-    await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
-      values (${flowId}, ${orgId}, 'Accounting event approval', 'financial_change', true, '{}'::jsonb)`);
-    const runId = randomUUID();
-    await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status, created_by)
-      values (${runId}, ${orgId}, ${flowId}, 'financial_change', ${changeId}, 'on_submit', 'waiting', ${submitterId})`);
-    const gateId = randomUUID();
-    await db.execute(sql`insert into flow_gates
-      (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key, quorum, status, assignee_role)
-      values (${gateId}, ${orgId}, ${flowId}, ${runId}, 'gate', 'financial_change', ${changeId},
-              'Approve the revaluation', 'gate', 'any', 'pending', ${role})`);
-    return { changeId, gateId };
+  await withBypassContext(() => grantScratchPermissions(orgId, submitterId, ['close.run', 'gl.post', 'documents.read']));
+  await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${orgId}`));
+  await withBypassContext(async () => {
+    const assignees = (await db.execute<{ id: string }>(sql`select a.user_id as id from role_assignments a
+      join app_roles r on r.org_id=a.org_id and r.id=a.role_id where a.org_id=${orgId} and r.key=${role}`)).rows;
+    for (const assignee of assignees) await grantScratchPermissions(orgId, assignee.id, ['close.run', 'documents.read']);
+    await seedApprovalFlow(orgId, { subjectKind: 'financial_change', mode: 'any',
+      assignees: [{ type: 'role', role }], preventSelfApproval: true });
+  });
+  return withOrgTransaction(orgId, async () => {
+    const basis = (await db.execute<{ book: string; period: string; equity: string; bank: string; currency: string }>(sql`
+      select b.id as book,p.id as period,
+        (select id from accounts where org_id=${orgId} and type='equity' order by id limit 1) as equity,
+        (select id from accounts where org_id=${orgId} and type='asset_bank' order by id limit 1) as bank,
+        public.accounting_book_currency(${orgId},b.id,${subsidiaryId}) as currency
+      from accounting_books b join accounting_periods p on p.org_id=b.org_id
+      where b.org_id=${orgId} and b.is_primary and p.starts_on<='2026-07-15' and p.ends_on>='2026-07-15'
+        and not p.is_adjustment order by p.id limit 1`)).rows[0]!;
+    const posted = await postEntry(db, { orgId, actorId: submitterId, bookId: basis.book, periodId: basis.period,
+      subsidiaryId, entryNumber: `CAP-${randomUUID()}`, postingDate: '2026-07-15', currency: basis.currency,
+      origin: 'manual', lines: [
+        { accountId: basis.equity, subsidiaryId, amount: '-100', currency: basis.currency, txnAmount: '-100', fxRate: '1' },
+        { accountId: basis.bank, subsidiaryId, amount: '100', currency: basis.currency, txnAmount: '100', fxRate: '1' },
+      ] });
+    const source = (await db.execute<{ id: string }>(sql`select id from journal_lines
+      where org_id=${orgId} and entry_id=${posted.entryId} and account_id=${basis.equity}`)).rows[0]!;
+    const changeId = await proposeHistoricalContributionFixture({ orgId, actorId: submitterId, sourceLineId: source.id,
+      measurementCurrency: basis.currency, presentationCurrency: basis.currency==='CAD'?'USD':'CAD',
+      historicalDate: '2026-07-15', amount: '-100', rate: '1.2' });
+    await db.execute(sql`insert into resource_grants(org_id,resource_type,resource_id,principal_type,principal_id,access,created_by)
+      select ${orgId},'folder',f.folder_id,'user',a.user_id,'viewer',${submitterId}
+      from financial_changes c join files f on f.org_id=c.org_id and f.id=(c.payload->'evidence'->'instruction'->'layers'->0->'source'->>'fileId')::uuid
+      join role_assignments a on a.org_id=c.org_id join app_roles r on r.org_id=a.org_id and r.id=a.role_id
+      where c.org_id=${orgId} and c.id=${changeId} and r.key=${role}`);
+    await submitFinancialChange(orgId, changeId, submitterId);
+    const gates = (await db.execute<{ id: string }>(sql`select id from flow_gates
+      where org_id=${orgId} and subject_kind='financial_change' and subject_id=${changeId} and status='pending'`)).rows;
+    assert.equal(gates.length, 1);
+    return { changeId, gateId: gates[0]!.id };
   });
 }
 
@@ -237,11 +258,11 @@ test("All approvals lists every pending approval in the organization within the 
     assert.equal(equityRow.kindLabel, "Equity action · Reserve change");
     assert.equal(equityRow.amount, "+1,000 shares");
     assert.equal(equityRow.assignee, "Equity Approver", "the row names who the gate waits on");
-    assert.equal(changeRow.assignee, "approver", "a role-routed gate names the role");
-    assert.equal(changeRow.kindLabel, financialChangeEventLabel("revaluation"), "an accounting event names its operation");
+    assert.equal(changeRow.assignee, "Accounting Approver", "role targeting freezes the resolved assignee");
+    assert.equal(changeRow.kindLabel, financialChangeEventLabel("historical_translation_contribution"), "an accounting event names its operation");
     for (const row of [equityRow, changeRow]) {
       assert.equal(row.canDecide, false, "another approver's gate offers no decision");
-      assert.equal(row.canDelegate, false, "nor a hand-off the delegate path would refuse");
+      assert.equal(row.canDelegate, true, "native Flow-management authority permits hand-off");
       assert.equal(row.awaitingAnotherApprover, false);
     }
     assert.equal(all!.emptyTitle, "Nothing pending");
@@ -359,26 +380,25 @@ test("a submitted period close is named by its fiscal period label, never the st
        where org_id = ${w.org.orgId} and not is_adjustment order by starts_on limit 1`))).rows[0]!;
     const blueprintId = randomUUID();
     const closeRunId = randomUUID();
-    const flowId = randomUUID();
-    const runId = randomUUID();
     await withBypassContext(async () => {
+      await grantScratchPermissions(w.org.orgId, w.managerId, ['close.run', 'close.read']);
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+        coalesce(settings->'features','{}'::jsonb)||'{"continuousClose":true}'::jsonb) where id=${w.org.orgId}`);
+      await grantScratchPermissions(w.org.orgId, w.approverId, ['close.approve', 'close.read']);
       await db.execute(sql`insert into close_blueprints (id, org_id, name) values (${blueprintId}, ${w.org.orgId}, 'Month-end close')`);
       await db.execute(sql`
         insert into close_runs (id, org_id, period_id, book_id, blueprint_id, status, current_stage, target_close_date, scope, started_at, started_by, created_by, updated_by)
         values (${closeRunId}, ${w.org.orgId}, ${period.id}, ${w.org.bookId}, ${blueprintId}, 'in_progress', 'review', current_date + 30, '{}'::jsonb, now(),
                 ${w.managerId}, ${w.managerId}, ${w.managerId})`);
-      await db.execute(sql`insert into flows (id, org_id, name, subject_kind, enabled, graph)
-        values (${flowId}, ${w.org.orgId}, 'Close sign-off', 'close_run', true, '{}'::jsonb)`);
-      await db.execute(sql`insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status, created_by)
-        values (${runId}, ${w.org.orgId}, ${flowId}, 'close_run', ${closeRunId}, 'on_submit', 'waiting', ${w.managerId})`);
-      await db.execute(sql`insert into flow_gates
-        (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title, group_key, quorum, status, assignee_user_id)
-        values (${randomUUID()}, ${w.org.orgId}, ${flowId}, ${runId}, 'gate', 'close_run', ${closeRunId}, 'Sign off the close', 'gate', 'any', 'pending', ${w.approverId})`);
+      await seedApprovalFlow(w.org.orgId, { subjectKind: 'close_run', mode: 'any',
+        assignees: [{ type: 'user', userId: w.approverId }], preventSelfApproval: true });
     });
+    await withOrgTransaction(w.org.orgId, () => routeSubjectSubmission({ orgId: w.org.orgId,
+      actorId: w.managerId, subjectKind: 'close_run', subjectId: closeRunId }));
     const label = periodDisplayLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false, startsOn: period.starts_on, endsOn: period.ends_on }, "en");
     assert.notEqual(label, period.name, "the stored name differs from the native label");
 
-    state.authz = authzFor(w.org.orgId, w.managerId, "equity_manager", ["equity.read", "equity.manage"]);
+    state.authz = authzFor(w.org.orgId, w.managerId, "equity_manager", ["equity.read", "equity.manage", "close.read", "close.run"]);
     const submitted = await withOrgContext(w.org.orgId, () => loadApprovals({ tab: "submitted" }));
     const row = submitted!.submittedRows.find((candidate) => candidate.kind === "close_run");
     assert.ok(row, "the close's starter sees it under Submitted by me");

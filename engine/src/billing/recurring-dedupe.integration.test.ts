@@ -26,15 +26,15 @@ async function seedInvoiceSchedule(
   actorId: string,
   opts: { templateCreatedBy?: string | null; autoPost?: boolean } = {},
 ): Promise<string> {
-  await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb
+  await db.execute(sql`update app_roles set permissions='["documents.manage","ar.create","ar.read","gl.post"]'::jsonb
     where org_id=${org.orgId} and key='admin'`);
   const templateId = randomUUID();
   await db.execute(sql`
     insert into documents
       (id, org_id, kind, status, document_number, document_date, due_date, currency,
-       subtotal, tax_total, total, party_id, created_by)
+       subtotal, tax_total, total, party_id, subsidiary_id, created_by)
     values (${templateId}, ${org.orgId}, 'customer_invoice', 'draft', ${"TPL-" + templateId.slice(0, 8)},
-            ${org.date}, ${org.date}, 'CAD', '100.00', '0.00', '100.00', ${org.customerId},
+            ${org.date}, ${org.date}, 'CAD', '100.00', '0.00', '100.00', ${org.customerId}, ${org.subsidiaryId},
             ${opts.templateCreatedBy === undefined ? actorId : opts.templateCreatedBy})
   `);
   await db.execute(sql`

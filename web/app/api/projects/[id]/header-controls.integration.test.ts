@@ -82,8 +82,18 @@ test('contract value is controlled by change orders once billing begins', enable
     actAs(org, preparer)
     const sov = await projectType(org, 'schedule_of_values')
     const billed = await project(org, sov, org.subsidiaryId, '1000', { headerControlTest: 'JOB-1' })
-    await db.execute(sql`insert into pay_applications(org_id,project_id,application_number,period_end,status)
-      values (${org.orgId},${billed},1,${org.date},'draft')`)
+    const sovResponse = await post(org.orgId, { action: 'addSov', projectId: billed,
+      description: 'Original scope', scheduledValue: '1000', retainagePercent: '0', incomeAccountId: org.accounts.revenue })
+    assert.equal(sovResponse.status, 201, await sovResponse.clone().text())
+    const sovLineId = (await sovResponse.json()).id
+    const appResponse = await post(org.orgId, { action: 'createPayApp', projectId: billed, periodEnd: org.date, retainagePercent: '0' })
+    assert.equal(appResponse.status, 201, await appResponse.clone().text())
+    const payApplicationId = (await appResponse.json()).id
+    const submittedApp = await post(org.orgId, { action: 'submitPayApp', payApplicationId,
+      lines: [{ sovLineId, thisPeriodCompleted: '100', materialsStored: '0' }] })
+    assert.equal(submittedApp.status, 200, await submittedApp.clone().text())
+    const billedApp = await post(org.orgId, { action: 'billPayApp', payApplicationId })
+    assert.equal(billedApp.status, 200, await billedApp.clone().text())
 
     // Before billing begins the header still edits the contract value.
     const unbilled = await project(org, sov, org.subsidiaryId, '1000')

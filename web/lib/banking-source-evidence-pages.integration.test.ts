@@ -1,3 +1,5 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install"
+installEngineSeams()
 import { registerHooks } from 'node:module'
 import { resolveAppModule } from './test-module-hooks'
 import { pathToFileURL } from 'node:url'
@@ -28,8 +30,9 @@ registerHooks({
   },
 })
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db') as typeof import('@openbooks/engine/platform/db')
+const { db, withBypassContext, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/platform/db') as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js') as typeof import('drizzle-orm')
+const { refreshSourceReconciliationState, signOffFromSourceEvidence, importStatement, startReconciliation, createMatch, markReconciled } = await import('@openbooks/engine/banking/banking')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 // The pages' LOADERS, not their rendered trees: the evidence badge and the
 // workspace header are loader-resolved strings, so the loader output is the
@@ -60,29 +63,48 @@ async function seedSourceEvidenceOrg() {
     await db.execute(sql`update accounts set currency_restriction='USD',reconcilable=true where org_id=${org.orgId} and id=${org.accounts.bank}`)
     await db.execute(sql`insert into connections(org_id,source,display_name,mirror_enabled)
       values(${org.orgId},${CONNECTOR_SOURCE},${CONNECTOR_NAME},true)`)
-    // One cleared line (mirrored source stamp) and one open line, both posted
-    // in the primary book on or before the sign-off cutoff.
-    const clearedEntry = randomUUID(), openEntry = randomUUID()
-    for (const [entry, number] of [[clearedEntry, 'cleared-1'], [openEntry, 'open-1']] as const) {
-      await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
-        values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},${number},${org.date},${org.periodId},'draft','manual')`)
-    }
-    await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,source_cleared_date,source_cleared_connector)
-      values(${randomUUID()},${org.orgId},${clearedEntry},1,${org.accounts.bank},${org.subsidiaryId},100,'USD',100,1,${org.date},${CONNECTOR_SOURCE}),
-        (${randomUUID()},${org.orgId},${clearedEntry},2,${org.accounts.adjustment},${org.subsidiaryId},-100,'USD',-100,1,null,null),
-        (${randomUUID()},${org.orgId},${openEntry},1,${org.accounts.bank},${org.subsidiaryId},50,'USD',50,1,null,null),
-        (${randomUUID()},${org.orgId},${openEntry},2,${org.accounts.adjustment},${org.subsidiaryId},-50,'USD',-50,1,null,null)`)
-    await db.execute(sql`update journal_entries set status='posted',posted_by=${actor} where org_id=${org.orgId} and id in (${clearedEntry},${openEntry})`)
-    const sourceRecon = randomUUID(), statementRecon = randomUUID(), orphanRecon = randomUUID()
-    await db.execute(sql`insert into reconciliations(id,org_id,account_id,through_date,currency,statement_balance,status,created_by,evidence_kind,evidence_connector,signed_off_by,signed_off_at)
-      values(${sourceRecon},${org.orgId},${org.accounts.bank},${org.date},'USD',150,'signed_off',${actor},'source',${CONNECTOR_SOURCE},${actor},now()),
-        (${statementRecon},${org.orgId},${org.accounts.bank},${org.date},'USD',150,'signed_off',${actor},'statement',null,${actor},now()),
-        (${orphanRecon},${org.orgId},${org.accounts.bank},${org.date},'USD',150,'signed_off',${actor},'source','lone-source',${actor},now())`)
-    return { actor, sourceRecon, statementRecon, orphanRecon }
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+      coalesce(settings->'features','{}'::jsonb)||'{"banking":true}'::jsonb) where id=${org.orgId}`)
+    return { actor }
   })
+  const ctx = { orgId: org.orgId, userId: seeded.actor, allowedSubsidiaryIds: null }
+  const deposit = (amount: string, date: string, connector: string | null) => withOrgTransaction(org.orgId, async () => {
+    const entry = randomUUID(), bankLine = randomUUID()
+    await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
+      values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},${entry},${date},${org.periodId},'draft','manual')`)
+    await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,source_cleared_date,source_cleared_connector)
+      values(${bankLine},${org.orgId},${entry},1,${org.accounts.bank},${org.subsidiaryId},${amount},'USD',${amount},1,${connector ? date : null},${connector}),
+        (${randomUUID()},${org.orgId},${entry},2,${org.accounts.adjustment},${org.subsidiaryId},${'-'+amount},'USD',${'-'+amount},1,null,null)`)
+    await db.execute(sql`update journal_entries set status='posted',posted_by=${seeded.actor} where org_id=${org.orgId} and id=${entry}`)
+    return bankLine
+  })
+  const sourceSignOff = (connector: string) => withOrgTransaction(org.orgId, async () => {
+    await refreshSourceReconciliationState(org.orgId, connector)
+    const signed = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx)
+    assert.equal(signed.signed, true)
+    if (!signed.signed) throw new Error('Source evidence must cover the complete cutoff.')
+    return signed.reconciliationId
+  })
+  await deposit('100','2026-07-13',CONNECTOR_SOURCE)
+  const sourceRecon = await sourceSignOff(CONNECTOR_SOURCE)
+  const bankLine = await deposit('50','2026-07-14',null)
+  const statementRecon = await withOrgTransaction(org.orgId, async () => {
+    await importStatement({ accountId: org.accounts.bank, source: 'manual', currency: 'USD',
+      statementDate: '2026-07-14', openingBalance: '100', closingBalance: '150',
+      lines: [{ postedOn: '2026-07-14', amount: '50', description: 'Bank deposit', bankTransactionId: 'statement-deposit' }] }, ctx)
+    const statementLine = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines
+      where org_id=${org.orgId} and account_id=${org.accounts.bank} and bank_transaction_id='statement-deposit'`)).rows[0]!
+    const reconciliation = await startReconciliation({ accountId: org.accounts.bank,
+      throughDate: '2026-07-14', statementBalance: '150' }, ctx)
+    await createMatch({ reconciliationId: reconciliation.id, statementLineIds: [statementLine.id], journalLineIds: [bankLine] }, ctx)
+    assert.equal((await markReconciled(reconciliation.id, ctx)).status, 'signed_off')
+    return reconciliation.id
+  })
+  await deposit('1','2026-07-15','lone-source')
+  const orphanRecon = await sourceSignOff('lone-source')
   state.user = { id: seeded.actor, orgId: org.orgId, isSuperAdmin: false, name: 'Bank operator', email: 'bank@scratch.test',
     roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: seeded.actor }
-  return { org, ...seeded }
+  return { org, ...seeded, sourceRecon, statementRecon, orphanRecon }
 }
 
 test('source-evidenced sign-off renders reconciled-from-connector with counts', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -93,10 +115,10 @@ test('source-evidenced sign-off renders reconciled-from-connector with counts', 
     const { key, params } = splitKey(loaded.headerDescription)
     assert.equal(key, 'reconcile.sourceSignedOffByDescription')
     assert.equal(params.connector, CONNECTOR_NAME)
-    assert.equal(params.date, org.date)
+    assert.equal(params.date, '2026-07-13')
     assert.equal(params.name, 'Bank operator')
     assert.equal(params.cleared, 1)
-    assert.equal(params.uncleared, 1)
+    assert.equal(params.uncleared, 0)
   } finally {
     state.user = null
     await dropScratchOrgReporting(org.orgId)
@@ -185,7 +207,7 @@ test('account balance nets a reversed entry with its posted mirror', { skip: !pr
     })
 
     const account = await withOrgContext(org.orgId, async () => loadBankingAccount(org.accounts.bank, {}))
-    assert.equal(account.glBalance, '150.0000', 'both the reversed original and its posted mirror net to zero')
+    assert.equal(account.glBalance, '151.0000', 'both the reversed original and its posted mirror net to zero')
   } finally {
     state.user = null
     await dropScratchOrgReporting(org.orgId)

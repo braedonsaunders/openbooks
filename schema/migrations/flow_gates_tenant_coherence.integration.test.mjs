@@ -21,15 +21,38 @@ const repairSql = readFileSync(
   "utf8",
 );
 
-function adminConnectionString() {
-  const explicit = process.env.OPENBOOKS_TEST_ADMIN_DB_URL;
-  if (explicit) return explicit.trim();
-  const runtime = process.env.OPENBOOKS_DB_URL;
-  if (!runtime) return "";
-  const url = new URL(runtime);
-  url.username = "openbooks";
-  url.password = process.env.PGPASSWORD || "openbooks";
-  return url.href;
+async function createMigrationCatalog() {
+  const url = process.env.OPENBOOKS_TEST_ADMIN_DB_URL?.trim();
+  assert.ok(url, "Migration conformance requires the explicit test administrator URL.");
+  const control = new pg.Client({ connectionString: url });
+  await control.connect();
+  const database = `ob_flow_gate_repair_${randomUUID().replaceAll('-', '')}`;
+  await control.query(`create database "${database}"`);
+  const scratchUrl = new URL(url);
+  scratchUrl.pathname = `/${database}`;
+  const client = new pg.Client({ connectionString: scratchUrl.href });
+  const close = async () => {
+    await client.end();
+    try { await control.query(`drop database "${database}" with (force)`); }
+    finally { await control.end(); }
+  };
+  try {
+    await client.connect();
+    // The published repair is qualified against its predecessor relations,
+    // isolated from the current application's frozen-policy admission rules.
+    await client.query(`
+      create table currencies(code text primary key,name text,minor_units integer);
+      create table orgs(id uuid primary key,name text,base_currency text,country text,settings jsonb,env_kind text);
+      create table flows(id uuid primary key,org_id uuid not null,name text,subject_kind text,graph jsonb);
+      create table flow_runs(id uuid primary key,org_id uuid not null,flow_id uuid,subject_kind text,subject_id uuid,trigger text);
+      create table flow_gates(id uuid primary key,org_id uuid not null,flow_id uuid,run_id uuid,node_id text,
+        subject_kind text,subject_id uuid,title text,group_key text);
+    `);
+    return { client, close };
+  } catch (error) {
+    await close();
+    throw error;
+  }
 }
 
 function postgresCode(error) {
@@ -119,8 +142,7 @@ async function restoreSingleColumnFks(client) {
 test("same-org flow gate can name its flow and run; cross-tenant insert and update are refused",
   { skip: !DB },
   async () => {
-    const client = new pg.Client({ connectionString: adminConnectionString() });
-    await client.connect();
+    const { client, close } = await createMigrationCatalog();
     try {
       await client.query("begin");
       await client.query("select set_config('app.bypass_rls', 'on', true)");
@@ -227,7 +249,7 @@ test("same-org flow gate can name its flow and run; cross-tenant insert and upda
       await client.query("rollback").catch(() => undefined);
       throw error;
     } finally {
-      await client.end();
+      await close();
     }
   },
 );
@@ -235,8 +257,7 @@ test("same-org flow gate can name its flow and run; cross-tenant insert and upda
 test("0214 fails closed on a dirty cross-tenant or orphaned pointer and does not rewrite those rows",
   { skip: !DB },
   async () => {
-    const client = new pg.Client({ connectionString: adminConnectionString() });
-    await client.connect();
+    const { client, close } = await createMigrationCatalog();
     try {
       await client.query("begin");
       await client.query("select set_config('app.bypass_rls', 'on', true)");
@@ -373,7 +394,7 @@ test("0214 fails closed on a dirty cross-tenant or orphaned pointer and does not
       await client.query("rollback").catch(() => undefined);
       throw error;
     } finally {
-      await client.end();
+      await close();
     }
   },
 );

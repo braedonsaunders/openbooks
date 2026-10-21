@@ -283,8 +283,8 @@ test(
         markReconciled(reconciliationId, ctx),
       ]);
       assert.deepEqual(signoffs, [
-        { journalLinesReconciled: 3 },
-        { journalLinesReconciled: 3 },
+        { status: "signed_off", journalLinesReconciled: 3 },
+        { status: "signed_off", journalLinesReconciled: 3 },
       ]);
 
       await assert.rejects(
@@ -606,7 +606,7 @@ test(
         ctx,
       );
       assert.equal((await autoMatch(reconciliation.id, ctx)).matched, 1);
-      assert.deepEqual(await markReconciled(reconciliation.id, ctx), { journalLinesReconciled: 1 });
+      assert.deepEqual(await markReconciled(reconciliation.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
 
       // A late-arriving but distinct transaction dated inside the signed
       // coverage must refuse — signed-off history is immutable and the
