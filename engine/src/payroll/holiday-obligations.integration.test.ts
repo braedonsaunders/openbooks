@@ -49,13 +49,13 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
           (error: unknown) => {
             const messages: string[] = [];
             for (let cause = error as { message?: string; cause?: unknown } | undefined; cause; cause = cause.cause as typeof cause) messages.push(cause.message ?? "");
-            assert.match(messages.join("\n"), /retained.*policy/i);
+            assert.match(messages.join("\n"), /Complete every configured accounting-event Flow gate/i);
             return true;
           });
         // A later policy edit cannot reinterpret the already submitted gate.
         await db.execute(sql`update flows set graph=jsonb_set(graph, '{nodes,1,data,gate,preventSelfApproval}', 'true'::jsonb) where org_id=${fx.orgId} and subject_kind='financial_change'`);
       } else {
-        await assert.rejects(decideGate({ gateId: gate.id, decision: "approved", userId: fx.actorId }), /self|assignee|permission|decide/i);
+        await assert.rejects(decideGate({ gateId: gate.id, decision: "approved", userId: fx.actorId }), /self|assignee|permission|decide|not an approver/i);
       }
       await decideGate({ gateId: gate.id, decision: "approved", userId: approvalMode === "solo" ? fx.actorId : actors.approver1Id });
     });

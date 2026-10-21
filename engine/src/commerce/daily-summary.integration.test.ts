@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -137,7 +139,7 @@ test("three orders post as one summary cash sale with exact aggregated totals", 
     const c = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, shipped));
     const d = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, sameDay));
 
-    const outcome = await withBypass(() => postDueDailySummariesForOrg(org.orgId, actor));
+    const outcome = await withOrgContext(org.orgId, () => postDueDailySummariesForOrg(org.orgId, actor));
     assert.equal(outcome.posted, 3);
 
     const summary = (await withOrgContext(org.orgId, () => db.execute<{
@@ -185,7 +187,7 @@ test("three orders post as one summary cash sale with exact aggregated totals", 
     assert.equal(waiting!.postingStatus, "pending");
     await db.execute(sql`update sales_channel_posting_policies set effective_to='2026-07-31'
       where org_id=${org.orgId} and channel_id=${channelId}`);
-    const refused = await withBypass(() => postDueDailySummariesForOrg(org.orgId,actor));
+    const refused = await withOrgContext(org.orgId, () => postDueDailySummariesForOrg(org.orgId,actor));
     assert.equal(refused.parked,1);
     const exception = await withBypass(() => loadChannelOrder(org.orgId,d.id));
     assert.equal(exception!.postingStatus,'exception');

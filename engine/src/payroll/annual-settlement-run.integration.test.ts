@@ -1,4 +1,5 @@
 import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
+import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -173,12 +174,8 @@ async function seedEmployee(
             ${JSON.stringify({ domicilio_comune: "H501", tempo_determinato: "false" })}::jsonb,
             ${fx.actorId}, ${fx.actorId})`);
   if (opts.eft) {
-    await db.execute(sql`
-      insert into party_bank_accounts (org_id, party_id, bank_name, country, currency,
-                                       account_last_four, approval_status, is_active,
-                                       created_by, updated_by)
-      values (${fx.orgId}, ${employeeId}, 'Test Bank', 'IT', 'EUR', '1234', 'approved', true,
-              ${fx.actorId}, ${fx.actorId})`);
+    await seedApprovedBankAccountFixture({ orgId: fx.orgId, actorId: fx.actorId, partyId: employeeId,
+      bankName: 'Test Bank', country: 'IT', currency: 'EUR', routing: {}, lastFour: '1234' });
   }
   return employeeId;
 }

@@ -16,7 +16,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, type ScratchOrg } from "../testing/fixtures.ts";
 import type { LedgerContext, Role } from "./types.ts";
 
 import { ROLES } from "./role-bindings.ts";
@@ -153,10 +153,7 @@ export async function createConformanceOrg(): Promise<ConformanceOrg> {
 
   const actorId = await createScratchUser(scratch.orgId, "Conformance Runner", "accountant");
 
-  // The lease service now enforces the same authority as its native API.
-  // Give the measured actor that explicit capability, not an implicit bypass.
-  await db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect)
-    values (${scratch.orgId},${actorId},'assets.manage','grant')`);
+  await grantScratchPermissions(scratch.orgId, actorId, ["assets.manage", "funds.manage", "close.run"]);
   const roleOf = new Map<string, Role>();
   for (const role of ROLES) {
     const account = roles[role];

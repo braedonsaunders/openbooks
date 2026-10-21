@@ -1,9 +1,12 @@
+import { installEngineSeams } from "../composition/install.ts";
+import { routeSubjectSubmission } from "../flows/submission-policy.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool, withOrgContext } from "../platform/db.ts";
+import { db, pool, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { recordProjectFinancialAdjustment } from "./financial-adjustments.ts";
 import {
   findDuplicateProjects,
@@ -888,12 +891,23 @@ test("project merge refuses pay-application collisions and moves revenue contrac
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
+    const approveApplication = async (id: string) => withOrgTransaction(org.orgId, async () => {
+      const receipt = await routeSubjectSubmission({ orgId: org.orgId, actorId: actor,
+        subjectKind: 'customer_pay_application', subjectId: id, source: 'api' });
+      assert.equal(receipt.policy.kind, 'ungated');
+      assert.equal((await db.execute(sql`update pay_applications set status='approved',approved_by=${actor},
+        approved_at=now(),updated_by=${actor} where org_id=${org.orgId} and id=${id} returning id`)).rows.length, 1);
+    });
     const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PA-A", "Payapp Alpha");
     const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PA-B", "Payapp Beta");
     await db.execute(sql`
       insert into pay_applications (org_id, project_id, application_number, period_end, status)
-      values (${org.orgId}, ${a}, 7, '2026-08-31', 'approved'),
-             (${org.orgId}, ${b}, 7, '2026-08-31', 'posted')`);
+      values (${org.orgId}, ${a}, 7, '2026-08-31', 'draft'),
+             (${org.orgId}, ${b}, 7, '2026-08-31', 'draft')`);
+    const closed = (await db.execute<{ id: string }>(sql`select id from pay_applications
+      where org_id=${org.orgId} and project_id=${b}`)).rows[0]!;
+    await approveApplication(closed.id);
+    await db.execute(sql`update pay_applications set status='posted' where org_id=${org.orgId} and id=${closed.id}`);
     await assert.rejects(
       mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
       /pay application number 7 exists on both projects/,
@@ -905,12 +919,14 @@ test("project merge refuses pay-application collisions and moves revenue contrac
        where org_id = ${org.orgId} and project_id = ${b}`);
     await db.execute(sql`
       insert into pay_applications (org_id, project_id, application_number, period_end, status)
-      values (${org.orgId}, ${b}, 9, '2026-08-31', 'submitted')`);
+      values (${org.orgId}, ${b}, 9, '2026-08-31', 'draft')`);
     await assert.rejects(
       mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor }),
       /both projects hold an open pay application/,
     );
     // Closed applications and revenue contracts follow the merge.
+    const applications = (await db.execute<{ id: string }>(sql`select id from pay_applications where org_id=${org.orgId} and status='draft'`)).rows;
+    for (const application of applications) await approveApplication(application.id);
     await db.execute(sql`update pay_applications set status = 'posted' where org_id = ${org.orgId}`);
     await db.execute(sql`
       insert into revenue_contracts (org_id, project_id, contract_number, customer_id)

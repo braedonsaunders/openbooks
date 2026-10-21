@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -17,14 +19,16 @@ import { assertWithholdingDepositCurrent, assertWithholdingDepositEdit, createWi
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 
 async function fixture(org: ScratchOrg) {
-  const actor = await createScratchUser(org.orgId, "Withholding accountant", "admin");
-  const role = randomUUID(), authority = randomUUID(), enrollment = randomUUID();
+  const actor = await createScratchUser(org.orgId, "Withholding accountant", "withholding_accountant");
+  const role = (await db.execute<{ role_id: string }>(sql`select role_id from role_assignments
+    where org_id=${org.orgId} and user_id=${actor}`)).rows[0]!.role_id;
+  const authority = randomUUID(), enrollment = randomUUID();
   // The shared ISO registry may already contain USD from another scratch organization.
   await db.execute(sql`insert into currencies(code,name,minor_units) values('USD','US Dollar',2) on conflict(code) do nothing`);
   await db.execute(sql`update orgs set base_currency='USD',country='US',settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"contractorWithholding":true,"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
   await db.execute(sql`update subsidiaries set country='US',base_currency='USD' where org_id=${org.orgId} and id=${org.subsidiaryId}`);
-  await db.execute(sql`insert into app_roles(id,org_id,key,name,permissions) values(${role},${org.orgId},'withholding-accountant','Withholding accountant','["ap.pay","documents.manage","admin.setup.manage"]'::jsonb)`);
-  await db.execute(sql`insert into role_assignments(org_id,user_id,role_id) values(${org.orgId},${actor},${role})`);
+  await db.execute(sql`update app_roles set permissions='["ap.pay","ap.create","documents.manage","admin.setup.manage"]'::jsonb
+    where org_id=${org.orgId} and id=${role}`);
   await db.execute(sql`insert into parties(id,org_id,kind,display_name) values(${authority},${org.orgId},'company','Internal Revenue Service')`);
   await db.execute(sql`insert into vendor_roles(org_id,party_id,backup_withholding) values(${org.orgId},${org.vendorId},true),(${org.orgId},${authority},false)`);
   const policy = {

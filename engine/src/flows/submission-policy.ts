@@ -11,7 +11,7 @@ import {
   FlowDispatchError,
 } from "./dispatch-result.ts";
 import { getFlowAdapter } from "./registry.ts";
-import { runRecordFlows, type RecordFlowsResult } from "./run.ts";
+import { parseFlowGraph, runRecordFlows, type RecordFlowsResult } from "./run.ts";
 
 import type { FlowSubmissionPolicy } from "../platform/flow-submission-policy.ts";
 export type SubmissionPolicy = FlowSubmissionPolicy;
@@ -97,7 +97,11 @@ export async function routeSubjectSubmission(input: {
     select id,graph from flows where org_id=${input.orgId}
       and subject_kind=${input.subjectKind} and enabled order by id
   `)
-  ).rows;
+  ).rows.map(flow => {
+    const graph = parseFlowGraph(flow.id, flow.graph);
+    if (!graph) throw new FlowDispatchError(`Flow ${flow.id} has an invalid graph. Open Flows to correct it before submitting this record.`);
+    return { id: flow.id, graph };
+  });
   const dispatch = await runRecordFlows(
     input.event ?? { kind: "on_submit", source: input.source ?? "ui" },
     input.subjectKind,

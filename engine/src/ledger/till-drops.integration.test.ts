@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -18,7 +20,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 async function configure(org: ScratchOrg, tillId: string): Promise<void> {
   await withBypassContext(() => db.execute(sql`
-    update orgs set settings = settings || jsonb_build_object('cashSales',
+    update orgs set settings = jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"cashSales":true}'::jsonb) || jsonb_build_object('cashSales',
       coalesce(settings->'cashSales', '{}'::jsonb) ||
       jsonb_build_object('depositAccountIds', jsonb_build_array(${org.accounts.bank}::text),
                          'defaultCashAccountId', ${tillId}::text))

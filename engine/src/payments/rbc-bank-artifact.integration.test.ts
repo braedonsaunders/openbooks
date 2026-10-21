@@ -1,3 +1,4 @@
+import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
@@ -19,7 +20,7 @@ const ORIGINATOR = { clientNumber: "0123456789", originatorLongName: "Boreal-Rid
 
 async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "AP treasury operator", "ap_treasury"));
-  await withBypassContext(() => grantScratchPermissions(org.orgId, actorId, ["ap.pay", "admin.setup.manage"]));
+  await withBypassContext(() => grantScratchPermissions(org.orgId, actorId, ["ap.pay", "admin.setup.manage", "parties.manage"]));
   await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
   const formatId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
     select id from payment_formats where org_id=${org.orgId} and code='RBC-STD152'`))).rows[0]!.id;
@@ -36,12 +37,10 @@ async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
     await db.execute(sql`update parties set display_name='O’Neil-Smith Supply, Ltd.' where org_id=${org.orgId} and id=${org.vendorId}`);
     await db.execute(sql`insert into vendor_roles (org_id,party_id,ap_account_id,is_active,created_by)
       values (${org.orgId},${org.vendorId},${org.accounts.ap},true,${actorId}) on conflict (party_id) do update set is_active=true`);
-    await db.execute(sql`insert into party_bank_accounts (id,org_id,party_id,bank_name,country,currency,routing,
-      account_number_encrypted,account_last_four,approval_status,is_active,approved_at,approved_by,created_by,updated_by)
-      values (${bankId},${org.orgId},${org.vendorId},'Canadian vendor bank','CA','CAD',
-        '{"institution":"003","transit":"00212"}'::jsonb,
-        ${encryptAccountNumber("000123456789",{orgId:org.orgId})},'6789','approved',true,
-        ${org.date},${actorId},${actorId},${actorId})`);
+    await seedApprovedBankAccountFixture({ id: bankId, orgId: org.orgId, actorId, partyId: org.vendorId,
+      bankName: 'Canadian vendor bank', country: 'CA', currency: 'CAD',
+      routing: { institution: '003', transit: '00212' },
+      sealedAccount: encryptAccountNumber('000123456789', { orgId: org.orgId }), lastFour: '6789' });
     await db.execute(sql`insert into documents (id,org_id,kind,status,document_number,subsidiary_id,party_id,
       document_date,currency,fx_rate,subtotal,tax_total,total,created_by)
       values (${billId},${org.orgId},'vendor_bill','draft','BILL-00427',${org.subsidiaryId},${org.vendorId},

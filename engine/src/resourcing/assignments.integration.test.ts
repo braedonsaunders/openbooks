@@ -1,3 +1,6 @@
+import { installEngineSeams } from "../composition/install.ts";
+import { submitResourceRequest } from "./requests.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -26,7 +29,7 @@ async function fixture(run: (f: Fixture) => Promise<void>): Promise<void> {
       const actorId = await createScratchUser(org.orgId, "Resourcing operator", "admin");
       const employeePartyId = randomUUID();
       const projectId = randomUUID();
-      affected(await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true}'::jsonb) where id = ${org.orgId}`), "feature setup");
+      affected(await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true,"resourceRequests":true}'::jsonb) where id = ${org.orgId}`), "feature setup");
       affected(await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${employeePartyId}, ${org.orgId}, 'person', 'Consultant', ${org.subsidiaryId}, true, '{}'::jsonb)`), "employee setup");
       affected(await db.execute(sql`insert into employee_roles (org_id, party_id, job_title, hired_on, is_active) values (${org.orgId}, ${employeePartyId}, 'Consultant', '2026-01-01', true)`), "role setup");
       affected(await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, ${`RS-${projectId.slice(0, 6)}`}, 'Assignment project', ${org.customerId}, 'active', true, '{}'::jsonb)`), "project setup");
@@ -66,8 +69,10 @@ test("booking-key upserts and every source retain their row and planning values"
   const taskId = randomUUID(), requestId = randomUUID();
   await withBypassContext(async () => {
     affected(await db.execute(sql`insert into project_tasks (id, org_id, project_id, name, created_by, updated_by) values (${taskId}, ${f.org.orgId}, ${f.projectId}, 'Consulting', ${f.actorId}, ${f.actorId})`), "task setup");
-    affected(await db.execute(sql`insert into res_requests (id, org_id, project_id, employee_party_id, first_week, last_week, hours_per_week, status, created_by, updated_by) values (${requestId}, ${f.org.orgId}, ${f.projectId}, ${f.employeePartyId}, '2026-10-18', '2026-10-18', '8.0000', 'approved', ${f.actorId}, ${f.actorId})`), "request setup");
+    affected(await db.execute(sql`insert into res_requests (id, org_id, project_id, employee_party_id, first_week, last_week, hours_per_week, status, created_by, updated_by) values (${requestId}, ${f.org.orgId}, ${f.projectId}, ${f.employeePartyId}, '2026-10-18', '2026-10-18', '8.0000', 'draft', ${f.actorId}, ${f.actorId})`), "request setup");
   });
+  const approved = await submitResourceRequest({ ...context(f), requestId });
+  assert.equal(approved.status, 'approved');
   const first = await upsertAssignment(input(f, { plannedHours: "50.0000", booking: "soft", billItemId: f.org.items.service, projectTaskId: taskId }));
   const updated = await upsertAssignment(input(f, { plannedHours: "50.0000", booking: "hard", isBillable: false, billItemId: f.org.items.service, projectTaskId: taskId }));
   assert.equal(updated.assignment.id, first.assignment.id);
@@ -118,7 +123,7 @@ test("invalid hours, week, links, scope, feature, title, and capacity refuse by 
   await assert.rejects(upsertAssignment({ ...base, allowedSubsidiaryIds: new Set([randomUUID()]) }), ScopeNotFoundError);
   affected(await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":false}'::jsonb) where id = ${f.org.orgId}`)), "feature update");
   await assert.rejects(upsertAssignment(base), refused("resourcing_feature_disabled", "turn on Resourcing in Company Settings → Features"));
-  affected(await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true}'::jsonb) where id = ${f.org.orgId}`)), "feature restore");
+  affected(await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true,"resourceRequests":true}'::jsonb) where id = ${f.org.orgId}`)), "feature restore");
   await withBypassContext(async () => affected(await db.execute(sql`insert into work_schedules (org_id, employee_party_id, pattern, effective_from, is_active, created_by, updated_by) values (${f.org.orgId}, ${f.employeePartyId}, 'varies', '2026-01-01', true, ${f.actorId}, ${f.actorId})`), "schedule setup"));
   await assert.rejects(upsertAssignment({ ...base, allowedSubsidiaryIds: null }), refused("capacity_unknown", "give this person a cycle schedule in Setup → Payroll → Work schedules"));
 }));

@@ -11,6 +11,7 @@ import { calculatedRun, seedAdoption } from "./filing-test-fixtures.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { commitPayRun } from "./run-commit.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { reconcilePayrollFilingAccounts } from "./filing-reconciliation.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -44,6 +45,9 @@ async function seedTwoEntities(): Promise<TwoEntityFixture> {
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     values (${entityB}, ${fx.orgId}, ${fx.subsidiaryId}, 'Entity B', 'CAD', 'CA')`);
+  await upsertPayrollEmployerFact({ orgId: fx.orgId, actorId: fx.actorId, subsidiaryId: entityB,
+    country: 'CA', factKey: 'eht_exemption_share_on', effectiveFrom: '2026-01-01', value: '0',
+    changeReason: 'The Ontario exemption is allocated to Entity A; Entity B retains zero allocation' });
   const scheduleB = randomUUID();
   await seedPayrollSchedule(fx.orgId, scheduleB, fx.actorId, {
     name: 'B schedule', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',

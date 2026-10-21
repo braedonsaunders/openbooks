@@ -1,3 +1,4 @@
+import { executeIdempotentInventoryAction } from "./action-idempotency.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -7,6 +8,7 @@ import { toUnits } from "../money/money.ts";
 import { issueInventory, receiveInventory } from "./movements.ts";
 import {
   createScratchOrg,
+  seedFlowActors,
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -161,8 +163,16 @@ for (const method of ["fifo", "movingAvg"] as const) {
         const input = { itemId,stockLocationId:org.stockLocationId,quantity:example.quantity,
           totalValue:example.value,subsidiaryId:org.subsidiaryId,offsetAccountId:org.accounts.clearing,date:org.date,
           idempotencyKey:randomUUID() };
-        const received = await receiveInventory(org.orgId, null, input);
-        assert.deepEqual(await receiveInventory(org.orgId, null, input), received);
+        const actorId = (await seedFlowActors(org.orgId)).adminId;
+        const receive = () => executeIdempotentInventoryAction(org.orgId, actorId, {
+          operation: 'inventory.receive', idempotencyKey: input.idempotencyKey, request: input,
+          execute: () => receiveInventory(org.orgId, actorId, input),
+        });
+        const first = await receive();
+        assert.equal(first.replayed, false);
+        const replay = await receive();
+        assert.equal(replay.replayed, true);
+        assert.deepEqual(replay.value, first.value);
         const layers = (await db.execute<{q:string;v:string}>(sql`
           select remaining_quantity::text q,unit_cost::text v from cost_layers
           where org_id=${org.orgId} and item_id=${itemId}`)).rows;

@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -155,7 +157,7 @@ test("an unpaid cancellation voids its sales order", { skip: !DB }, async () => 
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const { channelId } = await setup(org, actor);
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, unpaidOrder("3001")));
-    const sale = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const sale = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     if (sale.status !== "posted") {
       const parked = (await withOrgContext(org.orgId, () => db.execute<{ code: string | null; reason: string | null }>(sql`
         select exception_code as code, exception_reason as reason from channel_orders
@@ -187,7 +189,7 @@ test("a paid cancellation waits for its refund and never double-posts", { skip: 
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const { channelId } = await setup(org, actor);
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("3002")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     const cancel = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "3002", {
       kind: "cancellation",
       externalId: "cancel:3002",
@@ -201,7 +203,7 @@ test("a paid cancellation waits for its refund and never double-posts", { skip: 
       refund: fullRefund("3002", "r-3002"),
       occurredAt: "2026-07-16T10:00:00Z",
     }));
-    assert.equal((await withBypass(() => postChannelRefund(org.orgId, actor, refund.eventId))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, refund.eventId))).status, "posted");
     // The refund retires the cancellation: exactly one cash refund exists.
     assert.equal((await withBypass(() => postChannelCancellation(org.orgId, actor, cancel.eventId))).status, "ignored");
     const refunds = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
@@ -229,7 +231,7 @@ test("a cancelled pending order never posts", { skip: !DB }, async () => {
     const order = (await withOrgContext(org.orgId, () => db.execute<{ posting_status: string }>(sql`
       select posting_status from channel_orders where id = ${stored.id} and org_id = ${org.orgId}`))).rows[0]!;
     assert.equal(order.posting_status, "excluded");
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "excluded");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "excluded");
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -3,6 +3,7 @@ import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
   seedPayrollProfile, seedPayrollWage, createScratchOrg, seedFlowActors, seedWorkerEmployment, grantScratchPermissions,
 } from "../testing/fixtures.ts";
+import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -753,14 +754,9 @@ async function employee(fx: Fixture, name: string, opts: {
 
   if (opts.bank) {
     const canadian = "institution" in opts.bank;
-    await db.execute(sql`
-      insert into party_bank_accounts (org_id, party_id, bank_name, country, currency, routing,
-                                       account_number_encrypted, account_last_four, approval_status,
-                                       is_active, created_by, updated_by)
-      values (${fx.orgId}, ${id}, 'Test Bank', ${canadian ? "CA" : "US"},
-              ${canadian ? "CAD" : "USD"}, ${JSON.stringify(opts.bank)}::jsonb,
-              ${encryptAccountNumber("000123456789", { orgId: fx.orgId })}, '6789', 'approved', true,
-              ${fx.actorId}, ${fx.actorId})`);
+    await seedApprovedBankAccountFixture({ orgId: fx.orgId, actorId: fx.actorId, partyId: id,
+      bankName: 'Test Bank', country: canadian ? 'CA' : 'US', currency: canadian ? 'CAD' : 'USD',
+      routing: opts.bank, sealedAccount: encryptAccountNumber('000123456789', { orgId: fx.orgId }), lastFour: '6789' });
   }
   return id;
 }

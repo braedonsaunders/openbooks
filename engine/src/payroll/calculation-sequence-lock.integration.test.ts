@@ -172,6 +172,7 @@ describe("calculation-holds-no-sequence-lock", { skip: !DB }, () => {
   test("locked number_sequences rows do not block the calculation", async () => {
     const fx = await calculableOrg();
     const holder = await holdOpen();
+    await holder.query("select set_config('app.current_org', $1, true)", [fx.orgId]);
     try {
       // The locks concurrent documents' allocations would take — the run's
       // own series row (allocated in the short creation step) and a vendor
@@ -201,6 +202,7 @@ describe("calculation-holds-no-sequence-lock", { skip: !DB }, () => {
   test("the calculation's own row lock does not block another document's numbering", async () => {
     const fx = await calculableOrg();
     const holder = await holdOpen();
+    await holder.query("select set_config('app.current_org', $1, true)", [fx.orgId]);
     try {
       // The calculation's claim on its run row, held open while another
       // document allocates — the report's blocked party proceeds.

@@ -1,3 +1,6 @@
+import { installEngineSeams } from "../composition/install.ts";
+import { routeSubjectSubmission } from "./submission-policy.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -9,6 +12,8 @@ import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
+  seedApprovalFlow,
+  grantScratchPermissions,
 } from "../testing/fixtures.ts";
 
 /**
@@ -54,27 +59,12 @@ async function seedTimesheetGate(
       (${headerId}, ${orgId}, ${employeeId}, '2026-07-12',
        'submitted', ${actorId}, ${actorId})
   `);
-  const flowId = randomUUID();
-  const runId = randomUUID();
-  const gateId = randomUUID();
-  await db.execute(sql`
-    insert into flows (id, org_id, name, subject_kind, enabled, graph)
-    values (${flowId}, ${orgId}, 'Timesheet approvals', 'timesheet_week', true, '{}'::jsonb)
-  `);
-  await db.execute(sql`
-    insert into flow_runs
-      (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
-    values (${runId}, ${orgId}, ${flowId}, 'timesheet_week', ${headerId}, 'on_submit', 'waiting')
-  `);
-  await db.execute(sql`
-    insert into flow_gates
-      (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id,
-       title, assignee_user_id, group_key, quorum, status)
-    values (${gateId}, ${orgId}, ${flowId}, ${runId}, 'gate-1',
-            'timesheet_week', ${headerId}, 'Manager approval',
-            ${assigneeId}, 'gate-1', 'any', 'pending')
-  `);
-  return gateId;
+  await seedApprovalFlow(orgId, { subjectKind: "timesheet_week", mode: "any", assignees: [{ type: "user", userId: assigneeId }] });
+  await routeSubjectSubmission({ orgId, actorId, subjectKind: "timesheet_week", subjectId: headerId });
+  const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates
+    where org_id=${orgId} and subject_kind='timesheet_week' and subject_id=${headerId} and status='pending'`)).rows[0];
+  assert.ok(gate);
+  return gate.id;
 }
 
 async function seedWorkOrderGates(
@@ -86,51 +76,36 @@ async function seedWorkOrderGates(
   subsidiaryId: string,
   otherSubsidiaryId: string,
 ): Promise<{ inScopeGateId: string; outOfScopeGateId: string }> {
-  const flowId = randomUUID();
   const inScopeOrderId = randomUUID();
   const outOfScopeOrderId = randomUUID();
-  const inScopeRunId = randomUUID();
-  const outOfScopeRunId = randomUUID();
-  const inScopeGateId = randomUUID();
-  const inScopeSiblingGateId = randomUUID();
-  const outOfScopeGateId = randomUUID();
-
   await db.execute(sql`
     insert into mfg_work_orders
       (id, org_id, number, produced_item_id, quantity_ordered, unit, subsidiary_id, created_by)
     values
       (${inScopeOrderId}, ${orgId}, 'WO-WORKLIST-A', ${itemId}, 1, 'ea', ${subsidiaryId}, ${makerId}),
-      (${outOfScopeOrderId}, ${orgId}, 'WO-WORKLIST-B', ${itemId}, 1, 'ea', ${otherSubsidiaryId}, ${makerId})
-  `);
-  await db.execute(sql`
-    insert into flows (id, org_id, name, subject_kind, enabled, graph)
-    values (${flowId}, ${orgId}, 'Work-order approvals', 'work_order', true, '{}'::jsonb)
-  `);
-  await db.execute(sql`
-    insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
-    values
-      (${inScopeRunId}, ${orgId}, ${flowId}, 'work_order', ${inScopeOrderId}, 'on_submit', 'waiting'),
-      (${outOfScopeRunId}, ${orgId}, ${flowId}, 'work_order', ${outOfScopeOrderId}, 'on_submit', 'waiting')
-  `);
-  await db.execute(sql`
-    insert into flow_gates
-      (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title,
-       assignee_user_id, group_key, quorum, status)
-    values
-      (${inScopeGateId}, ${orgId}, ${flowId}, ${inScopeRunId}, 'gate-a', 'work_order', ${inScopeOrderId},
-       'Work-order approval', ${firstApproverId}, 'gate-a', 'all', 'pending'),
-      (${inScopeSiblingGateId}, ${orgId}, ${flowId}, ${inScopeRunId}, 'gate-a', 'work_order', ${inScopeOrderId},
-       'Work-order approval', ${secondApproverId}, 'gate-a', 'all', 'pending'),
-      (${outOfScopeGateId}, ${orgId}, ${flowId}, ${outOfScopeRunId}, 'gate-b', 'work_order', ${outOfScopeOrderId},
-       'Work-order approval', ${firstApproverId}, 'gate-b', 'any', 'pending')
-  `);
-  return { inScopeGateId, outOfScopeGateId };
+      (${outOfScopeOrderId}, ${orgId}, 'WO-WORKLIST-B', ${itemId}, 1, 'ea', ${otherSubsidiaryId}, ${makerId})`);
+  await seedApprovalFlow(orgId, { subjectKind: "work_order", mode: "all", assignees: [
+    { type: "user", userId: firstApproverId }, { type: "user", userId: secondApproverId },
+  ] });
+  for (const subjectId of [inScopeOrderId, outOfScopeOrderId])
+    await routeSubjectSubmission({ orgId, actorId: makerId, subjectKind: "work_order", subjectId });
+  const gates = (await db.execute<{ id: string; subject_id: string }>(sql`select id,subject_id from flow_gates
+    where org_id=${orgId} and subject_kind='work_order' and assignee_user_id=${firstApproverId} and status='pending'`)).rows;
+  const inScope = gates.find(gate => gate.subject_id === inScopeOrderId);
+  const outOfScope = gates.find(gate => gate.subject_id === outOfScopeOrderId);
+  assert.ok(inScope); assert.ok(outOfScope);
+  return { inScopeGateId: inScope.id, outOfScopeGateId: outOfScope.id };
 }
 
 test("a restricted worklist hides gates from other subsidiaries", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+      coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"timeTracking":true}'::jsonb) where id=${org.orgId}`);
+    await grantScratchPermissions(org.orgId, actors.submitterId, ["manufacturing.manage"]);
+    for (const userId of [actors.approver1Id, actors.approver2Id])
+      await grantScratchPermissions(org.orgId, userId, ["manufacturing.manage", "time.approve"]);
     const otherSubsidiary = await withOrg(org.orgId, () =>
       seedSecondSubsidiary(org.orgId, org.subsidiaryId),
     );
@@ -199,11 +174,6 @@ test("a restricted worklist hides gates from other subsidiaries", { skip: !DB },
       "an in-scope caller still sees the gate",
     );
   } finally {
-    await db.execute(sql`delete from flow_gates where org_id = ${org.orgId}`);
-    await db.execute(sql`delete from flow_runs where org_id = ${org.orgId}`);
-    await db.execute(sql`delete from flows where org_id = ${org.orgId}`);
-    await db.execute(sql`delete from mfg_work_orders where org_id = ${org.orgId}`);
-    await db.execute(sql`delete from timesheet_weeks where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);
   }
 });

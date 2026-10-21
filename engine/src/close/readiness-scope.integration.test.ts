@@ -279,25 +279,22 @@ test('scoped bank readiness respects bank ownership and conservatively includes 
   } finally {await dropScratchOrg(org.orgId);}
 });
 
-test('standard entity close does not certify group consolidation and old tasks are explicitly waived once', {skip:!enabled}, async () => {
+test('an existing group close cannot be resumed as an entity close or silently waive its tasks', {skip:!enabled}, async () => {
   const {org,actor,other}=await setup();
   try {
     await db.execute(sql`update accounts set eliminate=true where id=${org.accounts.cogs}`);
     await journal(org,actor,org.subsidiaryId,'10');
     const runId=await run(org,actor);
     assert.equal((await counts(org.orgId,runId))['intercompany-residual'],1);
-    await db.execute(sql`update close_runs set scope=${JSON.stringify({subsidiaryIds:[other]})}::jsonb where id=${runId}`);
-    assert.equal((await counts(org.orgId,runId))['intercompany-residual']??0,0);
-    const tasks=(await db.execute<{status:string;reason:string}>(sql`select status,result->>'reason' as reason from close_run_tasks
-      where run_id=${runId} and key in ('intercompany-balanced','consolidation')`)).rows;
-    assert.equal(tasks.length,2);
-    for (const task of tasks) assert.deepEqual(task,{status:'waived',reason:'group-consolidation-not-applicable-to-entity-close'});
-    await counts(org.orgId,runId);
-    const events=(await db.execute<{payload:{before:Record<string,unknown>[]}}>(sql`select payload from close_events
-      where run_id=${runId} and event_type='tasks.scope_not_applicable'`)).rows;
-    assert.equal(events.length,1);
-    assert.equal(events[0]!.payload.before.length,2);
-    assert.ok('completed_at' in events[0]!.payload.before[0]!);
+    const before=(await db.execute(sql`select * from close_run_tasks
+      where org_id=${org.orgId} and run_id=${runId} and key in ('intercompany-balanced','consolidation') order by id`)).rows;
+    assert.equal(before.length,2);
+    await assert.rejects(run(org,actor,[other]), /different subsidiary scope/);
+    assert.deepEqual((await db.execute(sql`select * from close_run_tasks
+      where org_id=${org.orgId} and run_id=${runId} and key in ('intercompany-balanced','consolidation') order by id`)).rows,before);
+    assert.equal((await counts(org.orgId,runId))['intercompany-residual'],1);
+    assert.equal((await db.execute(sql`select id from close_run_tasks
+      where org_id=${org.orgId} and run_id=${runId} and status='waived'`)).rows.length,0);
   } finally {await dropScratchOrg(org.orgId);}
 });
 

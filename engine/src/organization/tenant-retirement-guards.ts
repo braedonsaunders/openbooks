@@ -1205,11 +1205,10 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     name: "je_guard",
-    source: "0440_connector_replay_authorization_guard.sql",
-    sha256: "b04c5bd00429a773ddd89092376fd0be32740dcb545515c3848b70edd73e6778",
-    newSha256:
-      "a2ab4792639530e9886f32cb76b77734bb1bc3f55e512c2995ce25a47d0bc853",
-    patch: true,
+    source: "0791_connector_replay_module_authority.sql",
+    sha256: "81264b8d4c0b65a49d18fcda3fc0c4c97a3964b5d12cabed457d4c01b0485190",
+    newSha256: "81264b8d4c0b65a49d18fcda3fc0c4c97a3964b5d12cabed457d4c01b0485190",
+    patch: false,
   },
   {
     name: "jl_guard",

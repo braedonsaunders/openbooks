@@ -156,7 +156,7 @@ test("the tenant policy excludes the equity requester, and rejection keeps its r
     );
     await assert.rejects(
       releaseEquityActionFlowApproval({ subjectId: held.requestId!, outcome: "rejected", comment: " ", ctx: { orgId: w.org.orgId, userId: w.approverId } }),
-      refusal("equity_reason_required"),
+      refusal("equity_action_routing_failed"),
     );
     await decideGate({ gateId: approverGate.id, decision: "rejected", userId: w.approverId, comment: "The board did not approve the buyback" });
     const rejected = await request(w.org.orgId, held.requestId!);

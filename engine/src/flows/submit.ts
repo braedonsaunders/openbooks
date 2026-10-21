@@ -61,6 +61,12 @@ export class SubmitError extends Error {
   readonly name = "SubmitError";
 }
 
+export interface DocumentSubmissionOptions {
+  source?: FlowEventSource;
+  /** The native till command validates its source, destination, count and entity before submission. */
+  purpose?: "cash_drop";
+}
+
 export interface SubmitResult {
   /** A flow produced approval gates; the document is now `pending_approval`. */
   gated: boolean;
@@ -83,7 +89,7 @@ export async function submitForApproval(
   _targetKind: string,
   targetId: string,
   actorId: string | null,
-  options: { source?: FlowEventSource } = {},
+  options: DocumentSubmissionOptions = {},
 ): Promise<SubmitResult> {
   // Resolve the tenant before opening the transaction. The transaction then
   // locks the document row and keeps that lock through flow planning, gate
@@ -104,7 +110,7 @@ async function submitForApprovalLocked(
   targetId: string,
   actorId: string | null | undefined,
   orgId: string,
-  options: { source?: FlowEventSource },
+  options: DocumentSubmissionOptions,
 ): Promise<SubmitResult> {
   const candidate = (
     await db
@@ -131,13 +137,21 @@ async function submitForApprovalLocked(
     throw new SubmitError(`document is ${doc.status}, not draft`);
   const submitter = actorId ?? null;
   if (submitter === null) {
+    if (options.purpose === "cash_drop") throw new SubmitError("A named till operator must record the cash drop.");
     if (!options.source) throw new SubmitError("A named authorized operator must submit this document.");
     await assertSystemSubmissionSource({ orgId, subjectKind:doc.kind, subjectId:doc.id, source:options.source });
   }
   if (submitter !== null) {
     const authority = documentKindPermissions(doc.kind);
     if (!authority) throw new ScopeNotFoundError();
-    await lockActorCommandAuthority(db, orgId, submitter, doc.subsidiaryId, authority.edit);
+    if (options.purpose === "cash_drop") {
+      const custom = doc.custom as Record<string, unknown> | null;
+      if (doc.kind !== "transfer" || (!custom?.cashSaleDeposit && !custom?.tillDrop))
+        throw new SubmitError("Record a bounded till drop from Cash Sales before submitting it.");
+      await lockActorCommandAuthority(db, orgId, submitter, doc.subsidiaryId, "cash_sales.deposit");
+    } else {
+      await lockActorCommandAuthority(db, orgId, submitter, doc.subsidiaryId, authority.edit);
+    }
   }
   const consolidationRefusal = await consolidationSourceRefusal(
     db,
@@ -361,7 +375,7 @@ export async function submitAndReleaseIfUngated(
   targetId: string,
   actorId: string | null,
   /** Provenance set by the server command, never taken from a request body. */
-  options: { source?: FlowEventSource } = {},
+  options: DocumentSubmissionOptions = {},
 ): Promise<SubmissionReleaseResult> {
   const [candidate] = await db
     .select({ orgId: schema.documents.orgId })

@@ -78,7 +78,7 @@ test('submitPayApplication still submits with unrestricted scope', { skip: !DB }
     ], null)
     assert.ok(Number(computed.grossThisPeriod) > 0)
     const status = (await db.execute<{ status: string }>(sql`select status from pay_applications where id=${app.id}`)).rows[0]!.status
-    assert.equal(status, 'submitted')
+    assert.equal(status, 'approved')
   } finally {
     await dropScratchOrg(org.orgId)
   }

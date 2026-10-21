@@ -1,3 +1,7 @@
+import { installEngineSeams } from "../composition/install.ts";
+import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { decideGate } from "../flows/gates.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -11,8 +15,11 @@ import {
   createScratchUser,
   dropScratchOrg,
   seedPostingAccount,
+  seedApprovalFlow,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
+
+installEngineSeams();
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -22,7 +29,7 @@ const control = (org: ScratchOrg) => ({
 
 async function configureDeposits(orgId: string, bankIds: string[]): Promise<void> {
   await withBypassContext(() => db.execute(sql`
-    update orgs set settings = settings || jsonb_build_object('cashSales',
+    update orgs set settings = jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"cashSales":true}'::jsonb) || jsonb_build_object('cashSales',
       coalesce(settings->'cashSales', '{}'::jsonb) ||
       jsonb_build_object('depositAccountIds',
         (select coalesce(jsonb_agg(value), '[]'::jsonb) from jsonb_array_elements_text(${JSON.stringify(bankIds)}::jsonb) as value)))
@@ -94,6 +101,8 @@ async function fixture(cashTendered: string, secondTillTendered?: string): Promi
 test("a till drop posts a transfer from till cash to the bank", { skip: !DB }, async () => {
   const { org, actorId, saleId, saleNumber, tillId } = await fixture("100.0000");
   try {
+    assert.equal(await withOrg(org.orgId, () => actorHasPermission(db, org.orgId, actorId, "cash_sales.deposit")), true);
+    assert.equal(await withOrg(org.orgId, () => actorHasPermission(db, org.orgId, actorId, "gl.post")), false);
     const drop = await recordCashDeposit(
       org.orgId,
       actorId,
@@ -298,5 +307,51 @@ test("drops refuse an unposted sale, a missing slip and an outside bank", { skip
     );
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+
+test("till deposits enforce the operator's native permission and the Cash Sales feature before writing", { skip: !DB }, async () => {
+  const { org, actorId, saleId } = await fixture("100.0000");
+  try {
+    const outsider = await createScratchUser(org.orgId, "Unassigned operator", "unassigned_cash_operator");
+    const input = { saleId, amount: "60.0000", date: org.date, bankAccountId: org.accounts.bank, slipNumber: "SLIP-AUTHORITY" };
+    await assert.rejects(recordCashDeposit(org.orgId, outsider, input, { key: randomUUID() }), ScopeNotFoundError);
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,cashSales}','false'::jsonb) where id=${org.orgId}`);
+    await assert.rejects(recordCashDeposit(org.orgId, actorId, input, { key: randomUUID() }),
+      (error: unknown) => error instanceof CashDepositError && error.status === 404);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from documents
+      where org_id=${org.orgId} and kind='transfer'`)).rows[0]!.count, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a till deposit waits for every tenant-configured Flow and posts once after release", { skip: !DB }, async () => {
+  const { org, actorId, saleId } = await fixture("100.0000");
+  try {
+    const approvers = await Promise.all(["First bookkeeper", "Second bookkeeper"].map(name => createScratchUser(org.orgId, name, "accountant")));
+    for (const userId of approvers) await seedApprovalFlow(org.orgId, {
+      subjectKind: "transfer", mode: "all", assignees: [{ type: "user", userId }],
+    });
+    const input = { saleId, amount: "60.0000", date: org.date, bankAccountId: org.accounts.bank, slipNumber: "SLIP-FLOWS" };
+    const key = randomUUID();
+    const pending = await recordCashDeposit(org.orgId, actorId, input, { key });
+    assert.equal(pending.posted, false);
+    const gates = (await db.execute<{ id: string; assignee_user_id: string }>(sql`select id,assignee_user_id from flow_gates
+      where org_id=${org.orgId} and subject_kind='transfer' and subject_id=${pending.transferId} and status='pending' order by id`)).rows;
+    assert.equal(gates.length, 2);
+    await decideGate({ gateId: gates[0]!.id, userId: gates[0]!.assignee_user_id, decision: "approved" });
+    assert.equal((await db.execute<{ status: string }>(sql`select status from documents
+      where org_id=${org.orgId} and id=${pending.transferId}`)).rows[0]!.status, "pending_approval");
+    await decideGate({ gateId: gates[1]!.id, userId: gates[1]!.assignee_user_id, decision: "approved" });
+    const posted = await recordCashDeposit(org.orgId, actorId, input, { key });
+    assert.equal(posted.posted, true);
+    assert.equal(posted.transferId, pending.transferId);
+    assert.equal((await recordCashDeposit(org.orgId, actorId, input, { key })).transferId, pending.transferId);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_entries
+      where org_id=${org.orgId} and source_document_id=${pending.transferId} and status='posted'`)).rows[0]!.count, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
   }
 });

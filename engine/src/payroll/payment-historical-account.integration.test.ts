@@ -113,7 +113,7 @@ for (const evidence of ["absent", "ambiguous"] as const) {
             ${account("liability_payable")},'Additional employee liability',amount,party_id,created_by,updated_by
           from document_lines where org_id=${fx.orgId} and document_id=${input.documentId} and party_id=${fx.employeeId}`);
       }
-      await submitAndReleaseIfUngated({ ...input, actorId: fx.actorId });
+      await submitAndReleaseIfUngated("pay_run", input.documentId, fx.actorId);
       await postDocument(input.documentId, {
         control: { ar: account("asset_receivable"), ap: account("liability_payable"), bank: bankAccountId },
       });

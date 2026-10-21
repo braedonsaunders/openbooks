@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -17,7 +19,7 @@ import { approvePayoutSuggestion, suggestPayoutLineFix } from "./exception-assis
 import { matchPayoutLines } from "./payout-reconciliation.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import { db, withBypass } from "../platform/db.ts";
+import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import {
   importSettlementBatch,
@@ -200,7 +202,7 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
   const channelB = await mkChannel(subB, "Western Shop", "western.myshopify.com", "wh-western");
 
   const postedA = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelA, paidOrder("8801")));
-  const outcomeA = await withBypass(() => postChannelOrder(org.orgId, actor, postedA.id));
+  const outcomeA = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, postedA.id));
   assert.equal(outcomeA.status, "posted");
   // The storefront customer buys from both entities, so the shared party is
   // granted the second entity before its order posts there. Stock is
@@ -213,7 +215,7 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
     subsidiaryId: subB, offsetAccountId: org.accounts.clearing, date: org.date,
   }));
   const postedB = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelB, smallerOrder("8802")));
-  const outcomeB = await withBypass(() => postChannelOrder(org.orgId, actor, postedB.id));
+  const outcomeB = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, postedB.id));
   assert.equal(outcomeB.status, "posted");
 
   const docOf = async (id: string): Promise<{ id: string; number: string; total: string }> => (await db.execute<{ id: string; number: string; total: string }>(sql`
@@ -724,7 +726,7 @@ test("refund claims count only posted receipts visible in the payout's entity", 
       },
       occurredAt: "2026-07-16T09:00:00Z",
     }));
-    const refunded = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+    const refunded = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(refunded.status, "posted", "the home refund posts its cash refund");
     assert.ok(refunded.documentId);
     const inserted = await db.execute(sql`
@@ -1042,7 +1044,7 @@ test("two visible posted refunds still read as ambiguous", { skip: !DB }, async 
         },
         occurredAt: refundedAt,
       }));
-      const outcome = await withBypass(() => postChannelRefund(org.orgId, actor, event.eventId));
+      const outcome = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
       assert.equal(outcome.status, "posted", `partial refund ${externalId} posts`);
       assert.ok(outcome.documentId);
     };

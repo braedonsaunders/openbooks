@@ -8,6 +8,7 @@ import {
   dropScratchOrg,
   seedFlowActors,
   seedApprovalFlow,
+  grantScratchPermissions,
   type ScratchOrg,
   type FlowActors,
 } from "../testing/fixtures.ts";
@@ -37,6 +38,7 @@ async function fixture(fn: (f: Fixture) => Promise<void>) {
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
+    await grantScratchPermissions(org.orgId, actors.approver1Id, ["ar.post"]);
     await db.execute(
       sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'ar.post','grant')`,
     );

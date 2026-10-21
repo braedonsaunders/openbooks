@@ -89,7 +89,7 @@ test("one org's rows are invisible from another org's scope, via table and view"
     // exactly as a user query would.
     const seenView = await runUserSql(
       `select id from documents where id = '${entryB}'`,
-      { orgId: orgA.orgId },
+      { orgId: orgA.orgId, payrollRead: true, expenseRead: true },
     );
     assert.equal(seenView.rowCount, 0, "org A must not see org B's entry through the web-reader view");
     // Non-vacuity, both mechanisms: B's own scope sees it — through the
@@ -102,7 +102,7 @@ test("one org's rows are invisible from another org's scope, via table and view"
     assert.equal(seenOwn.tableHidden, false, "org B must see its own entry — otherwise the emptiness above proves nothing");
     const seenOwnGoverned = await runUserSql(
       `select id from documents where id = '${entryB}'`,
-      { orgId: orgB.orgId },
+      { orgId: orgB.orgId, payrollRead: true, expenseRead: true },
     );
     assert.equal(seenOwnGoverned.rowCount, 1, "org B must see its own entry through the governed reader — otherwise the governed emptiness above proves nothing");
   } finally {

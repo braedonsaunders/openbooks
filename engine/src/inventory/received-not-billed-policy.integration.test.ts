@@ -14,6 +14,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  */
 test("received-not-billed resolves profile then company and never double-counts", { skip: !DB }, () => {
   const source = `
+    import { installEngineSeams } from "./engine/src/composition/install.ts";
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -25,6 +26,7 @@ test("received-not-billed resolves profile then company and never double-counts"
     import { createScratchOrg, createScratchUser, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
 
     installTrustedTestDatabaseBypass();
+    installEngineSeams();
 
     const balanceOf = async (orgId, accountId) => (await db.execute(sql\`
       select coalesce(sum(l.amount), 0)::text as amount from journal_lines l

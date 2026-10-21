@@ -1,3 +1,6 @@
+import { canonicalJson } from "../platform/canonical-json.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
@@ -420,6 +423,27 @@ interface DropTransfer {
   amountMinor: bigint;
 }
 
+async function assertDropTransferTerms(orgId: string, documentId: string, drop: DropTransfer): Promise<void> {
+  const document = (await db.execute<{
+    subsidiary_id: string | null; currency: string; document_date: string; custom: Record<string, unknown>;
+  }>(sql`select subsidiary_id,currency,document_date::text,custom from documents
+    where org_id=${orgId} and id=${documentId} for update`)).rows[0];
+  const lines = (await db.execute<{ account_id: string; amount: string; subsidiary_id: string | null }>(sql`
+    select account_id,amount::text,subsidiary_id from document_lines
+     where org_id=${orgId} and document_id=${documentId} order by line_number for update`)).rows;
+  const source = (custom: Record<string, unknown>) => ({
+    cashSaleDeposit: custom.cashSaleDeposit ?? null,
+    tillDrop: custom.tillDrop ?? null,
+  });
+  if (!document || document.subsidiary_id !== drop.subsidiaryId || document.currency !== drop.currency
+    || document.document_date !== drop.date || canonicalJson(source(document.custom)) !== canonicalJson(source(drop.custom))
+    || lines.length !== 2 || lines[0]?.account_id !== drop.bankAccountId || lines[1]?.account_id !== drop.sourceAccountId
+    || toUnits(lines[0]!.amount) !== drop.amountMinor || toUnits(lines[1]!.amount) !== -drop.amountMinor
+    || lines.some(line => line.subsidiary_id !== null && line.subsidiary_id !== drop.subsidiaryId))
+    throw depositError("The transfer no longer matches the counted till drop.", 409,
+      "Review this transfer's Flow actions, then record the counted drop again from Cash Sales.");
+}
+
 /**
  * Create a till drop's native transfer and post it. The transfer posts in
  * the same constrained shape the Banking drawer writes (destination carries
@@ -432,6 +456,11 @@ async function createAndPostDrop(
   actorId: string,
   drop: DropTransfer,
 ): Promise<CashDepositResult> {
+  await withOrgTransaction(orgId, async () => {
+    if (!(await lockAndCheckOrgFeature(db, orgId, "cashSales")))
+      throw depositError("Cash Sales is disabled.", 404, "Enable Cash Sales in Company Settings → Features before recording a drop.");
+    await lockActorCommandAuthority(db, orgId, actorId, drop.subsidiaryId, "cash_sales.deposit");
+  });
   const { slip, amountMinor, sourceAccountId } = drop;
   const key = drop.key && isUuid(drop.key) ? drop.key : randomUUID();
   // An explicit currency is a currency change the writer refuses without
@@ -534,6 +563,7 @@ async function createAndPostDrop(
         "transfer",
         created.id,
         actorId,
+        { purpose: "cash_drop" },
       );
       if (submission.flowError) {
         throw depositError(
@@ -542,6 +572,7 @@ async function createAndPostDrop(
           "Release the drop from Banking, or ask an approver.",
         );
       }
+      await assertDropTransferTerms(orgId, created.id, drop);
       if (submission.gated) {
         return { kind: "pending" as const };
       }
@@ -551,6 +582,8 @@ async function createAndPostDrop(
         409,
         "Open the drop in Banking to see its state.",
       );
+    } else {
+      await assertDropTransferTerms(orgId, created.id, drop);
     }
     try {
       const entryId = await postDocument(created.id, await controlDeps(orgId), {

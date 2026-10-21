@@ -3,7 +3,7 @@ import test from 'node:test';
 import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { dropScratchOrgReporting } from '../testing/fixtures.ts';
-import { calculatedRun, seedAdoption, type AdoptionFixture } from './filing-test-fixtures.ts';
+import { calculatedRun, seedAdoption, seedCanadianFilingAccountForTest, qualifyCanadianOpeningForTest, type AdoptionFixture } from './filing-test-fixtures.ts';
 import { CA_PERIOD_OPENING_TREATMENT } from './canada/period-openings.ts';
 import { saveOpeningBalances } from './opening-balances.ts';
 import { savePayrollPeriodOpening } from './period-opening-store.ts';
@@ -19,6 +19,23 @@ async function opening(f: AdoptionFixture) {
   await db.execute(sql`update parties set subsidiary_id=${f.subsidiaryId} where org_id=${f.orgId} and id=${f.employeeId}`);
   await saveOpeningBalances({ orgId: f.orgId, actorId: f.actorId, taxYear: 2026, allowedSubsidiaryIds: null,
     rows: [{ employeePartyId: f.employeeId, amounts: { pensionableYtd: '262.77', insurableYtd: '262.77', taxableYtd: '262.77', cppYtd: '7.63', eiYtd: '4.28' } }] });
+  const filingAccountId = await seedCanadianFilingAccountForTest(f.orgId, f.actorId, {
+    subsidiaryId: f.subsidiaryId, accountNumber: '123456789RP0001', name: 'CRA payroll registration',
+    effectiveFrom: '2026-01-01', eiEmployerMultiplier: '1.4',
+  });
+  assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+    where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning id`)).rows.length, 1);
+  await qualifyCanadianOpeningForTest({ ...f, employeePartyId: f.employeeId, taxYear: 2026,
+    filingAccountId, province: 'ON', coverageStart: '2026-01-01', coverageEnd: '2026-07-20',
+    amounts: { pensionableYtd: '262.77', insurableYtd: '262.77', taxableYtd: '262.77', cppYtd: '7.63', eiYtd: '4.28' },
+    reportableBases: { cpp: '262.77', ei: '262.77', qpip: '0' },
+    levyAllocations: [
+      ...['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'].map(region =>
+        ({ programKey: 'ca_wcb', region, federalAccountId: null, amount: '0' })),
+      ...['BC','MB','NL','ON'].map(region => ({ programKey: 'ca_eht', region, federalAccountId: null, amount: '0' })),
+      { programKey: 'ca_cnt', region: 'QC', federalAccountId: null, amount: '0' },
+    ],
+  });
   const annual = (await db.execute<{ updated_at: string }>(sql`select updated_at::text as updated_at from payroll_opening_balances
     where org_id=${f.orgId} and employee_party_id=${f.employeeId} and tax_year=2026`)).rows[0]!;
   const amounts = Object.fromEntries(CA_PERIOD_OPENING_TREATMENT.fields.map((field) => [field.key, '0']));
@@ -64,7 +81,7 @@ test('admitted period payments consume one period CPP exemption while EI remains
     await commitPayRun(input);
     const accounts = (await db.execute<{ id: string; type: string }>(sql`select id,type from accounts where org_id=${f.orgId}`)).rows;
     const account = (type: string) => { const row = accounts.find(candidate => candidate.type === type); assert.ok(row); return row.id; };
-    await db.execute(sql`update documents set status='approved' where org_id=${f.orgId} and id=${input.documentId}`);
+
     await postDocument(input.documentId, { control: { ar: account('asset_receivable'), ap: account('liability_payable'), bank: account('asset_bank') } });
     const ledger = (await db.execute<{ amount: string; count: number }>(sql`select coalesce(sum(amount),0)::text as amount,count(*)::int as count
       from journal_lines where org_id=${f.orgId}`)).rows[0]!;

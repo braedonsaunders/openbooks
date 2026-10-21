@@ -12,7 +12,7 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { submitForApproval } from "./submit.ts";
-import { retryFlowRun } from "./run.ts";
+import { retryFlowRun, runRecordFlows } from "./run.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { lockFlowSubjectAdmission } from "./subject-admission.ts";
 import { lockSubjectScope, tableScope } from "./subject-scope.ts";
@@ -170,14 +170,11 @@ test("an ownerless record fails closed under a scoped flow", { skip: !DB }, asyn
     const ownerless = await seedDocument(org.orgId, {
       kind: "vendor_bill", createdBy: actors.submitterId, subsidiaryId: null,
     });
-    const result = await submitForApproval("vendor_bill", ownerless, actors.submitterId);
-    assert.equal(result.gated, false);
-    assert.ok(result.flowError, "the submission must refuse, never release");
-    assert.match(result.flowError!, /legal entity could not be resolved/);
+    await assert.rejects(submitForApproval("vendor_bill", ownerless, actors.submitterId), /legal entity could not be resolved/);
     assert.equal(await docStatus(ownerless), "draft");
     const rows = await flowRowsFor(ownerless);
     assert.equal(rows.gates, 0);
-    assert.equal(rows.runs, 1, "the failed admission is recorded as a failed run, not a gate");
+    assert.equal(rows.runs, 0, "a refused submission rolls its routing back atomically");
   });
 });
 
@@ -381,8 +378,9 @@ test("retry refuses when the flow was scoped away, preserving the failed run", {
     const doc = await seedDocument(org.orgId, {
       kind: "vendor_bill", createdBy: actors.submitterId, subsidiaryId: second,
     });
-    const submitted = await submitForApproval("vendor_bill", doc, actors.submitterId);
-    assert.ok(submitted.flowError);
+    const submitted = await withOrgTransaction(org.orgId, () => runRecordFlows({ kind: "on_submit", source: "ui" },
+      "vendor_bill", doc, { orgId: org.orgId, userId: actors.submitterId }));
+    assert.equal(submitted.failed, true);
     const failedRun = (await db.execute<{ id: string }>(sql`
       select id from flow_runs where subject_id = ${doc} and status = 'failed' limit 1`)).rows[0];
     assert.ok(failedRun);

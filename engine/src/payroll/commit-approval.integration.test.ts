@@ -12,7 +12,9 @@ import { dropScratchOrg, seedApprovalFlow, seedFlowActors, grantScratchPermissio
 import { PayrollError } from "./error.ts";
 
 async function payrollReviewActors(orgId:string){
- const actors=await seedFlowActors(orgId);await grantScratchPermissions(orgId,actors.approver1Id,['payroll.manage']);return actors;
+ const actors=await seedFlowActors(orgId);
+ for(const actorId of [actors.submitterId,actors.approver1Id]) await grantScratchPermissions(orgId,actorId,['payroll.manage']);
+ return actors;
 }
 
 /**

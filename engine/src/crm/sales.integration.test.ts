@@ -1,3 +1,6 @@
+import { installEngineSeams } from "../composition/install.ts";
+import { decideGate } from "../flows/gates.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
@@ -6,6 +9,7 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  seedApprovalFlow,
 } from "../testing/fixtures.ts";
 import { writeSalesCommand, previewTerritory } from "./sales.ts";
 import { ensureCrmDefaults } from "./crm.ts";
@@ -44,6 +48,8 @@ test(
           sql`update app_roles set permissions='["crm.setup.manage","crm.forecasts.override"]'::jsonb where org_id=${org.orgId}`,
         ),
       );
+      await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: 'sales_quota',
+        assignees: [{ type: 'user', userId: checker }], mode: 'any', preventSelfApproval: true }));
       await withBypassContext(() => ensureCrmDefaults(org.orgId, maker));
       const employee = await withOrg(org.orgId, async () => {
         const p = (
@@ -61,10 +67,19 @@ test(
         actorId: maker,
         allowedSubsidiaryIds: null,
       };
-      const write = (command: SalesCommand, actorId = maker) =>
-        withOrg(org.orgId, () =>
-          writeSalesCommand({ ...scope, actorId }, command),
-        ) as Promise<SalesRecord>;
+      const write = async (command: SalesCommand, actorId = maker): Promise<SalesRecord> =>
+        withOrg(org.orgId, async () => {
+          if (command.action === 'quota-transition' && command.lifecycle === 'approved') {
+            const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates
+              where org_id=${org.orgId} and subject_kind='sales_quota' and subject_id=${command.id}
+                and status='pending'`)).rows[0];
+            assert.ok(gate, 'the quota decision requires its pending native Flow gate');
+            await decideGate({ gateId: gate.id, userId: actorId, decision: 'approved', comment: command.reason });
+            return (await db.execute<SalesRecord>(sql`select * from crm_sales_quotas
+              where org_id=${org.orgId} and id=${command.id}`)).rows[0]!;
+          }
+          return writeSalesCommand({ ...scope, actorId }, command) as Promise<SalesRecord>;
+        });
       await t.test(
         "inactive employees can be removed from Sales but cannot be newly designated",
         async () => {
@@ -216,7 +231,7 @@ test(
                 lifecycle: "approved",
                 reason: "Self approval",
               }),
-            /different authorized manager/,
+            /not an approver|self.approval/i,
           );
           quota = await write(
             {

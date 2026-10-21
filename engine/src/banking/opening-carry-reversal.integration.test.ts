@@ -61,7 +61,7 @@ for (const scenario of [
     const totals = await reconciliationTotals(recon.id, ctx);
     assert.equal(totals.clearedBalance, `${scenario.closing}.0000`, "the opening must retain the controlled reversal history through the cutoff");
     assert.equal(totals.difference, "0.0000");
-    assert.deepEqual(await markReconciled(recon.id, ctx), { journalLinesReconciled: 1 });
+    assert.deepEqual(await markReconciled(recon.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
     const signoff = (await db.execute<{ changes: { openingCarriedForward: string } }>(sql`
       select changes from audit_log where org_id=${org.orgId} and row_id=${recon.id}
         and table_name='reconciliations' and action='approve'`)).rows[0]!;

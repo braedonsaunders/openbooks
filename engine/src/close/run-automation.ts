@@ -117,26 +117,6 @@ export async function refreshCloseRun(
       values (${orgId}, ${runId}, 'run.validated', ${actorId ?? null},
               ${JSON.stringify({ fingerprint, evidence })}::jsonb)`);
 
-    // Old standard runs may already contain group tasks. Preserve their rows
-    // and evidence, but explicitly waive inapplicable work instead of claiming
-    // that an entity close proved consolidated balances correct.
-    if (groupNotApplicable) {
-      const previous = await tx.execute<Record<string, unknown>>(sql`
-        select * from close_run_tasks where org_id=${orgId} and run_id=${runId}
-          and key in ('intercompany-balanced','consolidation') and status <> 'waived' for update`);
-      if (previous.rows.length) {
-        const result = { reason: "group-consolidation-not-applicable-to-entity-close", subsidiaryIds: run.scope.subsidiaryIds };
-        await tx.execute(sql`update close_run_tasks set status='waived', result=${JSON.stringify(result)}::jsonb,
-          completed_at=now(), completed_by=${actorId ?? null}, updated_at=now(), updated_by=${actorId ?? null}
-          where org_id=${orgId} and run_id=${runId} and key in ('intercompany-balanced','consolidation') and status <> 'waived'`);
-        await tx.execute(sql`insert into close_events (org_id,run_id,event_type,actor_id,payload)
-          values (${orgId},${runId},'tasks.scope_not_applicable',${actorId ?? null},
-            ${JSON.stringify({before:previous.rows,after:{status:"waived",result}})}::jsonb)`);
-      }
-      await tx.execute(sql`update close_exceptions set status='resolved', resolved_at=now(), resolved_by=${actorId ?? null},
-        resolution='group-consolidation-not-applicable-to-entity-close', updated_at=now()
-        where org_id=${orgId} and run_id=${runId} and code in ('intercompany-residual','intercompany-unreconciled','consolidated-rates-missing') and status='open'`);
-    }
     for (const check of checks) {
       const task = (await tx.execute<{ id: string }>(sql`
         select id from close_run_tasks where run_id = ${runId} and org_id = ${orgId} and key = ${check.taskKey}`));

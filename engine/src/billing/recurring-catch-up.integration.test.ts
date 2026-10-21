@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -28,7 +30,7 @@ async function seedSchedule(
     maxOccurrences?: number | null; skippedRunOns?: string[]; name?: string;
   } = { nextRunOn: "2026-05-10" },
 ): Promise<{ scheduleId: string; templateId: string }> {
-  await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb
+  await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post","ar.create","ar.post"]'::jsonb
     where org_id=${org.orgId} and key='admin'`);
   const templateId = randomUUID();
   await db.execute(sql`
@@ -298,7 +300,7 @@ test("catch-up over three periods resolves three distinct descriptions", { skip:
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Token controller", "admin");
-    await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb
+    await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post","ar.create","ar.post"]'::jsonb
       where org_id=${org.orgId} and key='admin'`);
     await addPeriod(org, 2026, 1);
     await addPeriod(org, 2026, 2);

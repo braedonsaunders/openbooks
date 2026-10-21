@@ -22,6 +22,7 @@ import {
 } from "../../consolidation/consolidation.ts";
 import { db } from "../../platform/db.ts";
 import { postEntry } from "../../journal/post-entry.ts";
+import { recordHistoricalContributionFixture } from "../../testing/historical-translations.ts";
 import { capture, setSpotRate } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 
@@ -45,7 +46,7 @@ async function postFixtureEntry(
   date: string,
   memo: string,
   lines: FixtureLine[],
-): Promise<void> {
+): Promise<string> {
   const ledger = ctx.ledger!;
   const entryId = randomUUID();
   await db.transaction(async (tx) => {
@@ -68,6 +69,7 @@ async function postFixtureEntry(
     if (posted.entryId !== entryId)
       throw new Error(`fixture journal ${number} was not posted`);
   });
+  return entryId;
 }
 
 async function addSubsidiary(
@@ -376,7 +378,7 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
                               required_dimensions, custom, subsidiary_include_children)
         values (${dividendsDeclaredId}, ${ledger.orgId}, '3050', 'Dividends Declared', 'equity', false, true, false, false,
                 '[]'::jsonb, '{}'::jsonb, true)`);
-      await postFixtureEntry(
+      const dividendEntryId = await postFixtureEntry(
         ctx,
         associateId,
         "CONF-C3-DIV",
@@ -387,6 +389,12 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
           { accountId: ctx.roles.bank, amount: "-50", currency: "CAD" },
         ],
       );
+      const dividendLine = (await db.execute<{ id: string }>(sql`
+        select id from journal_lines where org_id=${ledger.orgId} and entry_id=${dividendEntryId}
+          and account_id=${dividendsDeclaredId}`)).rows[0]!;
+      await recordHistoricalContributionFixture({ orgId: ledger.orgId, actorId: ledger.actorId,
+        sourceLineId: dividendLine.id, measurementCurrency: "CAD", presentationCurrency: "CAD",
+        historicalDate: ledger.date, amount: "50", rate: "1" });
       await postFixtureEntry(
         ctx,
         ledger.subsidiaryId,
@@ -530,6 +538,7 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
     facts: [
       "The reporting currency is CAD; the subsidiary keeps its books in USD.",
       "July spot rates are 1.3500 (5 July) and 1.4000 (25 July): the derived average is 1.3750 and the current rate is 1.4000.",
+      "The preceding period retains an explicitly supplied consolidated historical basis of 1.30.",
       "Acquisition-date equity of USD 1,000.00 at the policy acquisition rate of 1.30 eliminates at CAD 1,300.00 against a CAD 1,200.00 investment, with fair value of 1,400.00 giving a 100.00 adjustment, NCI of 280.00 and goodwill of 80.00.",
       "Period profit of USD 100.00 at the 1.3750 average is CAD 137.50; NCI income is 137.50 × 20% = CAD 27.50, leaving NCI equity at a 307.50 credit.",
     ],
@@ -578,6 +587,11 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
           { accountId: ctx.roles.revenue, amount: "-100", currency: "USD" },
         ],
       );
+      await db.execute(sql`
+        insert into consolidated_fx_rates
+          (org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)
+        select ${ledger.orgId},id,'USD','CAD','1.30','1.30','1.30','manual'
+          from accounting_periods where org_id=${ledger.orgId} and fiscal_year=2026 and period_number=6`);
       await setSpotRate(ledger, "USD", "CAD", "2026-07-05", "1.35");
       await setSpotRate(ledger, "USD", "CAD", "2026-07-25", "1.40");
       await deriveConsolidatedRates(

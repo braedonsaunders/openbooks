@@ -281,19 +281,23 @@ test("HR-12 cycle open proposes within guideline, flags outside, and refuses emp
     assert.equal(decided.status, "approved");
     const reopened = await reopenLine({ orgId: org.orgId, actorId: h.managerId, lineId: empLine.id, reason: "market moved" });
     assert.equal(reopened.status, "proposed");
-    // The proposer cannot decide their own line.
+    // Without tenant gates the authorized proposer may release the line.
     await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: empLine.id, proposedPct: "3" });
-    await assert.rejects(
-      approveLine({ orgId: org.orgId, actorId: h.hrId, lineId: empLine.id }),
-      /decide their own line/,
-    );
+    assert.equal((await approveLine({ orgId: org.orgId, actorId: h.hrId, lineId: empLine.id })).status, "approved");
+    await reopenLine({ orgId: org.orgId, actorId: h.hrId, lineId: empLine.id, reason: "Request the team's review" });
+    await seedApprovalFlow(org.orgId, { subjectKind: "compensation_cycle_line", mode: "any",
+      assignees: [{ type: "user", userId: h.managerId }] });
+    assert.equal((await approveLine({ orgId: org.orgId, actorId: h.hrId, lineId: empLine.id })).status, "proposed");
     // A rejection needs its reason — the manager reads it.
     await assert.rejects(
       rejectLine({ orgId: org.orgId, actorId: h.managerId, lineId: empLine.id, reason: "  " }),
       /non-blank reason is required/,
     );
-    const rejected = await rejectLine({ orgId: org.orgId, actorId: h.managerId, lineId: empLine.id, reason: "over budget for the team" });
-    assert.equal(rejected.status, "rejected");
+    const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates
+      where org_id=${org.orgId} and subject_kind='compensation_cycle_line' and subject_id=${empLine.id} and status='pending'`)).rows[0]!;
+    await decideGate({ gateId: gate.id, userId: h.managerId, decision: "rejected", comment: "over budget for the team" });
+    assert.equal((await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id }))
+      .find(line => line.id === empLine.id)?.status, "rejected");
   });
 });
 
@@ -315,13 +319,7 @@ test("HR-12 cycle approval runs through Flows and push writes each wage once", {
     await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3", reason: "hr proposes" });
-    // Submitting with no enabled flow refuses by name (the approval IS a Flows run).
-    await assert.rejects(
-      submitCycleForApproval({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id }),
-      /no enabled approval flow produced an approval gate/,
-    );
-    // The approval is a Flows run: the gate goes to an approver who is
-    // not the submitter (self-approval is forbidden outright).
+    // The tenant chooses an independent approver for this round.
     const cycleApprover = await createScratchUser(org.orgId, "Comp Cycle Approver", "comp_cycle_approver");
     await grantPermissions(org.orgId, cycleApprover, ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve"]);
     await linkPerson(org.orgId, cycleApprover);
@@ -531,8 +529,9 @@ test("HR-12 cross-org wage link on a pushed line halts the push", { skip: !DB },
     });
     await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
-    await seedApprovalFlow(org.orgId, { subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND, assignees: [{ type: "user", userId: h.hrId }], mode: "any" });
+
     await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "2", reason: "x" });
+    assert.equal((await submitCycleForApproval({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id })).status, "approved");
     // Forge a real wage row in a SECOND org and link it onto the pushed
     // line (bypassing the service, the way a hostile write would): the
     // FK lets the link exist (it names a real rate), so the service's
@@ -557,8 +556,6 @@ test("HR-12 cross-org wage link on a pushed line halts the push", { skip: !DB },
          set pushed_rate_id = ${foreignRate}, status = 'pushed',
              approver_party_id = ${approverParty}, decided_at = now()
        where id = ${line!.id}`);
-    // Drive the cycle to approved without the gate (unit of the check under test).
-    await db.execute(sql`update hrm_comp_cycles set status = 'approved' where id = ${cycle.id}`);
     await assert.rejects(
       pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id }),
       /outside this organization/,

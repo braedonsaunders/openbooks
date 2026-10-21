@@ -200,7 +200,7 @@ test(
         unmatchedStatementLines: 0,
         matchedJournalLines: 1,
       });
-      assert.deepEqual(await markReconciled(recon2.id, ctx), { journalLinesReconciled: 1 });
+      assert.deepEqual(await markReconciled(recon2.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
     } finally {
       await dropScratchOrg(org.orgId);
     }

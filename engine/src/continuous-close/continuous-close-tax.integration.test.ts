@@ -1,3 +1,4 @@
+import { withSimClock } from "../platform/clock.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -32,7 +33,7 @@ function detectorsWith(overrides: Record<string, Record<string, number>> = {}) {
 }
 
 async function scan(orgId: string, overrides: Record<string, Record<string, number>> = {}) {
-  return taxFindings(orgId, "1000.0000", detectorsWith(overrides));
+  return withSimClock("2026-08-01T12:00:00.000Z", () => taxFindings(orgId, "1000.0000", detectorsWith(overrides)));
 }
 
 /** A posted vendor bill whose single line carries (or omits) a tax code. */
@@ -83,8 +84,7 @@ test(
   async () => {
     const org = await withBypass(() => createScratchOrg());
     try {
-      // Scratch fixtures post into the July open period while the business
-      // day is real today: widen the window to reach them.
+      // The detector runs after the fixture's July posting period closes.
       const untaxedId = await seedPostedBill(org, "TAX-UNTAXED", "1500.0000", null);
       const codeId = randomUUID();
       await withBypassContext(async () => {
@@ -223,7 +223,7 @@ test(
                   null)
         `);
       });
-      const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "tax", trigger: "manual", allowedSubsidiaryIds: null /* test setup: system provenance, unrestricted by construction */ });
+      const result = await withSimClock("2026-08-01T12:00:00.000Z", () => runContinuousCloseAgent({ orgId: org.orgId, agentKey: "tax", trigger: "manual", allowedSubsidiaryIds: null }));
       assert.equal((result as { status: string }).status, "completed");
       assert.ok((result as { detected: number }).detected >= 1, "the run detects the untaxed bill");
       const persisted = (await withBypassContext(() =>

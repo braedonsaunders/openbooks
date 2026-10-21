@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -151,7 +153,7 @@ function paidOrder(externalId: string): ChannelOrder {
 
 async function postPaidOrder(org: ScratchOrg, actor: string, channelId: string, externalId: string): Promise<string> {
   const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder(externalId)));
-  const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+  const outcome = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
   assert.equal(outcome.status, "posted");
   return stored.id;
 }

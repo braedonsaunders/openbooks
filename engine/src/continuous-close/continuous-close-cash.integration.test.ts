@@ -1,3 +1,4 @@
+import { withSimClock } from "../platform/clock.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -167,7 +168,7 @@ test(
 test(
   "the forecast fires on the statistical prediction week, not the far due date",
   { skip: !DB },
-  async () => {
+  async () => withSimClock("2026-07-15T12:00:00.000Z", async () => {
     const org = await createScratchOrg();
     try {
       await seedBankCash(org, "FORECAST-CASH", "1000.0000");
@@ -199,7 +200,7 @@ test(
     } finally {
       await dropScratchOrg(org.orgId);
     }
-  },
+  }),
 );
 
 test(

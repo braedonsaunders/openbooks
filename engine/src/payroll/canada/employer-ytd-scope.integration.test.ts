@@ -350,7 +350,7 @@ test('qualifying employer source after calculation makes unchanged opening amoun
     from pay_runs where org_id=${f.orgId} and document_id=${input.documentId}`)).rows;
   assert.equal(retained.length,1);
   assert.equal(payRunCalculationSourceDigest(retained[0]!.snapshot),retained[0]!.digest);
-  assert.equal(retained[0]!.snapshot.openingEmployerAuthorities,undefined,'A refused employee consumes no opening history');
+  assert.deepEqual(retained[0]!.snapshot.openingEmployerAuthorities,[],'A refused employee consumes no opening history');
   const levyAuthority=await qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
    allocations,reason:'Retain the complete original Canadian levy allocation',allowedSubsidiaryIds:null});

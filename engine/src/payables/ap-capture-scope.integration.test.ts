@@ -86,6 +86,8 @@ test("manual materialize of an out-of-scope purchase order refuses and writes no
       values (${fileId}, ${org.orgId}, (select id from folders where org_id = ${org.orgId} limit 1),
               'scope.pdf', 'application/pdf', 4)`);
     const poId = await seedHiddenPo(org, vendor, hidden, "PO-HID-1");
+    const poLineId = (await db.execute<{ id: string }>(sql`select id from document_lines
+      where org_id=${org.orgId} and document_id=${poId} and line_number=1`)).rows[0]!.id;
     const captureId = randomUUID();
     await db.execute(sql`
       insert into ap_capture_items
@@ -100,7 +102,7 @@ test("manual materialize of an out-of-scope purchase order refuses and writes no
                 subtotal: "10.0000", taxTotal: "0.0000", total: "10.0000", memo: null,
                 lines: [{ description: "PO service line", productCode: null, quantity: "1.0000", unit: "ea",
                            unitPrice: "10.0000", amount: "10.0000", taxAmount: "0.0000",
-                           accountId: org.accounts.cogs, itemId: null, purchaseOrderLineId: null, confidence: "1.0000" }],
+                           accountId: org.accounts.cogs, itemId: org.items.service, purchaseOrderLineId: poLineId, confidence: "1.0000" }],
               })}::jsonb,
               '[]'::jsonb, ${vendor}, ${poId}, ${actor}, ${actor})`);
     const scopeA = new Set([org.subsidiaryId]);

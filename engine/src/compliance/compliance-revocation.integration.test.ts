@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+import { submitComplianceWaiver } from "./waivers.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -14,11 +16,28 @@ import { vendorComplianceStatus } from "./compliance.ts";
 const { db, withBypassContext, withOrgContext } = await import(
   "@openbooks/engine/platform/db"
 );
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
+const { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions } = await import(
   "@openbooks/engine/testing/fixtures"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function seedRevokedWaiver(orgId: string, actorId: string, partyId: string, requirementId: string, revokedAt: string): Promise<void> {
+  installEngineSeams();
+  await grantScratchPermissions(orgId, actorId, ["compliance.waive"]);
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"subcontractorCompliance":true}'::jsonb) where id=${orgId}`);
+  const waiver = (await db.execute<{ id: string }>(sql`
+    insert into compliance_waivers
+      (org_id,party_id,requirement_id,reason,effective_from,expires_on,created_by,updated_by)
+    values (${orgId},${partyId},${requirementId},'Bounded exception window','2026-06-01','2026-08-01',${actorId},${actorId}) returning id`)).rows[0]!;
+  const released=await submitComplianceWaiver({orgId,actorId,id:waiver.id});
+  assert.equal(released.status,'approved');
+  await db.execute(sql`update compliance_waivers set revoked_at=${revokedAt}::timestamptz,
+    revoked_by=${actorId},revoke_reason='No longer needed',updated_by=${actorId}
+    where org_id=${orgId} and id=${waiver.id}`);
+}
+
 
 test(
   "a revoked exception covers dates before revocation but not after",
@@ -50,13 +69,7 @@ test(
             values (${org.orgId}, 'GL', 'General Liability', 'insurance', 'block_payment', false, ${actorId}, ${actorId})
             returning id`)
         ).rows[0]!.id;
-        await db.execute(sql`
-          insert into compliance_waivers
-            (org_id, party_id, requirement_id, reason, effective_from, expires_on,
-             approved_by, revoked_at, revoke_reason, created_by, updated_by)
-          values (${org.orgId}, ${partyId}, ${req}, 'test exception window',
-                  '2026-06-01', '2026-08-01',
-                  ${actorId}, '2026-07-10T14:00:00Z', 'no longer needed', ${actorId}, ${actorId})`);
+        await seedRevokedWaiver(org.orgId, actorId, partyId, req, '2026-07-10T14:00:00Z');
       });
       const statusAt = (asOf: string) =>
         withOrgContext(org.orgId, () =>
@@ -112,13 +125,7 @@ test(
             values (${org.orgId}, 'GL', 'General Liability', 'insurance', 'block_payment', false, ${actorId}, ${actorId})
             returning id`)
         ).rows[0]!.id;
-        await db.execute(sql`
-          insert into compliance_waivers
-            (org_id, party_id, requirement_id, reason, effective_from, expires_on,
-             approved_by, revoked_at, revoke_reason, created_by, updated_by)
-          values (${org.orgId}, ${partyId}, ${req}, 'test timezone window',
-                  '2026-06-01', '2026-08-01',
-                  ${actorId}, '2026-07-10T02:00:00Z', 'no longer needed', ${actorId}, ${actorId})`);
+        await seedRevokedWaiver(org.orgId, actorId, partyId, req, '2026-07-10T02:00:00Z');
       });
       const statusAt = (asOf: string) =>
         withOrgContext(org.orgId, () =>

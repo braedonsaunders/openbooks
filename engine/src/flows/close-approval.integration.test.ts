@@ -12,6 +12,7 @@ import {
   seedApprovalFlow,
   seedDraftDocument,
   seedFlowActors,
+  grantScratchPermissions,
   type FlowActors,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -31,6 +32,8 @@ async function withCloseRun(
   const fixture = await createScratchOrg();
   try {
     const actors = await seedFlowActors(fixture.orgId);
+    for (const actorId of [actors.submitterId, actors.approver1Id, actors.approver2Id, actors.adminId, actors.outsiderId])
+      await grantScratchPermissions(fixture.orgId, actorId, ["close.run"]);
     await db.execute(sql`
       update orgs
          set settings = jsonb_set(
@@ -176,10 +179,12 @@ test("a frozen solo close gate releases with a ledger fingerprint and signoff", 
   });
 });
 
-test("an unconfigured close requires a tenant-authored flow without creating one", { skip: !DB }, async () => {
+test("an unconfigured close releases under the tenant zero-gate policy without creating a flow", { skip: !DB }, async () => {
   await withCloseRun(async (fixture, actors, runId) => {
-    await assert.rejects(requestCloseApproval(fixture.orgId, runId, actors.submitterId), /workflow in Flows/);
-    assert.equal((await closeStatus(runId)).status, "in_progress");
+    assert.deepEqual(await requestCloseApproval(fixture.orgId, runId, actors.submitterId), { approvals: 0 });
+    assert.equal((await closeStatus(runId)).status, "approved");
+    assert.equal((await db.execute(sql`select id from flow_gates where org_id=${fixture.orgId}
+      and subject_kind='close_run' and subject_id=${runId}`)).rows.length, 0);
     assert.equal((await db.execute(sql`select id from flows where org_id=${fixture.orgId}
       and subject_kind='close_run'`)).rows.length, 0);
   });

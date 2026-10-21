@@ -4,7 +4,7 @@ import test from 'node:test'
 import pg from 'pg'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '../platform/db.ts'
-import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow } from '../testing/fixtures.ts'
+import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow, grantScratchPermissions } from '../testing/fixtures.ts'
 import { submitFinancialChange } from '../flows/financial-changes-adapter.ts'
 import { decideGate } from '../flows/gates.ts'
 import { proposeProvisionAssessment, applyProvisionAssessment, provisionEditorOptions, type ProvisionProposal } from './assessments.ts'
@@ -16,6 +16,7 @@ test('independent provision assessments recognize and remeasure one tenant liabi
   const org = await createScratchOrg()
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))
+    await grantScratchPermissions(org.orgId, actors.approver1Id, ["gl.manage"])
     const expense = randomUUID(), liability = randomUUID()
     await withBypassContext(async () => {
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{reportingFramework}','"ifrs"') where id=${org.orgId}`)
@@ -114,6 +115,7 @@ test('provision accounts are limited to subsidiaries admitted by their account r
   const org = await createScratchOrg()
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))
+    await grantScratchPermissions(org.orgId, actors.approver1Id, ["gl.manage"])
     const subA = randomUUID(), subB = randomUUID(), expense = randomUUID(), liability = randomUUID()
     await withBypassContext(async () => {
       await db.execute(sql`update orgs set settings=settings || '{"reportingFramework":"ifrs"}'::jsonb where id=${org.orgId}`)

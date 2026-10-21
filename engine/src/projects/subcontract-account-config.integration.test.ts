@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -7,7 +9,7 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
   addSubcontractSovLine,
-  approveVendorPayApplication,
+  submitSubcontract,
   createVendorPayApplication,
   generateVendorPayApplicationBill,
   SubcontractError,
@@ -19,7 +21,7 @@ const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 type Org = Awaited<ReturnType<typeof createScratchOrg>>;
 type Fixture = { org: Org; actor: string; approver: string; subcontract: string; sov: string; idleSov: string; app: string };
 
-async function fixture(run: (f: Fixture) => Promise<void>) {
+async function fixture(run: (f: Fixture) => Promise<void>, initialState: "draft" | "approved" = "approved") {
   const org = await createScratchOrg();
   try {
     const actor = await createScratchUser(org.orgId, "Subcontract account controller", "admin");
@@ -40,11 +42,11 @@ async function fixture(run: (f: Fixture) => Promise<void>) {
     // The public SOV API already permits an explicit capitalization account.
     const sov = (await withOrgTransaction(org.orgId, () => addSubcontractSovLine({ orgId: org.orgId, userId: actor, subcontractId: subcontract, description: "Capitalized work", scheduledValue: "4000", expenseAccountId: org.accounts.invAsset, sortOrder: 1 }))).id;
     const idleSov = (await withOrgTransaction(org.orgId, () => addSubcontractSovLine({ orgId: org.orgId, userId: actor, subcontractId: subcontract, description: "Unbilled work", scheduledValue: "1000", sortOrder: 2 }))).id;
-    await db.execute(sql`update subcontracts set status='active' where org_id=${org.orgId} and id=${subcontract}`);
+    await submitSubcontract(org.orgId, actor, subcontract);
     const app = (await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: org.date }))).id;
     await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "1000.1234", materialsStoredCurrent: "0" }] }));
-    await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app));
-    await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app));
+    if (initialState === "approved") await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app));
+
     await run({ org, actor, approver, subcontract, sov, idleSov, app });
   } finally {
     await dropScratchOrgReporting(org.orgId);
@@ -137,7 +139,6 @@ for (const source of ["SOV", "vendor"] as const) {
 test("subcontract bill skips unconfigured stored-material transfer with zero gross", enabled, async () => fixture(async (f) => {
   // Seed prior stored-material evidence, then submit a new application through
   // the normal workflow: installation offsets the reduction in stored stock.
-  await db.execute(sql`update vendor_pay_applications set status='draft' where org_id=${f.org.orgId} and id=${f.app}`);
   await db.execute(sql`update vendor_pay_application_lines set previous_earned='125.4321', previous_materials_stored='125.4321'
     where org_id=${f.org.orgId} and pay_application_id=${f.app} and sov_line_id=${f.idleSov}`);
   // The shared fixture already saved this draft once (revision 1 → 2), so
@@ -145,6 +146,6 @@ test("subcontract bill skips unconfigured stored-material transfer with zero gro
   // is built on.
   await withOrgTransaction(f.org.orgId, () => updateVendorPayApplicationLines({ orgId: f.org.orgId, userId: f.actor, payApplicationId: f.app, expectedRevision: 2, lines: [{ sovLineId: f.idleSov, workCompletedThisPeriod: "125.4321", materialsStoredCurrent: "0" }] }));
   await withOrgTransaction(f.org.orgId, () => submitVendorPayApplication(f.org.orgId, f.actor, f.app));
-  await withOrgTransaction(f.org.orgId, () => approveVendorPayApplication(f.org.orgId, f.approver, f.app));
+
   await generatedWithAccount(f, f.org.accounts.invAsset);
-}));
+}, "draft"));

@@ -6,7 +6,7 @@ import { decideGate } from "../flows/gates.ts";
 import { submitForApproval, withdrawDocumentSubmission } from "../flows/submit.ts";
 import { payRunRejection } from "./approval.ts";
 import { seedAdoption, calculatedRun } from "./filing-test-fixtures.ts";
-import { dropScratchOrg, seedApprovalFlow, seedFlowActors } from "../testing/fixtures.ts";
+import { dropScratchOrg, seedApprovalFlow, seedFlowActors, grantScratchPermissions } from "../testing/fixtures.ts";
 
 /**
  * A rejected pay run names its rejecter and reason until it is resubmitted.
@@ -36,6 +36,8 @@ test("a rejected pay run reports the rejecter and reason until it is resubmitted
   const fx = await seedAdoption();
   try {
     const actors = await seedFlowActors(fx.orgId);
+    for (const actorId of [actors.submitterId, actors.approver1Id])
+      await grantScratchPermissions(fx.orgId, actorId, ["payroll.manage"]);
     await seedApprovalFlow(fx.orgId, {
       subjectKind: "pay_run",
       assignees: [{ type: "user", userId: actors.approver1Id }],

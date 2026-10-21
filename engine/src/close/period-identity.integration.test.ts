@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import {seedCloseRunApprovalFixture} from "../testing/close.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";

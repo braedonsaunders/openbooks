@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -12,7 +14,7 @@ import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
   assertSubcontractPaymentCleared,
-  approveVendorPayApplication,
+  submitSubcontract,
   createSubcontractPaymentControl,
   createVendorPayApplication,
   generateVendorPayApplicationBill,
@@ -52,15 +54,18 @@ async function fixture(run: (f: {
       await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status)
         values(${project},${org.orgId},${org.subsidiaryId},'VRET','Vendor retainage job',${org.customerId},${type},'active')`);
       await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active) values(${vendor},${org.orgId},'vendor','Vendor retainage vendor',true)`);
-      await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-VRET','Vendor retainage scope','CAD','5000','active')`);
+      await db.execute(sql`insert into subcontracts(id,org_id,project_id,vendor_id,number,title,currency,original_commitment,status) values(${subcontract},${org.orgId},${project},${vendor},'SC-VRET','Vendor retainage scope','CAD','5000','draft')`);
       await db.execute(sql`insert into subcontract_sov_lines(id,org_id,subcontract_id,description,scheduled_value,expense_account_id,sort_order) values(${sov},${org.orgId},${subcontract},'Work','2000',${org.accounts.cogs},1)`);
+      await db.execute(sql`insert into subcontract_sov_lines(id,org_id,subcontract_id,description,scheduled_value,expense_account_id,sort_order)
+        values(${randomUUID()},${org.orgId},${subcontract},'Remaining scope','3000',${org.accounts.cogs},2)`);
       return { actor, approver, project, subcontract, sov };
     });
     const { actor, approver, project, subcontract, sov } = seeded;
+    await submitSubcontract(org.orgId, actor, subcontract);
     const app = await withOrgTransaction(org.orgId, () => createVendorPayApplication({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: org.date }));
     await withOrgTransaction(org.orgId, () => updateVendorPayApplicationLines({ orgId: org.orgId, userId: actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: sov, workCompletedThisPeriod: "1000", materialsStoredCurrent: "0" }] }));
     await withOrgTransaction(org.orgId, () => submitVendorPayApplication(org.orgId, actor, app.id));
-    await withOrgTransaction(org.orgId, () => approveVendorPayApplication(org.orgId, approver, app.id));
+
     const generated = await withOrgTransaction(org.orgId, () => generateVendorPayApplicationBill(org.orgId, actor, app.id));
     assert.equal((await withOrgTransaction(org.orgId, () => submitAndReleaseIfUngated("vendor_bill", generated.vendorBillDocumentId, actor))).autoApproved, true);
     await withOrgTransaction(org.orgId, () => postDocument(generated.vendorBillDocumentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }, { audit: { actorId: approver, source: "test" } }));
@@ -127,7 +132,7 @@ async function vendorBill(f: Fixture) {
   const app = await withOrgTransaction(f.org.orgId, () => createVendorPayApplication({ orgId: f.org.orgId, userId: f.actor, subcontractId: f.subcontract, periodEnd: "2026-07-16" }));
   await withOrgTransaction(f.org.orgId, () => updateVendorPayApplicationLines({ orgId: f.org.orgId, userId: f.actor, payApplicationId: app.id, expectedRevision: 1, lines: [{ sovLineId: f.sov, workCompletedThisPeriod: "500", materialsStoredCurrent: "0" }] }));
   await withOrgTransaction(f.org.orgId, () => submitVendorPayApplication(f.org.orgId, f.actor, app.id));
-  await withOrgTransaction(f.org.orgId, () => approveVendorPayApplication(f.org.orgId, f.approver, app.id));
+
   return (await withOrgTransaction(f.org.orgId, () => generateVendorPayApplicationBill(f.org.orgId, f.actor, app.id))).vendorBillDocumentId;
 }
 async function vendorRelease(f: Fixture) {
@@ -297,7 +302,7 @@ test("vendor retainage billing refuses an inactive control account before creati
     lines: [{ sovLineId: f.sov, workCompletedThisPeriod: "100", materialsStoredCurrent: "0" }],
   }));
   await withOrgTransaction(f.org.orgId, () => submitVendorPayApplication(f.org.orgId, f.actor, app.id));
-  await withOrgTransaction(f.org.orgId, () => approveVendorPayApplication(f.org.orgId, f.approver, app.id));
+
   await withBypassContext(async () => {
     await db.execute(sql`
       update orgs set settings = jsonb_set(

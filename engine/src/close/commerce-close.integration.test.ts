@@ -10,7 +10,7 @@ import { createChannel, markChannelActive, retryChannel } from "../commerce/chan
 import { upsertAccountMap } from "../commerce/account-maps.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { markSettlementLineJournal } from "../payments/psp-settlement.ts";
-import { db, withBypass } from "../platform/db.ts";
+import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { createProgram, issueStoredValue } from "../stored-value/accounts.ts";
 import {
   createScratchOrg,
@@ -547,12 +547,12 @@ test("a proven commerce task freezes one evidence snapshot, exactly once per fin
     ).rows[0]?.id;
     assert.ok(taskId, "the run carries the commerce task while Sales Channels is on");
     // Nothing to freeze before the proof completes.
-    assert.equal(await withBypass(() => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor)), null);
+    assert.equal(await withOrgContext(fx.org.orgId, () => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor)), null);
     await withBypass(async () => {
       await db.execute(sql`update close_runs set data_fingerprint = 'fp-proof-1' where id = ${runId} and org_id = ${fx.org.orgId}`);
       await db.execute(sql`update close_run_tasks set status = 'complete' where id = ${taskId} and org_id = ${fx.org.orgId}`);
     });
-    const evidenceId = await withBypass(() => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor));
+    const evidenceId = await withOrgContext(fx.org.orgId, () => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor));
     assert.ok(evidenceId);
     const rows = (
       await withBypass(() => db.execute<{ label: string; snapshot: unknown }>(sql`
@@ -569,7 +569,7 @@ test("a proven commerce task freezes one evidence snapshot, exactly once per fin
     // and still attaches once.
     const unreachable = snapshot.checks.find((check) => check.code === "commerce-storefront-unreachable");
     assert.ok((unreachable?.count ?? 0) > 0);
-    assert.equal(await withBypass(() => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor)), evidenceId);
+    assert.equal(await withOrgContext(fx.org.orgId, () => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor)), evidenceId);
     assert.equal(
       (
         await withBypass(() => db.execute<{ count: string }>(sql`

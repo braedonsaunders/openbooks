@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -191,7 +193,7 @@ test("paid order posts one balanced cash sale with gateway tenders, tax and COGS
     const emailMatch = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId,
       paidOrder("1001-email-match", { customerExternalId: null })));
     assert.equal(emailMatch.customerPartyId, stored.customerPartyId);
-    const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const outcome = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(outcome.status, "posted");
     assert.ok(outcome.documentId);
     const doc = (await withOrgContext(org.orgId, () => db.execute<{ kind: string; status: string; total: string; subtotal: string; tax_total: string; party_id: string | null; source_channel_id: string | null }>(sql`
@@ -289,7 +291,7 @@ test("discount lines net the taxable base by the discounted line's tax code with
       tenders: [{ gateway: "shopify_payments", amountMinor: 9350n, giftCardExternalId: null, authorizationRef: null }],
     });
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
-    const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const outcome = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(outcome.status, "posted");
     const components = (await withOrgContext(org.orgId, () => db.execute<{
       line_amount: string; tax_code_id: string; taxable_amount: string; tax_amount: string;
@@ -327,9 +329,9 @@ test("replaying a posted order is a no-op", { skip: !DB }, async () => {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const { channelId } = await setup(org, actor, "per_order");
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("1002")));
-    const first = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const first = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(first.status, "posted");
-    const second = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const second = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(second.status, "posted");
     assert.equal(second.documentId, first.documentId);
     const count = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
@@ -363,7 +365,7 @@ test("unmapped SKU parks with remedy; mapping it replays and posts", { skip: !DB
       tenders: [{ gateway: "shopify_payments", amountMinor: 2716n, giftCardExternalId: null, authorizationRef: null }],
     };
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, broken));
-    const parked = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const parked = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(parked.status, "exception");
     assert.equal(parked.code, "unmapped_item");
     const queued = await withBypass(() => listChannelExceptions(org.orgId, channelId, "unmapped_item"));
@@ -426,7 +428,7 @@ test("gift card tender redeems stored value", { skip: !DB }, async () => {
       ],
     };
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
-    const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const outcome = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(outcome.status, "posted");
     const card = (await withOrgContext(org.orgId, () => db.execute<{ balance_minor: string }>(sql`
       select balance_minor from stored_value_accounts where id = ${issued.accountId} and org_id = ${org.orgId}`))).rows[0]!;
@@ -457,7 +459,7 @@ test("a gift-card storefront sale issues the full paid amount in ledger units", 
       tenders: [{ gateway: "shopify_payments", amountMinor: 10_000n, giftCardExternalId: null, authorizationRef: "auth-gc-1011" }],
     };
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
-    const posted = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const posted = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(posted.status, "posted");
     const issued = (await withOrgContext(org.orgId, () => db.execute<{ issued: string; balance: string }>(sql`
       select issued_minor as issued, balance_minor as balance from stored_value_accounts
@@ -492,7 +494,7 @@ test("a storefront gift-card tender cannot exceed its stored ledger balance", { 
       tenders: [{ gateway: "gift_card", amountMinor: 10_000n, giftCardExternalId: "gc-underfunded", authorizationRef: null }],
     };
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
-    const result = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const result = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.deepEqual(result, { status: "pending", documentId: null });
     const cashSales = (await withOrgContext(org.orgId, () => db.execute<{ count: number }>(sql`
       select count(*)::int as count from documents where org_id = ${org.orgId} and kind = 'cash_sale' and external_ref = '1013'`))).rows[0]!.count;
@@ -512,14 +514,14 @@ test("replaying an approved channel cash sale posts its original approved lines 
       subjectKind: "cash_sale", assignees: [{ type: "user", userId: approver }], mode: "any",
     }));
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("1012")));
-    const held = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const held = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(held.status, "pending");
     assert.ok(held.documentId);
     const gate = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from flow_gates where org_id = ${org.orgId} and subject_id = ${held.documentId} and status = 'pending'`))).rows[0]!;
     await withBypass(() => decideGate({ gateId: gate.id, decision: "approved", userId: approver }));
 
-    const replayed = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const replayed = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(replayed.status, "posted");
     assert.equal(replayed.documentId, held.documentId);
     const doc = (await withOrgContext(org.orgId, () => db.execute<{ status: string; lines: number; tenders: number; postedEntryId: string | null }>(sql`
@@ -568,7 +570,7 @@ test("marketplace-collected tax posts no merchant liability", { skip: !DB }, asy
       tenders: [{ gateway: "shopify_payments", amountMinor: 1500n, giftCardExternalId: null, authorizationRef: null }],
     };
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
-    const outcome = await withBypass(() => postChannelOrder(org.orgId, actor, stored.id));
+    const outcome = await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id));
     assert.equal(outcome.status, "posted");
     // The merchant books 13.00: the 2.00 the facilitator kept never lands.
     const doc = (await withOrgContext(org.orgId, () => db.execute<{ total: string; tax_total: string }>(sql`

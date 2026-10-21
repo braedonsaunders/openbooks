@@ -1,3 +1,4 @@
+import { approveBudgetScenarioFixture } from "../testing/budgets.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -66,17 +67,9 @@ async function seedBudget(org: ScratchOrg & { fundId: string }, actorId: string,
       values (${org.orgId}, ${scenarioId}, ${org.accounts.adjustment}, ${org.periodId},
         ${org.subsidiaryId}, '100.0000', ${JSON.stringify({ fund: org.fundId })}::jsonb, ${actorId}, ${actorId})
     `);
-    await db.execute(sql`
-      update budget_scenarios set status = 'pending_approval', revision = revision + 1,
-             submitted_at = now(), submitted_by = ${actorId}
-       where id = ${scenarioId} and org_id = ${org.orgId}
-    `);
-    await db.execute(sql`
-      update budget_scenarios set status = 'approved', revision = revision + 1,
-             approved_at = now(), approved_by = ${actorId}
-       where id = ${scenarioId} and org_id = ${org.orgId}
-    `);
+
   });
+  await approveBudgetScenarioFixture(org.orgId, scenarioId);
   return scenarioId;
 }
 

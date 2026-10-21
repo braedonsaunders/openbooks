@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -13,6 +15,7 @@ import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import {
   createScratchOrg,
   createScratchUser,
+  grantScratchPermissions,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
 
@@ -31,6 +34,7 @@ test("an ad-hoc payment cannot pay a compliance-blocked bill", { skip: !DB }, as
   const org = await createScratchOrg();
   try {
     const actor = await createScratchUser(org.orgId, "Clerk", "ap_clerk");
+    await grantScratchPermissions(org.orgId, actor, ["ap.pay"]);
     // Opt the org into subcontractor compliance.
     await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true'::jsonb) where id = ${org.orgId}`);
     // A vendor class plus a block_payment insurance requirement (no expiry,

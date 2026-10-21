@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '../platform/db.ts'
-import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow } from '../testing/fixtures.ts'
+import { createScratchOrg, dropScratchOrg, seedFlowActors, seedApprovalFlow, grantScratchPermissions } from '../testing/fixtures.ts'
 import { submitFinancialChange } from '../flows/financial-changes-adapter.ts'
 import { decideGate } from '../flows/gates.ts'
 import { proposeProvisionAssessment, applyProvisionAssessment, type ProvisionProposal } from './assessments.ts'
@@ -14,6 +14,7 @@ test('governed construction forecasts recognize remaining loss once, refuse stal
   const org = await createScratchOrg()
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))
+    await grantScratchPermissions(org.orgId, actors.approver1Id, ["gl.manage"])
     const expense = randomUUID(), liability = randomUUID()
     await withBypassContext(async () => {
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{reportingFramework}','"ifrs"') where id=${org.orgId}`)
@@ -92,6 +93,7 @@ test('loss-contract detection follows the project owner and the closing book', {
   const org = await createScratchOrg()
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))
+    await grantScratchPermissions(org.orgId, actors.approver1Id, ["gl.manage"])
     const expense = randomUUID(), liability = randomUUID(), projectId = randomUUID(), taxBook = randomUUID()
     await withBypassContext(async () => {
       await db.execute(sql`insert into accounts(id,org_id,number,name,type) values

@@ -76,6 +76,10 @@ async function insertApprovedPo(org: ScratchOrg, subsidiaryId: string | null, cu
     values (${poId}, ${org.orgId}, 'purchase_order', 'draft', ${documentNumber},
             ${org.vendorId}, ${subsidiaryId}, ${org.date}, ${currency}, 100, 0, 100, null)`);
   await db.execute(sql`
+    insert into document_lines
+      (id,org_id,document_id,line_number,account_id,description,quantity,unit,unit_price,amount,tax_amount)
+    values (${randomUUID()},${org.orgId},${poId},1,${org.accounts.cogs},'PO inheritance line','10','ea','10','100','0')`);
+  await db.execute(sql`
     update documents set status = 'approved', updated_at = now()
      where id = ${poId} and org_id = ${org.orgId}`);
   return poId;
@@ -89,6 +93,13 @@ async function insertCapture(
   purchaseOrderId: string | null,
 ): Promise<string> {
   const captureId = randomUUID();
+  const capture = normalized(invoiceNumber, org.accounts.cogs, currency);
+  if (purchaseOrderId) {
+    const line = (await db.execute<{ id: string }>(sql`
+      select id from document_lines where org_id=${org.orgId} and document_id=${purchaseOrderId} and line_number=1`)).rows[0];
+    assert.ok(line, "the selected purchase order has its matched source line");
+    capture.lines[0]!.purchaseOrderLineId = line.id;
+  }
   await db.execute(sql`
     insert into ap_capture_items
       (id, org_id, file_id, status, original_filename, content_hash,
@@ -96,7 +107,7 @@ async function insertCapture(
        created_by, updated_by)
     values (${captureId}, ${org.orgId}, ${fileId}, 'needs_review', ${invoiceNumber + ".pdf"},
             ${`poinherit-${randomUUID().replaceAll("-", "")}`}, 'vendor_bill',
-            ${JSON.stringify(normalized(invoiceNumber, org.accounts.cogs, currency))}::jsonb,
+            ${JSON.stringify(capture)}::jsonb,
             '[]'::jsonb, ${org.vendorId}, ${purchaseOrderId},
             null, null)`);
   return captureId;

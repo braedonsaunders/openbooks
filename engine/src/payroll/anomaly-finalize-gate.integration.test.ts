@@ -75,7 +75,8 @@ test("anomaly finalization uses the native active schedule owner and refuses una
         assert.equal((await db.execute(sql`update pay_schedules set is_active=true
           where org_id=${fx.orgId} and id=${scheduleId} returning id`)).rows.length, 1);
       }
-      for (const subsidiaryId of [fx.subsidiaryId, childId]) {
+      // The native root cannot be deactivated; exercise unavailable ownership on its child.
+      for (const subsidiaryId of [childId]) {
         const documentId = subsidiaryId === fx.subsidiaryId ? rootRun.documentId : childRun.documentId;
         assert.equal((await db.execute(sql`update subsidiaries set is_active=false
           where org_id=${fx.orgId} and id=${subsidiaryId} returning id`)).rows.length, 1);

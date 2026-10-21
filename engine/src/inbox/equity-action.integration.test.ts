@@ -8,7 +8,7 @@ import { pendingEquityActions, withdrawEquityAction } from "../equity/governance
 import { EQUITY_ACTION_SUBJECT_KIND } from "../flows/equity-actions-adapter.ts";
 import { decideGate, worklistGates } from "../flows/gates.ts";
 import { db } from "../platform/db.ts";
-import { createScratchUser, dropScratchOrgReporting, seedApprovalFlow } from "../testing/fixtures.ts";
+import { createScratchUser, dropScratchOrgReporting, seedApprovalFlow, grantScratchPermissions } from "../testing/fixtures.ts";
 import { equityRefusal, setupEquityWorld, type EquityWorld } from "../testing/equity-world.ts";
 import { actOnInboxItem, InboxError, listInbox } from "./index.ts";
 
@@ -98,26 +98,43 @@ test("rejecting from the inbox needs a reason and applies nothing", { skip: !DB 
   }
 });
 
-test("the requester can never approve its own equity action", { skip: !DB }, async () => {
+test("the tenant may authorize its equity requester to decide its assigned gate", { skip: !DB }, async () => {
   const w = await setupEquityWorld();
   try {
-    // Even a Flow that names the requester and opts out of the self-approval
-    // guard routes the action to the other approver only.
+    await grantScratchPermissions(w.org.orgId, w.managerId, ["equity.approve"]);
     await seedApprovalFlow(w.org.orgId, {
       subjectKind: EQUITY_ACTION_SUBJECT_KIND, mode: "any", preventSelfApproval: false,
+      assignees: [{ type: "user", userId: w.managerId }],
+    });
+    const { plan, requestId } = await planWithPendingReserve(w);
+    const items = await inbox(w, w.managerId);
+    assert.equal(items.length, 1);
+    assert.deepEqual(await inbox(w, w.approverId), []);
+    await actOnInboxItem({ orgId: w.org.orgId, actorId: w.managerId, asOf: AS_OF }, items[0]!.id, "approve");
+    assert.equal((await request(w.org.orgId, requestId)).status, "applied");
+    assert.equal(await reserved(w, plan.id), "4001000");
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
+
+test("the tenant may exclude its equity requester from its assigned approval gate", { skip: !DB }, async () => {
+  const w = await setupEquityWorld();
+  try {
+    await grantScratchPermissions(w.org.orgId, w.managerId, ["equity.approve"]);
+    await seedApprovalFlow(w.org.orgId, {
+      subjectKind: EQUITY_ACTION_SUBJECT_KIND, mode: "any", preventSelfApproval: true,
       assignees: [{ type: "user", userId: w.managerId }, { type: "user", userId: w.approverId }],
     });
     const { plan, requestId } = await planWithPendingReserve(w);
     assert.deepEqual(await inbox(w, w.managerId), []);
-    assert.deepEqual(await worklistGates(w.org.orgId, w.managerId), [], "no gate names the requester");
+    assert.deepEqual(await worklistGates(w.org.orgId, w.managerId), []);
     const [item] = await inbox(w, w.approverId);
     await assert.rejects(
       actOnInboxItem({ orgId: w.org.orgId, actorId: w.managerId, asOf: AS_OF }, item!.id, "approve"),
       (error: unknown) => error instanceof InboxError && error.code === "NOT_FOUND",
-      "the approver's item is invisible to the requester",
     );
-    const gateId = item!.source.id;
-    await assert.rejects(decideGate({ gateId, decision: "approved", userId: w.managerId }));
+    await assert.rejects(decideGate({ gateId: item!.source.id, decision: "approved", userId: w.managerId }));
     assert.equal((await request(w.org.orgId, requestId)).status, "pending_approval");
     assert.equal(await reserved(w, plan.id), "4000000");
   } finally {
@@ -125,21 +142,18 @@ test("the requester can never approve its own equity action", { skip: !DB }, asy
   }
 });
 
-test("an approver named by the Flow without the equity.approve duty cannot release an equity action", { skip: !DB }, async () => {
+test("a Flow naming an equity reviewer without approval authority refuses routing before release", { skip: !DB }, async () => {
   const w = await setupEquityWorld();
   try {
     const reviewerId = await createScratchUser(w.org.orgId, "Read-only Reviewer", "equity_reader");
     await db.execute(sql`update app_roles set permissions = '["equity.read"]'::jsonb where org_id = ${w.org.orgId} and key = 'equity_reader'`);
     await seedApprovalFlow(w.org.orgId, { subjectKind: EQUITY_ACTION_SUBJECT_KIND, assignees: [{ type: "user", userId: reviewerId }], mode: "any" });
-    const { plan, requestId } = await planWithPendingReserve(w);
-    const [item] = await listInbox({ orgId: w.org.orgId, actorId: reviewerId, asOf: AS_OF }, { kinds: ["equity_action"] });
-    await assert.rejects(
-      actOnInboxItem({ orgId: w.org.orgId, actorId: reviewerId, asOf: AS_OF }, item!.id, "approve"),
-      (error: unknown) => error instanceof Error && /equity\.approve/.test(error.message),
-    );
-    assert.equal((await request(w.org.orgId, requestId)).status, "pending_approval", "the refused decision rolls back");
-    assert.deepEqual((await flowState(w.org.orgId, requestId)).gates, ["pending"]);
-    assert.equal(await reserved(w, plan.id), "4000000");
+    const before = (await db.execute(sql`select id from equity_action_requests where org_id=${w.org.orgId}`)).rows;
+    await assert.rejects(planWithPendingReserve(w), /cannot approve this record/);
+    assert.deepEqual((await db.execute(sql`select id from equity_action_requests where org_id=${w.org.orgId}`)).rows, before);
+    assert.deepEqual(await inbox(w, reviewerId), []);
+    const structure = await loadStructure({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, asOf: "2026-12-31" });
+    assert.equal(structure.plans.find(plan => plan.code === "EIP")?.reserved, "4000000");
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
   }
@@ -150,6 +164,12 @@ test("the requester withdraws a pending equity action: its approval closes and n
   try {
     await seedApprovalFlow(w.org.orgId, { subjectKind: EQUITY_ACTION_SUBJECT_KIND, assignees: [{ type: "user", userId: w.approverId }], mode: "any" });
     const { plan, requestId } = await planWithPendingReserve(w);
+    await assert.rejects(db.execute(sql`update equity_action_requests set status='withdrawn',
+      decided_by=${w.managerId},decided_at=now(),decision_comment='Withdraw this pending request'
+      where org_id=${w.org.orgId} and id=${requestId}`),
+    (error: unknown) => error instanceof Error && error.cause instanceof Error
+      && /after cancelling its native Flow gates/.test(error.cause.message));
+
 
     await assert.rejects(
       withdrawEquityAction({ orgId: w.org.orgId, actorId: w.approverId, requestId, reason: "Not mine to withdraw" }),

@@ -127,7 +127,7 @@ test("a refund arriving before its success parks, settles, and queues exactly on
       select status, reason from payment_disputes where org_id = ${org.orgId}`)).rows;
     assert.equal(queued.length, 1);
     assert.equal(queued[0]!.status, "pending_review");
-    assert.match(queued[0]!.reason ?? "", /did not report the refunded amount/);
+    assert.match(queued[0]!.reason ?? "", /did not report a refund amount/);
 
     // The refund redelivery is a new provider event, so it queues as its own
     // review row — but the marker stays single and nothing posts twice.

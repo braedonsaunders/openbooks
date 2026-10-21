@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -24,7 +26,7 @@ async function fixture(org:ScratchOrg,deposit=false) {
       to_char(month_start,'YYYY-MM'),month_start::date,(month_start+interval '1 month'-interval '1 day')::date,false,p.fiscal_calendar_id
       from accounting_periods p cross join generate_series('2026-08-01'::date,'2027-12-01'::date,interval '1 month') month_start
      where p.org_id=${org.orgId} and p.id=${org.periodId}`);
-  await db.execute(sql`update app_roles set permissions='["ap.pay","documents.manage","admin.setup.manage"]'::jsonb where org_id=${org.orgId} and key='admin'`);
+  await db.execute(sql`update app_roles set permissions='["ap.pay","ap.create","documents.manage","admin.setup.manage"]'::jsonb where org_id=${org.orgId} and key='admin'`);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"contractorWithholding":true,"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
   await db.execute(sql`insert into parties(id,org_id,kind,display_name) values(${authority},${org.orgId},'company','Tax authority')`);
   await db.execute(sql`insert into vendor_roles(org_id,party_id,backup_withholding) values(${org.orgId},${org.vendorId},${deposit}),(${org.orgId},${authority},false)`);

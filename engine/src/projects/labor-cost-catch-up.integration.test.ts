@@ -45,7 +45,7 @@ async function insertProject(org: ScratchOrg, code: string, isInternal: boolean)
     insert into projects
       (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom, is_internal)
     values
-      (${id}, ${org.orgId}, ${org.subsidiaryId}, ${code}, ${code}, ${org.customerId},
+      (${id}, ${org.orgId}, ${org.subsidiaryId}, ${code}, ${code}, ${isInternal ? null : org.customerId},
        'active', true, '{}'::jsonb, ${isInternal})`);
   return id;
 }

@@ -24,7 +24,7 @@ test("fx revaluation clears unrealized positions on a secondary book", { skip: !
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const taxBookId = randomUUID();
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-      coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
+      coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true,"multiBookAccounting":true}'::jsonb) where id=${org.orgId}`);
     await db.execute(sql`
       update orgs set settings = settings || jsonb_build_object('controlAccounts',
         coalesce(settings->'controlAccounts', '{}'::jsonb) ||
@@ -97,7 +97,7 @@ test("secondary-book revaluation keeps book accounts and maps only the gain or l
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const taxBookId = randomUUID();
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-      coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
+      coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true,"multiBookAccounting":true}'::jsonb) where id=${org.orgId}`);
     await db.execute(sql`
       update orgs set settings = settings || jsonb_build_object('controlAccounts',
         coalesce(settings->'controlAccounts', '{}'::jsonb) ||

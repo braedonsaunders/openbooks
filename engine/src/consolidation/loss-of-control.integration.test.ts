@@ -7,6 +7,7 @@ import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
+  grantScratchPermissions,
   dropScratchOrg,
   seedFlowActors,
   seedApprovalFlow,
@@ -65,9 +66,8 @@ async function fixture(work: (f: Fixture) => Promise<void>) {
       elimination = randomUUID(),
       interest = randomUUID(),
       accounts: Record<string, string> = {};
-    await db.execute(
-      sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'close.run','grant')`,
-    );
+    await grantScratchPermissions(org.orgId, actors.submitterId, ["close.run"]);
+    await grantScratchPermissions(org.orgId, actors.approver1Id, ["close.run"]);
     await db.execute(
       sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_elimination,is_active) values(${child},${org.orgId},${org.subsidiaryId},'Disposal subject','CAD','CA',false,true),(${elimination},${org.orgId},${org.subsidiaryId},'Group eliminations','CAD','CA',true,true)`,
     );

@@ -193,7 +193,7 @@ test("processor receipts retain native approval gates and refuse revoked funding
     const { h, receipt, save } = await fixture(org);
     await save();
     const approver = await createScratchUser(org.orgId, "Receipt approver", "receipt_approver");
-    await grantScratchPermissions(org.orgId, approver, ["ar.pay"]);
+    await grantScratchPermissions(org.orgId, approver, ["ar.pay", "ar.approve"]);
     await seedApprovalFlow(org.orgId, { subjectKind: "customer_payment", mode: "any", assignees: [{ type: "user", userId: approver }] });
     assert.equal((await submitAndReleaseIfUngated("customer_payment", receipt.id, h.userId)).gated, true);
     await assert.rejects(postPaymentWithApplications(receipt.id, undefined, h.userId), /approval/);

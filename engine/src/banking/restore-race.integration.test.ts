@@ -135,7 +135,7 @@ for (const scenario of ["new session", "cutoff extension"] as const) {
           assert.equal(approvals.length, 1);
           assert.equal(approvals[0]!.changes.excludedStatementLines, 1);
           assert.equal(restores.length, 0);
-          assert.deepEqual(await markReconciled(recon.id, ctx), { journalLinesReconciled: 0 });
+          assert.deepEqual(await markReconciled(recon.id, ctx), { status: "signed_off", journalLinesReconciled: 0 });
         }
       } finally {
         await dropScratchOrg(org.orgId);

@@ -3,8 +3,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { installEngineSeams } from "../composition/install.ts";
 import { runScheduleNow } from "./recurring.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+
+installEngineSeams();
 
 for (const scenario of ["customer_invoice", "tax code", "rate change", "inactive member", "journal", "eliminating journal", "restricted journal"] as const) {
   const kind = scenario.endsWith("journal") ? "journal" : "customer_invoice";
@@ -13,7 +16,7 @@ for (const scenario of ["customer_invoice", "tax code", "rate change", "inactive
     const org = await createScratchOrg();
     try {
       const actor = await createScratchUser(org.orgId, "Template operator", "recurring_operator");
-      await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb where org_id=${org.orgId} and key='recurring_operator'`);
+      await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post","ar.create","ar.post"]'::jsonb where org_id=${org.orgId} and key='recurring_operator'`);
       const segment = randomUUID(), headerValue = randomUUID(), lineValue = randomUUID();
       const template = randomUUID(), schedule = randomUUID(), group = randomUUID(), taxCode = randomUUID(), child = randomUUID();
       const secondaryBook = kind === "journal" ? randomUUID() : null;

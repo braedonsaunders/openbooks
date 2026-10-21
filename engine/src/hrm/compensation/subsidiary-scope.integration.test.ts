@@ -13,7 +13,7 @@ import {
   CompensationError, approvePlan, approvePlanLine, attachStatementPdf, cancelCycle, closeCycle, closePlan, compaRatioFor,
   computeGapSnapshot, createCycle, createPayBand, createPlan, createPlanLine, cyclePacing, fulfilPayInformationRequest, generateStatement,
   latestGapSnapshot, listPayBands, listPlanLines, listPlanLinesForPlans, listPlans, listStatements, proposeLine, refusePayInformationRequest,
-  renderStatementPdf, requestPayInformation, submitCycleForApproval, submitPlan,
+  renderStatementPdf, requestPayInformation, submitCycleForApproval, submitPlan, pushCycle,
 } from "./index.ts";
 import { compensationArchitectureSummary } from './overview.ts';
 import { listPayBandVersions } from './bands.ts';
@@ -142,18 +142,23 @@ async function cycle(w: ScopeWorld, actorId: string, name: string, employerSubsi
     orgId: w.orgId, actorId, name, kind: "merit", effectiveOn: "2026-04-01", currency: "CAD",
     guidelineKind: "matrix", guideline: {}, scope: { employerSubsidiaryId, departmentId: null },
   });
-  if (status) await force(sql`update hrm_comp_cycles set status = ${status} where org_id = ${w.orgId} and id = ${created.id}`);
+  if (status) await force(sql`update hrm_comp_cycles set status = 'open' where org_id = ${w.orgId} and id = ${created.id}`);
+  if (status === "pushed") {
+    await setFeatures(w.orgId, { payroll: true });
+    assert.equal((await submitCycleForApproval({ orgId: w.orgId, actorId, cycleId: created.id })).status, "approved");
+    assert.equal((await pushCycle({ orgId: w.orgId, actorId, cycleId: created.id })).pushed, 0);
+  }
   return created;
 }
 
 const cycleWorker = async (w: ScopeWorld, subsidiaryId: string) =>
   (await seedEmployment(w.orgId, subsidiaryId, { displayName: "Cycle Worker", withVersion: false })).employmentId;
 
-async function cycleLine(orgId: string, cycleId: string, employmentId: string, status: "pending" | "approved"): Promise<string> {
+async function cycleLine(orgId: string, cycleId: string, employmentId: string, status: "pending"): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     insert into hrm_comp_cycle_lines (org_id, cycle_id, employment_id, current_rate, currency, basis, status, approver_party_id, decided_at)
     select ${orgId}, ${cycleId}, e.id, '90000.0000', 'CAD', 'annual', ${status},
-           case when ${status} = 'approved' then e.worker_party_id end, case when ${status} = 'approved' then now() end
+           null, null
       from worker_employments e where e.org_id = ${orgId} and e.id = ${employmentId}
     returning id`)).rows[0]!.id;
 }
@@ -403,14 +408,15 @@ scopeMatrix([
       await scopePlanTo(w, planB.id, w.subB);
       const submitB = await refusal(submitPlan({ orgId, actorId: w.scoped, planId: planB.id }), CompensationError, NOT_VISIBLE);
       assert.equal(submitB.code, "NOT_FOUND");
-      assert.equal((await submitPlan({ orgId, actorId: w.admin, planId: planB.id })).status, "submitted");
+      assert.equal((await submitPlan({ orgId, actorId: w.admin, planId: planB.id })).status, "approved");
+      await hiddenLikeMissing("approve B plan", () => approvePlan({ orgId, actorId: w.scoped, planId: planB.id }),
+        () => approvePlan({ orgId, actorId: w.scoped, planId: randomUUID() }));
       const mixed = await refusal(submitPlan({ orgId, actorId: w.scoped, planId: plan.id }), CompensationError);
       assert.equal(mixed.code, "NOT_FOUND", "a plan carrying a B line does not submit for an A-scoped manager");
       const planA = await newPlan(w, "A-only plan");
       await line(w.scoped, w.subA, "Engineer III A2", "1", planA.id);
-      for (const [move, status] of [[submitPlan, "submitted"], [approvePlan, "approved"], [closePlan, "closed"]] as const) {
-        assert.equal((await move({ orgId, actorId: w.scoped, planId: planA.id })).status, status);
-      }
+      assert.equal((await submitPlan({ orgId, actorId: w.scoped, planId: planA.id })).status, "approved");
+      assert.equal((await closePlan({ orgId, actorId: w.scoped, planId: planA.id })).status, "closed");
     },
   }),
   scopeRow({
@@ -438,14 +444,18 @@ scopeMatrix([
       const orgId = w.orgId;
       const cancel = (cycleId: string) => () => cancelCycle({ orgId, actorId: w.scoped, cycleId, reason: "probe" });
       await hiddenLikeMissing("cancel B round", cancel((await cycle(w, w.admin, "B round", w.subB)).id), cancel(randomUUID()));
-      // An A round carrying a B line: the unrestricted admin passes scope and reaches the approval-flow gate.
+      // A round carrying both entities needs an unrestricted submitter.
       const mixed = await cycle(w, w.admin, "Mixed round", w.subA, "open");
-      for (const employmentId of [empA, empB]) await cycleLine(orgId, mixed.id, employmentId, "approved");
+      for (const employmentId of [empA, empB]) {
+        const lineId = await cycleLine(orgId, mixed.id, employmentId, "pending");
+        await proposeLine({ orgId, actorId: w.admin, lineId, proposedRate: "95000.0000", reason: "Merit proposal" });
+      }
       const submit = (actorId: string) => refusalOf(submitCycleForApproval({ orgId, actorId, cycleId: mixed.id }));
       const hidden = await submit(w.scoped);
       assert.equal(hidden.code, "NOT_FOUND");
       assert.match(hidden.message, NOT_VISIBLE);
-      assert.match((await submit(w.admin)).message, /approval flow/, "unrestricted passes scope and reaches Flows");
+      assert.equal((await submitCycleForApproval({ orgId, actorId: w.admin, cycleId: mixed.id })).status, "approved",
+        "an unrestricted operator releases the round when the tenant has configured no gates");
 
       const proposals = await cycle(w, w.admin, "Proposal round", w.subA, "open");
       const propose = (lineId: string) => () => proposeLine({ orgId, actorId: w.scoped, lineId, proposedRate: "95000.0000", reason: "merit" });

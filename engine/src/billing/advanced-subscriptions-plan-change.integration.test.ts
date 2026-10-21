@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgContext } from "../platform/db.ts";
 import {
   activateLifecycle,
   applyAmendment,
@@ -61,6 +61,11 @@ async function seedBilledContract(org: ScratchOrg, actorId: string) {
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
     coalesce(settings->'features','{}'::jsonb) || '{"subscriptionBilling":true,"advancedSubscriptions":true}'::jsonb)
     where id=${org.orgId}`);
+  await db.execute(sql`
+    insert into accounting_periods
+      (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+    select ${randomUUID()}, ${org.orgId}, 2026, 5, '2026-05', '2026-05-01', '2026-05-31', false, fiscal_calendar_id
+      from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`);
   const plan = await seedPlanVersion(org, actorId, { name: "Plan A", unitPrice: "100.00" });
   const subscriptionId = randomUUID();
   await db.execute(sql`
@@ -75,7 +80,14 @@ async function seedBilledContract(org: ScratchOrg, actorId: string) {
     termStartsOn: "2026-05-15",
     renewalPolicy: "none",
   });
-  await runDueSubscriptions("2026-05-15");
+  const run = await withOrgContext(org.orgId, () => runDueSubscriptions("2026-05-15"));
+  const billed = (await db.execute<{ next_bill_on: string; last_error: string | null }>(sql`
+    select next_bill_on::text, last_error from subscriptions
+     where org_id = ${org.orgId} and id = ${subscriptionId}`)).rows[0]!;
+  assert.equal(run.failed, 0, billed.last_error ?? "the first contract invoice must succeed");
+  assert.equal(run.billed, 1);
+  assert.equal(run.posted, 1);
+  assert.equal(billed.next_bill_on, "2026-06-15");
   return { subscriptionId, planA: plan };
 }
 

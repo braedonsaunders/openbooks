@@ -128,7 +128,7 @@ test(
         unmatchedStatementLines: 0,
         matchedJournalLines: 1,
       });
-      assert.deepEqual(await markReconciled(recon.id, ctx), { journalLinesReconciled: 1 });
+      assert.deepEqual(await markReconciled(recon.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
       const status = (await db.execute<{ status: string }>(sql`
         select status from reconciliations where org_id = ${org.orgId} and id = ${recon.id}
       `)).rows[0]!.status;
@@ -210,7 +210,7 @@ test(
         unmatchedStatementLines: 0,
         matchedJournalLines: 1,
       });
-      assert.deepEqual(await markReconciled(recon2.id, ctx), { journalLinesReconciled: 1 });
+      assert.deepEqual(await markReconciled(recon2.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
       const carriedStillOpen = (await db.execute<{ count: number }>(sql`
         select count(*)::int as count
           from journal_lines jl

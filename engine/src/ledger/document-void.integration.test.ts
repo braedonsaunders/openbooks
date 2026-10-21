@@ -520,7 +520,7 @@ test("a void naming an adjustment-period reversal posts the reversal there", { s
       );
       assert.ok(error instanceof DocumentVoidError, `expected a named refusal for ${reversalPeriodId}`);
       assert.equal(error.code, "reversal-period-uncovered");
-      assert.match(error.message, /reversal period .* is not a(n)? (valid period reference|adjustment period covering)/);
+      assert.match(error.message, /reversal period .* is not a(n)? (valid period reference|adjustment period in the subsidiary’s effective fiscal calendar covering)/);
     }
     const untouched = (await db.execute<{ status: string; reversal_entry_id: string | null }>(sql`
       select status, reversal_entry_id from documents where id = ${refused.documentId}

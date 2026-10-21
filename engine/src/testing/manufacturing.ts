@@ -20,7 +20,7 @@ export async function createWorkOperator(orgId: string, name: string, permission
 export function createManufacturingOperator(orgId: string, name: string) {
   return createWorkOperator(orgId, name, [
     "manufacturing.read", "manufacturing.manage", "items.read", "items.manage", "items.post",
-    "admin.setup.manage", "ap.read", "ap.manage", "ap.post",
+    "admin.setup.manage", "ap.read", "ap.create", "ap.post",
     "time.read", "time.manage", "time.approve", "time.reopen",
   ]);
 }

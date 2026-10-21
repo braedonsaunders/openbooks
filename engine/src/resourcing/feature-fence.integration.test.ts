@@ -14,6 +14,8 @@ import { createRetainer, draftHoursDrawdown } from "./retainers.ts";
 import { cancelResourceRequest, createResourceRequest, submitResourceRequest } from "./requests.ts";
 import { deleteAssignment, releaseAssignment, upsertAssignment } from "./assignments.ts";
 
+installEngineSeams();
+
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 type Fixture = { orgId: string; actorId: string; approverId: string; customerId: string; serviceItemId: string; projectId: string; employeePartyId: string };
 const KEYS = { projects: true, flows: true, revenueRecognition: true, resourcing: true, resourceRequests: true, retainerBilling: true };

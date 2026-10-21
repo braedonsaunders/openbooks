@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -168,7 +170,7 @@ test("inbound fulfilment issues stock and records COGS when the sale posted with
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const { channelId } = await setup(org, actor, false);
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("2001")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     // The storefront fulfils: the sale posted revenue but moved no stock.
     assert.equal(await issueCount(org.orgId, org.items.fifo), "0");
     const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "2001", {
@@ -204,7 +206,7 @@ test("inbound fulfilment behind an issued sale is tracking-only", { skip: !DB },
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const { channelId } = await setup(org, actor, true);
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("2002")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     // OpenBooks fulfilled: the sale already relieved the stock.
     assert.equal(await issueCount(org.orgId, org.items.fifo), "1");
     const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "2002", {
@@ -227,7 +229,7 @@ test("an unmapped fulfilment location parks with its remedy", { skip: !DB }, asy
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const { channelId } = await setup(org, actor, false);
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("2003")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "2003", {
       kind: "fulfilment",
       externalId: "fulfilment:F3",
@@ -254,7 +256,7 @@ test("partial fulfilments split one sale line across events with linkage", { ski
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const { channelId } = await setup(org, actor, false);
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("2006")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     assert.equal(await issueCount(org.orgId, org.items.fifo), "0");
     const first = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "2006", {
       kind: "fulfilment",
@@ -317,7 +319,7 @@ test("a cancelled fulfilment reverses its issue", { skip: !DB }, async () => {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const { channelId } = await setup(org, actor, false);
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("2004")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "2004", {
       kind: "fulfilment",
       externalId: "fulfilment:F4",
@@ -391,7 +393,7 @@ test("a manual push fulfils the order at Shopify with a fake server", { skip: !D
     const { channelId } = await setup(org, actor, true);
     void channelId;
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, paidOrder("2005")));
-    assert.equal((await withBypass(() => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
+    assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     const calls: Array<{ query: string; variables: unknown }> = [];
     const outcome = await withBypass(() => requestChannelFulfilmentPush(
       org.orgId, actor, { orderId: stored.id }, { shopifyTransport: fakeShopifyTransport(calls) },

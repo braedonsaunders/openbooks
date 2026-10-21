@@ -1,3 +1,5 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONFORMANCE_CORPUS, validateCorpus } from "./matrix.ts";
