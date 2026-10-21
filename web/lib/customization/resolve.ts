@@ -6,6 +6,7 @@ import {
   defaultFormLayout,
   defaultListView,
   getRecordType,
+  registeredListColumns,
   isUntouchedSeededView,
   mergeRegisteredFieldsIntoLayout,
   stripSeededDefaultMark,
@@ -293,7 +294,7 @@ function mergeCustomFieldsIntoView(
     }
   }
   const live = new Set(showInListDefs.map((d) => `cf_${d.key}`));
-  view.columns = view.columns.filter((c) => isCustomFieldKey(c.key) ? live.has(c.key) : !!meta?.listColumns.some(column => column.key === c.key));
+  view.columns = registeredListColumns(view.recordType, view.columns).filter((c) => !isCustomFieldKey(c.key) || live.has(c.key));
   return view;
 }
 

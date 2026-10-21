@@ -8,6 +8,7 @@ import { ChevronUp, ChevronDown, Eye, EyeOff, GripVertical, Plus, Trash2 } from 
 import { Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import {
   defaultListView,
+  registeredListColumns,
   getRecordType,
   isCustomFieldKey,
   customFieldDefKey,
@@ -44,6 +45,7 @@ export function NewViewButton({ recordType }: { recordType: string }) {
 }
 
 function ensureCustomColumns(view: ListViewConfig, showInListDefs: CustomFieldDefClient[]): ListViewConfig {
+  view.columns = registeredListColumns(view.recordType, view.columns)
   const placed = new Set(view.columns.map((c) => c.key))
   for (const column of getRecordType(view.recordType)?.listColumns ?? []) {
     if (!placed.has(column.key)) {

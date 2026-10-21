@@ -710,6 +710,12 @@ export function mergeRegisteredFieldsIntoLayout(layout: FormLayoutConfig): FormL
 }
 
 /** The system-default list view: all columns (registry order), no filters. */
+/** Stored lists and their designer share the current catalog's built-in columns. */
+export function registeredListColumns(recordType: string, columns: readonly ListColumnPlacement[]): ListColumnPlacement[] {
+  const registered = new Set(RECORD_TYPE_BY_KEY[recordType]?.listColumns.map(column => column.key) ?? []);
+  return columns.filter(column => isCustomFieldKey(column.key) || registered.has(column.key));
+}
+
 export function defaultListView(recordType: RecordTypeKey, context: ListViewContext = {}): ListViewConfig {
   const meta = RECORD_TYPE_BY_KEY[recordType]
   if (!meta) throw new Error(`unknown record type: ${recordType}`)

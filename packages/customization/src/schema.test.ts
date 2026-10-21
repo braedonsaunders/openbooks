@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   defaultListView,
+  registeredListColumns,
   defaultFormLayout,
   lintListView,
   lintFormLayout,
@@ -10,6 +11,17 @@ import {
   resolveFormTabs,
 } from './schema.ts'
 import { getRecordType, recordTypeForFeatureState } from './registry.ts'
+
+test('stored lists remain editable after a built-in column is removed', () => {
+  const stored = defaultListView('vendor_bill')
+  stored.columns.push({ key: '_actions', visible: true }, { key: 'cf_reference', visible: true })
+  const current = { ...stored, columns: registeredListColumns(stored.recordType, stored.columns) }
+  assert.deepEqual(lintListView(current), [])
+  assert.ok(!current.columns.some(column => column.key === '_actions'))
+  assert.ok(current.columns.some(column => column.key === 'cf_reference'))
+  assert.deepEqual(current.filters, stored.filters)
+  assert.deepEqual(current.sort, stored.sort)
+})
 
 test('stored project billing-method views retain their columns, filters and sort', () => {
   const view = {
