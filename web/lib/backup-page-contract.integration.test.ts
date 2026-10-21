@@ -117,7 +117,8 @@ const backupRunCases = [
               return {
                 format: "module",
                 shortCircuit: true,
-                source: `const key = Symbol.for('openbooks.backup-run-gate')
+                source: `export { guardUnrestrictedScope } from ${JSON.stringify(new URL('./authz.ts', import.meta.url).href)}
+                  const key = Symbol.for('openbooks.backup-run-gate')
                   export async function guardPermission() { return globalThis[key] }`,
               };
             }
