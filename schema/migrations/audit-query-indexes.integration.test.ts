@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import pg from 'pg'
@@ -8,15 +9,22 @@ test('audit indexes build concurrently and resume without duplicate or invalid i
   skip: !process.env.OPENBOOKS_TEST_ADMIN_DB_URL,
 }, async () => {
   const url = process.env.OPENBOOKS_TEST_ADMIN_DB_URL!
-  assert.match(new URL(url).pathname, /^\/ob_/, 'index conformance must use a disposable test database')
-  const pool = new pg.Pool({ connectionString: url, max: 1 })
-  const client = await pool.connect()
+  const control = new pg.Client({ connectionString: url })
+  await control.connect()
+  const database = `ob_audit_indexes_${randomBytes(8).toString('hex')}`
+  const scratchUrl = new URL(url)
+  scratchUrl.pathname = `/${database}`
+  await control.query(`create database "${database}"`)
+  const client = new pg.Client({ connectionString: scratchUrl.href })
   const filename = 'schema/migrations/generated/0468_audit_query_indexes.sql'
   const body = readFileSync(filename, 'utf8')
   assert.equal(migrationRunsWithoutTransaction(body), true)
   try {
-    // These names belong only to the migration under test in this scratch database.
-    await client.query('drop index if exists public.audit_log_org_at_id, public.audit_log_org_metadata')
+    await client.connect()
+    await client.query(`create table public.audit_log (
+      id uuid primary key, org_id uuid not null, at timestamptz not null,
+      table_name text, row_id uuid, action text, actor_id uuid
+    )`)
     const apply = () => executeMigrationBody(client, body, { transactional: false, filename })
     await apply()
     const read = async () => (await client.query(`
@@ -33,7 +41,8 @@ test('audit indexes build concurrently and resume without duplicate or invalid i
     await apply()
     assert.deepEqual(await read(), first)
   } finally {
-    client.release()
-    await pool.end()
+    await client.end()
+    try { await control.query(`drop database "${database}" with (force)`) }
+    finally { await control.end() }
   }
 })

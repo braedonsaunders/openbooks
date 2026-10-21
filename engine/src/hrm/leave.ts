@@ -907,11 +907,9 @@ export interface SubmitLeaveRequestQuery {
 
 /**
  * Submit a draft for governed approval. Opens the native approval run
- * through the flows planning entrypoint (lazy import: the flows registry
- * loads this service's adapter, so a static import would cycle). A request
- * no enabled flow gates is refused with the configuration remedy — never
- * auto-approved. All filing validations re-run: a draft is a parking spot,
- * never a promise.
+ * through the native Flow router. Configured gates must complete; a tenant's
+ * zero-gate policy releases immediately. All filing validations run again
+ * before submission.
  */
 export async function submitLeaveRequest(
   query: SubmitLeaveRequestQuery,

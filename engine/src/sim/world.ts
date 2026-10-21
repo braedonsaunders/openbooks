@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { db, withBypass, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { civilDateFromParts, endOfMonth } from "../platform/business-date.ts";
 import { dropSimOrg } from "../testing/fixtures.ts";
 import { provisionOrganizationDefaults } from "../provisioning/organization-provisioning.ts";
@@ -555,9 +555,6 @@ export async function provisionOrg(
       vendors, customers, actors, periods, employees, timeTypeId, laborItemId,
       engagements, jobs, subscriptions,
     };
-    if (profile.meteredProducts?.length) {
-      await withOrgContext(orgId, () => provisionSaasUsage(profile, simWorld, window));
-    }
     if (profile.resourcing) await provisionResourcingPlan({
       profile,
       plan: profile.resourcing,
@@ -570,6 +567,9 @@ export async function provisionOrg(
   });
 
   try {
+    if (profile.meteredProducts?.length) {
+      await withOrgTransaction(world.orgId, () => provisionSaasUsage(profile, world, window));
+    }
     // This second transaction is crash-recoverable: the committed org carries
     // its attempt id until opening balances post and the attempt is finalized.
     const scale = profile.openingScale ?? (profile.industry === "construction" ? "2.5" : "1");

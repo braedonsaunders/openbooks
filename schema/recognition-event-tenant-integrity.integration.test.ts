@@ -11,7 +11,7 @@
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
@@ -46,6 +46,20 @@ const generatedDir = join(root, "schema", "migrations", "generated");
 const migrationName = "0084_recognition_event_tenant_coherence.sql";
 const migrationPath = join(generatedDir, migrationName);
 const migrationBody = readFileSync(migrationPath, "utf8");
+assert.equal(createHash("sha256").update(migrationBody).digest("hex"),
+  "8ddcaa85c7d1df9f624ed3a5b43a5a56ccac0025092ffa31273c6cc4cc3322cd");
+
+async function replayPublishedMigration(client: pg.Client): Promise<void> {
+  await client.query("begin");
+  try {
+    await client.query(migrationBody);
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  }
+}
+
 const publishedFiles = readdirSync(generatedDir)
   .filter((file) => file.endsWith(".sql"))
   .sort();
@@ -295,11 +309,8 @@ test("0084 enforces tenant-coherent recognition events on replay and fresh boots
       await ensureMigrationRoles(upgrade.control);
       await ensureMigrationRoles(fresh.control);
 
-      // Upgrade replay: bootstrap a clean database through 0084, then
-      // reproduce the deployed 0062 state by replacing only this edge with
-      // its original single-column definition and clearing its ledger row.
-      // This keeps the test focused on the live forward-repair boundary while
-      // the separate fresh database below exercises the complete chain.
+      // Replay the immutable repair against its historical constraint shape.
+      // The supported baseline is qualified separately; its ledger is untouched.
       await runBootstrap(upgrade.url);
       await upgrade.client.query(`
         alter table public.recognition_events
@@ -309,8 +320,6 @@ test("0084 enforces tenant-coherent recognition events on replay and fresh boots
           foreign key (obligation_id)
           references public.performance_obligations (id)
           on delete cascade;
-        delete from public._applied_migrations
-         where filename = 'generated/0084_recognition_event_tenant_coherence.sql';
       `);
       const dependentKeys = await dependentForeignKeys(upgrade.client);
       assert.ok(dependentKeys.length > 0, "the tenant key must have at least one dependent foreign key");
@@ -337,7 +346,7 @@ test("0084 enforces tenant-coherent recognition events on replay and fresh boots
 
       try {
         await assert.rejects(
-          runBootstrap(upgrade.url),
+          replayPublishedMigration(upgrade.client),
           (error: unknown) => {
             assert.match(String(error), /23514|legacy data violates tenant coherence/);
             assert.match(String(error), /legacy data violates tenant coherence/);
@@ -355,7 +364,7 @@ test("0084 enforces tenant-coherent recognition events on replay and fresh boots
       );
 
       await upgrade.client.query(`delete from public.recognition_events where id = $1`, [legacyEventId]);
-      await runBootstrap(upgrade.url);
+      await replayPublishedMigration(upgrade.client);
       assert.match(await constraintDefinition(upgrade.client), /FOREIGN KEY \(org_id, obligation_id\) REFERENCES performance_obligations\(org_id, id\)/);
       assert.equal(
         (await upgrade.client.query(`select 1 from public.recognition_events where org_id = $1`, [upgradeFixture.orgA])).rows.length,
@@ -365,7 +374,7 @@ test("0084 enforces tenant-coherent recognition events on replay and fresh boots
 
       // Replaying the exact published body must not duplicate the key or
       // disturb the already-upgraded data.
-      await upgrade.client.query(migrationBody);
+      await replayPublishedMigration(upgrade.client);
       const replayConstraint = await upgrade.client.query(
         `select count(*)::int as count from pg_constraint
           where conrelid = 'public.recognition_events'::regclass

@@ -1,3 +1,6 @@
+import { installEngineSeams } from "../composition/install.ts";
+installEngineSeams();
+import { seedCommittedBenefitRunWithoutStubs } from "../testing/benefit-fixtures.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -41,7 +44,6 @@ import { setPackSlotAccount } from "../payroll/packs.ts";
 import { US_PACK_RATES } from "../payroll/us/rates.ts";
 import { upsertStatutoryRate } from "../payroll/statutory-rates.ts";
 import { recordPayRunPayment } from "../payroll/payment.ts";
-import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { fromUnits, sum, toUnits } from "../money/money.ts";
 import type { LaborComplianceReportRow } from "../payroll/labor-compliance.ts";
@@ -303,7 +305,8 @@ test("per-diem: brackets price the day, approval crosses the seam, voids carry r
       orgId: org.orgId, actorId: adminId, employmentId, weekStart: "2026-09-07",
     });
     assert.equal(entries.length, 2, "two project rows on one civil date count as one worked date, below the weekly threshold, so no top-up");
-    assert.ok(entries.every((entry) => entry.amount === "75.0000"));
+    assert.deepEqual(entries.map(entry => entry.amount).sort(), ["25.0000", "50.0000"]);
+    assert.equal(sum(entries.map(entry => entry.amount)), "75.0000", "one civil day earns one daily allowance, attributed by hours");
     const approved = await approveEntry(db, { orgId: org.orgId, actorId: adminId, entryId: entries[0]!.id, kind: "per_diem" });
     assert.equal(approved.status, "approved");
     const seam = (await db.execute<{ status: string; amount: string }>(sql`
@@ -311,7 +314,7 @@ test("per-diem: brackets price the day, approval crosses the seam, voids carry r
        where org_id = ${org.orgId} and entry_kind = 'per_diem' and entry_id = ${entries[0]!.id}::uuid
     `)).rows[0];
     assert.equal(seam?.status, "pending");
-    assert.equal(seam?.amount, "75.0000");
+    assert.equal(seam?.amount, entries[0]!.amount);
     // Consumed seam rows refuse voids by run name.
     await markSeamConsumed(db, org.orgId, (await db.execute<{ id: string }>(sql`
       select id::text as id from hrm_allowance_payroll_inputs
@@ -498,8 +501,7 @@ test("certified payroll refuses approved project time on a committed but unposte
       orgId: org.orgId, actorId: adminId, payScheduleId: scheduleId,
       periodStart: "2026-09-07", periodEnd: "2026-09-13", payDate: "2026-09-16",
     });
-    await db.execute(sql`update pay_runs set run_status = 'committed'
-      where org_id = ${org.orgId} and document_id = ${run.documentId}`);
+    await seedCommittedBenefitRunWithoutStubs(org.orgId, run.documentId);
     await assertConstructionRefusal(
       () => generate(db, { orgId: org.orgId, actorId: adminId, projectId, weekEnding: "2026-09-13", formatKey: "federal-weekly" }),
       /No posted pay run covers the week ending 2026-09-13/,
@@ -562,6 +564,10 @@ test("certified payroll freezes posted native wages by dated classification with
     await seedPayrollProfile(org.orgId, partyId, employmentId, scheduleId, adminId, {
       country: "US", province: "TX", filingStatus: "single", payBasis: "hourly", filingAccountId,
     });
+    await db.execute(sql`insert into employee_tax_certificates
+      (org_id, employee_party_id, country, certificate_key, answers, effective_from, created_by, updated_by)
+      values (${org.orgId}, ${partyId}, 'US', 'us_w4_tax_residency',
+        '{"alien_status":"us_person_or_resident_alien"}'::jsonb, '2026-01-01', ${adminId}, ${adminId})`);
     const firstClass = await createClassification(db, { ...scope,
       code: "CARP", name: "Carpenter", trade: "Carpentry" });
     const secondClass = await createClassification(db, { ...scope,
@@ -597,7 +603,6 @@ test("certified payroll freezes posted native wages by dated classification with
     const runInput = { ...scope, documentId: run.documentId };
     assert.deepEqual((await calculatePayRun(runInput)).errors, []);
     assert.ok((await commitPayRun(runInput)).lines > 0);
-    assert.equal((await submitAndReleaseIfUngated("pay_run", run.documentId, adminId)).autoApproved, true);
     await postDocument(run.documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
     const payment = await recordPayRunPayment({ ...runInput, bankAccountId: org.accounts.bank,
       allowedSubsidiaryIds: new Set([org.subsidiaryId]) });

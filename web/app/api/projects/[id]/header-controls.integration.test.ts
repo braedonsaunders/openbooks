@@ -1,3 +1,5 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install"
+installEngineSeams()
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -81,7 +83,7 @@ test('contract value is controlled by change orders once billing begins', enable
     const sov = await projectType(org, 'schedule_of_values')
     const billed = await project(org, sov, org.subsidiaryId, '1000', { headerControlTest: 'JOB-1' })
     await db.execute(sql`insert into pay_applications(org_id,project_id,application_number,period_end,status)
-      values (${org.orgId},${billed},1,${org.date},'void')`)
+      values (${org.orgId},${billed},1,${org.date},'draft')`)
 
     // Before billing begins the header still edits the contract value.
     const unbilled = await project(org, sov, org.subsidiaryId, '1000')

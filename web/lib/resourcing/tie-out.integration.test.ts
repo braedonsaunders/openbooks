@@ -1,9 +1,13 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install"
+installEngineSeams()
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
+const { seedEmployment } = await import('@openbooks/engine/testing/hrm-harness')
+const { createLeavePolicy, fileLeaveRequest, submitLeaveRequest } = await import('@openbooks/engine/hrm/leave')
 const { loadPlanVsActual } = await import('./tie-out.ts')
 
 test('plan-vs-actual ties planned hours to approved time with forecast capacity evidence', { skip: !env.OPENBOOKS_DB_URL }, async () => {
@@ -13,7 +17,7 @@ test('plan-vs-actual ties planned hours to approved time with forecast capacity 
   try {
     await withBypassContext(async () => {
       ids.actor = await createScratchUser(org.orgId, 'Tie-out operator', 'admin')
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"resourcing":true}'::jsonb,true) where id=${org.orgId}`)
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"resourcing":true,"hrm":true}'::jsonb,true) where id=${org.orgId}`)
       await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${ids.hiddenSub},${org.orgId},${org.subsidiaryId},'Hidden subsidiary','USD','US')`)
       for (const [id, name] of [[ids.anna, 'Anna Plan'], [ids.ben, 'Ben Plan']]) {
         await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom) values(${id},${org.orgId},'person',${name},${org.subsidiaryId},true,'{}'::jsonb)`)
@@ -35,12 +39,23 @@ test('plan-vs-actual ties planned hours to approved time with forecast capacity 
       await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,status,is_billable,billing_status,costing_basis,created_by,updated_by) values
         (${ids.approved},${org.orgId},${ids.anna},'2026-10-06','6.0000',${ids.visible},'approved',true,'unbilled','actual',${ids.actor},${ids.actor}),
         (${ids.submitted},${org.orgId},${ids.anna},'2026-10-07','4.0000',${ids.visible},'submitted',true,'unbilled','actual',${ids.actor},${ids.actor})`)
-      await db.execute(sql`insert into worker_employments(id,org_id,worker_party_id,employer_subsidiary_id,revision) values (${ids.employment},${org.orgId},${ids.ben},${org.subsidiaryId},1)`)
+      const employment = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: ids.ben })
+      ids.employment = employment.employmentId
       await db.execute(sql`insert into hrm_leave_types(id,org_id,code,name) values (${ids.leaveType},${org.orgId},'VAC','Vacation')`)
-      await db.execute(sql`insert into hrm_leave_requests(id,org_id,employment_id,leave_type_id,starts_on,ends_on,hours,status) values
-        (${ids.request},${org.orgId},${ids.employment},${ids.leaveType},'2026-10-06','2026-10-06','8.0000','approved')`)
-      await db.execute(sql`insert into hrm_absences(id,org_id,leave_request_id,employment_id,on_date,hours,leave_type_id,source,created_by,updated_by) values
-        (${ids.absence},${org.orgId},${ids.request},${ids.employment},'2026-10-06','8.0000',${ids.leaveType},'request',${ids.actor},${ids.actor})`)
+    })
+    await withOrgContext(org.orgId, async () => {
+      await createLeavePolicy({ orgId: org.orgId, actorId: ids.actor!, leaveTypeId: ids.leaveType!,
+        accrualRule: { kind: 'unlimited' }, effectiveFrom: '2020-01-01' })
+      const draft = await fileLeaveRequest({ orgId: org.orgId, actorId: ids.actor!, employmentId: ids.employment!,
+        leaveTypeId: ids.leaveType!, startsOn: '2026-10-06', endsOn: '2026-10-06', hours: '8',
+        onBehalf: true, reason: 'Scheduled vacation' })
+      const approved = await submitLeaveRequest({ orgId: org.orgId, actorId: ids.actor!, requestId: draft.id })
+      assert.equal(approved.status, 'approved')
+      ids.request = approved.id
+      const absence = (await db.execute<{ id: string }>(sql`select id from hrm_absences
+        where org_id=${org.orgId} and leave_request_id=${approved.id}`)).rows
+      assert.equal(absence.length, 1)
+      ids.absence = absence[0]!.id
     })
 
     const scope = new Set([org.subsidiaryId])

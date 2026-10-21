@@ -607,7 +607,7 @@ test(
       const gates = (await run(() => db.execute<{id:string;assignee_user_id:string}>(sql`select id,assignee_user_id from flow_gates
         where org_id=${org.orgId} and subject_id=${count.id} and status='pending'`))).rows;
       assert.deepEqual(gates.map(gate => gate.assignee_user_id), [reviewer], "tenant self-approval prevention excludes every historical observer");
-      await assert.rejects(run(() => postStockCount(org.orgId,second,count.id)), /approval|review|Flow/);
+      await assert.rejects(run(() => withOrgTransaction(org.orgId,()=>postStockCount(org.orgId,second,count.id))), /approval|review|Flow/);
       await decideGate({ gateId:gates[0]!.id,decision:"approved",userId:reviewer,allowedSubsidiaryIds:null });
       const posted = await run(() =>
         withOrgTransaction(org.orgId, () =>

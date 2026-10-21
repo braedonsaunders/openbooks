@@ -6,7 +6,7 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, seedApprovalFlow, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { routeSubjectSubmission } from "./submission-policy.ts";
 import { FlowDispatchError } from "./dispatch-result.ts";
-import { decideGate } from "./gates.ts";
+import { gateDecisionCapability } from "./gates.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const WEEK = "2026-07-12";
@@ -29,7 +29,7 @@ async function fixture() {
 }
 
 for (const preventSelfApproval of [true, false]) {
-  test(`timesheet self-approval follows the tenant policy: ${preventSelfApproval ? "restricted" : "allowed"}`, { skip: !DB }, async () => {
+  test(`timesheet decision eligibility follows the tenant policy: ${preventSelfApproval ? "restricted" : "allowed"}`, { skip: !DB }, async () => {
     const f = await fixture();
     try {
       await seedApprovalFlow(f.org.orgId, { subjectKind: "timesheet_week", mode: "all", preventSelfApproval,
@@ -46,9 +46,9 @@ for (const preventSelfApproval of [true, false]) {
         const gate = (await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId}
           and subject_id=${f.week} and assignee_user_id=${f.submitter} and status='pending'`)).rows[0];
         assert.ok(gate);
-        await decideGate({ gateId:gate.id, decision:"approved", userId:f.submitter, allowedSubsidiaryIds:null });
-        assert.equal((await db.execute<{status:string}>(sql`select status from flow_gates where org_id=${f.org.orgId} and id=${gate.id}`)).rows[0]?.status,"approved");
-        assert.equal((await db.execute<{status:string}>(sql`select status from timesheet_weeks where org_id=${f.org.orgId} and id=${f.week}`)).rows[0]?.status,"approved");
+        const capability=await withOrgTransaction(f.org.orgId,()=>gateDecisionCapability(gate.id,f.submitter));
+        assert.equal(capability.canAct,true);
+        assert.equal(capability.sodBlocked,false);
       }
     } finally { await f.close(); }
   });

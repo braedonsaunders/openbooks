@@ -75,8 +75,9 @@ test('retrospective tiers append balanced catch-up facts and claims follow tenan
  try {
   const actors=await commercialActors(org);
   const agreementId=await seedAgreement(org,actors.submitterId,'VOLUME');
-  await assert.rejects(()=>approveRebateAgreement(org.orgId,actors.submitterId,agreementId,'Independent approval required'),/independent/);
-  await approveRebateAgreement(org.orgId,actors.adminId,agreementId,'Reviewed commercial liability');
+  await approveRebateAgreement(org.orgId,actors.submitterId,agreementId,'Reviewed commercial liability');
+  const approved=(await withOrg(org.orgId,()=>db.execute<{approved_by:string}>(sql`select approved_by from rebate_agreements where org_id=${org.orgId} and id=${agreementId} and status='approved'`))).rows[0];
+  assert.equal(approved?.approved_by,actors.submitterId,'the tenant’s zero-gate policy permits the maker to submit and release the agreement');
   const first=await invoice(org,actors.adminId,'350');assert.equal(await earned(org.orgId,agreementId),'17.5000');
   const original=(await withOrg(org.orgId,()=>db.execute<{id:string;amount:string}>(sql`select id,amount::text from rebate_accruals where org_id=${org.orgId} and agreement_id=${agreementId}`))).rows[0]!;
   await invoice(org,actors.adminId,'650');assert.equal(await earned(org.orgId,agreementId),'100.0000');

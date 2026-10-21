@@ -389,7 +389,7 @@ test('tenant and field refusals name the remedy with exact drawer messages', asy
       // Explicit null subsidiary.
       response = await post({ ...all.vendor_bill, subsidiaryId: null }, randomUUID())
       assert.equal(response.status, 422)
-      assert.match((await response.json() as { error: string }).error, /requires a subsidiary/)
+      assert.match((await response.json() as { error: string }).error, /select a legal entity or enter a document currency/)
       // Missing line account names its line.
       response = await post(
         { ...all.vendor_bill, lines: [{ amount: '5', description: 'No account' }] },

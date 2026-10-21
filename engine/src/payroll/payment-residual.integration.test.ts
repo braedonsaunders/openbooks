@@ -347,7 +347,7 @@ test("payroll rejects a mismatched liability at storage without creating cash or
       where r.org_id=${fx.orgId} and r.document_id=${input.documentId}`)).rows[0]!;
     assert.deepEqual(state, {
       paid_at: null, paid_entry_id: null, run_status: "committed",
-      document_status: "draft", posted_entry_id: null, currency: "CAD",
+      document_status: "approved", posted_entry_id: null, currency: "CAD",
       entries: 0, lines: 0, applications: 0,
     });
   } finally {

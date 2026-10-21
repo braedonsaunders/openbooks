@@ -1,3 +1,5 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
@@ -48,6 +50,8 @@ const { randomUUID } = await import("node:crypto");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/testing/fixtures"
 );
+const { seedEmployment, setFeatures } = await import("@openbooks/engine/testing/hrm-harness");
+const { createLeavePolicy, fileLeaveRequest, submitLeaveRequest } = await import("@openbooks/engine/hrm/leave");
 const { loadWeek } = await import("./_lib.ts");
 const { POST: submitWeek } = await import("./submit/route.ts");
 
@@ -59,15 +63,15 @@ async function seedLeaveCover() {
   // The shared time authority lock runs for real: the actor holds time.manage.
   await withBypassContext(async () => {
     await db.execute(sql`
-      update app_roles set permissions = '["time.read", "time.manage"]'::jsonb
+      update app_roles set permissions = '["time.read", "time.manage", "hrm.leave.manage", "hrm.leave.request"]'::jsonb
        where org_id = ${org.orgId} and key = 'admin'`);
   });
   const employeeId = randomUUID();
-  const employmentId = randomUUID();
+  let employmentId = "";
   const leaveTypeId = randomUUID();
-  const requestId = randomUUID();
+  let requestId = "";
   const strangerId = randomUUID();
-  const strangerEmploymentId = randomUUID();
+  let strangerEmploymentId = "";
   await withBypassContext(async () => {
     for (const [party, name] of [[employeeId, "Leave Worker"], [strangerId, "Stranger"]] as const) {
       await db.execute(sql`
@@ -85,36 +89,27 @@ async function seedLeaveCover() {
     await db.execute(sql`
       update users set party_id = ${employeeId} where id = ${actorId} and org_id = ${org.orgId}
     `);
-    for (const [employment, party] of [[employmentId, employeeId], [strangerEmploymentId, strangerId]] as const) {
-      await db.execute(sql`
-        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
-        values (${employment}, ${org.orgId}, ${party}, ${org.subsidiaryId})
-      `);
-    }
+    ({ employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: employeeId }));
+    ({ employmentId: strangerEmploymentId } = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: strangerId }));
+    await setFeatures(org.orgId, { hrm: true });
     await db.execute(sql`
       insert into hrm_leave_types (id, org_id, code, name)
       values (${leaveTypeId}, ${org.orgId}, 'VAC', 'Vacation')
     `);
-    // The worker's approved full-week absence, plus a stranger's overlapping
-    // one that must never surface as this week's cover.
-    await db.execute(sql`
-      insert into hrm_leave_requests
-        (id, org_id, employment_id, leave_type_id, starts_on, ends_on, hours,
-         reason, status, decided_by, decided_at, decision_reason)
-      values
-        (${requestId}, ${org.orgId}, ${employmentId}, ${leaveTypeId},
-         '2026-07-13', '2026-07-17', '40.00',
-         'Family week', 'approved', ${actorId}, now(), 'Approved: coverage arranged')
-    `);
-    await db.execute(sql`
-      insert into hrm_leave_requests
-        (id, org_id, employment_id, leave_type_id, starts_on, ends_on, hours,
-         reason, status, decided_by, decided_at, decision_reason)
-      values
-        (${randomUUID()}, ${org.orgId}, ${strangerEmploymentId}, ${leaveTypeId},
-         '2026-07-14', '2026-07-16', '24.00',
-         'Stranger time off', 'approved', ${actorId}, now(), 'Approved')
-    `);
+  });
+  await withOrgContext(org.orgId, async () => {
+    await createLeavePolicy({ orgId: org.orgId, actorId, leaveTypeId,
+      accrualRule: { kind: "unlimited" }, effectiveFrom: "2020-01-01" });
+    for (const [employment, startsOn, endsOn, hours] of [
+      [employmentId, "2026-07-13", "2026-07-17", "40"],
+      [strangerEmploymentId, "2026-07-14", "2026-07-16", "24"],
+    ]) {
+      const draft = await fileLeaveRequest({ orgId: org.orgId, actorId, employmentId: employment!,
+        leaveTypeId, startsOn, endsOn, hours, onBehalf: true, reason: "Scheduled vacation" });
+      const approved = await submitLeaveRequest({ orgId: org.orgId, actorId, requestId: draft.id });
+      assert.equal(approved.status, "approved");
+      if (employment === employmentId) requestId = approved.id;
+    }
   });
   return { org, actorId, employeeId, requestId };
 }

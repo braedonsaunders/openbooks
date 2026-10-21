@@ -27,6 +27,9 @@ registerHooks({
         if (!authz.permissions.includes(permission)) throw new Error('test guard forbids ' + permission);
         return authz;
       }
+      export function requirePermission(authz,permission) {
+        if(!can(authz,permission))throw new Error('test guard forbids '+permission);
+      }
       export function guardSubsidiaryScope() { return null }
     `)
     if (specifier === '../../../../lib/features' || specifier === './features') return virtual(`

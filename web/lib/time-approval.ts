@@ -39,25 +39,6 @@ export type {
 export const LABOR_COSTING_SETUP_HREF = '/admin/setup/labor-costing'
 
 /**
- * The actor's own person party in this org, if their login links to one.
- * Null for logins with no person (service and cross-org admin actors) —
- * with no person they can never BE the week's employee, so there is no
- * self-approval to prevent.
- */
-export async function actorPersonPartyId(
-  orgId: string,
-  actorId: string,
-): Promise<string | null> {
-  return (
-    (
-      await db.execute<{ partyId: string | null }>(sql`
-    select party_id as "partyId" from users where id = ${actorId} and org_id = ${orgId} for share
-  `)
-    ).rows[0]?.partyId ?? null
-  )
-}
-
-/**
  * The ONE set of side-effects that fire when time becomes approved — shared by
  * the personal weekly timesheet approval and field-ticket approval so hours
  * are costed identically no matter how they were captured:

@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { stubModules } from '../../testing/stub-modules'
+import { stubModules, intlServerStubSource } from '../../testing/stub-modules'
 import type { SessionUser } from '../auth'
 
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __listDrawerSession: session })
-stubModules({ navigation: false, intl: 'export async function getTranslations(){return key=>key}', authz: false, features: false })
+stubModules({ navigation: false, intl: intlServerStubSource('export async function getTranslations(){return key=>key}'), authz: false, features: false })
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__listDrawerSession.user}' }

@@ -1,3 +1,5 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install";
+installEngineSeams();
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'

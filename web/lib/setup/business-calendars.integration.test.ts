@@ -330,8 +330,8 @@ test('calendar shape violations refuse with the remedy', { skip: !env.OPENBOOKS_
     const cases: Array<[string, Record<string, unknown>, RegExp]> = [
       ['seven-day weekend', { ...CALENDAR, weekendDays: [1, 2, 3, 4, 5, 6, 7] }, /business day/],
       ['eighth weekday', { ...CALENDAR, weekendDays: [6, 8] }, /ISO weekdays/],
-      ['non-select week start', { ...CALENDAR, weekStartsOn: '9' }, /starts the week/],
-      ['lowercase country', { ...CALENDAR, holidayCountry: 'us' }, /capitals/],
+      ['non-select week start', { ...CALENDAR, weekStartsOn: '9' }, /weekStartsOn has an invalid value/],
+      ['invalid country', { ...CALENDAR, holidayCountry: 'USA' }, /ISO country code/],
       ['region without country', { ...CALENDAR, holidayCountry: '', holidayRegion: 'ON' }, /country/],
     ]
     for (const [name, body, pattern] of cases) {

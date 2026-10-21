@@ -138,9 +138,8 @@ async function opaqueFixture(commit = true) {
 
 function scopedGate(fx: { orgId: string; actorId: string; subsidiaryId: string }, permission: string): Authz {
   return {
-    user: { orgId: fx.orgId, id: fx.actorId },
-    // Read-before-action runs the real kind gate (pay_run reads via the GL namespace), so gates carry gl.read.
-    permissions: new Set([permission, 'gl.read']),
+    user: { orgId: fx.orgId, id: fx.actorId, roles: [{key:"admin"}] },
+    permissions: new Set([permission, 'payroll.read']),
     allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
   } as Authz;
 }
@@ -239,7 +238,7 @@ const GATING_GRAPH = {
         // Assignee targets discriminate on `type`: `kind` fails graph
         // validation and the fail-closed dispatch refuses the submit before
         // the scope check under test is ever reached.
-        gate: { title: "Approve pay run", assignees: [{ type: "role", role: "admin" }], mode: "any" },
+        gate: { title: "Approve pay run", assignees: [{ type: "role", role: "admin" }], mode: "any", preventSelfApproval: false },
       },
     },
   ],

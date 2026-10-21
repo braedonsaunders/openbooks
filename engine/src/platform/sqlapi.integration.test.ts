@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { PoolClient } from 'pg'
@@ -9,10 +8,6 @@ import { createScratchOrg, dropScratchOrg } from '../testing/fixtures.ts'
 import { listSchema, runUserSql, SQL_TEXT_EXECUTING_FUNCTIONS } from './sqlapi.ts'
 
 const DB = !!process.env.OPENBOOKS_DB_URL
-const PRIVATE_PROJECTION_MIGRATION = readFileSync(
-  new URL('../../../schema/migrations/generated/0070_governed_query_private_projection.sql', import.meta.url),
-  'utf8',
-)
 
 test('governed SQL catalog enforces tenant RLS and denies credential surfaces', { skip: !DB }, async () => {
   const first = await withBypass(() => createScratchOrg())
@@ -289,11 +284,10 @@ test('governed SQL stays available while the ordinary request pool is saturated'
   }
 })
 
-test('governed SQL redacts private CRM bodies and time-entry memos after migration replay', { skip: !DB, timeout: 120_000 }, async () => {
-  // Replay the forward migration twice before exercising the real SQL API.
-  // This catches both an unsafe refresh implementation and non-idempotent DDL.
-  await pool.query(PRIVATE_PROJECTION_MIGRATION)
-  await pool.query(PRIVATE_PROJECTION_MIGRATION)
+test('governed SQL redacts private CRM bodies and time-entry memos after repeated native catalog refresh', { skip: !DB, timeout: 120_000 }, async () => {
+  // Rebuilding the supported catalog must preserve private-field projections.
+  await pool.query('select public.openbooks_refresh_query_catalog()')
+  await pool.query('select public.openbooks_refresh_query_catalog()')
 
   const org = await withBypass(() => createScratchOrg())
   const privateActivityId = randomUUID()

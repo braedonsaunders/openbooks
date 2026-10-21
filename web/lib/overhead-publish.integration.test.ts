@@ -98,6 +98,7 @@ const routeHooks = registerHooks({
         format: "module",
         source: `
           const state = globalThis[Symbol.for('openbooks.overhead-publish-route-test')]
+          export class OverheadZeroOverStandardError extends Error {}
           export async function publishOverheadRates(orgId, actorId, effectiveFrom, rates) {
             state.calls.push({ orgId, actorId, effectiveFrom, rates })
             return { published: rates?.length ?? 0 }

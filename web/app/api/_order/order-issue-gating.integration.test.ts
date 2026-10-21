@@ -1,3 +1,5 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install";
+installEngineSeams();
 import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
