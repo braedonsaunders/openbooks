@@ -143,10 +143,9 @@ test("all ten tenant gates govern close task release and self-approval follows t
     await updateCloseTask(command);
     assert.equal(await taskAuditCount(h,taskId),1,"an exact pending replay creates no duplicate submission event");
     const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.orgId} and subject_kind='close_task' and subject_id=${taskId} order by id`)).rows;
-    assert.equal(gates.length,10);
     await assert.rejects(decideGate({gateId:gates[0]!.id,userId:h.adminId,decision:"approved"}),/not an approver/);
-    assert.equal(gates.length,count);
-  for(const gate of gates){
+    assert.equal(gates.length,10);
+    for(const gate of gates){
       assert.equal((await taskState(h,taskId)).status,"submitted");
       await decideGate({gateId:gate.id,userId:h.submitterId,decision:"approved"});
     }

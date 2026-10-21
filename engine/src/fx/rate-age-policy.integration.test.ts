@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 import { closingSpotRateWithinAgeLimit, averageSpotRateWithinAgeLimit, resolveFxRateAgeLimit } from "./rate-age-policy.ts";
-import { periodFingerprint } from "../close/readiness.ts";
+import { periodFingerprint } from "../close/period-fingerprint.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

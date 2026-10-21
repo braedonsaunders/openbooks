@@ -30,7 +30,7 @@ test('native request reads preserve tenant and legal-entity scope without exposi
           values(${id},${owner.orgId},${owner.customerId},'Operating bank','CA','CAD','retained-secret-envelope','1234','pending',false,${author},${author})`)
       }
     })
-    state.authz={user:{orgId:org.orgId,id:actor,roles:[]},permissions:new Set(['parties.read']),allowedSubsidiaryIds:null} as Authz
+    state.authz={user:{orgId:org.orgId,id:actor,roles:[],name:'Request reviewer',email:'reviewer@scratch.test',envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor,isSuperAdmin:false},permissions:new Set(['parties.read']),allowedSubsidiaryIds:null} satisfies Authz
     await withOrgContext(org.orgId,async()=>{
       const response=await read(ownId);assert.equal(response.status,200)
       const detail=await response.json();assert.equal(detail.subjectId,ownId)

@@ -3,9 +3,9 @@ import { defineRoute } from '@/lib/api/route'
 import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { withdrawApprovalCommand } from '@openbooks/engine/flows/command-approval'
 
+/** The native command permits an authorized withdrawal even when new Flows are disabled. */
 export const POST = defineRoute({
   public: 'session',
-  feature: { none: 'Withdrawing an existing submission remains available when Flows are disabled' },
   params: z.strictObject({
     subjectKind: z.string().min(1).max(100),
     id: uuidString(),

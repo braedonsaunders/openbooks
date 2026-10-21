@@ -209,7 +209,7 @@ test('every API route serving a feature consults a gate', () => {
         if (file === 'app/api/flows/commands/[subjectKind]/[id]/withdraw/route.ts') {
           const recall = read(file)
           assert.match(recall, /public:\s*['"]session['"]/)
-          assert.match(recall, /feature:\s*\{ none: 'Withdrawing an existing submission remains available when Flows are disabled' \}/)
+          assert.doesNotMatch(recall, GATE, 'recalling retained submissions must remain available when new Flows are disabled')
           assert.match(recall, /await withdrawApprovalCommand\(/)
           continue
         }

@@ -307,3 +307,11 @@ test('record parameter refusals preserve opaque 404 before parsing edit bodies w
   assert.equal((await handler(post({memo:'Reviewed edit'}), valid)).status, 200)
   assert.equal(invoked, true)
 })
+
+
+test("session commands without a creation feature remain available when features are disabled", async () => {
+  reset({ feature: "off" });
+  const handler = defineRoute({ public: "session", handler: async () => ok() });
+  assert.equal((await handler(get())).status, 200);
+  assert.deepEqual(state.calls, ["session"]);
+});
