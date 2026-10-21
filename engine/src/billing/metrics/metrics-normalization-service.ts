@@ -1,4 +1,5 @@
-import { routeNativeApproval, readNativeApprovalDecision } from "../../platform/approval-routing.ts";
+import { ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
+import { routeNativeApproval, readNativeApprovalDecision, lockApprovalSubject, cancelNativeApprovals } from "../../platform/approval-routing.ts";
 import { lockActorCommandAuthority } from "../../organization/actor-command-authority.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -236,14 +237,13 @@ function missingRequest(requestId: string): UsageBillingError {
 function liveRequestRemedy(existing: NormalizationRequestRecord): string {
   return (
     `Request ${existing.id} for ${existing.month} is already ${existing.status}. ` +
-    "Wait for it to finish, cancel it, or open it in Company Setup → SaaS Metrics to follow its progress."
+    "Open the request in Company Setup → SaaS Metrics. Complete its assigned Flow gates or, while pending, have its requester cancel it."
   );
 }
 
 /**
- * Truthful per-status claim remedy: only a running request can be waited
- * on or cancelled; terminal rows name their own recovery and never invite
- * a cancel, and failed rows point at retry rather than waiting.
+ * Request-state remedies describe supported native actions without exposing
+ * the server's execution fence or granting another approval path.
  */
 function claimStateRemedy(existing: NormalizationRequestRecord): string {
   switch (existing.status) {
@@ -257,7 +257,7 @@ function claimStateRemedy(existing: NormalizationRequestRecord): string {
     case "failed":
       return (
         `Request ${existing.id} for ${existing.month} already failed. ` +
-        "Retry the failed request in Company Setup → SaaS Metrics to open a fresh lease, then continue."
+        "Review the recorded failure in Company Setup → SaaS Metrics, correct its cause and submit a new correction through the tenant’s Flows."
       );
     case "cancelled":
       return (
@@ -290,6 +290,7 @@ export async function createNormalizationRequest(args: {
   const idempotencyKey = requireUuid(args.idempotencyKey, "idempotency_key");
   const bodyHash = requestBodyHash({ orgId, month, reason, requestedBy });
   return withOrgTransaction(orgId, async () => {
+    await lockNormalizationOperator(orgId,requestedBy);
     const attemptInsert = async (): Promise<{ request: NormalizationRequestRecord; created: boolean } | null> => {
       try {
         const inserted = (await db.execute<RequestRow>(sql`
@@ -307,13 +308,6 @@ export async function createNormalizationRequest(args: {
           );
         }
         const id = inserted[0]!.id;
-        await lockActorCommandAuthority(
-          db,
-          orgId,
-          requestedBy,
-          null,
-          "usage.manage",
-        );
         const routing = await routeNativeApproval({
           orgId,
           actorId: requestedBy,
@@ -409,127 +403,6 @@ async function readLiveRequest(
   return rows[0] ?? null;
 }
 
-/**
- * Record the actor authorized by the request's complete tenant Flow submission.
- * Releasing the same approved request preserves its recorded evidence.
- */
-export async function approveNormalizationRequest(args: {
-  orgId: string;
-  requestId: string;
-  approverId: string;
-  approvalRunId?: string;
-}): Promise<NormalizationRequestRecord> {
-  const orgId = requireUuid(args.orgId, "org_id");
-  const requestId = requireUuid(args.requestId, "request_id");
-  const approverId = requireUuid(args.approverId, "approved_by");
-  return withOrgTransaction(orgId, async () => {
-    const existing = await readRequest(db, orgId, requestId);
-    if (!existing) throw missingRequest(requestId);
-    await requireNormalizationApproval(
-      orgId,
-      requestId,
-      approverId,
-      args.approvalRunId,
-    );
-    if (existing.status !== "pending") {
-      throw refusal(
-        "saas_normalization_approval_state",
-        `Request ${requestId} is ${existing.status} and no longer accepts an approval.`,
-        SETUP_LIST_REMEDY,
-        { status: 409 },
-      );
-    }
-    if (existing.approved_by !== null) {
-      if (existing.approved_by === approverId) return toRecord(existing);
-      throw refusal(
-        "saas_normalization_approver_recorded",
-        `Request ${requestId} already records approver ${existing.approved_by}; the recorded approval stands.`,
-        SETUP_LIST_REMEDY,
-        { field: "approved_by", status: 409 },
-      );
-    }
-    const updated = (await db.execute<RequestRow>(sql`
-      update saas_metrics_normalization_requests
-         set approved_by = ${approverId}, approved_at = now(), updated_by = ${approverId}
-       where org_id = ${orgId} and id = ${requestId} and status = 'pending'
-      returning ${REQUEST_COLUMNS}
-    `)).rows;
-    if (updated.length !== 1 || !updated[0]) {
-      throw refusal(
-        "saas_normalization_approval_write_missing",
-        `Approval for request ${requestId} was not recorded.`,
-        SETUP_LIST_REMEDY,
-        { status: 409 },
-      );
-    }
-    return toRecord(updated[0]!);
-  });
-}
-
-/**
- * Atomically claim a pending approved request into running with a fresh
- * cryptographically random lease token. A second concurrent first claim
- * matches zero rows and receives the already-claimed remedy instead.
- */
-export async function claimNormalizationRequest(args: {
-  orgId: string;
-  requestId: string;
-  leaseTtlMinutes?: number;
-}): Promise<{ request: NormalizationRequestRecord; leaseToken: string }> {
-  const orgId = requireUuid(args.orgId, "org_id");
-  const requestId = requireUuid(args.requestId, "request_id");
-  const ttlMinutes = args.leaseTtlMinutes ?? DEFAULT_LEASE_MINUTES;
-  if (!Number.isInteger(ttlMinutes) || ttlMinutes < 1 || ttlMinutes > 1440) {
-    throw refusal(
-      "saas_normalization_lease_ttl_invalid",
-      "The lease duration must be between 1 and 1440 minutes.",
-      "Request a lease of 1 to 1440 minutes when claiming in Company Setup → SaaS Metrics.",
-      { field: "leaseTtlMinutes" },
-    );
-  }
-  const leaseToken = randomUUID();
-  return withOrgTransaction(orgId, async () => {
-    const existing = await readRequest(db, orgId, requestId);
-    if (!existing) throw missingRequest(requestId);
-    if (existing.status !== "pending") {
-      throw refusal(
-        "saas_normalization_already_claimed",
-        `Request ${requestId} is ${existing.status}; the first claim already ran.`,
-        claimStateRemedy(toRecord(existing)),
-        { status: 409 },
-      );
-    }
-    if (existing.approved_by === null) {
-      throw refusal(
-        "saas_normalization_claim_unapproved",
-        `Request ${requestId} has no recorded approval and cannot be claimed.`,
-        "Submit the pending request through tenant Flows in Company Setup → SaaS Metrics, then claim its released correction.",
-        { status: 409 },
-      );
-    }
-    const updated = (await db.execute<RequestRow>(sql`
-      update saas_metrics_normalization_requests
-         set status = 'running', lease_token = ${leaseToken},
-             lease_expires_at = now() + make_interval(mins => ${ttlMinutes}),
-             attempt_count = attempt_count + 1,
-             progress = progress || '{"phase":"claimed"}'::jsonb,
-             updated_by = approved_by
-       where org_id = ${orgId} and id = ${requestId} and status = 'pending'
-      returning ${REQUEST_COLUMNS}
-    `)).rows;
-    if (updated.length !== 1 || !updated[0]) {
-      const current = await readRequest(db, orgId, requestId);
-      throw refusal(
-        "saas_normalization_already_claimed",
-        `Request ${requestId} was claimed concurrently and is no longer pending.`,
-        current ? claimStateRemedy(toRecord(current)) : SETUP_LIST_REMEDY,
-        { status: 409 },
-      );
-    }
-    return { request: toRecord(updated[0]!), leaseToken };
-  });
-}
-
 async function diagnoseFenceMiss(
   executor: SqlExecutor,
   orgId: string,
@@ -543,7 +416,7 @@ async function diagnoseFenceMiss(
       "saas_normalization_lease_state",
       `Request ${requestId} is ${existing.status} and holds no live lease.`,
       record.status === "failed"
-        ? "Retry the failed request in Company Setup → SaaS Metrics to open a fresh lease, then continue."
+        ? "Review the recorded failure in Company Setup → SaaS Metrics, correct its cause and submit a new correction through the tenant’s Flows."
         : SETUP_LIST_REMEDY,
       { status: 409 },
     );
@@ -557,170 +430,10 @@ async function diagnoseFenceMiss(
     "saas_normalization_lease_mismatch",
     `The presented lease token does not match the live lease for request ${requestId}.`,
     expiry
-      ? "The lease has expired. Reacquire the request with a fresh token in Company Setup → SaaS Metrics, then continue."
-      : "Heartbeat with the live token held by the current worker, or wait for expiry and reacquire with a fresh token in Company Setup → SaaS Metrics.",
+      ? "The correction execution expired. Reload its native request and retry the original Flow decision after reviewing its recorded state."
+      : "A correction is already executing. Wait for its result and reload the native request before retrying.",
     { field: "leaseToken", status: 409 },
   );
-}
-
-/**
- * Heartbeat under the live lease token: extends the expiry and optionally
- * records progress. Heartbeats manufacture no attempt audit event. An
- * expired, wrong, or stale token matches zero rows and refuses by name.
- */
-export async function heartbeatNormalizationRequest(args: {
-  orgId: string;
-  requestId: string;
-  leaseToken: string;
-  progress?: Record<string, unknown>;
-  leaseTtlMinutes?: number;
-}): Promise<NormalizationRequestRecord> {
-  const orgId = requireUuid(args.orgId, "org_id");
-  const requestId = requireUuid(args.requestId, "request_id");
-  const leaseToken = requireUuid(args.leaseToken, "lease_token");
-  const ttlMinutes = args.leaseTtlMinutes ?? DEFAULT_LEASE_MINUTES;
-  if (!Number.isInteger(ttlMinutes) || ttlMinutes < 1 || ttlMinutes > 1440) {
-    throw refusal(
-      "saas_normalization_lease_ttl_invalid",
-      "The lease duration must be between 1 and 1440 minutes.",
-      "Request a lease of 1 to 1440 minutes when heartbeating in Company Setup → SaaS Metrics.",
-      { field: "leaseTtlMinutes" },
-    );
-  }
-  if (args.progress !== undefined && (args.progress === null || typeof args.progress !== "object" || Array.isArray(args.progress))) {
-    throw refusal(
-      "saas_normalization_progress_invalid",
-      "Heartbeat progress must be a JSON object.",
-      "Send progress as a JSON object, or omit it, in Company Setup → SaaS Metrics.",
-      { field: "progress" },
-    );
-  }
-  return withOrgTransaction(orgId, async () => {
-    const updated = (await db.execute<RequestRow>(sql`
-      update saas_metrics_normalization_requests
-         set lease_expires_at = greatest(lease_expires_at, now() + make_interval(mins => ${ttlMinutes})),
-             progress = ${args.progress === undefined ? sql`progress` : sql`progress || ${JSON.stringify(args.progress)}::jsonb`},
-             updated_by = approved_by
-       where org_id = ${orgId} and id = ${requestId} and status = 'running'
-         and lease_token = ${leaseToken} and lease_expires_at > now()
-      returning ${REQUEST_COLUMNS}
-    `)).rows;
-    if (updated.length !== 1 || !updated[0]) {
-      await diagnoseFenceMiss(db, orgId, requestId);
-    }
-    return toRecord(updated[0]!);
-  });
-}
-
-/**
- * Reacquire a running request only after its lease expired, with a fresh
- * token and a new attempt. A live lease refuses visibly; the caller must
- * heartbeat with the live token or wait for expiry. The executor reruns
- * the complete v0 proof before any metric write on the new attempt.
- */
-export async function reacquireNormalizationRequest(args: {
-  orgId: string;
-  requestId: string;
-  leaseTtlMinutes?: number;
-}): Promise<{ request: NormalizationRequestRecord; leaseToken: string }> {
-  const orgId = requireUuid(args.orgId, "org_id");
-  const requestId = requireUuid(args.requestId, "request_id");
-  const ttlMinutes = args.leaseTtlMinutes ?? DEFAULT_LEASE_MINUTES;
-  if (!Number.isInteger(ttlMinutes) || ttlMinutes < 1 || ttlMinutes > 1440) {
-    throw refusal(
-      "saas_normalization_lease_ttl_invalid",
-      "The lease duration must be between 1 and 1440 minutes.",
-      "Request a lease of 1 to 1440 minutes when reacquiring in Company Setup → SaaS Metrics.",
-      { field: "leaseTtlMinutes" },
-    );
-  }
-  const leaseToken = randomUUID();
-  return withOrgTransaction(orgId, async () => {
-    const existing = await readRequest(db, orgId, requestId);
-    if (!existing) throw missingRequest(requestId);
-    if (existing.status !== "running") {
-      throw refusal(
-        "saas_normalization_reacquire_state",
-        `Request ${requestId} is ${existing.status}; only a running request with an expired lease can be reacquired.`,
-        existing.status === "failed"
-          ? "Retry the failed request in Company Setup → SaaS Metrics to open a fresh lease."
-          : SETUP_LIST_REMEDY,
-        { status: 409 },
-      );
-    }
-    const updated = (await db.execute<RequestRow>(sql`
-      update saas_metrics_normalization_requests
-         set lease_token = ${leaseToken},
-             lease_expires_at = now() + make_interval(mins => ${ttlMinutes}),
-             attempt_count = attempt_count + 1,
-             progress = progress || '{"phase":"reacquired"}'::jsonb,
-             updated_by = approved_by
-       where org_id = ${orgId} and id = ${requestId} and status = 'running'
-         and lease_expires_at <= now()
-      returning ${REQUEST_COLUMNS}
-    `)).rows;
-    if (updated.length !== 1 || !updated[0]) {
-      throw refusal(
-        "saas_normalization_lease_live",
-        `The lease for request ${requestId} is still live; it cannot be reacquired.`,
-        "Heartbeat with the live token held by the current worker, or wait for expiry and reacquire with a fresh token in Company Setup → SaaS Metrics.",
-        { status: 409 },
-      );
-    }
-    return { request: toRecord(updated[0]!), leaseToken };
-  });
-}
-
-/** Retry a failed request into running with a fresh lease; the retry re-proves v0 before any write. */
-export async function retryNormalizationRequest(args: {
-  orgId: string;
-  requestId: string;
-  leaseTtlMinutes?: number;
-}): Promise<{ request: NormalizationRequestRecord; leaseToken: string }> {
-  const orgId = requireUuid(args.orgId, "org_id");
-  const requestId = requireUuid(args.requestId, "request_id");
-  const ttlMinutes = args.leaseTtlMinutes ?? DEFAULT_LEASE_MINUTES;
-  if (!Number.isInteger(ttlMinutes) || ttlMinutes < 1 || ttlMinutes > 1440) {
-    throw refusal(
-      "saas_normalization_lease_ttl_invalid",
-      "The lease duration must be between 1 and 1440 minutes.",
-      "Request a lease of 1 to 1440 minutes when retrying in Company Setup → SaaS Metrics.",
-      { field: "leaseTtlMinutes" },
-    );
-  }
-  const leaseToken = randomUUID();
-  return withOrgTransaction(orgId, async () => {
-    const existing = await readRequest(db, orgId, requestId);
-    if (!existing) throw missingRequest(requestId);
-    if (existing.status !== "failed") {
-      throw refusal(
-        "saas_normalization_retry_state",
-        `Request ${requestId} is ${existing.status}; only a failed request can be retried.`,
-        SETUP_LIST_REMEDY,
-        { status: 409 },
-      );
-    }
-    const updated = (await db.execute<RequestRow>(sql`
-      update saas_metrics_normalization_requests
-         set status = 'running', lease_token = ${leaseToken},
-             lease_expires_at = now() + make_interval(mins => ${ttlMinutes}),
-             attempt_count = attempt_count + 1,
-             progress = progress || '{"phase":"retried"}'::jsonb,
-             result = null, failure = null, remedy = null,
-             updated_by = approved_by
-       where org_id = ${orgId} and id = ${requestId} and status = 'failed'
-      returning ${REQUEST_COLUMNS}
-    `)).rows;
-    if (updated.length !== 1 || !updated[0]) {
-      throw refusal(
-        "saas_normalization_retry_write_missing",
-        `Retry for request ${requestId} was not recorded.`,
-        SETUP_LIST_REMEDY,
-        { status: 409 },
-      );
-    }
-    return { request: toRecord(updated[0]!), leaseToken };
-  });
 }
 
 /** Cancel a pending request (requester) or a running/failed one (approver, live lease for running). */
@@ -728,13 +441,13 @@ export async function cancelNormalizationRequest(args: {
   orgId: string;
   requestId: string;
   actorId: string;
-  leaseToken?: string;
 }): Promise<NormalizationRequestRecord> {
   const orgId = requireUuid(args.orgId, "org_id");
   const requestId = requireUuid(args.requestId, "request_id");
   const actorId = requireUuid(args.actorId, "actor_id");
-  const leaseToken = args.leaseToken === undefined ? undefined : requireUuid(args.leaseToken, "lease_token");
   return withOrgTransaction(orgId, async () => {
+    await lockApprovalSubject(orgId,"metrics_normalization",requestId);
+    await lockNormalizationOperator(orgId,actorId);
     const existing = await readRequest(db, orgId, requestId);
     if (!existing) throw missingRequest(requestId);
     if (existing.status === "pending") {
@@ -746,6 +459,7 @@ export async function cancelNormalizationRequest(args: {
           { status: 409 },
         );
       }
+      await cancelNativeApprovals({orgId,actorId,subjectKind:"metrics_normalization",subjectId:requestId});
       const updated = (await db.execute<RequestRow>(sql`
         update saas_metrics_normalization_requests
            set status = 'cancelled', updated_by = ${actorId}
@@ -755,58 +469,9 @@ export async function cancelNormalizationRequest(args: {
       if (updated.length !== 1 || !updated[0]) throw missingRequest(requestId);
       return toRecord(updated[0]!);
     }
-    if (existing.status === "running" || existing.status === "failed") {
-      if (actorId !== existing.approved_by) {
-        throw refusal(
-          "saas_normalization_cancel_forbidden",
-          `Only the recorded approver can cancel ${existing.status} request ${requestId}.`,
-          "Have the recorded approver cancel it in Company Setup → SaaS Metrics.",
-          { status: 409 },
-        );
-      }
-      if (existing.status === "running") {
-        if (leaseToken === undefined) {
-          throw refusal(
-            "saas_normalization_cancel_lease_missing",
-            `Cancelling running request ${requestId} needs the live lease token.`,
-            "Heartbeat or reacquire first in Company Setup → SaaS Metrics, then cancel with the live token.",
-            { field: "leaseToken", status: 409 },
-          );
-        }
-        const updated = (await db.execute<RequestRow>(sql`
-          update saas_metrics_normalization_requests
-             set status = 'cancelled', updated_by = approved_by
-           where org_id = ${orgId} and id = ${requestId} and status = 'running'
-             and lease_token = ${leaseToken} and lease_expires_at > now()
-          returning ${REQUEST_COLUMNS}
-        `)).rows;
-        if (updated.length !== 1 || !updated[0]) {
-          await diagnoseFenceMiss(db, orgId, requestId);
-        }
-        return toRecord(updated[0]!);
-      }
-      // The guard requires a cancelled request to carry no outcome, so
-      // the failed failure and remedy clear atomically with the cancel.
-      const updated = (await db.execute<RequestRow>(sql`
-        update saas_metrics_normalization_requests
-           set status = 'cancelled', result = null, failure = null, remedy = null,
-               updated_by = approved_by
-         where org_id = ${orgId} and id = ${requestId} and status = 'failed'
-        returning ${REQUEST_COLUMNS}
-      `)).rows;
-      if (updated.length !== 1 || !updated[0]) {
-        throw refusal(
-          "saas_normalization_cancel_write_missing",
-          `Cancellation for request ${requestId} was not recorded.`,
-          SETUP_LIST_REMEDY,
-          { status: 409 },
-        );
-      }
-      return toRecord(updated[0]!);
-    }
     throw refusal(
       "saas_normalization_cancel_state",
-      `Request ${requestId} is ${existing.status} and cannot be cancelled; terminal rows are immutable.`,
+      `Request ${requestId} is ${existing.status} and cannot be cancelled; only a pending correction can be withdrawn.`,
       "File a new request in Company Setup → SaaS Metrics for further work.",
       { status: 409 },
     );
@@ -844,9 +509,9 @@ async function assertLiveClaim(
       "saas_normalization_execute_state",
       `Request ${requestId} is ${existing.status} and cannot execute.`,
       existing.status === "pending"
-        ? "Complete the request’s tenant Flow gates and claim its released correction in Company Setup → SaaS Metrics, then execute."
+        ? "Complete the request’s tenant Flow gates in Approvals; the final decision executes the correction automatically."
         : existing.status === "failed"
-          ? "Retry the failed request in Company Setup → SaaS Metrics to open a fresh lease, then execute."
+          ? "Review the recorded failure in Company Setup → SaaS Metrics and submit the corrected request through its tenant Flows."
           : SETUP_LIST_REMEDY,
       { status: 409 },
     );
@@ -1209,7 +874,7 @@ function toFailure(error: unknown, month: string): { failure: string; remedy: st
 /**
  * Record a guarded failed outcome under the live lease in a fresh
  * transaction (the attempt transaction already rolled back). If the fence
- * misses — the lease expired or a reacquire superseded this worker — the
+ * misses — the execution fence expired or its attempt is no longer current — the
  * original refusal propagates so the new lease owner stays authoritative.
  */
 async function recordExecutionFailure(args: {
@@ -1468,62 +1133,6 @@ async function runCorrectionAttempt(
 }
 
 /**
- * Execute the approved correction: one fenced attempt that re-proves v0
- * before any metric write. A succeeded request replays its recorded result
- * byte-for-byte; any source, hash, rate, row-count, or affected-row drift
- * rolls every metric write back and records a guarded failed outcome with
- * the real remedy. Never blindly resumes a partially computed payload:
- * every attempt recomputes from unchanged sources inside one transaction.
- */
-export async function executeNormalizationRequest(args: {
-  orgId: string;
-  requestId: string;
-  leaseToken: string;
-  leaseTtlMinutes?: number;
-}): Promise<NormalizationExecutionResult> {
-  const orgId = requireUuid(args.orgId, "org_id");
-  const requestId = requireUuid(args.requestId, "request_id");
-  const leaseToken = requireUuid(args.leaseToken, "lease_token");
-  const ttlMinutes = args.leaseTtlMinutes ?? DEFAULT_LEASE_MINUTES;
-  if (!Number.isInteger(ttlMinutes) || ttlMinutes < 1 || ttlMinutes > 1440) {
-    throw refusal(
-      "saas_normalization_lease_ttl_invalid",
-      "The lease duration must be between 1 and 1440 minutes.",
-      "Request a lease of 1 to 1440 minutes when executing in Company Setup → SaaS Metrics.",
-      { field: "leaseTtlMinutes" },
-    );
-  }
-  const peek = await withOrgTransaction(orgId, async () => readRequest(db, orgId, requestId));
-  if (!peek) throw missingRequest(requestId);
-  if (peek.status === "succeeded" && peek.result) return peek.result;
-  try {
-    return await runCorrectionAttempt(orgId, requestId, leaseToken, peek.month.slice(0, 10), ttlMinutes);
-  } catch (error) {
-    // Pre-claim fence and state refusals fire before any metric work starts,
-    // so there is no failed outcome to record; everything after the live
-    // claim — including a post-claim feature-off — records one under the
-    // live lease.
-    if (
-      error instanceof UsageBillingError
-      && [
-        "saas_normalization_request_missing",
-        "saas_normalization_execute_state",
-        "saas_normalization_execute_unapproved",
-        "saas_normalization_lease_mismatch",
-        "saas_normalization_lease_state",
-        "saas_normalization_lease_live",
-        "saas_normalization_month_mismatch",
-      ].includes(error.code)
-    ) {
-      throw error;
-    }
-    const month = peek.month.slice(0, 10);
-    const { failure, remedy, error: original } = toFailure(error, month);
-    return await recordExecutionFailure({ orgId, requestId, leaseToken, failure, remedy, original });
-  }
-}
-
-/**
  * Release a correction authorized by its tenant Flow policy and record the
  * first pending-to-running claim atomically in a single transaction, then
  * execute the fenced correction with the lease token held server-side. No
@@ -1531,7 +1140,7 @@ export async function executeNormalizationRequest(args: {
  * entrypoint: either both guarded statements commit together or the
  * concurrent loser refuses on zero rows. The raw token is never returned;
  * callers receive the request record and the recorded result only.
- * Recovery claim and execute commands retain the same native authorization proof.
+ * No separate approval, claim or token-bearing execution command is exposed.
  */
 export async function approveAndExecuteNormalizationRequest(args: {
   orgId: string;
@@ -1552,7 +1161,10 @@ export async function approveAndExecuteNormalizationRequest(args: {
       { field: "leaseTtlMinutes" },
     );
   }
-  const peek = await withOrgTransaction(orgId, async () => readRequest(db, orgId, requestId));
+  const peek = await withOrgTransaction(orgId, async () => {
+    await lockNormalizationOperator(orgId,approverId);
+    return readRequest(db, orgId, requestId);
+  });
   if (!peek) throw missingRequest(requestId);
   if (peek.status === "succeeded" && peek.result) {
     return { request: toRecord(peek), result: peek.result };
@@ -1963,14 +1575,18 @@ export async function listNormalizationMonthStates(orgId: string): Promise<Norma
   });
 }
 
+async function lockNormalizationOperator(orgId:string,actorId:string): Promise<void> {
+  const allowed=await lockActorCommandAuthority(db,orgId,actorId,null,"usage.manage");
+  if(allowed!==null)throw new ScopeNotFoundError();
+}
+
 async function requireNormalizationApproval(
   orgId: string,
   requestId: string,
   actorId: string,
   approvalRunId?: string,
 ): Promise<void> {
-  await lockActorCommandAuthority(db, orgId, actorId, null, "usage.manage");
-  await lockActorCommandAuthority(db, orgId, actorId, null, "close.reopen");
+  await lockNormalizationOperator(orgId,actorId);
   const decision = await readNativeApprovalDecision({
     orgId,
     actorId,
@@ -2031,8 +1647,7 @@ export async function releaseNormalizationApproval(args: {
     });
     return;
   }
-  await lockActorCommandAuthority(db, orgId, actorId, null, "usage.manage");
-  await lockActorCommandAuthority(db, orgId, actorId, null, "close.reopen");
+  await lockNormalizationOperator(orgId,actorId);
   const changed =
     await db.execute(sql`update saas_metrics_normalization_requests set status='cancelled',updated_by=${actorId}
     where org_id=${orgId} and id=${requestId} and status='pending' returning id`);

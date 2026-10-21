@@ -40,7 +40,7 @@ export const metricsNormalizationFlowAdapter = defineTableSubjectAdapter({
   permissions: {
     read: "usage.read",
     edit: "usage.manage",
-    approve: "close.reopen",
+    approve: "usage.manage",
   },
   scope: { via: "none" },
   releaseViaHandler: true,

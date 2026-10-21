@@ -1,29 +1,27 @@
+import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { decideGate } from "../../flows/gates.ts";
+import {prepareNormalizationFlowFixture, completeNormalizationFlowFixture, executeNormalizationFlowFixture, normalizationGateIds} from "../../testing/metrics-normalization.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
-import { isUuid } from "../../platform/uuid.ts";
 import {
   createScratchOrg,
   createScratchUser,
+  grantScratchPermissions,
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
 import { UsageBillingError } from "../usage/errors.ts";
 import {
   approveAndExecuteNormalizationRequest,
-  approveNormalizationRequest,
+  releaseNormalizationApproval,
   cancelNormalizationRequest,
-  claimNormalizationRequest,
   createNormalizationRequest,
-  executeNormalizationRequest,
   getNormalizationRequest,
-  heartbeatNormalizationRequest,
   normalizationLeaseDigest,
   normalizationMonthLockKey,
-  reacquireNormalizationRequest,
-  retryNormalizationRequest,
 } from "./metrics-normalization-service.ts";
 import {
   computeLegacyV0Month,
@@ -66,7 +64,7 @@ interface Fixture {
   approver: string;
 }
 
-async function withFixture(run: (ctx: Fixture) => Promise<void>): Promise<void> {
+async function withFixture(run: (ctx: Fixture) => Promise<void>, options:Parameters<typeof prepareNormalizationFlowFixture>[1]={}): Promise<void> {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const requester = await createScratchUser(org.orgId, "Normalization Requester", "admin");
@@ -74,7 +72,9 @@ async function withFixture(run: (ctx: Fixture) => Promise<void>): Promise<void> 
     await withOrgTransaction(org.orgId, async () => {
       await enableMetrics(org.orgId);
     });
-    await run({ org, requester, approver });
+    const ctx={org,requester,approver};
+    await prepareNormalizationFlowFixture(ctx,options);
+    await run(ctx);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -90,10 +90,8 @@ async function fileRequest(ctx: Fixture, overrides?: Partial<{ month: string; re
   });
 }
 
-async function approvedClaim(ctx: Fixture, overrides?: { idempotencyKey?: string }) {
-  const filed = await fileRequest(ctx, overrides);
-  await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.approver });
-  return claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
+async function pendingFlowRequest(ctx: Fixture, overrides?: { idempotencyKey?: string }) {
+  return fileRequest(ctx, overrides);
 }
 
 async function seedCustomerAndSubscription(ctx: Fixture, currency = "CAD"): Promise<{ customerId: string; subscriptionId: string }> {
@@ -293,10 +291,8 @@ async function expectRefusal(
   code: string,
   remedyFragment: string,
 ): Promise<UsageBillingError> {
-  const error = await run.then(
-    () => null,
-    (failure: unknown) => failure,
-  );
+  let error:unknown = await run.then(() => null,(failure:unknown) => failure);
+  for(let depth=0;depth<8&&error instanceof Error&&!(error instanceof UsageBillingError)&&error.cause;depth++)error=error.cause;
   assert.ok(error instanceof UsageBillingError, `expected a UsageBillingError (${code}), saw ${String(error)}`);
   assert.equal(error.code, code, "the refusal must name its code");
   assert.match(error.remedy, new RegExp(remedyFragment), "the refusal must pin a usable remedy");
@@ -630,156 +626,18 @@ test("a requester outside the organization is refused and stores nothing", { ski
   });
 });
 
-test("self-approval refuses even for an admin; a distinct approver records", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    const filed = await fileRequest(ctx);
-    await expectRefusal(
-      approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.requester }),
-      "saas_normalization_self_approval",
-      "different authorized approver",
-    );
-    const approved = await approveNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-      approverId: ctx.approver,
-    });
-    assert.equal(approved.approvedBy, ctx.approver);
-    const replay = await approveNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-      approverId: ctx.approver,
-    });
-    assert.equal(replay.approvedBy, ctx.approver, "re-approval by the recorded approver replays");
-    const events = await requestAuditEvents(ctx.org.orgId, filed.request.id);
-    const kinds = events.map((event) => event.action);
-    assert.ok(kinds.includes("saas_normalization_requested"), "creation records the typed requested event");
-    assert.ok(kinds.includes("saas_normalization_approved"), "approval records the typed approved event");
-    const requested = events.find((event) => event.action === "saas_normalization_requested")!;
-    assert.equal(requested.changes.actor, ctx.requester, "the requested event carries the truthful actor");
-    assert.equal(requested.changes.reason, REASON, "the requested event carries the reason");
-  });
-});
-
-test("a concurrent second claim matches zero rows and names the live request", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    const filed = await fileRequest(ctx);
-    await expectRefusal(
-      claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id }),
-      "saas_normalization_claim_unapproved",
-      "distinct approver",
-    );
-    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.approver });
-    const first = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
-    assert.equal(first.request.status, "running");
-    assert.equal(first.request.attemptCount, 1);
-    assert.ok(isUuid(first.leaseToken), `normalization lease token must be a UUID; received ${JSON.stringify(first.leaseToken)}`);
-    await expectRefusal(
-      claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id }),
-      "saas_normalization_already_claimed",
-      "Company Setup",
-    );
-    const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
-    assert.ok(!("leaseToken" in status), "status reads never expose the live token");
-  });
-});
-
-test("heartbeats extend under the live token; stale tokens refuse without new attempts", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    const { request, leaseToken } = await approvedClaim(ctx);
-    const heartbeat = await heartbeatNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: request.id,
-      leaseToken,
-      progress: { pct: 10 },
-    });
-    assert.equal(heartbeat.attemptCount, 1, "a heartbeat opens no new attempt");
-    assert.equal(heartbeat.progress.pct, 10, "heartbeat progress is recorded");
-    assert.ok(
-      (heartbeat.leaseExpiresAt ?? "") >= (request.leaseExpiresAt ?? ""),
-      "a heartbeat never shortens the lease",
-    );
-    await expectRefusal(
-      heartbeatNormalizationRequest({
-        orgId: ctx.org.orgId,
-        requestId: request.id,
-        leaseToken: "00000000-0000-0000-0000-000000000000",
-      }),
-      "saas_normalization_lease_mismatch",
-      "live token",
-    );
-    const after = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id });
-    assert.equal(after.attemptCount, 1, "a stale token manufactures no attempt");
-    const events = await requestAuditEvents(ctx.org.orgId, request.id);
-    assert.ok(
-      !events.some((event) => event.action === "saas_normalization_heartbeat"),
-      "heartbeats manufacture no attempt audit event",
-    );
-  });
-});
-
-test("reacquisition refuses while the lease is live and shortens nothing", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    const { request } = await approvedClaim(ctx);
-    await expectRefusal(
-      reacquireNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id }),
-      "saas_normalization_lease_live",
-      "wait for expiry",
-    );
-    const shortened = await withOrgTransaction(ctx.org.orgId, async () =>
-      db.execute(sql`
-        update saas_metrics_normalization_requests
-           set lease_expires_at = lease_expires_at - make_interval(mins => 1), updated_by = approved_by
-         where org_id = ${ctx.org.orgId} and id = ${request.id}
-      `).then(() => "updated", () => "refused"));
-    assert.equal(shortened, "refused", "the guard never lets a heartbeat shorten the lease");
-  });
-});
-
-test("executing a pending request refuses; a stale token records no failure", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    const filed = await fileRequest(ctx);
-    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.approver });
-    await expectRefusal(
-      executeNormalizationRequest({
-        orgId: ctx.org.orgId,
-        requestId: filed.request.id,
-        leaseToken: randomUUID(),
-      }),
-      "saas_normalization_execute_state",
-      "claim the request",
-    );
-    const { request, leaseToken } = await claimNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-    });
-    await expectRefusal(
-      executeNormalizationRequest({
-        orgId: ctx.org.orgId,
-        requestId: request.id,
-        leaseToken: randomUUID(),
-      }),
-      "saas_normalization_lease_mismatch",
-      "live token",
-    );
-    const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id });
-    assert.equal(status.status, "running", "a stale execution attempt records no failed outcome");
-    assert.equal(status.failure, null);
-    assert.ok(leaseToken.length > 0);
-  });
-});
-
 test("an empty month refuses with the recompute remedy and records the failure", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
-    const { request, leaseToken } = await approvedClaim(ctx);
+    const { request } = await pendingFlowRequest(ctx);
     await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, request.id),
       "saas_normalization_nothing_to_correct",
       "ordinary SaaS metrics recompute",
     );
     const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id });
-    assert.equal(status.status, "failed");
-    assert.match(status.failure ?? "", /saas_normalization_nothing_to_correct/);
-    assert.match(status.remedy ?? "", /ordinary SaaS metrics recompute/);
+    assert.equal(status.status, "pending", "a refused native decision rolls its lifecycle back");
+    assert.equal(status.failure,null);
+    assert.equal(status.remedy,null);
     const stored = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from saas_metrics_monthly where org_id = ${ctx.org.orgId}
@@ -792,9 +650,9 @@ test("a fully normalized month refuses as already done and keeps its rows", { sk
   await withFixture(async (ctx) => {
     const seeded = await seedCustomerAndSubscription(ctx);
     await seedNormalizedMonth(ctx, seeded.customerId, seeded.subscriptionId);
-    const { request, leaseToken } = await approvedClaim(ctx);
+    const { request } = await pendingFlowRequest(ctx);
     await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, request.id),
       "saas_normalization_already_normalized",
       "stored month",
     );
@@ -826,9 +684,9 @@ test("a mixed legacy and normalized month refuses as unsupported partial", { ski
       `);
       assert.equal(changed.rows.length, 1, "the subsidiary facts must become normalized to stage a mixed month");
     });
-    const { request, leaseToken } = await approvedClaim(ctx);
+    const { request } = await pendingFlowRequest(ctx);
     await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, request.id),
       "saas_normalization_partial_denominations",
       "never edited by hand",
     );
@@ -854,15 +712,15 @@ test("missing FX evidence fails the batch with its setup remedy and no writes", 
       `);
       assert.equal(removed.rows.length, 1, "the covering rate must be withdrawn to stage the drift");
     });
-    const { request, leaseToken } = await approvedClaim(ctx);
+    const { request } = await pendingFlowRequest(ctx);
     const error = await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, request.id),
       "saas_metrics_fx_rate_missing",
       "FX rates",
     );
     assert.match(error.message, /EUR→CAD/, "the refusal names the uncovered pair");
     const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id });
-    assert.equal(status.status, "failed");
+    assert.equal(status.status, "pending", "a refused native decision rolls its lifecycle back");
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ currency: string | null; hash: string }>(sql`
         select reporting_currency as currency, inputs_hash as hash from saas_metrics_monthly
@@ -884,8 +742,8 @@ test("a reproduced legacy month corrects atomically with per-row before and afte
       (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from journal_entries where org_id = ${ctx.org.orgId}
       `)).rows[0]?.count);
-    const { request, leaseToken } = await approvedClaim(ctx);
-    const result = await executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken });
+    const { request } = await pendingFlowRequest(ctx);
+    const result = await executeNormalizationFlowFixture(ctx, request.id);
     assert.equal(result.month, MONTH);
     assert.equal(result.reportingCurrency, "CAD");
     assert.equal(result.denominationVersion, "v1");
@@ -928,12 +786,9 @@ test("a reproduced legacy month corrects atomically with per-row before and afte
       assert.equal(changes.v1Hash, result.monthHash);
       assert.ok(changes.before, "the legacy before-image is recorded");
       assert.ok(changes.after, "the normalized after-image is recorded");
-      assert.ok(
-        !JSON.stringify(changes).includes(leaseToken),
-        "raw lease tokens never enter audit",
-      );
+      assert.equal(Object.hasOwn(changes,"leaseToken"),false,"raw lease tokens never enter audit");
     }
-    const replay = await executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken });
+    const replay = await executeNormalizationFlowFixture(ctx, request.id);
     assert.deepEqual(replay, result, "a succeeded byte-identical replay returns the recorded result");
     const journalAfter = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ count: string }>(sql`
@@ -955,8 +810,8 @@ test("a closed month corrects only through the approved request without reopenin
       `);
       assert.equal(closed.rows.length, 1, "July AR must be closed before the correction");
     });
-    const { request, leaseToken } = await approvedClaim(ctx);
-    const result = await executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken });
+    const { request } = await pendingFlowRequest(ctx);
+    const result = await executeNormalizationFlowFixture(ctx, request.id);
     assert.match(result.monthHash, /^[0-9a-f]{64}$/);
     const locks = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ state: string }>(sql`
@@ -964,128 +819,6 @@ test("a closed month corrects only through the approved request without reopenin
          where org_id = ${ctx.org.orgId} and period_id = ${ctx.org.periodId} and module = 'ar'
       `)).rows);
     assert.equal(locks[0]?.state, "closed", "the accounting period stays closed throughout");
-  });
-});
-
-test("a crashed worker supersedes cleanly: old tokens die, the new attempt re-proves", { skip: !DB, timeout: 180_000 }, async () => {
-  await withFixture(async (ctx) => {
-    await seedCustomerAndSubscription(ctx);
-    await seedV0Month(ctx);
-    const filed = await fileRequest(ctx);
-    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.approver });
-    const crashed = await claimNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-      leaseTtlMinutes: 1,
-    });
-    // The crash: the worker vanishes holding attempt one's lease. Force the
-    // lease past expiry through the reacquire fence by waiting out a
-    // one-minute lease, then reacquire and rerun the complete proof.
-    const waitForExpiry = async (): Promise<void> => {
-      const deadline = Date.now() + 120_000;
-      for (;;) {
-        const expired = await withOrgTransaction(ctx.org.orgId, async () =>
-          (await db.execute<{ expired: boolean }>(sql`
-            select lease_expires_at <= now() as expired
-              from saas_metrics_normalization_requests
-             where org_id = ${ctx.org.orgId} and id = ${filed.request.id}
-          `)).rows[0]?.expired ?? false);
-        if (expired) return;
-        if (Date.now() > deadline) throw new Error("the one-minute lease never expired");
-        await new Promise((resolve) => setTimeout(resolve, 5_000));
-      }
-    };
-    assert.equal(crashed.request.attemptCount, 1);
-    await waitForExpiry();
-    const revived = await reacquireNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
-    assert.equal(revived.request.attemptCount, 2, "reacquisition opens a fresh attempt");
-    assert.notEqual(revived.leaseToken, crashed.leaseToken, "reacquisition mints a fresh token");
-    await expectRefusal(
-      heartbeatNormalizationRequest({
-        orgId: ctx.org.orgId,
-        requestId: filed.request.id,
-        leaseToken: crashed.leaseToken,
-      }),
-      "saas_normalization_lease_mismatch",
-      "live token",
-    );
-    await expectRefusal(
-      executeNormalizationRequest({
-        orgId: ctx.org.orgId,
-        requestId: filed.request.id,
-        leaseToken: crashed.leaseToken,
-      }),
-      "saas_normalization_lease_mismatch",
-      "live token",
-    );
-    const result = await executeNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-      leaseToken: revived.leaseToken,
-    });
-    assert.equal(result.attempt, 2);
-    const events = await requestAuditEvents(ctx.org.orgId, filed.request.id);
-    const kinds = events.map((event) => event.action);
-    assert.ok(kinds.includes("saas_normalization_abandoned"), "the crashed attempt is abandoned in audit");
-    assert.ok(kinds.includes("saas_normalization_reacquired"), "the revival is claimed in audit");
-    assert.ok(kinds.includes("saas_normalization_succeeded"), "the revived attempt finalizes");
-  });
-});
-
-test("retry after failure re-proves and succeeds without resuming payload", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    await seedCustomerAndSubscription(ctx, "EUR");
-    await seedFxRate(ctx, "EUR", "CAD", "2026-07-31", "1.5000000000");
-    await seedV0Month(ctx);
-    await withOrgTransaction(ctx.org.orgId, async () => {
-      const removed = await db.execute(sql`
-        delete from fx_rates
-         where org_id = ${ctx.org.orgId} and from_currency = 'EUR' and to_currency = 'CAD'
-        returning id
-      `);
-      assert.equal(removed.rows.length, 1, "the covering rate must be withdrawn to stage the drift");
-    });
-    const filed = await fileRequest(ctx);
-    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.approver });
-    const first = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
-    await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, leaseToken: first.leaseToken }),
-      "saas_metrics_fx_rate_missing",
-      "FX rates",
-    );
-    await seedFxRate(ctx, "EUR", "CAD", "2026-07-31", "1.5000000000");
-    const retried = await retryNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
-    assert.equal(retried.request.attemptCount, 2);
-    const result = await executeNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-      leaseToken: retried.leaseToken,
-    });
-    assert.equal(result.attempt, 2);
-    assert.match(result.monthHash, /^[0-9a-f]{64}$/);
-  });
-});
-
-test("cancellation honors requester, approver, and terminal immutability", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    const filed = await fileRequest(ctx);
-    const refusal = await expectRefusal(
-      cancelNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, actorId: ctx.approver }),
-      "saas_normalization_cancel_forbidden",
-      "Have the requester cancel it in Company Setup",
-    );
-    assert.match(refusal.message, /Only the requester/);
-    const cancelled = await cancelNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-      actorId: ctx.requester,
-    });
-    assert.equal(cancelled.status, "cancelled");
-    await expectRefusal(
-      approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.approver }),
-      "saas_normalization_approval_state",
-      "Company Setup",
-    );
   });
 });
 
@@ -1101,9 +834,9 @@ test("a changed source refuses as drift with zero writes and the chained remedy"
       `);
       assert.equal(changed.rows.length, 1, "the subscription price must move to stage source drift");
     });
-    const { request, leaseToken } = await approvedClaim(ctx);
+    const { request } = await pendingFlowRequest(ctx);
     await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, request.id),
       "saas_normalization_source_drift",
       "earlier months first",
     );
@@ -1129,9 +862,9 @@ test("a tampered stored value refuses with zero writes and administrator escalat
       `);
       assert.equal(tampered.rows.length, 1, "the stored value must move to stage tamper");
     });
-    const { request, leaseToken } = await approvedClaim(ctx);
+    const { request } = await pendingFlowRequest(ctx);
     await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, request.id),
       "saas_normalization_stored_tamper",
       "never edited by hand",
     );
@@ -1159,9 +892,9 @@ test("a tampered stored hash refuses with zero writes and administrator escalati
       `);
       assert.equal(tampered.rows.length, 1, "the stored hash must move to stage tamper");
     });
-    const { request, leaseToken } = await approvedClaim(ctx);
+    const { request } = await pendingFlowRequest(ctx);
     const error = await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, request.id),
       "saas_normalization_hash_tamper",
       "never edited by hand",
     );
@@ -1188,9 +921,9 @@ test("a missing stored row refuses as key drift with zero writes", { skip: !DB }
       `);
       assert.equal(removed.rows.length, 1, "the facts row must leave to stage a missing key");
     });
-    const { request, leaseToken } = await approvedClaim(ctx);
+    const { request } = await pendingFlowRequest(ctx);
     await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, request.id),
       "saas_normalization_v0_key_drift",
       "new request",
     );
@@ -1209,9 +942,9 @@ test("an extra source key refuses as key drift with zero writes", { skip: !DB },
     await seedCustomerAndSubscription(ctx);
     await seedV0Month(ctx);
     await seedCustomerAndSubscription(ctx);
-    const { request, leaseToken } = await approvedClaim(ctx);
+    const { request } = await pendingFlowRequest(ctx);
     const error = await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, request.id),
       "saas_normalization_v0_key_drift",
       "new request",
     );
@@ -1226,151 +959,6 @@ test("an extra source key refuses as key drift with zero writes", { skip: !DB },
   });
 });
 
-test("the E-facing action approves, claims, and executes with no token returned", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    await seedCustomerAndSubscription(ctx);
-    const v0 = await seedV0Month(ctx, MONTH, true);
-    const filed = await fileRequest(ctx);
-    const done = await approveAndExecuteNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-      approverId: ctx.approver,
-    });
-    assert.equal(done.request.status, "succeeded");
-    assert.equal(done.request.approvedBy, ctx.approver);
-    assert.equal(done.request.attemptCount, 1, "one atomic action opens exactly one attempt");
-    assert.ok(!("leaseToken" in done) && !("leaseToken" in done.request), "the raw token never leaves the server");
-    assert.deepEqual(done.result.sourceV0Hashes, [v0.legacyHash]);
-    const events = await requestAuditEvents(ctx.org.orgId, filed.request.id);
-    const kinds = events.map((event) => event.action);
-    assert.deepEqual(
-      kinds,
-      ["saas_normalization_requested", "saas_normalization_approved", "saas_normalization_claimed", "saas_normalization_succeeded"],
-      "one action records approval, first claim, and finalization with no approved-pending gap",
-    );
-    const replay = await approveAndExecuteNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-      approverId: ctx.approver,
-    });
-    assert.deepEqual(replay.result, done.result, "the E-facing replay returns the recorded result");
-  });
-});
-
-test("the E-facing action refuses self-approval and concurrent losers with zero gaps", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    await seedCustomerAndSubscription(ctx);
-    await seedV0Month(ctx);
-    const filed = await fileRequest(ctx);
-    await expectRefusal(
-      approveAndExecuteNormalizationRequest({
-        orgId: ctx.org.orgId,
-        requestId: filed.request.id,
-        approverId: ctx.requester,
-      }),
-      "saas_normalization_self_approval",
-      "different authorized approver",
-    );
-    const secondApprover = await createScratchUser(ctx.org.orgId, "Normalization Rival", "admin");
-    const [first, second] = await Promise.allSettled([
-      approveAndExecuteNormalizationRequest({
-        orgId: ctx.org.orgId,
-        requestId: filed.request.id,
-        approverId: ctx.approver,
-      }),
-      approveAndExecuteNormalizationRequest({
-        orgId: ctx.org.orgId,
-        requestId: filed.request.id,
-        approverId: secondApprover,
-      }),
-    ]);
-    const wins = [first, second].filter((outcome) => outcome.status === "fulfilled");
-    const losses = [first, second].filter((outcome) => outcome.status === "rejected");
-    assert.equal(wins.length, 1, "exactly one concurrent approval claims the request");
-    assert.equal(losses.length, 1, "the concurrent loser refuses on zero rows");
-    const loss = (losses[0] as PromiseRejectedResult).reason as unknown;
-    assert.ok(loss instanceof UsageBillingError, "the loser refuses with a named refusal");
-    assert.ok(
-      ["saas_normalization_approver_recorded", "saas_normalization_already_claimed", "saas_normalization_approval_state"].includes(loss.code),
-      `the loser names the race it lost, saw ${loss.code}`,
-    );
-    const events = await requestAuditEvents(ctx.org.orgId, filed.request.id);
-    assert.equal(
-      events.filter((event) => event.action === "saas_normalization_approved").length,
-      1,
-      "concurrent losers record no second approval",
-    );
-    assert.equal(
-      events.filter((event) => event.action === "saas_normalization_claimed").length,
-      1,
-      "concurrent losers record no second claim",
-    );
-  });
-});
-
-test("a running request cancels only by the approver under the live lease", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    const { request, leaseToken } = await approvedClaim(ctx);
-    await expectRefusal(
-      cancelNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, actorId: ctx.requester, leaseToken }),
-      "saas_normalization_cancel_forbidden",
-      "recorded approver",
-    );
-    await expectRefusal(
-      cancelNormalizationRequest({
-        orgId: ctx.org.orgId,
-        requestId: request.id,
-        actorId: ctx.approver,
-        leaseToken: randomUUID(),
-      }),
-      "saas_normalization_lease_mismatch",
-      "live token",
-    );
-    const cancelled = await cancelNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: request.id,
-      actorId: ctx.approver,
-      leaseToken,
-    });
-    assert.equal(cancelled.status, "cancelled");
-    assert.equal(cancelled.failure, null);
-    assert.equal(cancelled.remedy, null);
-    assert.equal(cancelled.result, null);
-  });
-});
-
-test("a failed request records failure then cancels cleanly by the approver", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    const { request, leaseToken } = await approvedClaim(ctx);
-    await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, leaseToken }),
-      "saas_normalization_nothing_to_correct",
-      "ordinary SaaS metrics recompute",
-    );
-    const failed = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id });
-    assert.equal(failed.status, "failed");
-    assert.ok(failed.failure && failed.remedy, "the failed outcome is recorded");
-    await expectRefusal(
-      cancelNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id, actorId: ctx.requester }),
-      "saas_normalization_cancel_forbidden",
-      "recorded approver",
-    );
-    const cancelled = await cancelNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: request.id,
-      actorId: ctx.approver,
-    });
-    assert.equal(cancelled.status, "cancelled");
-    assert.equal(cancelled.failure, null, "the failed failure clears atomically with the cancel");
-    assert.equal(cancelled.remedy, null, "the failed remedy clears atomically with the cancel");
-    assert.equal(cancelled.result, null);
-    const events = await requestAuditEvents(ctx.org.orgId, request.id);
-    const last = events[events.length - 1]!;
-    assert.equal(last.action, "saas_normalization_cancelled", "the cancel records its canonical event");
-    assert.equal(last.changes.actor, ctx.approver, "the cancelled event carries the truthful approver actor");
-  });
-});
-
 test("chained mixed-currency months reproduce v0 across the audited correction", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
     await seedCustomerAndSubscription(ctx, "EUR");
@@ -1379,11 +967,7 @@ test("chained mixed-currency months reproduce v0 across the audited correction",
     const augustBefore = await withOrgTransaction(ctx.org.orgId, async () =>
       computeLegacyV0Month(db, ctx.org.orgId, NEXT_MONTH));
     const filedJuly = await fileRequest(ctx, { month: MONTH });
-    const doneJuly = await approveAndExecuteNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filedJuly.request.id,
-      approverId: ctx.approver,
-    });
+    const doneJuly = await completeNormalizationFlowFixture(ctx, filedJuly.request.id);
     assert.equal(doneJuly.request.status, "succeeded");
     const augustAfter = await withOrgTransaction(ctx.org.orgId, async () =>
       computeLegacyV0Month(db, ctx.org.orgId, NEXT_MONTH));
@@ -1394,11 +978,7 @@ test("chained mixed-currency months reproduce v0 across the audited correction",
     );
     await seedV0Month(ctx, NEXT_MONTH);
     const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
-    const doneAugust = await approveAndExecuteNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filedAugust.request.id,
-      approverId: ctx.approver,
-    });
+    const doneAugust = await completeNormalizationFlowFixture(ctx, filedAugust.request.id);
     assert.equal(doneAugust.request.status, "succeeded");
     assert.deepEqual(doneAugust.result.sourceV0Hashes, [augustBefore.legacyHash]);
     const augustRows = await withOrgTransaction(ctx.org.orgId, async () =>
@@ -1422,17 +1002,15 @@ test("a prior ordinary v1 rewrite with no preserved provenance refuses", { skip:
       assert.equal(rewritten.frozen, false, "the ordinary recompute rewrites July without audit provenance");
     });
     const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
-    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, approverId: ctx.approver });
-    const { leaseToken } = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
     const error = await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, filedAugust.request.id),
       "saas_normalization_v0_provenance_missing",
       "audited normalization workflow",
     );
     assert.ok(error.message.includes(`Month ${NEXT_MONTH} depends on prior month ${MONTH}`),
       `the refusal must name the affected month and its unprovenanced dependency; received ${error.message}`);
     const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
-    assert.equal(status.status, "failed");
+    assert.equal(status.status, "pending", "a refused native decision rolls its lifecycle back");
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ currency: string | null }>(sql`
         select reporting_currency as currency from saas_metrics_monthly
@@ -1449,11 +1027,7 @@ test("a tampered prior v1 row does not poison the next month's proof", { skip: !
     await seedFxRate(ctx, "EUR", "CAD", "2026-07-31", "1.5000000000");
     await seedV0Month(ctx, MONTH);
     const filedJuly = await fileRequest(ctx, { month: MONTH });
-    await approveAndExecuteNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filedJuly.request.id,
-      approverId: ctx.approver,
-    });
+    await completeNormalizationFlowFixture(ctx, filedJuly.request.id);
     await withOrgTransaction(ctx.org.orgId, async () => {
       const tampered = await db.execute(sql`
         update saas_metrics_monthly set mrr_end = mrr_end + 1, expansion_mrr = expansion_mrr + 1
@@ -1464,11 +1038,7 @@ test("a tampered prior v1 row does not poison the next month's proof", { skip: !
     });
     const augustV0 = await seedV0Month(ctx, NEXT_MONTH);
     const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
-    const doneAugust = await approveAndExecuteNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filedAugust.request.id,
-      approverId: ctx.approver,
-    });
+    const doneAugust = await completeNormalizationFlowFixture(ctx, filedAugust.request.id);
     assert.equal(doneAugust.request.status, "succeeded", "the immutable before-image still proves August");
     assert.deepEqual(doneAugust.result.sourceV0Hashes, [augustV0.legacyHash]);
   });
@@ -1510,11 +1080,7 @@ test("a succeeded correction binds audit columns, counts, and hashes to its requ
     await seedCustomerAndSubscription(ctx);
     await seedV0Month(ctx, MONTH);
     const filed = await fileRequest(ctx);
-    const done = await approveAndExecuteNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-      approverId: ctx.approver,
-    });
+    const done = await completeNormalizationFlowFixture(ctx, filed.request.id);
     assert.equal(done.request.status, "succeeded");
     const bound = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{
@@ -1565,11 +1131,7 @@ test("a conflicting appended provenance candidate refuses as ambiguous", { skip:
     await seedCustomerAndSubscription(ctx);
     await seedV0Month(ctx, MONTH);
     const filedJuly = await fileRequest(ctx, { month: MONTH });
-    await approveAndExecuteNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filedJuly.request.id,
-      approverId: ctx.approver,
-    });
+    await completeNormalizationFlowFixture(ctx, filedJuly.request.id);
     await seedV0Month(ctx, NEXT_MONTH);
     const genuine = await monthlyCorrectedChanges(ctx);
     await appendAuditEvent(ctx, "saas_metrics_monthly", randomUUID(), {
@@ -1578,16 +1140,14 @@ test("a conflicting appended provenance candidate refuses as ambiguous", { skip:
       request_id: randomUUID(),
     }, ctx.approver, randomUUID());
     const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
-    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, approverId: ctx.approver });
-    const { leaseToken } = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
     const error = await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, filedAugust.request.id),
       "saas_normalization_provenance_ambiguous",
       "escalate with the request id",
     );
     assert.match(error.message, /prior month/, "the refusal names the ambiguously provenanced month");
     const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
-    assert.equal(status.status, "failed");
+    assert.equal(status.status, "pending", "a refused native decision rolls its lifecycle back");
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ currency: string | null }>(sql`
         select reporting_currency as currency from saas_metrics_monthly
@@ -1603,19 +1163,13 @@ test("a duplicated provenance event refuses as tampered over-count", { skip: !DB
     await seedCustomerAndSubscription(ctx);
     await seedV0Month(ctx, MONTH);
     const filedJuly = await fileRequest(ctx, { month: MONTH });
-    await approveAndExecuteNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filedJuly.request.id,
-      approverId: ctx.approver,
-    });
+    await completeNormalizationFlowFixture(ctx, filedJuly.request.id);
     await seedV0Month(ctx, NEXT_MONTH);
     const genuine = await monthlyCorrectedChanges(ctx);
     await appendAuditEvent(ctx, "saas_metrics_monthly", randomUUID(), genuine, ctx.approver, randomUUID());
     const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
-    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, approverId: ctx.approver });
-    const { leaseToken } = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
     await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, leaseToken }),
+      executeNormalizationFlowFixture(ctx, filedAugust.request.id),
       "saas_normalization_provenance_tampered",
       "escalate with the request id",
     );
@@ -1629,49 +1183,117 @@ test("a duplicated provenance event refuses as tampered over-count", { skip: !DB
   });
 });
 
-test("a post-claim feature-off records a fenced failed outcome, never a stranded run", { skip: !DB }, async () => {
-  await withFixture(async (ctx) => {
-    await seedCustomerAndSubscription(ctx);
-    const v0 = await seedV0Month(ctx);
-    const filed = await fileRequest(ctx);
-    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, approverId: ctx.approver });
-    const { leaseToken } = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
-    await setSaaSMetricsFeature(ctx, false);
-    const error = await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, leaseToken }),
-      "feature_off",
-      "Company Settings → Features",
-    );
-    assert.match(error.remedy, /SaaS metrics/, "the refusal carries the real Features remedy");
-    const failed = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
-    assert.equal(failed.status, "failed", "the claimed request never strands running");
-    assert.match(failed.failure ?? "", /feature_off/);
-    assert.match(failed.remedy ?? "", /Features/);
-    const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null; hash: string }>(sql`
-        select reporting_currency as currency, inputs_hash as hash from saas_metrics_monthly
-         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
-      `)).rows);
-    assert.equal(rows.length, v0.monthly.length, "no metric write survives the feature-off rollback");
-    for (const row of rows) {
-      assert.equal(row.currency, null);
-      assert.equal(row.hash, v0.legacyHash);
-    }
-    await setSaaSMetricsFeature(ctx, true);
-    const retried = await retryNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
-    await expectRefusal(
-      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id, leaseToken }),
-      "saas_normalization_lease_mismatch",
-      "live token",
-    );
-    const revived = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filed.request.id });
-    assert.equal(revived.status, "running", "the stale token never overwrites the newer lease");
-    const result = await executeNormalizationRequest({
-      orgId: ctx.org.orgId,
-      requestId: filed.request.id,
-      leaseToken: retried.leaseToken,
-    });
-    assert.equal(result.attempt, 2);
-    assert.match(result.monthHash, /^[0-9a-f]{64}$/);
+
+test("zero tenant gates release a correction without a separate approver",{skip:!DB},async () => {
+  await withFixture(async ctx => {
+    await seedCustomerAndSubscription(ctx);await seedV0Month(ctx);
+    assert.equal(await withOrgTransaction(ctx.org.orgId,()=>actorHasPermission(db,ctx.org.orgId,ctx.requester,"close.reopen")),false);
+    const filed=await fileRequest(ctx);
+    assert.equal(filed.request.status,"succeeded");assert.equal(filed.request.approvedBy,ctx.requester);
+    assert.deepEqual(await normalizationGateIds(ctx,filed.request.id),[]);
+    assert.ok(filed.request.result);assert.equal(Object.hasOwn(filed.request,"leaseToken"),false);
+  },{gates:0});
+});
+
+test("every configured tenant gate completes before the correction is released",{skip:!DB},async () => {
+  await withFixture(async ctx => {
+    await seedCustomerAndSubscription(ctx);const before=await seedV0Month(ctx);const filed=await fileRequest(ctx);
+    const gates=await normalizationGateIds(ctx,filed.request.id);assert.equal(gates.length,10);
+    for(const gateId of gates.slice(0,-1))await decideGate({gateId,userId:ctx.approver,decision:"approved"});
+    assert.equal((await getNormalizationRequest({orgId:ctx.org.orgId,requestId:filed.request.id})).status,"pending");
+    assert.equal((await correctionAuditEvents(ctx.org.orgId)).length,0);
+    const stored=await withOrgTransaction(ctx.org.orgId,()=>db.execute<{hash:string}>(sql`select inputs_hash as hash
+      from saas_metrics_monthly where org_id=${ctx.org.orgId} and month=${MONTH}`));
+    assert.equal(stored.rows[0]?.hash,before.legacyHash);
+    await decideGate({gateId:gates.at(-1)!,userId:ctx.approver,decision:"approved"});
+    const done=await getNormalizationRequest({orgId:ctx.org.orgId,requestId:filed.request.id});
+    assert.equal(done.status,"succeeded");assert.equal(done.attemptCount,1);
+  },{gates:10});
+});
+
+test("the tenant may explicitly allow its requester to decide the correction gate",{skip:!DB},async () => {
+  await withFixture(async ctx => {
+    await seedCustomerAndSubscription(ctx);await seedV0Month(ctx);const filed=await fileRequest(ctx);
+    const done=await completeNormalizationFlowFixture(ctx,filed.request.id,ctx.requester);
+    assert.equal(done.request.status,"succeeded");assert.equal(done.request.approvedBy,ctx.requester);
+  },{allowSelfApproval:true});
+});
+
+test("a direct release claim cannot replace the correction's native Flow decisions",{skip:!DB},async () => {
+  await withFixture(async ctx => {
+    await seedCustomerAndSubscription(ctx);await seedV0Month(ctx);const filed=await fileRequest(ctx);
+    for(const outcome of ["approved","rejected"] as const)await expectRefusal(releaseNormalizationApproval({
+      subjectId:filed.request.id,outcome,ctx:{orgId:ctx.org.orgId,userId:ctx.approver}}),
+      "saas_normalization_approval_required","pending correction Flow gate");
+    await expectRefusal(approveAndExecuteNormalizationRequest({orgId:ctx.org.orgId,requestId:filed.request.id,approverId:ctx.approver}),
+      "saas_normalization_approval_required","Approvals");
+    assert.equal((await getNormalizationRequest({orgId:ctx.org.orgId,requestId:filed.request.id})).status,"pending");
+    assert.equal((await correctionAuditEvents(ctx.org.orgId)).length,0);
+  });
+});
+
+test("concurrent decisions release one correction and preserve its recorded replay",{skip:!DB},async () => {
+  await withFixture(async ctx => {
+    await seedCustomerAndSubscription(ctx);await seedV0Month(ctx);const filed=await fileRequest(ctx);
+    const [gateId]=await normalizationGateIds(ctx,filed.request.id);assert.ok(gateId);
+    const decisions=await Promise.allSettled([1,2].map(()=>decideGate({gateId,userId:ctx.approver,decision:"approved"})));
+    assert.equal(decisions.filter(r=>r.status==="fulfilled").length,1);
+    const done=await completeNormalizationFlowFixture(ctx,filed.request.id);
+    assert.equal(done.request.attemptCount,1);
+    assert.deepEqual((await completeNormalizationFlowFixture(ctx,filed.request.id)).result,done.result);
+    assert.equal((await requestAuditEvents(ctx.org.orgId,filed.request.id)).filter(e=>e.action==="saas_normalization_succeeded").length,1);
+  });
+});
+
+test("replayed creation and completion require the actor's current organization-wide authority",{skip:!DB},async () => {
+  await withFixture(async ctx => {
+    await seedCustomerAndSubscription(ctx);await seedV0Month(ctx);const key=randomUUID();
+    const filed=await fileRequest(ctx,{idempotencyKey:key});await completeNormalizationFlowFixture(ctx,filed.request.id);
+    await withOrgTransaction(ctx.org.orgId,()=>db.execute(sql`update user_permission_overrides set effect='deny'
+      where org_id=${ctx.org.orgId} and user_id in (${ctx.requester},${ctx.approver}) and permission='usage.manage'`));
+    await assert.rejects(fileRequest(ctx,{idempotencyKey:key}),/not found/);
+    await assert.rejects(completeNormalizationFlowFixture(ctx,filed.request.id),/not found/);
+    const scoped=await createScratchUser(ctx.org.orgId,"Scoped metrics operator","scoped_metrics_operator");
+    await grantScratchPermissions(ctx.org.orgId,scoped,["usage.manage"]);
+    await withOrgTransaction(ctx.org.orgId,()=>db.execute(sql`update app_roles set subsidiary_restriction=
+      ${JSON.stringify({mode:"list",subsidiaryIds:[ctx.org.subsidiaryId]})}::jsonb where org_id=${ctx.org.orgId} and key='scoped_metrics_operator'`));
+    await assert.rejects(fileRequest(ctx,{requestedBy:scoped,idempotencyKey:randomUUID()}),/not found/);
+  });
+});
+
+test("requester cancellation also withdraws pending native Flow work and retains its audit",{skip:!DB},async () => {
+  await withFixture(async ctx => {
+    await seedCustomerAndSubscription(ctx);await seedV0Month(ctx);const filed=await fileRequest(ctx);
+    await expectRefusal(cancelNormalizationRequest({orgId:ctx.org.orgId,requestId:filed.request.id,actorId:ctx.approver}),
+      "saas_normalization_cancel_forbidden","requester");
+    const cancelled=await cancelNormalizationRequest({orgId:ctx.org.orgId,requestId:filed.request.id,actorId:ctx.requester});
+    assert.equal(cancelled.status,"cancelled");assert.deepEqual(await normalizationGateIds(ctx,filed.request.id),[]);
+    assert.equal((await requestAuditEvents(ctx.org.orgId,filed.request.id)).filter(e=>e.action==="saas_normalization_cancelled").length,1);
+    const replacement=await fileRequest(ctx);assert.notEqual(replacement.request.id,filed.request.id);
+  });
+});
+
+test("a refused decision leaves the original gate retryable and reruns the complete financial proof",{skip:!DB},async () => {
+  await withFixture(async ctx => {
+    await seedCustomerAndSubscription(ctx,"EUR");await seedFxRate(ctx,"EUR","CAD","2026-07-31","1.5000000000");
+    await seedV0Month(ctx);const filed=await fileRequest(ctx);const originalGates=await normalizationGateIds(ctx,filed.request.id);
+    await withOrgTransaction(ctx.org.orgId,()=>db.execute(sql`delete from fx_rates where org_id=${ctx.org.orgId} and from_currency='EUR' and to_currency='CAD'`));
+    await expectRefusal(executeNormalizationFlowFixture(ctx,filed.request.id),"saas_metrics_fx_rate_missing","FX rates");
+    assert.deepEqual(await normalizationGateIds(ctx,filed.request.id),originalGates);
+    const pending=await getNormalizationRequest({orgId:ctx.org.orgId,requestId:filed.request.id});
+    assert.equal(pending.status,"pending");assert.equal(pending.attemptCount,0);assert.equal(pending.approvedBy,null);
+    await seedFxRate(ctx,"EUR","CAD","2026-07-31","1.5000000000");
+    const done=await completeNormalizationFlowFixture(ctx,filed.request.id);assert.equal(done.request.attemptCount,1);
+  });
+});
+
+test("feature-off refusal rolls the decision back and preserves the original correction for retry",{skip:!DB},async () => {
+  await withFixture(async ctx => {
+    await seedCustomerAndSubscription(ctx);const before=await seedV0Month(ctx);const filed=await fileRequest(ctx);
+    await setSaaSMetricsFeature(ctx,false);
+    await expectRefusal(executeNormalizationFlowFixture(ctx,filed.request.id),"feature_off","Company Settings → Features");
+    await setSaaSMetricsFeature(ctx,true);
+    assert.equal((await getNormalizationRequest({orgId:ctx.org.orgId,requestId:filed.request.id})).status,"pending");
+    const done=await completeNormalizationFlowFixture(ctx,filed.request.id);assert.deepEqual(done.result.sourceV0Hashes,[before.legacyHash]);
   });
 });
