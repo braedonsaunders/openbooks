@@ -1,14 +1,21 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install";
+installEngineSeams();
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import { db, withBypassContext, withOrgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
+  seedApprovalFlow,
+  createScratchUser,
 } from "@openbooks/engine/testing/fixtures";
-import { releaseTimesheetWeekApproval } from "./timesheet-approval-release.ts";
+import { routeSubjectSubmission } from "@openbooks/engine/flows/submission-policy";
+import { decideGate } from "@openbooks/engine/flows/gates";
+import { registerFlowApprovalReleaseHandlers } from "./flow-approval-releases.ts";
+await registerFlowApprovalReleaseHandlers();
 
 /**
  * Flow-gated timesheet decisions must leave the same decision evidence on
@@ -23,9 +30,10 @@ const WEEK = "2026-07-12";
 async function seedWeek(status: "submitted", entryHours: string) {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+  const submitterId = await withBypassContext(() => createScratchUser(org.orgId, "Week author", "admin"));
   await withBypassContext(async () => {
     await db.execute(sql`
-      update app_roles set permissions = '["time.read", "time.approve"]'::jsonb
+      update app_roles set permissions = '["time.read", "time.manage", "time.approve"]'::jsonb
        where org_id = ${org.orgId} and key = 'admin'`);
     await db.execute(sql`
       update orgs set settings = settings || '{"features": {"timeTracking": true}}'::jsonb
@@ -60,7 +68,7 @@ async function seedWeek(status: "submitted", entryHours: string) {
          submitted_by, submitted_at, created_by, updated_by)
       values
         (${headerId}, ${org.orgId}, ${employeeId}, ${WEEK},
-         ${status}, ${actorId}, now(), ${actorId}, ${actorId})
+         ${status}, ${submitterId}, now(), ${submitterId}, ${submitterId})
     `);
     await db.execute(sql`
       insert into time_entries
@@ -72,7 +80,15 @@ async function seedWeek(status: "submitted", entryHours: string) {
          ${actorId}, ${actorId})
     `);
   });
-  return { org, actorId, employeeId, headerId, timeEntryId };
+  await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: "timesheet_week", mode: "any",
+    assignees: [{ type: "user", userId: actorId }], preventSelfApproval: true }));
+  await withOrgTransaction(org.orgId, () => routeSubjectSubmission({ orgId: org.orgId,
+    actorId: submitterId, subjectKind: "timesheet_week", subjectId: headerId }));
+  const gates = await withOrgContext(org.orgId, async () => (await db.execute<{ id: string }>(sql`
+    select id from flow_gates where org_id=${org.orgId} and subject_kind='timesheet_week'
+      and subject_id=${headerId} and status='pending'`)).rows);
+  assert.equal(gates.length, 1);
+  return { org, actorId, employeeId, headerId, timeEntryId, gateId: gates[0]!.id };
 }
 
 async function weekAudit(orgId: string, headerId: string) {
@@ -98,16 +114,9 @@ async function cleanup(fixture: Awaited<ReturnType<typeof seedWeek>>) {
 test("a flow-gated rejection audits the decision reason on the week", async () => {
   const fixture = await seedWeek("submitted", "4.0000");
   try {
-    await withOrgContext(fixture.org.orgId, () =>
-      releaseTimesheetWeekApproval(
-        fixture.org.orgId,
-        fixture.actorId,
-        fixture.headerId,
-        "rejected",
-        null,
-        "Client code is wrong, please fix",
-      ),
-    );
+    const decision = await decideGate({ gateId: fixture.gateId, userId: fixture.actorId,
+      decision: "rejected", comment: "Client code is wrong, please fix" });
+    assert.equal(decision.ok, true);
     const rows = await weekAudit(fixture.org.orgId, fixture.headerId);
     assert.equal(rows.length, 1, "the release must leave exactly one audit row for the week");
     const changes = rows[0]!.changes as {
@@ -133,16 +142,9 @@ test("a flow-gated approval records its comment and costs no zero-hour declarati
       select count(*) as n from journal_entries where org_id = ${fixture.org.orgId}`)
   ).rows[0]!.n);
   try {
-    await withOrgContext(fixture.org.orgId, () =>
-      releaseTimesheetWeekApproval(
-        fixture.org.orgId,
-        fixture.actorId,
-        fixture.headerId,
-        "approved",
-        null,
-        "Leave week looks right",
-      ),
-    );
+    const decision = await decideGate({ gateId: fixture.gateId, userId: fixture.actorId,
+      decision: "approved", comment: "Leave week looks right" });
+    assert.equal(decision.ok, true);
     const rows = await weekAudit(fixture.org.orgId, fixture.headerId);
     assert.equal(rows.length, 1, "the release must leave exactly one audit row for the week");
     const changes = rows[0]!.changes as {

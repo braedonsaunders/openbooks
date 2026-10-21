@@ -11,7 +11,7 @@ registerHooks({
 })
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedVacationTerms } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedVacationTerms, seedPayrollAccountingConfiguration } = await import('@openbooks/engine/testing/fixtures')
 const { calculatePayRun } = await import("@openbooks/engine/payroll/run-calculation"), { commitPayRun } = await import("@openbooks/engine/payroll/run-commit"), { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle"), { seedPayrollComponents } = await import("@openbooks/engine/payroll/run-setup");
 const { setPackSlotAccount, incomeTaxWithholdingSystemKeys } = await import('@openbooks/engine/payroll/packs')
 const { upsertPayrollEmployerFact } = await import('@openbooks/engine/payroll/employer-fact-store')
@@ -109,6 +109,12 @@ async function caPayrollOrg(): Promise<CaFixture> {
       },
       features: { payroll: true },
     })}::jsonb where id = ${org.orgId}`)
+  await seedPayrollAccountingConfiguration(org.orgId, {
+    wageExpenseAccountId: wageExpense, burdenExpenseAccountId: burdenExpense, netPayAccountId: netPayable,
+    wagesTo: 'expense', countries: ['CA'], slotAccounts: { CA: {
+      cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable,
+    } },
+  })
   await seedPayrollComponents(org.orgId, actorId, 'CA')
   // Quebec source deductions remit to Revenu Quebec, not the CRA vendor, so
   // the qc slot carries its own account rather than the legacy tax mapping.

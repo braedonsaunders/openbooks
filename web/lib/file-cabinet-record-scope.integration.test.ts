@@ -606,6 +606,7 @@ const consolidatedRows = [
             import pg from 'pg';
             import { sql } from 'drizzle-orm';
             import { db } from './engine/src/platform/db.ts';
+            import { dropScratchOrg } from './engine/src/testing/fixtures.ts';
             import { installTrustedTestDatabaseBypass } from './engine/src/testing/database-bypass.ts';
             import { purgeFolder } from './web/lib/file-cabinet/index.ts';
 
@@ -660,14 +661,7 @@ const consolidatedRows = [
             } finally {
               await client.query('rollback').catch(() => undefined);
               await client.end().catch(() => undefined);
-              await db.transaction(async (tx) => {
-                await tx.execute(sql\`delete from file_attachments where org_id = \${orgId}\`);
-                await tx.execute(sql\`delete from file_blobs where version_id in (select id from file_versions where file_id in (select id from files where org_id = \${orgId}))\`);
-                await tx.execute(sql\`delete from file_versions where file_id in (select id from files where org_id = \${orgId})\`);
-                await tx.execute(sql\`delete from files where org_id = \${orgId}\`);
-                await tx.execute(sql\`delete from folders where org_id = \${orgId}\`);
-                await tx.execute(sql\`delete from orgs where id = \${orgId}\`);
-              });
+              await dropScratchOrg(orgId);
             }
           `;
           const result = spawnSync(

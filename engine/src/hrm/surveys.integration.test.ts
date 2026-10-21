@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { waitForLockWaiter } from "../testing/lock-wait.ts";
+import { db, pool } from "../platform/db.ts";
 import {
   createScratchUser,
   type ScratchOrg,
@@ -356,31 +357,26 @@ test("a response waits for the close transition and refuses after it commits", {
       partyIds: h.parties,
     });
     const scaleId = survey.questions.find((question) => question.kind === "scale")!.id;
-    let settled = false;
     let submission: Promise<unknown> | undefined;
-    let wasBlockedBySurveyLock = false;
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`
-        select id from hrm_surveys where org_id = ${h.org.orgId} and id = ${survey.id} for update
-      `);
+    const holder = await pool.connect();
+    try {
+      await holder.query("begin");
+      await holder.query("select id from hrm_surveys where org_id=$1 and id=$2 for update", [h.org.orgId, survey.id]);
+      // A separate checkout holds the lock; the native submit command owns
+      // its own tenant transaction rather than joining the test's transaction.
       submission = submitResponse({
-        token: opened.deliveries[0]!.token,
-        today: "2026-09-21",
+        token: opened.deliveries[0]!.token, today: "2026-09-21",
         answers: [{ questionId: scaleId, value: 4 }],
-      }).then(
-        () => { settled = true; return "submitted"; },
-        (error: unknown) => { settled = true; return error; },
-      );
-      // Let the submission reach its survey-state read while this transaction owns the row.
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      wasBlockedBySurveyLock = !settled;
-      await tx.execute(sql`
-        update hrm_surveys set status = 'closed', closes_at = now()
-         where org_id = ${h.org.orgId} and id = ${survey.id}
-      `);
-    });
+      }).then(() => "submitted", (error: unknown) => error);
+      await waitForLockWaiter(holder, { label: "survey response submission" });
+      await holder.query("update hrm_surveys set status='closed',closes_at=now() where org_id=$1 and id=$2", [h.org.orgId, survey.id]);
+      await holder.query("commit");
+    } finally {
+      await holder.query("rollback");
+      holder.release();
+      if (submission) await Promise.allSettled([submission]);
+    }
     const outcome = await submission!;
-    assert.equal(wasBlockedBySurveyLock, true);
     assert.ok(outcome instanceof HrmSurveysError);
     assert.match(outcome.message, /not open for responses/);
     const responses = (await db.execute<{ count: string }>(sql`

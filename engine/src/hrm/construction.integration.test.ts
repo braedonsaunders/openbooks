@@ -512,7 +512,7 @@ test("certified payroll refuses approved project time on a committed but unposte
 test("certified payroll freezes posted native wages by dated classification without repeating nonproject pay", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async ({ org, adminId, outsiderId }) => {
     const scope = { orgId: org.orgId, actorId: adminId };
-    await grantPermissions(org.orgId, adminId, ["payroll.manage", "payroll.read"]);
+    await grantPermissions(org.orgId, adminId, ["payroll.manage", "payroll.read", "payroll.run"]);
     const weekEnding = "2026-07-19";
     // The shared currency registry may already contain USD; that conflict changes no tenant evidence.
     await db.execute(sql`

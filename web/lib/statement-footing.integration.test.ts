@@ -1,12 +1,30 @@
+import * as drizzleModule from "drizzle-orm";
+import * as platformDatabase from "@openbooks/engine/platform/db";
+import * as scratchFixtures from "@openbooks/engine/testing/fixtures";
+import * as statementMatrixModule from "./statement-matrix.ts";
+import * as statementReports from "./reports/statements.ts";
+import * as statementFormat from "./statement-format.ts";
+import * as childProcess from "node:child_process";
+import * as fiscalCalendar from "@openbooks/engine/close/calendar";
+import * as reportingPeriods from "../../web/lib/periods.ts";
+import * as moneyModule from "@openbooks/engine/money/money";
+import * as reportReaders from "../../web/lib/reports.ts";
+import * as consolidationModule from "./consolidation";
+import * as assertModule from "node:assert/strict";
+import * as cryptoModule from "node:crypto";
+import * as nodeTestModule from "node:test";
+import * as fileSystem from "../../web/lib/reports/transaction-detail.ts";
+import * as postingDocuments from "@openbooks/engine/ledger/posting-document";
+import * as registerReports from "./reports/registers";
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { balanceSheetView } = await import('./statement-matrix.ts')
-const { balanceSheet, trialBalance } = await import('./reports/statements.ts')
-const { decimalAdd } = await import('./statement-format.ts')
+const { sql } = drizzleModule
+const { db, env, withBypass, withBypassContext } = platformDatabase
+const { createScratchOrg, dropScratchOrg } = scratchFixtures
+const { balanceSheetView } = statementMatrixModule
+const { balanceSheet, trialBalance } = statementReports
+const { decimalAdd } = statementFormat
 
 /**
  * Fixed-asset cost lines printed NET of their contra while the
@@ -98,8 +116,8 @@ test('balance sheet prints gross cost with contra and foots to total assets', { 
 
 
 const consolidatedRows = [
-  { label: "statement fx periods", register: async () => {
-        const { spawnSync }=await import("node:child_process");
+  { label: "statement fx periods", register: () => {
+        const { spawnSync }=childProcess;
         /**
          * Regression (fnd_mt9f3fnu_tztsoy): comparative statements and accumulated
          * earnings reused the CURRENT period's consolidated FX rates for historical
@@ -351,19 +369,17 @@ const consolidatedRows = [
           },
         );
   } },
-  { label: "statement quarter breakout", register: async () => {
-        const { pathToFileURL }=await import("node:url");
+  { label: "statement quarter breakout", register: () => {
         /**
          * Quarter breakout columns must follow the org's fiscal calendar, not the
          * calendar year: with a February fiscal start, Jan 2026 belongs to Q4 FY2026
          * and Feb 2026 opens Q1 FY2027. A January-hardcoded quarter split reports
          * calendar quarters ("Q1 2026") and groups fiscal straddlers wrongly.
          */
-        const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
-        const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
-        const { statementMatrix, PNL_TYPES } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
+        const { db, withBypassContext, withOrgContext } = (platformDatabase) as typeof import('@openbooks/engine/platform/db')
+        const { sql } = drizzleModule
+        const { createScratchOrg, dropScratchOrg } = (scratchFixtures) as typeof import('@openbooks/engine/testing/fixtures')
+        const { statementMatrix, PNL_TYPES } = (statementMatrixModule) as typeof import('./statement-matrix')
 
         test('quarter breakout follows the org fiscal start month, not January', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
@@ -418,8 +434,7 @@ const consolidatedRows = [
           }
         })
   } },
-  { label: "statement fiscal period breakout", register: async () => {
-        const { pathToFileURL }=await import("node:url");
+  { label: "statement fiscal period breakout", register: () => {
         /**
          * Statement month/quarter breakouts must follow the org's configured fiscal
          * periods for retail calendars — not calendar months. A 4-4-5 org's 5-week
@@ -428,13 +443,12 @@ const consolidatedRows = [
          * declared periods. Monthly-cadence orgs (January or April start) must stay
          * byte-identical to calendar math.
          */
-        const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
-        const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
-        const { generateAccountingPeriods } = (await import("@openbooks/engine/close/calendar")) as typeof import("@openbooks/engine/close/calendar");
-        const { statementMatrix, PNL_TYPES } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
-        const { resolvePeriod } = (await import(root + 'web/lib/periods.ts')) as typeof import('./periods')
+        const { db, withBypassContext, withOrgContext } = (platformDatabase) as typeof import('@openbooks/engine/platform/db')
+        const { sql } = drizzleModule
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = (scratchFixtures) as typeof import('@openbooks/engine/testing/fixtures')
+        const { generateAccountingPeriods } = (fiscalCalendar) as typeof import("@openbooks/engine/close/calendar");
+        const { statementMatrix, PNL_TYPES } = (statementMatrixModule) as typeof import('./statement-matrix')
+        const { resolvePeriod } = (reportingPeriods) as typeof import('./periods')
 
         type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
 
@@ -733,7 +747,7 @@ const consolidatedRows = [
                 fiscalPeriod: { fiscalYear: 2026, periodNumber: 2, from: '2026-03-02', to: '2026-03-29' },
               })
               // Presenters label the window from the period itself, in the viewer's locale.
-              const { reportPeriodLabel } = (await import(root + 'web/lib/format.ts')) as typeof import('./format')
+              const { reportPeriodLabel } = (await import('./format.ts')) as typeof import('./format')
               assert.equal(
                 reportPeriodLabel(await resolvePeriod('this_period', { today, orgId: org.orgId }), 'en'),
                 'P03 FY2026 · Mar 2026 – May 2026',
@@ -756,8 +770,7 @@ const consolidatedRows = [
           }
         })
   } },
-  { label: "statement prior period", register: async () => {
-        const { pathToFileURL }=await import("node:url");
+  { label: "statement prior period", register: () => {
         /**
          * RP8 — `compare=prior_period` built the comparative as an EQUAL-DAY window
          * (Feb 1–28 compared to Jan 4–31, dropping Jan 1–3). The comparative for a
@@ -765,13 +778,12 @@ const consolidatedRows = [
          * immediately preceding it; a non-aligned window keeps the equal-length
          * comparative and says so in the column label.
          */
-        const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
-        const { toUnits } = (await import('@openbooks/engine/money/money')) as typeof import('@openbooks/engine/money/money')
-        const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
-        const { profitAndLoss } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
-        const { priorAccountingWindow, profitAndLossView } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
+        const { db, withBypassContext, withOrgContext } = (platformDatabase) as typeof import('@openbooks/engine/platform/db')
+        const { toUnits } = (moneyModule) as typeof import('@openbooks/engine/money/money')
+        const { sql } = drizzleModule
+        const { createScratchOrg, dropScratchOrg } = (scratchFixtures) as typeof import('@openbooks/engine/testing/fixtures')
+        const { profitAndLoss } = (reportReaders) as typeof import('./reports')
+        const { priorAccountingWindow, profitAndLossView } = (statementMatrixModule) as typeof import('./statement-matrix')
 
         const labels = {
           revenue: 'Revenue', costOfGoodsSold: 'Cost of goods sold', grossProfit: 'Gross profit', expenses: 'Expenses',
@@ -841,8 +853,8 @@ const consolidatedRows = [
           }
         })
   } },
-  { label: "statement fx adjustment period", register: async () => {
-        const { spawnSync }=await import("node:child_process");
+  { label: "statement fx adjustment period", register: () => {
+        const { spawnSync }=childProcess;
         /**
          * Regression (G5): a calendar's adjustment period starts AND ends on the
          * final regular period's last day. Consolidated rate windows are selected by
@@ -1014,14 +1026,14 @@ const consolidatedRows = [
           },
         );
   } },
-  { label: "statement matrix precision", register: async () => {
+  { label: "statement matrix precision", register: () => {
         type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
-        const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+        const { sql } = drizzleModule
+        const { db, env, withBypass, withOrgContext } = platformDatabase
+        const { createScratchOrg, dropScratchOrg } = scratchFixtures
 
-        const { resolveSubsidiaryView } = await import('./consolidation')
-        const { statementMatrix } = await import('./statement-matrix')
+        const { resolveSubsidiaryView } = consolidationModule
+        const { statementMatrix } = statementMatrixModule
 
         async function postManual(org: ScratchOrg, tag: string, date: string, periodId: string, subId: string, lines: [string, string][]) {
           const entry = randomUUID()
@@ -1129,17 +1141,17 @@ const consolidatedRows = [
 
 
         const consolidatedRows = [
-          { label: "statement matrix control loss", register: async () => {
-                const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
-                const { randomUUID } = await import("node:crypto");
-                const test = (await import("node:test")).default;
+          { label: "statement matrix control loss", register: () => {
+                const assert: typeof import("node:assert/strict") = (assertModule).default;
+                const { randomUUID } = cryptoModule;
+                const test = (nodeTestModule).default;
                 type StatementSubsidiaryContext = import("./statement-matrix").StatementSubsidiaryContext;
-                const { sql } = await import("drizzle-orm");
+                const { sql } = drizzleModule;
                 const { db, env, withBypass, withOrgContext } =
-                  await import("@openbooks/engine/platform/db");
+                  platformDatabase;
                 const { createScratchOrg, dropScratchOrg } =
-                  await import("@openbooks/engine/testing/fixtures");
-                const { statementMatrix } = await import("./statement-matrix");
+                  scratchFixtures;
+                const { statementMatrix } = statementMatrixModule;
 
 
                 test(
@@ -1286,14 +1298,14 @@ const consolidatedRows = [
                   },
                 );
           } },
-          { label: "statement matrix draft columns", register: async () => {
-                const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
-                const { randomUUID } = await import("node:crypto");
-                const test = (await import("node:test")).default;
-                const { sql } = await import('drizzle-orm')
-                const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-                const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-                const { statementMatrix } = await import('./statement-matrix')
+          { label: "statement matrix draft columns", register: () => {
+                const assert: typeof import("node:assert/strict") = (assertModule).default;
+                const { randomUUID } = cryptoModule;
+                const test = (nodeTestModule).default;
+                const { sql } = drizzleModule
+                const { db, env, withBypass, withOrgContext } = platformDatabase
+                const { createScratchOrg, dropScratchOrg } = scratchFixtures
+                const { statementMatrix } = statementMatrixModule
 
                 /**
                  * Breakout columns must come from the same posted set the aggregation reads.
@@ -1374,19 +1386,18 @@ const consolidatedRows = [
           } },
         ] as const;
 
-        for (const row of consolidatedRows) await row.register();
+        for (const row of consolidatedRows) row.register();
   } },
 ] as const;
 
-for(const row of consolidatedRows) await row.register();
+for(const row of consolidatedRows) row.register();
 
 
 const statementActivityCases = [
-  { label: "transaction detail cash basis", register: async () => {
-        const { pathToFileURL } = await import('node:url');
-        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
-        const test = (await import('node:test')).default;
-        const { randomUUID } = await import('node:crypto');
+  { label: "transaction detail cash basis", register: () => {
+        const assert: typeof import('node:assert/strict') = (assertModule).default;
+        const test = (nodeTestModule).default;
+        const { randomUUID } = cryptoModule;
         /**
          * Cash-basis statement cells recognize accrual documents at their settled
          * share (the matrix's settlement-share cash logic), but the ledger drill-down
@@ -1394,13 +1405,12 @@ const statementActivityCases = [
          * so a partially paid invoice's revenue never appeared and the drill net could
          * not tie to the clicked cell. The drill must mirror the matrix engine.
          */
-        const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
-        const { toUnits } = (await import('@openbooks/engine/money/money')) as typeof import('@openbooks/engine/money/money')
-        const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
-        const { statementMatrix, PNL_TYPES } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
-        const { transactionDetail } = (await import(root + 'web/lib/reports/transaction-detail.ts')) as typeof import('./reports/transaction-detail')
+        const { db, withBypassContext, withOrgContext } = (platformDatabase) as typeof import('@openbooks/engine/platform/db')
+        const { toUnits } = (moneyModule) as typeof import('@openbooks/engine/money/money')
+        const { sql } = drizzleModule
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = (scratchFixtures) as typeof import('@openbooks/engine/testing/fixtures')
+        const { statementMatrix, PNL_TYPES } = (statementMatrixModule) as typeof import('./statement-matrix')
+        const { transactionDetail } = (fileSystem) as typeof import('./reports/transaction-detail')
 
         test('cash-basis drill-down ties to the cash-basis statement cell', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
@@ -1467,14 +1477,14 @@ const statementActivityCases = [
           }
         })
   } },
-  { label: "trial balance activity", register: async () => {
-        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
-        const { randomUUID } = await import('node:crypto');
-        const test = (await import('node:test')).default;
-        const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/platform/db')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-        const { trialBalance } = await import('./reports/statements.ts')
+  { label: "trial balance activity", register: () => {
+        const assert: typeof import('node:assert/strict') = (assertModule).default;
+        const { randomUUID } = cryptoModule;
+        const test = (nodeTestModule).default;
+        const { sql } = drizzleModule
+        const { db, env, withBypass, withBypassContext } = platformDatabase
+        const { createScratchOrg, dropScratchOrg } = scratchFixtures
+        const { trialBalance } = statementReports
 
         /**
          * The trial balance is headed "accounts with activity" but dropped
@@ -1525,19 +1535,19 @@ const statementActivityCases = [
   } },
 ] as const;
 
-for (const row of statementActivityCases) await row.register();
+for (const row of statementActivityCases) row.register();
 
 
 const partnerStatementCases = [
-  { label: "partner statement quiet party", register: async () => {
-        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
-        const { randomUUID } = await import('node:crypto');
-        const test = (await import('node:test')).default;
-        const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
-        const { partnerStatement } = await import('./reports/registers')
+  { label: "partner statement quiet party", register: () => {
+        const assert: typeof import('node:assert/strict') = (assertModule).default;
+        const { randomUUID } = cryptoModule;
+        const test = (nodeTestModule).default;
+        const { sql } = drizzleModule
+        const { db, env, withBypass, withOrgContext } = platformDatabase
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = scratchFixtures
+        const { postDocument } = postingDocuments;
+        const { partnerStatement } = registerReports
 
         /**
          * A party statement is addressed to ONE party: its opening and closing must
@@ -1580,13 +1590,13 @@ const partnerStatementCases = [
   } },
 ] as const;
 
-for (const row of partnerStatementCases) await row.register();
+for (const row of partnerStatementCases) row.register();
 
-const multiBookStatementsCases = [{ label: "multi-book-statements", register: async () => {
-const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
-const { spawnSync } = await import("node:child_process");
-const test = (await import("node:test")).default;
-const { env } = await import("@openbooks/engine/platform/db");
+const multiBookStatementsCases = [{ label: "multi-book-statements", register: () => {
+const assert: typeof import("node:assert/strict") = (assertModule).default;
+const { spawnSync } = childProcess;
+const test = (nodeTestModule).default;
+const { env } = platformDatabase;
 test(
   "statements answer per accounting book across summary, raw, and trial-balance paths",
   { skip: !env.OPENBOOKS_DB_URL },
@@ -1613,8 +1623,8 @@ test(
         // identical activity in both books must never fuse into one total.
         const taxBookId = randomUUID();
         await db.execute(sql\`
-          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode)
-          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true, 'full')\`);
+          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode, replication_from)
+          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true, 'full', '2026-01-01')\`);
 
         const departmentId = randomUUID();
         await db.execute(sql\`
@@ -1973,7 +1983,7 @@ test(
 );
 
 const consolidatedRows = [
-  { label: "multi book balance readers", register: async () => {
+  { label: "multi book balance readers", register: () => {
         // Database partition: this drives the real balance readers against
         // PostgreSQL (scratch org, parallel tax book, July fiscal year). The unit
         // partition has no database, so it lives under the .integration suffix
@@ -1992,8 +2002,8 @@ const consolidatedRows = [
               try {
                 const taxBookId = randomUUID();
                 await db.execute(sql\`
-                  insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode)
-                  values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true, 'full')\`);
+                  insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode, replication_from)
+                  values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true, 'full', '2026-01-01')\`);
 
                 // A July fiscal year makes the June summary row prior-year P&L. The
                 // accounts list, the COA balance AND the GL opening must all exclude
@@ -2160,5 +2170,5 @@ const consolidatedRows = [
   } },
 ] as const;
 
-for(const row of consolidatedRows) await row.register();
-}}] as const; for (const row of multiBookStatementsCases) await row.register();
+for(const row of consolidatedRows) row.register();
+}}] as const; for (const row of multiBookStatementsCases) row.register();

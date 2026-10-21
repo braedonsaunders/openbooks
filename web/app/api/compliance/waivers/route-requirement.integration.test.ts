@@ -1,3 +1,5 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install";
+installEngineSeams();
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -115,7 +117,7 @@ test("waiver creation still files against an applicable requirement", async () =
     const response = await post({ partyId, requirementId: applicableId, ...VALID });
     const json = (await response.json().catch(() => null)) as { status?: string } | null;
     assert.equal(response.status, 200, JSON.stringify(json));
-    assert.equal(json?.status, "pending_approval");
+    assert.equal(json?.status, "approved", "the tenant zero-gate policy releases the valid exception");
     assert.equal(await waiverCount(org.orgId), 1);
   } finally {
     await dropScratchOrg(org.orgId);

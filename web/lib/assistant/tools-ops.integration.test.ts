@@ -10,6 +10,7 @@ stubModules({ intl: true, navigation: false, authz: false, features: false });
 const { sql } = await import('drizzle-orm')
 const { withBypassContext, db, env, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { deleteSandbox } = await import('@openbooks/engine/sandbox/lifecycle')
 const { executeAssistantTool } = await import('./registry')
 
 function authzFor(orgId: string, permissions: string[]): Authz {
@@ -114,8 +115,7 @@ test('assistant environments list sandboxes with refresh status, isolated per or
       assert.deepEqual(bare, { ok: false, error: 'forbidden' })
     })
   } finally {
-    await withBypassContext(() => db.execute(sql`delete from sandboxes where id = ${sbId}`))
-    await withBypassContext(() => db.execute(sql`delete from orgs where id = ${sbOrgId}`))
+    await deleteSandbox(sbId)
     await dropScratchOrg(orgA.orgId)
     await dropScratchOrg(orgB.orgId)
   }

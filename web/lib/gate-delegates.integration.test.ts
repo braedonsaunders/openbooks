@@ -32,13 +32,13 @@ test('authorized direct assignees and Flow managers are offered Delegate on a pe
   try {
     const { submitter, assignee, reviewer, admin, direct, byRole } = await withBypassContext(async () => {
       const submitter = await createScratchUser(org.orgId, 'Asset Accountant', 'asset_accountant')
-      const assignee = await createScratchUser(org.orgId, 'Controller', 'controller')
+      const assignee = await createScratchUser(org.orgId, 'Controller', 'gate_reviewer')
       await grantScratchPermissions(org.orgId, assignee, ['ar.approve'])
       const reviewer = await createScratchUser(org.orgId, 'Flow Manager', 'flow_manager')
       await grantScratchPermissions(org.orgId, reviewer, ['flows.manage', 'flows.approve'])
       const admin = await createScratchUser(org.orgId, 'Organization Admin', 'admin')
       const direct = await pendingChangeGate(org.orgId, org.subsidiaryId, submitter, { userId: assignee })
-      const byRole = await pendingChangeGate(org.orgId, org.subsidiaryId, submitter, { role: 'controller' })
+      const byRole = await pendingChangeGate(org.orgId, org.subsidiaryId, submitter, { role: 'gate_reviewer' })
       return { submitter, assignee, reviewer, admin, direct, byRole }
     })
     const names = async (viewer: string, gate: string | null) =>

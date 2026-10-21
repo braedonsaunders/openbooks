@@ -114,7 +114,7 @@ test('contract value is controlled by change orders once billing begins', enable
     assert.equal(await contractValue(billed), '1000.0000')
 
     // The named remedy works: an approved change order moves the contract.
-    const created = await post(org.orgId, { action: 'addChangeOrder', projectId: billed, number: 'CO-1', description: 'Added scope', amount: '500' })
+    const created = await post(org.orgId, { action: 'addChangeOrder', projectId: billed, number: 'CO-1', description: 'Added scope', amount: '500', incomeAccountId: org.accounts.revenue })
     assert.equal(created.status, 201, await created.clone().text())
     actAs(org, approver)
     const approved = await post(org.orgId, { action: 'approveChangeOrder', id: (await created.json()).id, approvedOn: org.date })

@@ -11,6 +11,7 @@ installEngineSeams();
  * Integration partition: skips without OPENBOOKS_DB_URL; run one file per
  * database.
  */
+import { decideGate } from "../flows/gates.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -26,7 +27,6 @@ import {
 import {
   submitSubcontract,
   approveSubcontractChangeOrder,
-  approveVendorPayApplication,
   addSubcontractSovLine,
   createSubcontractChangeOrder,
   createVendorPayApplication,
@@ -162,10 +162,15 @@ test("change orders wait for open vendor applications and approval revalidates t
 
     await db.execute(sql`update subcontract_sov_lines set scheduled_value = '800'
       where org_id = ${f.orgId} and id = ${f.sov}`);
+    const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates
+      where org_id=${f.orgId} and subject_kind='vendor_pay_application' and subject_id=${f.appId} and status='pending'`)).rows;
+    assert.equal(gate.length, 1);
     await assert.rejects(
-      withOrgTransaction(f.orgId, () => approveVendorPayApplication(f.orgId, f.other, f.appId)),
+      decideGate({ gateId: gate[0]!.id, userId: f.other, decision: "approved" }),
       /exceeds the revised SOV value/,
     );
+    assert.equal((await db.execute<{ status: string }>(sql`select status from flow_gates where id=${gate[0]!.id}`)).rows[0]!.status,
+      "pending", "failed release rolls back the tenant's gate decision");
     const application = (await db.execute<{ status: string }>(sql`
       select status from vendor_pay_applications where org_id = ${f.orgId} and id = ${f.appId}
     `)).rows[0];

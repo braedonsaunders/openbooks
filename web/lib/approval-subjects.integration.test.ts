@@ -44,7 +44,6 @@ async function seedChange(
       '2026-07-15', 'subject readout for the inbox row', ${`subject-${id}`},
       ${JSON.stringify(args.payload ?? {})}::jsonb, ${JSON.stringify(args.beforeState ?? {})}::jsonb,
       ${submitterId}, ${submitterId}, ${submitterId})`);
-  await db.execute(sql`update financial_changes set status = 'pending' where org_id = ${orgId} and id = ${id}`);
   return id;
 }
 

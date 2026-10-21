@@ -1009,7 +1009,7 @@ test(
       assert.equal(insertAudit.changes.reason, "initial setup");
       assert.equal(insertAudit.changes.before, null);
       assert.equal(insertAudit.changes.after.isEnabled, true);
-      assert.deepEqual(insertAudit.changes.after.settings, { defaultRatePercent: "5.0000" });
+      assert.deepEqual(insertAudit.changes.after.settings, { defaultRatePercent: "5.0000", commitTransactions: true });
       assert.equal(insertAudit.changes.after.hasSecret, false);
       assert.equal(insertAudit.changes.after.revision, revision1);
 
@@ -1026,8 +1026,8 @@ test(
       assert.equal(after.displayName, "Avalara production");
       assert.equal(before.isEnabled, true);
       assert.equal(after.isEnabled, false);
-      assert.deepEqual(before.settings, { defaultRatePercent: "5.0000" });
-      assert.deepEqual(after.settings, { defaultRatePercent: "7.2500", companyCode: "MAIN" });
+      assert.deepEqual(before.settings, { defaultRatePercent: "5.0000", commitTransactions: true });
+      assert.deepEqual(after.settings, { defaultRatePercent: "7.2500", companyCode: "MAIN", commitTransactions: true });
       // The audit chains revisions: before.token is the caller's read, after.token the committed row.
       assert.equal(before.revision, revision1);
       assert.equal(after.revision, row2.updatedAt);

@@ -2,18 +2,22 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrg } from "../platform/db.ts";
+import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
   seedApprovalFlow,
+  seedPostingAccount,
+  type ScratchOrg,
 } from "../testing/fixtures.ts";
 import {
   createChangeRequestDraft,
   submitChangeRequest,
 } from "../hrm/change-requests.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
+import { postEntry } from "../journal/post-entry.ts";
+import { recordHistoricalContributionFixture } from "../testing/historical-translations.ts";
 import { decideGate } from "../flows/gates.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
@@ -89,34 +93,28 @@ async function seedAppliedChangeRequest(orgId: string, subsidiaryId: string): Pr
   return draft.id;
 }
 
-/** Walk one financial change draft → pending → approved → applied, returning its id. */
-async function seedAppliedFinancialChange(orgId: string, subsidiaryId: string, actorId: string): Promise<string> {
-  // Segregation of duties (storage CHECK): the approver differs from the submitter.
-  const approverId = await createScratchUser(orgId, "Clone Flow Finance Approver", "finance_approver");
-  const changeId = randomUUID();
-  await withBypass(() => db.execute(sql`
-    insert into financial_changes
-      (id, org_id, subsidiary_id, domain, subject_id, operation, effective_on,
-       reason, idempotency_key, payload, before_state, status, submitted_by)
-    values (${changeId}, ${orgId}, ${subsidiaryId}, 'lease', ${randomUUID()}, 'remeasure',
-            ${"2026-09-01"}, 'remeasure the cloned template lease', ${`clone-history-${changeId}`},
-            '{}'::jsonb, '{}'::jsonb, 'draft', ${actorId})
-  `));
-  await withBypass(() => db.execute(sql`
-    update financial_changes set status = 'pending'
-     where id = ${changeId} and org_id = ${orgId}
-  `));
-  await withBypass(() => db.execute(sql`
-    update financial_changes
-       set status = 'approved', approved_by = ${approverId}, approved_at = now()
-     where id = ${changeId} and org_id = ${orgId}
-  `));
-  await withBypass(() => db.execute(sql`
-    update financial_changes
-       set status = 'applied', applied_by = ${approverId}, applied_at = now(), result = '{}'::jsonb
-     where id = ${changeId} and org_id = ${orgId}
-  `));
-  return changeId;
+/** Apply an evidenced contribution through the tenant's native zero-gate policy. */
+async function seedAppliedFinancialChange(org: ScratchOrg, actorId: string): Promise<string> {
+  return withOrgTransaction(org.orgId, async () => {
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+      coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
+    const equity = await seedPostingAccount(org.orgId, "CLONE-CAP", "Contribution capital", "equity");
+    const posted = await postEntry(db, { orgId: org.orgId, actorId, bookId: org.bookId,
+      subsidiaryId: org.subsidiaryId, periodId: org.periodId, entryNumber: `CAP-${randomUUID()}`,
+      postingDate: org.date, currency: "CAD", origin: "manual", lines: [
+        { accountId: equity, subsidiaryId: org.subsidiaryId, amount: "-100", currency: "CAD", txnAmount: "-100", fxRate: "1" },
+        { accountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, amount: "100", currency: "CAD", txnAmount: "100", fxRate: "1" },
+      ] });
+    const source = (await db.execute<{ id: string }>(sql`select id from journal_lines
+      where org_id=${org.orgId} and entry_id=${posted.entryId} and account_id=${equity}`)).rows[0];
+    assert.ok(source);
+    await recordHistoricalContributionFixture({ orgId: org.orgId, actorId, sourceLineId: source.id,
+      measurementCurrency: "CAD", presentationCurrency: "USD", historicalDate: org.date, amount: "-100", rate: "1.2" });
+    const applied = (await db.execute<{ id: string }>(sql`select id from financial_changes
+      where org_id=${org.orgId} and subject_id=${source.id} and status='applied'`)).rows;
+    assert.equal(applied.length, 1);
+    return applied[0]!.id;
+  });
 }
 
 /** Delete every sandbox cut from a production org, so a failed clone's committed
@@ -133,7 +131,7 @@ test("a full sandbox clones applied HRM and financial-change history verbatim", 
   try {
     const requestId = await seedAppliedChangeRequest(org.orgId, org.subsidiaryId);
     const actor = await createScratchUser(org.orgId, "Clone Flow Actor", "admin");
-    const changeId = await seedAppliedFinancialChange(org.orgId, org.subsidiaryId, actor);
+    const changeId = await seedAppliedFinancialChange(org, actor);
 
     // ids are rebased by the copy, so correlate on rebase-invariant evidence:
     // the storage-computed digest, the payload bytes, and the natural
@@ -193,7 +191,8 @@ test("a full sandbox clones applied HRM and financial-change history verbatim", 
     // idempotency key (the row id is rebased).
     const clonedChange = (await db.execute<{ status: string }>(sql`
       select status from financial_changes
-       where org_id = ${created.sandboxOrgId} and idempotency_key = ${`clone-history-${changeId}`}
+       where org_id = ${created.sandboxOrgId} and idempotency_key =
+         (select idempotency_key from financial_changes where org_id=${org.orgId} and id=${changeId})
     `)).rows[0];
     assert.ok(clonedChange, "the clone carries the applied financial change");
     assert.equal(clonedChange!.status, "applied");

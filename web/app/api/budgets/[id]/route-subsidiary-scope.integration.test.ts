@@ -1,3 +1,5 @@
+import { installEngineSeams } from "@openbooks/engine/composition/install"
+installEngineSeams()
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
@@ -11,9 +13,9 @@ import type { SessionUser } from '../../../../lib/auth'
  * revision govern the whole scenario. Reads (GET, export) reveal only
  * scenarios wholly within scope — anything else answers as missing.
  * Scenario-level writes (PATCH, DELETE, lines, import, submit/approve/
- * reject/archive) require authority over every subsidiary the lines touch
- * and refuse by name otherwise. Regression: an A-scoped approver on an
- * A+B scenario is refused naming B; on an A-only scenario, approved.
+ * reject/archive) require authority over every subsidiary the lines touch.
+ * Native Flow gates recheck current scope: an A-scoped approver cannot
+ * release an A+B scenario and can release an A-only scenario.
  * Only the session is stubbed; gates, permission resolution and storage
  * are real.
  */
@@ -28,12 +30,13 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { db, withBypassContext, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } =
+const { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, grantScratchPermissions } =
   await import('@openbooks/engine/testing/fixtures')
 const { GET, PATCH, DELETE } = await import('./route')
-const { POST: act } = await import('./actions/route')
+const { submitBudgetScenario } = await import('@openbooks/engine/flows/budget-submission')
+const { decideGate } = await import('@openbooks/engine/flows/gates')
 const { GET: exportScenario } = await import('./export/route')
 const { PATCH: saveLines } = await import('./lines/route')
 const { POST: importScenario } = await import('./import/route')
@@ -70,20 +73,13 @@ async function makeScenario(
 ): Promise<string> {
   const id = randomUUID()
   // Insert as a draft first: the ledger refuses a submitted/approved
-  // scenario with no non-zero lines. Callers add lines, then submitScenario.
+  // scenario with no non-zero lines. Callers add lines before native submission.
   await withBypassContext(() => db.execute(sql`
     insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
     values (${id}, ${orgId}, ${bookId}, 2026, ${name}, 'budget', 'draft')`))
-  if (status !== 'draft') await submitScenario(orgId, id, status, submittedBy)
+  assert.equal(status, 'draft')
+  assert.equal(submittedBy, null)
   return id
-}
-
-async function submitScenario(
-  orgId: string, id: string, status: string, submittedBy: string | null,
-): Promise<void> {
-  await withBypassContext(() => db.execute(sql`
-    update budget_scenarios set status = ${status}, submitted_by = ${submittedBy}, revision = revision + 1
-     where id = ${id} and org_id = ${orgId}`))
 }
 
 async function addLine(
@@ -237,10 +233,8 @@ test('an A-scoped approver is refused on A+B but approves A-only', async () => {
     const cross = await makeScenario(org.orgId, org.bookId, 'Cross Pending', 'draft', null)
     await addLine(org.orgId, cross, org.accounts.cogs, org.periodId, org.subsidiaryId, maker)
     await addLine(org.orgId, cross, org.accounts.cogs, org.periodId, branch, maker)
-    await submitScenario(org.orgId, cross, 'pending_approval', maker)
     const home = await makeScenario(org.orgId, org.bookId, 'Home Pending', 'draft', null)
     await addLine(org.orgId, home, org.accounts.cogs, org.periodId, org.subsidiaryId, maker)
-    await submitScenario(org.orgId, home, 'pending_approval', maker)
 
     const approver = await withBypassContext(() => createScratchUser(org.orgId, 'approver', 'checker'))
     await withBypassContext(() => db.execute(sql`
@@ -249,21 +243,30 @@ test('an A-scoped approver is refused on A+B but approves A-only', async () => {
              subsidiary_restriction = ${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
        where org_id = ${org.orgId} and key = 'checker'`))
     state.user = sessionUser(approver, org.orgId)
-    const approve = (id: string, rev: number) =>
-      withOrgContext(org.orgId, () =>
-        act(new Request(`http://budgets.test/api/budgets/${id}/actions`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'approve', expectedRevision: rev }),
-        }), { params: Promise.resolve({ id }) }).then(jsonResponse))
-
-    const refused = await approve(cross, await revisionOf(org.orgId, cross))
-    assert.equal(refused.status, 403, 'approving a cross-scope scenario is refused')
-    assert.match(String(refused.json.error ?? ''), /out_of_scope_subsidiaries/)
-    assert.match(String(refused.json.error ?? ''), /Scope Branch/)
-
-    const approved = await approve(home, await revisionOf(org.orgId, home))
-    assert.equal(approved.status, 200, `an in-scope scenario approves: ${JSON.stringify(approved.json)}`)
-    assert.equal(approved.json.status, 'approved')
+    await withBypassContext(() => grantScratchPermissions(org.orgId, maker, ['budgets.manage']))
+    // Submit under an unrestricted assignment, then narrow it while the
+    // decisions wait. Current entity scope must still govern release.
+    await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb
+      where org_id=${org.orgId} and key='checker'`))
+    await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: 'budget_scenario', mode: 'any',
+      assignees: [{ type: 'user', userId: approver }], preventSelfApproval: true }))
+    for (const id of [cross, home]) await withOrgTransaction(org.orgId, () =>
+      submitBudgetScenario(org.orgId, maker, id, 1))
+    await withBypassContext(() => db.execute(sql`update app_roles
+      set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
+      where org_id=${org.orgId} and key='checker'`))
+    const gateFor = async (id: string) => (await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId}
+        and subject_kind='budget_scenario' and subject_id=${id} and status='pending'`)).rows))[0]!.id
+    const crossGate = await gateFor(cross)
+    await assert.rejects(decideGate({ gateId: crossGate, userId: approver, decision: 'approved',
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]) }), /approval not found/)
+    assert.equal((await withBypassContext(() => db.execute<{ status: string }>(sql`select status from budget_scenarios
+      where org_id=${org.orgId} and id=${cross}`))).rows[0]!.status, 'pending_approval')
+    assert.equal((await decideGate({ gateId: await gateFor(home), userId: approver, decision: 'approved',
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]) })).ok, true)
+    assert.equal((await withBypassContext(() => db.execute<{ status: string }>(sql`select status from budget_scenarios
+      where org_id=${org.orgId} and id=${home}`))).rows[0]!.status, 'approved')
   } finally {
     state.user = null
     await withBypassContext(() => dropScratchOrg(org.orgId))
