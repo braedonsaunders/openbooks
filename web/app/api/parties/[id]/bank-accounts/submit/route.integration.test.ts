@@ -4,20 +4,8 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import type { SessionUser } from '../../../../../../lib/auth'
 
-/**
- * Vendor bank accounts that have NO flow run at all —
- * created before the 'Vendor bank details' flow existed — sit at
- * 'Pending approval' forever. The engine never saw them (no run, no gate),
- * so they never appear in the approvals centre; the Approvals dialog claims
- * 'No approvals required'; and Edit-then-Save 409s because the party payload
- * returns a millisecond-truncated updated_at the OCC guard cannot accept.
- *
- * A record whose status claims it is awaiting approval must have exactly one
- * truthful path forward: submit it into the current flow (POST .../submit),
- * which re-drives the creation-side trigger against current values. When no
- * enabled flow listens, the submit refuses with a typed message instead of
- * silently leaving the record pending.
- */
+/** Pending bank details use tenant Flows: zero gates apply directly, while
+ * gated details remain unusable until every configured reviewer decides. */
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __bankSubmitUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
@@ -67,16 +55,16 @@ async function runCount(orgId: string, accountId: string): Promise<number> {
   )
 }
 
-test('a pre-flow bank account submits into the current flow exactly once', async () => {
+test('pending bank details submit into tenant Flows exactly once', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))
     const manager = actors.submitterId
     const approver = actors.approver1Id
     await withBypassContext(async () => {
-      await db.execute(sql`update app_roles set permissions = '["parties.read","parties.manage"]'::jsonb where org_id = ${org.orgId} and key = 'accountant'`)
+      await db.execute(sql`update app_roles set permissions = '["parties.read","parties.manage"]'::jsonb where org_id = ${org.orgId} and key in ('accountant','approver')`)
     })
-    const accountId = await seedPendingAccount(org.orgId, org.vendorId, manager, 'Pre-flow Bank')
+    const accountId = await seedPendingAccount(org.orgId, org.vendorId, manager, 'Initial Bank')
     const params = paramsFor(org.vendorId)
     state.user = asUser(manager, org.orgId, 'manager')
 
@@ -271,32 +259,33 @@ async function seedActionOnlyFlow(orgId: string, userId: string): Promise<string
   return flowId
 }
 
-test('an action-only flow refuses the submit instead of stranding the record gateless', async () => {
+test('an action-only flow runs its actions and applies bank details without inventing approval gates', async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId))
     const manager = actors.submitterId
     const approver = actors.approver1Id
     await withBypassContext(async () => {
-      await db.execute(sql`update app_roles set permissions = '["parties.read","parties.manage"]'::jsonb where org_id = ${org.orgId} and key = 'accountant'`)
+      await db.execute(sql`update app_roles set permissions = '["parties.read","parties.manage"]'::jsonb where org_id = ${org.orgId} and key in ('accountant','approver')`)
     })
     const accountId = await seedPendingAccount(org.orgId, org.vendorId, manager, 'Action-only Bank')
     await seedActionOnlyFlow(org.orgId, approver)
     state.user = asUser(manager, org.orgId, 'manager')
 
-    // The flow completes (its notification ran) but creates zero gates: the
-    // submit must refuse with the flow named, not report pending with no
-    // approver able to release the record.
-    const refused = await withOrgContext(org.orgId, () =>
+    const applied = await withOrgContext(org.orgId, () =>
       submit(submitRequest(org.vendorId, accountId), paramsFor(org.vendorId)))
-    assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()))
-    const body = (await refused.json()) as { error: string }
-    assert.match(body.error, /Notify-only bank flow/, 'the refusal names the gateless flow')
-    assert.match(body.error, /no approval gate/, 'the refusal names the cause')
-    // The refusal rolled the dispatch back: no run persists, the record is
-    // still pending, and a resubmit after fixing the flow can proceed.
-    assert.equal(await runCount(org.orgId, accountId), 0)
+    assert.equal(applied.status, 200, JSON.stringify(await applied.clone().json()))
+    const body = (await applied.json()) as { approvalStatus: string; directApplied: boolean }
+    assert.equal(body.approvalStatus, 'approved')
+    assert.equal(body.directApplied, true)
+    assert.equal(await runCount(org.orgId, accountId), 1, 'the configured notification flow is retained')
     assert.equal(await liveGateCount(org.orgId, accountId), 0)
+    const released = await withBypassContext(async () =>
+      (await db.execute<{ isActive: boolean; runStatus: string }>(sql`
+        select b.is_active as "isActive",r.status as "runStatus"
+          from party_bank_accounts b join flow_runs r on r.org_id=b.org_id and r.subject_id=b.id
+         where b.org_id=${org.orgId} and b.id=${accountId}`)).rows[0])
+    assert.deepEqual(released, { isActive: true, runStatus: 'completed' })
   } finally {
     state.user = null
     await withBypassContext(() => dropScratchOrg(org.orgId))
@@ -310,7 +299,7 @@ test('a failing sibling flow rolls the whole bank submit back instead of committ
     const manager = actors.submitterId
     const approver = actors.approver1Id
     await withBypassContext(async () => {
-      await db.execute(sql`update app_roles set permissions = '["parties.read","parties.manage"]'::jsonb where org_id = ${org.orgId} and key = 'accountant'`)
+      await db.execute(sql`update app_roles set permissions = '["parties.read","parties.manage"]'::jsonb where org_id = ${org.orgId} and key in ('accountant','approver')`)
     })
     const accountId = await seedPendingAccount(org.orgId, org.vendorId, manager, 'Mixed Bank')
     const good = await withBypassContext(() =>
@@ -335,14 +324,12 @@ test('a failing sibling flow rolls the whole bank submit back instead of committ
     })
     state.user = asUser(manager, org.orgId, 'manager')
 
-    // Flow A gated while flow B failed: the old code RETURNED the 422 from
-    // inside the transaction, committing A's live gate — approving it would
-    // have released the record despite the refusal.
+    // A sibling refusal must roll back all gates and native bank-detail changes.
     const refused = await withOrgContext(org.orgId, () =>
       submit(submitRequest(org.vendorId, accountId), paramsFor(org.vendorId)))
     assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()))
     const body = (await refused.json()) as { error: string }
-    assert.match(body.error, /could not enter the approval flow/)
+    assert.match(body.error, /approval flow.*failed/)
     assert.match(body.error, /Broken bank flow/, 'the refusal names the failed flow')
     assert.match(body.error, /zero assignees/, 'the refusal names the cause')
     // The refusal threw, so the transaction rolled back: no run and no live
@@ -353,4 +340,40 @@ test('a failing sibling flow rolls the whole bank submit back instead of committ
     state.user = null
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
+})
+
+
+for (const count of [0,10]) test(`edited bank details require exactly ${count} configured Flow gates`,async()=>{
+  const org=await withBypassContext(()=>createScratchOrg())
+  try{
+    const actors=await withBypassContext(()=>seedFlowActors(org.orgId))
+    await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["parties.read","parties.manage"]'::jsonb
+      where org_id=${org.orgId} and key in ('accountant','approver')`))
+    state.user=asUser(actors.submitterId,org.orgId,'manager')
+    const id=await seedPendingAccount(org.orgId,org.vendorId,actors.submitterId,'Operating bank')
+    const initial=await withOrgContext(org.orgId,()=>submit(submitRequest(org.vendorId,id),paramsFor(org.vendorId)))
+    assert.equal(initial.status,200,JSON.stringify(await initial.clone().json()))
+    const revision=(await withBypassContext(()=>db.execute<{revision:string}>(sql`
+      select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
+        from party_bank_accounts where org_id=${org.orgId} and id=${id}`))).rows[0]!.revision
+    for(let index=0;index<count;index++)await withBypassContext(()=>seedApprovalFlow(org.orgId,{
+      subjectKind:'party_bank_account',trigger:'on_update',assignees:[{type:'user',userId:actors.approver1Id}],mode:'all',
+    }))
+    const changed=await withOrgContext(org.orgId,()=>patchAccount(new Request(`http://bank.local/api/parties/${org.vendorId}/bank-accounts?accountId=${id}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({bankName:'Updated operating bank',expectedUpdatedAt:revision,changeReason:'Bank confirmed its corrected name'}),
+    }),paramsFor(org.vendorId)))
+    assert.equal(changed.status,200,JSON.stringify(await changed.clone().json()))
+    assert.equal((await changed.json()).approvalStatus,count?'pending':'approved')
+    const read=()=>withBypassContext(async()=>(await db.execute<{approvalStatus:string;isActive:boolean;bankName:string}>(sql`
+      select approval_status as "approvalStatus",is_active as "isActive",bank_name as "bankName"
+        from party_bank_accounts where org_id=${org.orgId} and id=${id}`)).rows[0]!)
+    const gates=await withBypassContext(async()=>(await db.execute<{id:string}>(sql`
+      select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending' order by id`)).rows)
+    assert.equal(gates.length,count)
+    for(const gate of gates){
+      assert.equal((await read()).isActive,false,'uncompleted review cannot release payment details')
+      await withOrgContext(org.orgId,()=>decideGate({gateId:gate.id,decision:'approved',userId:actors.approver1Id}))
+    }
+    assert.deepEqual(await read(),{approvalStatus:'approved',isActive:true,bankName:'Updated operating bank'})
+  }finally{state.user=null;await withBypassContext(()=>dropScratchOrg(org.orgId))}
 })

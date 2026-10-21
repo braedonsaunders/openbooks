@@ -220,7 +220,7 @@ test("a refused Flow decision keeps its actionable message beside the exception"
     const view = await mountExceptions();
     try {
       await click(buttonsNamed("Approve")[0]!);
-      assert.ok(view.host.textContent?.includes('This gate was already decided; refresh the exception.'));
+      assert.ok(document.querySelector('[role=dialog]')?.textContent?.includes('This gate was already decided; refresh the exception.'));
     } finally { await view.unmount(); }
   } finally { restoreFetch(); }
 });

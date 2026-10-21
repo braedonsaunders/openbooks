@@ -352,7 +352,28 @@
     "retried": "Aprovação reimpulsionada — a nova etapa está na lista de trabalho",
     "retryFailed": "Nova tentativa falhou",
     "commandWithdrawn": "Envio retirado. O registro pode ser editado e enviado novamente.",
-    "decisionRecorded": "Decisão registrada."
+    "decisionRecorded": "Decisão registrada.",
+    "recordReview": {
+      "title": "Solicitação de aprovação",
+      "terms": "Dados enviados",
+      "changed": "Este registro mudou após o envio. Retire a solicitação pendente e envie os dados atuais para uma nova análise.",
+      "unavailable": "Esta solicitação de aprovação está indisponível. Verifique suas permissões ou abra o registro atual.",
+      "fields": {
+        "effectiveFrom": "Vigente a partir de",
+        "expiresOn": "Vencimento",
+        "workedOn": "Data de trabalho",
+        "changeKind": "Tipo de alteração",
+        "revision": "Revisão",
+        "commandAction": "Ação",
+        "month": "Mês do relatório",
+        "commandReason": "Motivo da correção",
+        "cutoffOn": "Data limite",
+        "startsOn": "Início",
+        "endsOn": "Fim",
+        "allowance": "Auxílio"
+      },
+      "currentTerms": "Dados atuais"
+    }
   },
   "customFields": {
     "noOptions": "Nenhuma opção definida",

@@ -91,9 +91,11 @@ function navigationSource(pathname: string, routerSource?: string): string {
   );
 }
 
-const INTL_SERVER_DEFAULT =
-  // Key-echo translator with no catalog: `has` reports every key missing.
-  `export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}` +
+/** Server locale boundary for tests that retain their own catalog translator. */
+export function intlServerStubSource(translationsSource =
+  `export async function getTranslations(){const t=(key)=>key;t.has=()=>false;return t}`,
+): string {
+  return translationsSource +
   `export async function getMessages(){return {}}` +
   `export async function getLocale(){return 'en'}` +
   `export async function getTimeZone(){return 'UTC'}` +
@@ -101,6 +103,24 @@ const INTL_SERVER_DEFAULT =
   `export async function getFormatter(){return {` +
   `dateTime:(value,options)=>new Intl.DateTimeFormat('en',{...(options??{}),timeZone:'UTC'}).format(value),` +
   `number:(value,options)=>new Intl.NumberFormat('en',options).format(value)}}`;
+}
+
+const INTL_SERVER_DEFAULT = intlServerStubSource();
+
+/** Browser navigation boundary that publishes URL changes to mounted hooks. */
+export function browserNavigationStubSource(): string {
+  return `const listeners=new Set();
+    const snapshot=()=>window.location.href;
+    const subscribe=listener=>{listeners.add(listener);window.addEventListener('popstate',listener);return()=>{listeners.delete(listener);window.removeEventListener('popstate',listener)}};
+    function location(){return globalThis.React.useSyncExternalStore(subscribe,snapshot,snapshot)}
+    function navigate(url,replace){window.history[replace?'replaceState':'pushState']({},'',url);for(const listener of listeners)listener()}
+    export function useRouter(){return{push:url=>navigate(url,false),replace:url=>navigate(url,true),refresh(){},back:()=>window.history.back(),forward:()=>window.history.forward(),prefetch(){}}}
+    export function useSearchParams(){return new URL(location()).searchParams}
+    export function usePathname(){return new URL(location()).pathname}
+    export function useParams(){return{}}
+    export function redirect(url){throw Error('REDIRECT:'+url)}
+    export function notFound(){throw Error('NOT_FOUND')}`;
+}
 
 function authzSource(permissions: string[] | null): string {
   const granted =

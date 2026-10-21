@@ -352,7 +352,28 @@
     "retried": "承認を再実行しました — 新しいステップは作業リストにあります",
     "retryFailed": "再実行に失敗しました",
     "commandWithdrawn": "申請を取り下げました。内容を編集して再申請できます。",
-    "decisionRecorded": "判断を記録しました。"
+    "decisionRecorded": "判断を記録しました。",
+    "recordReview": {
+      "title": "承認依頼",
+      "terms": "提出された内容",
+      "changed": "提出後にレコードが変更されました。保留中の依頼を取り下げ、現在の内容を改めて審査に提出してください。",
+      "unavailable": "この承認依頼は表示できません。アクセス権を確認するか、現在のレコードを開いてください。",
+      "fields": {
+        "effectiveFrom": "適用開始日",
+        "expiresOn": "有効期限",
+        "workedOn": "勤務日",
+        "changeKind": "変更の種類",
+        "revision": "リビジョン",
+        "commandAction": "操作",
+        "month": "報告月",
+        "commandReason": "訂正理由",
+        "cutoffOn": "締切日",
+        "startsOn": "開始日",
+        "endsOn": "終了日",
+        "allowance": "手当"
+      },
+      "currentTerms": "現在の内容"
+    }
   },
   "customFields": {
     "noOptions": "選択肢が定義されていません",

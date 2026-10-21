@@ -16,6 +16,8 @@ const { NextIntlClientProvider } = await import('next-intl')
 const { default: messages } = await import('../../../messages/en')
 const { MoneyProvider } = await import('../../../components/money-provider')
 const { SecurityDrawer } = await import('./SecurityDrawer')
+const { NewRecordDrawer } = await import('./NewRecordDrawer')
+const { EquityRoundsPanel } = await import('./RoundsPanel')
 type DrawerProps = import('./view').SecurityDrawerData
 
 const SUB = 'a0000000-0000-4000-8000-000000000001'
@@ -255,7 +257,6 @@ test('a refused reversal keeps the form open with the refusal and its remedy', a
   assert.ok(body.includes('was voided, so its terms no longer stand'), 'the form stays open for another attempt')
 })
 
-const { NewRecordDrawer } = await import('./NewRecordDrawer')
 
 test('a new stakeholder with an address no message could be sent to is held at the form, with the reason beside the field', async () => {
   const requests: string[] = []
@@ -320,7 +321,6 @@ test('a new award vests from its issue date until the operator sets another star
   }
 })
 
-const { EquityRoundsPanel } = await import('./RoundsPanel')
 
 test('a round opens in its drawer with its pre-money basis, refuses a void while live securities stand, and lists voided rounds for history', async () => {
   const ROUND = 'd0000000-0000-4000-8000-000000000001'

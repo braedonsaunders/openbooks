@@ -496,14 +496,13 @@ test("saveConfig accepts setup authority without reconciliation authority", asyn
       defaultDisputedFundsAccountId: null,
       defaultChargebackLossAccountId: null,
       defaultDisputeFeeAccountId: null,
-      refundPolicy: undefined,
       pullEnabled: undefined,
       apiKey: null,
     },
   });
 });
 
-test("saveConfig stores the refund policy and dispute accounts for PayPal", async () => {
+test("saveConfig stores the dispute posting accounts for PayPal", async () => {
   reset(["admin.setup.manage"]);
 
   const response = await post({
@@ -511,7 +510,6 @@ test("saveConfig stores the refund policy and dispute accounts for PayPal", asyn
     provider: "paypal",
     displayName: "PayPal",
     isEnabled: true,
-    refundPolicy: "review",
     defaultDisputedFundsAccountId: "00000000-0000-4000-8000-0000000000c1",
     defaultChargebackLossAccountId: "00000000-0000-4000-8000-0000000000c2",
     defaultDisputeFeeAccountId: "00000000-0000-4000-8000-0000000000c3",
@@ -533,7 +531,6 @@ test("saveConfig stores the refund policy and dispute accounts for PayPal", asyn
       defaultDisputedFundsAccountId: "00000000-0000-4000-8000-0000000000c1",
       defaultChargebackLossAccountId: "00000000-0000-4000-8000-0000000000c2",
       defaultDisputeFeeAccountId: "00000000-0000-4000-8000-0000000000c3",
-      refundPolicy: "review",
       pullEnabled: undefined,
       apiKey: null,
     },
@@ -767,7 +764,6 @@ test("saveConfig accepts Square as a settlement provider", async () => {
     provider: "square",
     displayName: "Square",
     isEnabled: true,
-    refundPolicy: "automatic",
   });
 
   assert.equal(response.status, 200);

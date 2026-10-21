@@ -352,7 +352,28 @@
       "escalated": "Escalated"
     },
     "commandWithdrawn": "Submission withdrawn. The record can be edited and submitted again.",
-    "decisionRecorded": "Decision recorded."
+    "decisionRecorded": "Decision recorded.",
+    "recordReview": {
+      "title": "Approval request",
+      "terms": "Submitted terms",
+      "changed": "This record changed after submission. Withdraw the pending request and submit its current terms for fresh review.",
+      "unavailable": "This approval request is unavailable. Check your access or open its current record.",
+      "fields": {
+        "effectiveFrom": "Effective from",
+        "expiresOn": "Expiry",
+        "workedOn": "Work date",
+        "changeKind": "Change type",
+        "revision": "Revision",
+        "commandAction": "Command",
+        "month": "Reporting month",
+        "commandReason": "Correction reason",
+        "cutoffOn": "Cutoff",
+        "startsOn": "Starts",
+        "endsOn": "Ends",
+        "allowance": "Allowance"
+      },
+      "currentTerms": "Current terms"
+    }
   },
   "customFields": {
     "noOptions": "No options defined",

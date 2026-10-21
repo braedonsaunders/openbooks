@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { canonicalEngineSpecifier, resolveEngineSpecifier } from "./engine-resolve-hooks.ts";
+import { canonicalEngineSpecifier, resolveEngineSpecifier, isEngineModuleImport } from "./engine-resolve-hooks.ts";
 
 const engineRoot = new URL("../../engine/", import.meta.url);
 const engineExports = JSON.parse(readFileSync(new URL("package.json", engineRoot), "utf8")).exports as Record<string, string>;
@@ -36,3 +36,13 @@ test("implementation paths and unknown contracts are inaccessible to test loader
   assert.equal(resolveEngineSpecifier("drizzle-orm"), null);
   assert.equal(resolveEngineSpecifier("@openbooks/engine"), null);
 });
+
+
+test("native transport identity matches relative imports and declared aliases only",()=>{
+  const target='@openbooks/engine/platform/db'
+  assert.equal(isEngineModuleImport('@openbooks/engine/platform/database',undefined,target),false)
+  const caller=new URL('../../engine/src/flows/submission-policy.ts',import.meta.url).href
+  assert.equal(isEngineModuleImport('../platform/db.ts',caller,target),true)
+  assert.equal(isEngineModuleImport('../platform/approval-routing.ts',caller,target),false)
+  assert.equal(isEngineModuleImport('../platform/db.ts','mock:module',target),false)
+})

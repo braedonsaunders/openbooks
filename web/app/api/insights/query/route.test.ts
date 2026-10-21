@@ -1,12 +1,15 @@
+import { featureEnabled } from '@openbooks/engine/organization/feature-registry'
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { intlServerStubSource } from '../../../../testing/stub-modules'
 import { can, type Authz } from '../../../../lib/authz-core'
 import { requestAuthzContext } from '../../../../lib/authz-context'
 
 const key = Symbol.for('openbooks.insight-query-context-test')
 const observations: { phase: string; orgId: string | undefined }[] = []
 const state = {
+  featureEnabled,
   can,
   observe(phase: string) {
     const orgId = requestAuthzContext()?.user.orgId
@@ -22,11 +25,11 @@ const mocks = new Map([
   ['../../../../lib/authz', `${prefix} export const can=state.can`],
   ['./authz', `${prefix} export const can=state.can`],
   ['@openbooks/engine/platform/db', 'export const pool={}; export const db={}'],
-  ['next-intl/server', `${prefix} export async function getTranslations(namespace){state.observe('labels:'+namespace);await Promise.resolve();return key=>key}`],
+  ['next-intl/server', intlServerStubSource(`${prefix} export async function getTranslations(namespace){state.observe('labels:'+namespace);await Promise.resolve();return key=>key}`)],
   ['@openbooks/engine/platform/business-date/module', `${prefix} export async function businessToday(){state.observe('date');return '2026-10-08'}`],
   ['@/lib/fiscal', `${prefix} export async function fiscalStartMonth(){state.observe('fiscal');return 1}`],
   ['@/lib/custom-record-report-catalog', `${prefix} export async function reportEntityCatalog(){state.observe('catalog');return {}}`],
-  ['@/lib/features', `${prefix} export async function isFeatureEnabled(){state.observe('feature');return true}`],
+  ['@/lib/features', `${prefix} export const featureEnabled=state.featureEnabled; export async function orgFeatureState(){throw Error('unexpected catalog enumeration')}; export async function isFeatureEnabled(){state.observe('feature');return true}`],
   ['@/lib/insight-books', `${prefix} export class InsightBookScopeError extends Error{}; export async function resolveInsightBookScope(){state.observe('book');return ['primary-book']}`],
   ['@/lib/expense-access', `${prefix} export async function reportExpenseAccess(authz){state.observe('expenses');return authz.permissions.has('expenses.read')?{scope:'all'}:{scope:'none'}}`],
   ['@openbooks/analytics/server', `${prefix} export class InsightDenominationError extends Error{}; export async function runInsightQuery(pool,query,orgId,subsidiaries,labels,today,books,catalog,startMonth,expenseAccess){state.observe('execution');return {orgId,subsidiaries,books,label:labels.count(),today,expenseAccess}}`],

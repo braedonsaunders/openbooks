@@ -1081,6 +1081,7 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
         ],
         { tabKey: data.tabKey },
       ),
+      widgetBlock('approval-request-host', {}),
     ],
   })
 }

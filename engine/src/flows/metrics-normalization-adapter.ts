@@ -1,3 +1,4 @@
+import { approvalRequestHref } from "./review-links.ts";
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db } from "../platform/db.ts";
@@ -59,8 +60,8 @@ export const metricsNormalizationFlowAdapter = defineTableSubjectAdapter({
   label(id, values) {
     return `SaaS metrics · ${String(values.month ?? id)}`;
   },
-  deepLink() {
-    return "/admin/settings";
+  deepLink(id) {
+    return approvalRequestHref(METRICS_NORMALIZATION_SUBJECT_KIND,id);
   },
   async changeStatus() {
     throw new Error("Use the native correction lifecycle and Flow gates.");

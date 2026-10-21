@@ -136,7 +136,7 @@ export const nativeCommandSubjects = [
   defineCommandSubject({
     kind:"hrm_calibration_session",label:"Calibration publication",table:"hrm_calibration_sessions",statusColumn:"status",statuses:["draft","open","closed"],
     permissions:{read:"hrm.performance.read",edit:"hrm.performance.manage",approve:"hrm.performance.manage"},
-    scope:calibrationSessionScope(),href:id=>`/hrm/performance?tab=calibration&session=${id}`,
+    scope:calibrationSessionScope(),
     makerIds:sql`array(select distinct actor from (select s.created_by::text as actor union select u.id::text from users u where u.org_id=s.org_id and u.party_id=s.facilitator_party_id
       union select e.decided_by::text from hrm_calibration_entries e where e.org_id=s.org_id and e.session_id=s.id) makers where actor is not null)`,
     integrity:sql`public.calibration_session_approval_dependencies(s.org_id,s.id)`,
@@ -146,7 +146,6 @@ export const nativeCommandSubjects = [
     kind:"close_task",label:"Close task",table:"close_run_tasks",statusColumn:"status",
     statuses:["blocked","ready","in_progress","submitted","complete","changes_requested","invalidated","waived"],
     permissions:{read:"close.read",edit:"close.run",approve:"close.approve"},scope:{via:"none"},
-    href:id=>`/close?task=${id}`,
     makerColumn:"owner_id",
     makerIds:sql`array_remove(array[s.owner_id::text,s.completed_by::text,s.created_by::text],null)`,
     integrity:sql`public.close_task_approval_dependencies(s.org_id,s.id)`,
@@ -165,7 +164,7 @@ export const nativeCommandSubjects = [
       approve: "hrm.certifications.manage",
     },
     scope: tableScope("column", "hrm_training_courses", "subsidiary_id"),
-    href: (id) => `/hrm/training?course=${id}`,
+
     makerIds: sql`array(select u.id::text from users u where u.org_id=s.org_id and u.party_id=s.author_party_id)`,
     fields: [
       { key: "name", column: "name", label: "Course", type: "text" },
@@ -206,7 +205,7 @@ export const nativeCommandSubjects = [
           }
         : {}),
       scope: reconciliationScope(),
-      href: (id) => `/banking/reconciliations?reconciliation=${id}`,
+
       integrity: sql`public.reconciliation_approval_dependencies(s.org_id,s.id)`,
       fields: [
         {
@@ -247,7 +246,7 @@ export const nativeCommandSubjects = [
       edit: "banking.reconcile",
       approve: "banking.reconcile",
     },
-    href: (id) => `/banking/psp-settlements/reviews?review=${id}`,
+
     scope: {
       via: "custom",
       worklistPredicate(idsJson: string) {
@@ -303,7 +302,7 @@ export const nativeCommandSubjects = [
       approve: "compliance.verify",
     },
     scope: complianceScope("compliance_records"),
-    href: (id) => `/compliance/vendors?certificate=${id}`,
+
     fields: [
       { key: "issuer", column: "issuer_name", label: "Issuer", type: "text" },
       {
@@ -329,7 +328,7 @@ export const nativeCommandSubjects = [
     statuses: ["draft", "approved", "void"],
     permissions: { read: "ar.read", edit: "ar.create", approve: "ar.approve" },
     scope: tableScope("project", "change_orders", "project_id"),
-    href: (id) => `/construction?changeOrder=${id}`,
+
     integrity: sql`jsonb_build_object('contractValue',(select p.contract_value::text from projects p where p.org_id=s.org_id and p.id=s.project_id),
     'schedule',(select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'::jsonb) from sov_lines l where l.org_id=s.org_id and l.project_id=s.project_id))`,
     fields: [
@@ -350,7 +349,7 @@ export const nativeCommandSubjects = [
       approve: "compliance.waive",
     },
     scope: complianceScope("compliance_waivers"),
-    href: (id) => `/compliance/exceptions?exception=${id}`,
+
     fields: [
       { key: "reason", column: "reason", label: "Reason", type: "text" },
       {
@@ -374,7 +373,7 @@ export const nativeCommandSubjects = [
       approve: "admin.sandboxes.manage",
     },
     scope: { via: "none" },
-    href: (id) => `/admin/sandboxes?changeSet=${id}`,
+
     makerIds: sql`array_remove(array[s.created_by::text,s.reviewed_by::text],null)`,
     integrity: sql`(select coalesce(jsonb_agg(to_jsonb(i) order by i.id),'[]'::jsonb) from change_set_items i where i.org_id=s.org_id and i.change_set_id=s.id)`,
     fields: [
@@ -403,7 +402,7 @@ export const nativeCommandSubjects = [
       "hrm_headcount_plan_lines",
       "employer_subsidiary_id",
     ),
-    href: (id) => `/hrm/compensation?planLine=${id}`,
+
     fields: [
       { key: "name", column: "title", label: "Role", type: "text" },
       {
@@ -459,7 +458,7 @@ export const nativeCommandSubjects = [
         );
       },
     },
-    href: (id) => `/hrm/compensation?plan=${id}`,
+
     integrity: sql`(select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'::jsonb) from hrm_headcount_plan_lines l where l.org_id=s.org_id and l.plan_id=s.id)`,
     fields: [{ key: "name", column: "name", label: "Plan", type: "text" }],
   }),
@@ -476,7 +475,7 @@ export const nativeCommandSubjects = [
       approve: "hrm.compensation.approve",
     },
     scope: tableScope("employment", "hrm_comp_cycle_lines", "employment_id"),
-    href: (id) => `/hrm/compensation?line=${id}`,
+
     makerIds: sql`(select array_agg(u.id::text) from users u join worker_employments e on e.org_id=u.org_id and e.worker_party_id=u.party_id where e.org_id=s.org_id and e.id=s.employment_id)`,
     fields: [
       {
@@ -506,7 +505,7 @@ export const nativeCommandSubjects = [
         kind === "per_diem" ? "hrm_per_diem_entries" : "hrm_travel_pay_entries",
         "employment_id",
       ),
-      href: (id) => `/hrm/construction?entry=${id}`,
+
       fields: [
         { key: "amount", column: "amount", label: "Allowance", type: "number" },
         {
@@ -539,7 +538,7 @@ export const nativeCommandSubjects = [
     ],
     permissions: { read: "ap.read", edit: "ap.create", approve: "ap.approve" },
     scope: tableScope("project", "subcontracts", "project_id"),
-    href: (id) => `/subcontracts?subcontract=${id}`,
+
     integrity: sql`(select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'::jsonb) from subcontract_sov_lines l where l.org_id=s.org_id and l.subcontract_id=s.id)`,
     fields: [
       { key: "number", column: "number", label: "Subcontract", type: "text" },
@@ -560,7 +559,7 @@ export const nativeCommandSubjects = [
     statuses: ["draft", "approved"],
     permissions: { read: "ap.read", edit: "ap.create", approve: "ap.approve" },
     scope: subcontractScope("subcontract_change_orders"),
-    href: (id) => `/subcontracts?changeOrder=${id}`,
+
     integrity: sql`public.subcontract_change_approval_dependencies(s.org_id,s.subcontract_id)`,
     fields: [
       { key: "number", column: "number", label: "Change order", type: "text" },
@@ -575,7 +574,7 @@ export const nativeCommandSubjects = [
     statuses: ["draft", "submitted", "approved", "billed", "void"],
     permissions: { read: "ap.read", edit: "ap.create", approve: "ap.approve" },
     scope: subcontractScope("vendor_pay_applications"),
-    href: (id) => `/subcontracts?payApplication=${id}`,
+
     integrity: sql`(select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'::jsonb) from vendor_pay_application_lines l where l.org_id=s.org_id and l.pay_application_id=s.id)`,
     fields: [
       {
@@ -601,7 +600,7 @@ export const nativeCommandSubjects = [
     statuses: ["draft", "submitted", "approved", "invoiced", "posted", "void"],
     permissions: { read: "ar.read", edit: "ar.create", approve: "ar.approve" },
     scope: tableScope("project", "pay_applications", "project_id"),
-    href: (id) => `/projects?application=${id}`,
+
     integrity: sql`(select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'::jsonb) from pay_application_lines l where l.org_id=s.org_id and l.pay_application_id=s.id)`,
     fields: [
       {
@@ -635,7 +634,7 @@ export const nativeCommandSubjects = [
         edit: side === "vendor" ? "ap.post" : "ar.post",
         approve: side === "vendor" ? "ap.post" : "ar.post",
       },
-      href: (id) => `/rebates?agreement=${id}`,
+
       fields: [
         { key: "name", column: "name", label: "Agreement", type: "text" },
         { key: "side", column: "side", label: "Side", type: "text" },
@@ -689,7 +688,7 @@ export const nativeCommandSubjects = [
           );
         },
       },
-      href: (id) => `/rebates?claim=${id}`,
+
       integrity: sql`(select to_jsonb(a) from rebate_agreements a where a.org_id=s.org_id and a.id=s.agreement_id)`,
       fields: [
         {
@@ -714,7 +713,7 @@ export const nativeCommandSubjects = [
       approve: "hrm.employment.approve",
     },
     scope: tableScope("employment", "employment_changes", "employment_id"),
-    href: (id) => `/hrm/employments?change=${id}`,
+
     integrity: sql`(select jsonb_build_object('revision',e.revision) from worker_employments e where e.org_id=s.org_id and e.id=s.employment_id)`,
     fields: [
       {

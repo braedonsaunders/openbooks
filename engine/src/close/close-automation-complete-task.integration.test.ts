@@ -145,7 +145,8 @@ test("all ten tenant gates govern close task release and self-approval follows t
     const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.orgId} and subject_kind='close_task' and subject_id=${taskId} order by id`)).rows;
     assert.equal(gates.length,10);
     await assert.rejects(decideGate({gateId:gates[0]!.id,userId:h.adminId,decision:"approved"}),/not an approver/);
-    for(const gate of gates){
+    assert.equal(gates.length,count);
+  for(const gate of gates){
       assert.equal((await taskState(h,taskId)).status,"submitted");
       await decideGate({gateId:gate.id,userId:h.submitterId,decision:"approved"});
     }
@@ -252,6 +253,7 @@ for(const count of [0,10])test(`close run approval tasks reflect exactly ${count
   assert.equal(await state(),count?"review":"approved");
   if(count)await assert.rejects(updateCloseTask({orgId:h.orgId,runId:h.runId,taskId,actorId:h.submitterId,action:"complete"}),/close run through its native Flow/);
   const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.orgId} and subject_kind='close_run' and subject_id=${h.runId} order by id`)).rows;
+  assert.equal(gates.length,count);
   for(const gate of gates){assert.equal(await state(),"review");await decideGate({gateId:gate.id,userId:h.submitterId,decision:"approved"});}
   assert.equal(await state(),"approved");
   const task=(await db.execute<{status:string;reviewed_by:string|null}>(sql`select status,reviewed_by from close_run_tasks where org_id=${h.orgId} and id=${taskId}`)).rows[0]!;

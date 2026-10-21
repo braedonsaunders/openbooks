@@ -52,7 +52,7 @@ stubModules({
 const { loadContractCosts } = await import('./view')
 
 test('contract-costs pickers reuse the shared postable-account loader, narrowed to expense and liability types', async () => {
-  const data = await loadContractCosts({})
+  const data = await loadContractCosts({view: "assets"})
   assert.equal(state.loadAccountsOrg, 'org-1')
   assert.deepEqual(data.expenseAccounts, [
     { value: 'a-expense', label: '5000 · Commissions' },

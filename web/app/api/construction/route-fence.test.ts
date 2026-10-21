@@ -46,7 +46,9 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
-      export function pinnedTransactionExecutor() { throw new Error('unexpected pinned transaction in boundary test') }
+      import {AsyncLocalStorage} from 'node:async_hooks';
+      const scope=new AsyncLocalStorage();
+      export function pinnedTransactionExecutor(){return scope.getStore()?db:undefined}
       export function withTransactionSavepoint() { throw new Error('unexpected withTransactionSavepoint in route boundary test') }
 
       const state = globalThis[Symbol.for('openbooks.construction-fence-test')]
@@ -77,7 +79,7 @@ const mockSources = new Map<string, string>([
         return Promise.resolve(respond(kind, text))
       }
       export const db = {
-        execute: (query) => record('execute', query),
+        execute: (query) => record(scope.getStore()?'tx-execute':'execute', query),
         transaction: async (work) => {
           const tx = { execute: (query) => record('tx-execute', query) }
           return work(tx)
@@ -86,7 +88,7 @@ const mockSources = new Map<string, string>([
       // project-costing links this name at import; these paths never run it.
       export const orgContext = { getStore: () => null, run: (_store, fn) => fn() }
       export const schema = {}
-      export function withOrgTransaction(_orgId, work) { return work() }
+      export function withOrgTransaction(_orgId, work) { return scope.run(true,work) }
       export async function withOrg(_orgId, work) { return work() }
       export async function withOrgContext(_orgId, work) { return work() }
       export async function withBypass(work) { return work() }
@@ -253,7 +255,7 @@ test('approveChangeOrder takes the fence before touching the draft order', async
   // lookup (which finds nothing here), proving fence, recheck, then work.
   const res = await post({ action: 'approveChangeOrder', id: '00000000-0000-4000-8000-00000000c002', approvedOn: '2026-08-31' })
   assert.equal(res.status, 422)
-  assert.equal(((await res.json()) as { error: string }).error, 'Change order not found or no longer draft')
+  assert.equal(((await res.json()) as { error: string }).error, 'Change order not found.')
   const texts = txTexts()
   const fence = texts.findIndex((t) => t.includes('pg_advisory_xact_lock'))
   const recheck = texts.findIndex((t) => t.includes('for share') && t.includes('from orgs'))

@@ -4,7 +4,7 @@ import React from 'react'
 
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){}, replace(){} });export function redirect(){ throw new Error("redirect") };export const useSearchParams = () => new URLSearchParams();export const usePathname = () => "/hrm"', intl: 'export async function getTranslations(){const t=(k)=>k;return t};export async function getLocale(){return "en"}' })
+stubModules({ navigation: 'export const useRouter = () => ({ refresh(){}, push(){}, replace(){} });export function redirect(){ throw new Error("redirect") };export const useSearchParams = () => new URLSearchParams();export const usePathname = () => "/hrm"', intl: true })
 registerHooks({
   resolve(specifier, context, next) {
 

@@ -118,7 +118,7 @@ test('non-document subjects resolve to their domain grant', () => {
   assert.deepEqual(flowSubjectPermissions('timesheet_week'), {
     read: 'time.read',
     edit: 'time.manage',
-    approve: 'time.manage',
+    approve: 'time.approve',
   })
   assert.deepEqual(flowSubjectPermissions('budget_scenario'), {
     read: 'budgets.read',

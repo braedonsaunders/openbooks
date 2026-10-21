@@ -18,7 +18,7 @@ registerHooks({
     if (s === '../custom-fields' && c.parentURL?.endsWith('/resourcing-resources.ts')) return wrap('web/lib/custom-fields.ts', 'export async function loadFieldDefs(){return []}');
     if (s === '@openbooks/engine/platform/db' && c.parentURL?.endsWith('/resourcing-resources.ts')) return wrap('engine/src/platform/db.ts', 'export const db={execute:async()=>({rows:[{id:"00000000-0000-4000-8000-000000000004"}]})};export async function withOrgTransaction(orgId,fn){return fn()}');
     if (s === '../list/entity-reader' && c.parentURL?.endsWith('/resourcing-resources.ts')) return wrap('web/lib/list/entity-reader.ts', `export async function readEntityListPage(input){globalThis.__assignmentResourceBoundary.reads.push(input);return {ok:false,error:'scope_required',remedy:'Pass the acting user and explicit subsidiary scope'}}`);
-    if (s === '@/lib/authz') return wrap('web/lib/authz.ts', `export async function guardPermission(){const s=globalThis.__assignmentResourceBoundary;return {user:{id:s.actorId,orgId:s.orgId},permissions:new Set(['data.export','resourcing.read']),allowedSubsidiaryIds:s.scope}}`);
+    if (s === '@/lib/authz') return wrap('web/lib/authz.ts', `export async function guardPermission(){const s=globalThis.__assignmentResourceBoundary;return {user:{ roles: [],id:s.actorId,orgId:s.orgId},permissions:new Set(['data.export','resourcing.read']),allowedSubsidiaryIds:s.scope}}`);
     return resolveAppModule(s, c, next, root) ?? next(s, c);
   },
 });

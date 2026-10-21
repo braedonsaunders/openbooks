@@ -30,8 +30,8 @@ export async function requireFlowsSession(): Promise<Authz | NextResponse> {
  * (approval state, manual record buttons). Those surfaces render on every
  * document whether or not the organization uses Flows, so Flows being off is
  * not a refusal there: the caller still meets the subject's own read grant
- * and legal-entity scope, and the route answers with an empty state that
- * discloses no gates, runs or buttons.
+ * and legal-entity scope. Recorded approval history remains available;
+ * disabled Flows cannot offer a retry.
  */
 export async function requireFlowsRecordReader(): Promise<
   { authz: Authz; flowsEnabled: boolean } | NextResponse

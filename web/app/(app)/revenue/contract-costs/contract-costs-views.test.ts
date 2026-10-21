@@ -28,7 +28,7 @@ stubModules({
       `if (s.includes('contract_cost_amortization')) return { rows: [] };` +
       `if (s.includes('from currencies')) return { rows: [{ minor_units: 2 }] };` +
       `if (s.includes('from orgs')) return { rows: globalThis.__costViewsState.org };` +
-      `if (s.includes('not is_adjustment')) return { rows: globalThis.__costViewsState.periods };` +
+      `if (s.includes('not p.is_adjustment')) return { rows: globalThis.__costViewsState.periods };` +
       `if (s.includes('count(*)')) return { rows: [{ n: '0' }] };` +
       `return { rows: [] } } }`,
     '../../../../lib/setup/ref-options':

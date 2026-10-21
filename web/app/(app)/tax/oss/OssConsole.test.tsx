@@ -6,13 +6,12 @@ const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
 await bootJsdomEnvironment({ url: "http://localhost:4800/tax/oss", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
 
 const { registerHooks } = await import("node:module");
+const { browserNavigationStubSource, stubModules } = await import('../../../../testing/stub-modules');
+stubModules({navigation: browserNavigationStubSource()});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/link" || specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export default function Link(p){return p.children};export function useRouter(){return{push(){},replace(){},refresh(){}}};export function useSearchParams(){return new URLSearchParams()};export function usePathname(){return'/tax/oss'};export function useParams(){return{}}",
-      };
+    if (specifier === "next/link") {
+      return {shortCircuit:true,url:'data:text/javascript,'+encodeURIComponent("export default function Link(p){return globalThis.React.createElement('a',{href:p.href},p.children)}")};
     }
     return next(specifier, context);
   },
@@ -32,6 +31,7 @@ function tick(): Promise<void> {
 }
 
 async function mount(calls: string[]): Promise<{ host: HTMLDivElement; root: ReturnType<typeof createRoot>; restore: () => void }> {
+  window.history.replaceState({}, "", "/tax/oss");
   const prior = globalThis.fetch;
   const restore = () => {
     globalThis.fetch = prior;

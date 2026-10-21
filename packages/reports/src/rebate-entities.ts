@@ -13,7 +13,7 @@ export const REBATE_REPORT_ENTITIES: ReportEntity[] = (['customer','vendor'] as 
  },
  {
   key:`${side}_rebate_claims`,label:`${side==='customer'?'Customer':'Vendor'} rebate claims`,category:'orders',
-  description:'Earned claims, independent approvals and native settlement instruments.',featureKey:'rebateManagement',requiredPermission:side==='customer'?'ar.read':'ap.read',
+  description:'Earned claims, tenant Flow approvals and native settlement instruments.',featureKey:'rebateManagement',requiredPermission:side==='customer'?'ar.read':'ap.read',
   from:`rebate_claims c join rebate_agreements a on a.org_id=c.org_id and a.id=c.agreement_id and a.side='${side}' join parties p on p.org_id=c.org_id and p.id=c.party_id`,
   orgColumn:'c.org_id',subsidiaryScope:{column:'a.subsidiary_id'},currencyColumn:'currency',timeKey:'cutoff_on',
   columns:[{key:'id',label:'Claim',kind:'uuid',expr:'c.id'},{key:'agreement',label:'Agreement',kind:'text',expr:'a.code'},{key:'counterparty',label:'Counterparty',kind:'text',expr:'p.display_name'},

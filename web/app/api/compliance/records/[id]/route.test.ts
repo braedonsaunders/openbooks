@@ -1,3 +1,5 @@
+import { withPlatformDbTestSurface } from '../../../../../testing/stub-modules'
+import { isEngineModuleImport } from '../../../../../testing/engine-resolve-hooks.ts'
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
@@ -105,8 +107,14 @@ const mockSources = new Map<string, string>([
         state.calls.push({ kind, text, params })
         const transactional = kind === 'tx-execute'
 
+        if(text.includes('flow_command_record_fingerprint'))return {rows:[{status:state.committedRecord.status,maker:'${CREATOR_ID}',facts:{},fingerprint:'certificate-fingerprint',makers:[]}]};
+        if(text.includes('from orgs'))return {rows:[{features:{subcontractorCompliance:true}}]};
+        if(text.includes('from users'))return {rows:[{id:'${ACTOR_ID}',orgId:'${ORG_ID}',isActive:true,isSuperAdmin:false}]};
+        if(text.includes('role.permissions'))return {rows:[{permissions:['compliance.verify']}]};
+        if(text.includes('subsidiary_restriction'))return {rows:[{restriction:{mode:'all'}}]};
+        if(text.includes('insert into flow_submissions'))return {rows:[{id:'submission-1'}]};
         if (text.includes('from compliance_records')) {
-          return { rows: [state.committedRecord] }
+          return { rows: [text.includes('ownerSubsidiaryId')?{...state.committedRecord,ownerSubsidiaryId:'00000000-0000-4000-8000-00000000a007'}:{...state.committedRecord}] }
         }
 
         // Subsidiary-fence lookups: the unrestricted double resolves every
@@ -123,7 +131,7 @@ const mockSources = new Map<string, string>([
           // revision-race refusal, so the mock returns the written identity.
           if (transactional) state.stagedRecord = { ...state.nextRecord }
           else state.committedRecord = { ...state.nextRecord }
-          return { rows: [{ id: '00000000-0000-4000-8000-00000000a006' }] }
+          return { rows: [{ ...state.nextRecord, id: '00000000-0000-4000-8000-00000000a006' }] }
         }
 
         if (text.includes('insert into audit_log')) {
@@ -148,7 +156,8 @@ const mockSources = new Map<string, string>([
       }
 
       export const db = {
-        execute: (query) => Promise.resolve(respond('execute', query)),
+        execute: (query) => Promise.resolve(respond(state.inTx?'tx-execute':'execute', query)),
+        select(){const query={from(){return query},where(){return Promise.resolve([])}};return query},
         transaction: async (work) => {
           state.transactions += 1
           state.inTx = true
@@ -169,10 +178,12 @@ const mockSources = new Map<string, string>([
           }
         },
       }
-      export const schema = {}
+      export * as schema from '${import.meta.resolve('@openbooks/schema')}'
       export const pool = {}
       export const env = {}
-      export function withOrgTransaction(_orgId, work) { return work() }
+      export function withOrgTransaction(_orgId, work) { return state.inTx?work():db.transaction(()=>work()) }
+      export function pinnedTransactionExecutor(){return state.inTx?db:undefined}
+      export const orgContext={getStore:()=>state.inTx?{orgId:'${ORG_ID}'}:undefined}
       export async function withOrg(_orgId, work) { return work() }
       export async function withOrgContext(_orgId, work) { return work() }
       export async function withBypass(work) { return work() }
@@ -213,6 +224,8 @@ mockSources.set(
   `,
 )
 
+mockSources.set('mock:db',withPlatformDbTestSurface(mockSources.get('mock:db')!))
+
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/platform/db', 'mock:db'],
   ['@/lib/authz', 'mock:authz'],
@@ -221,6 +234,7 @@ const mockUrls = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (isEngineModuleImport(specifier, context.parentURL, '@openbooks/engine/platform/db')) return {url:'mock:db',shortCircuit:true};
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     // Resolve the web tsconfig's @/ alias for the plain Node test runner.
@@ -234,6 +248,9 @@ registerHooks({
 })
 
 const routeUrl = './route.ts?compliance-record-route-test'
+const {registerApprovalCommandRouter}=await import('@openbooks/engine/platform/approval-routing')
+const {routeApprovalCommand}=await import('@openbooks/engine/flows/command-approval')
+registerApprovalCommandRouter(routeApprovalCommand)
 const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
 
 function certificate(overrides: Certificate = {}): Certificate {
@@ -364,7 +381,7 @@ for (const scenario of scenarios) {
     assert.equal(audit.actor_id, ACTOR_ID)
     assert.equal(new Date(audit.at).toISOString(), AUDIT_AT, 'the database timestamp is present')
     assert.deepEqual(audit.changes.before, scenario.before, 'audit evidence captures the full prior row')
-    assert.deepEqual(audit.changes.after, scenario.body, 'audit evidence captures the submitted action')
+    assert.deepEqual(audit.changes.after, scenario.action==='verify'?scenario.after:scenario.body, 'audit evidence captures the native decision or submitted edit')
 
     const writes = state.calls.filter((call) =>
       call.text.includes('update compliance_records') || call.text.includes('insert into audit_log'),

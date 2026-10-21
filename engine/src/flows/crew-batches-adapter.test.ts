@@ -25,6 +25,7 @@ test("crew batch release delegates to the registered web handler", async () => {
       userId: "00000000-0000-4000-8000-000000000003",
     },
     { comment: "verified" },
+    { id: "00000000-0000-4000-8000-000000000004" } as never,
   );
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
@@ -32,6 +33,7 @@ test("crew batch release delegates to the registered web handler", async () => {
     subjectId: "00000000-0000-4000-8000-000000000001",
     outcome: "approved",
     comment: "verified",
+    approvalRunId: "00000000-0000-4000-8000-000000000004",
     ctx: {
       orgId: "00000000-0000-4000-8000-000000000002",
       userId: "00000000-0000-4000-8000-000000000003",

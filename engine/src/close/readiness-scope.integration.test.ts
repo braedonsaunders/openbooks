@@ -8,7 +8,7 @@ import {requestCloseApproval} from "./approvals.ts";
 import {updateCloseTask} from "./tasks.ts";
 import {seedApprovalFlow} from "../testing/fixtures.ts";
 import {decideGate} from "../flows/gates.ts";
-import { periodFingerprint } from "./readiness.ts";
+import { periodFingerprint } from "./period-fingerprint.ts";
 import { refreshCloseRun } from "./run-automation.ts";
 import { startCloseRun } from "./run-start.ts";
 import { recordClosingFxRateEvidence } from "./fx-revaluation-evidence.ts";

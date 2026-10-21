@@ -28,10 +28,9 @@ export {
 } from "./reopen-approvals.ts";
 export {
   submitPeriodReopen,
-  recloseApprovedReopen,
-  recloseExpiredReopens,
   withdrawPeriodReopen,
 } from "./reopen-lifecycle.ts";
+export { recloseApprovedReopen, recloseExpiredReopens } from "./reclose.ts";
 
 type ReopenRequestArgs = {
   orgId: string;

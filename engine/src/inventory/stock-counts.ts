@@ -15,7 +15,7 @@ import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts
 import { adjustInventory } from "./movements.ts";
 import { loadSubsidiaryContext, uuidArray } from "../organization/subsidiaries.ts";
 import { assertInventoryFeature } from "./profile-policy.ts";
-import { InventoryCostBasisError, InventoryError, type Runner } from "./contracts.ts";
+import { InventoryCostBasisError, InventoryError } from "./contracts.ts";
 import { getOnHandWith, lockInventoryPosition, primaryBookId } from "./position.ts";
 import {
   assertCountedNonNegative,
@@ -43,24 +43,6 @@ export {
   parseCountStatus,
 } from "./stock-count-gates.ts";
 export type { CountHeader, CountLine, StockCountStatus } from "./stock-count-gates.ts";
-
-/**
- * Count-basis on-hand for one stock-count line: the SAME layer math as every
- * other reader (lot/serial selection included), scoped to the count's legal
- * entity and, for lot-tracked items, to the line's lot. The lifecycle
- * snapshots `expected_quantity` through here at creation/recount and re-reads
- * through here at posting for the drift check, so the snapshot and the check
- * can never disagree on what "on hand" means.
- */
-function getCountBasisQuantity(
-  runner: Runner,
-  orgId: string,
-  itemId: string,
-  stockLocationId: string,
-  selection: { lotId?: string | null; serialId?: string | null; subsidiaryId?: string } = {},
-): Promise<{ quantity: string; value: string; unitCost: string }> {
-  return getOnHandWith(runner, orgId, itemId, stockLocationId, selection);
-}
 
 /**
  * Cycle-count / physical-inventory lifecycle over the `stock_counts` +
@@ -230,7 +212,7 @@ export async function createStockCount(
           throw new InventoryError("count line lot does not belong to the line's item — choose the item's own lot");
         }
       }
-      const basis = await getCountBasisQuantity(tx, orgId, line.itemId, line.stockLocationId, {
+      const basis = await getOnHandWith(tx, orgId, line.itemId, line.stockLocationId, {
         lotId: line.lotId ?? null,
         serialId: line.serialId ?? null,
         subsidiaryId: input.subsidiaryId,
@@ -368,7 +350,7 @@ export async function recountStockCountLine(
         "line already posted an inventory adjustment — correct it with a new count, not an edit",
       );
     }
-    const basis = await getCountBasisQuantity(tx, orgId, line.item_id, line.stock_location_id, {
+    const basis = await getOnHandWith(tx, orgId, line.item_id, line.stock_location_id, {
       lotId: line.lot_id,
       serialId: line.serial_id,
       subsidiaryId: count.subsidiaryId,
@@ -674,7 +656,7 @@ export async function postStockCount(
     const drifted: { line: CountLine; live: string }[] = [];
     for (const line of lines) {
       if (line.adjustmentMovementId) continue;
-      const live = await getCountBasisQuantity(tx, orgId, line.itemId, line.stockLocationId, {
+      const live = await getOnHandWith(tx, orgId, line.itemId, line.stockLocationId, {
         lotId: line.lotId,
         serialId: line.serialId,
         subsidiaryId: count.subsidiaryId,

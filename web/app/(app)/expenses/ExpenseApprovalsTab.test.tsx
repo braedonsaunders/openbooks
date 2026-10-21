@@ -49,6 +49,7 @@ const tabElement = (
 
 const EMPTY_STATE = {
   approvalState: { status: 'approved', pendingWith: [], myActions: null },
+  canRetry: false, failedRun: null, neverSubmitted: false, submittedByViewer: false,
   history: [],
 }
 
@@ -118,6 +119,7 @@ test('expense Approvals tab renders the empty state when no flow history exists'
 test('expense Approvals tab renders the submitted/requested/approved chain', async (t) => {
   const chain = {
     approvalState: { status: 'approved', pendingWith: [], myActions: null },
+    canRetry: false, failedRun: null, neverSubmitted: false, submittedByViewer: false,
     history: [
       { id: 'run:1', type: 'submitted', actor: 'Sammy Sloppy', comment: null, at: '2026-09-01T10:00:00.000Z' },
       { id: 'gate:g1:requested', type: 'requested', actor: 'Controller', comment: null, at: '2026-09-01T10:01:00.000Z', title: 'Manager approval' },

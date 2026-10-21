@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 /** Native interactive widgets retain server rendering and load their client
  * implementation only when placed. Client-side import boundaries keep unused
  * workspaces out of pages that share the server widget registry. */
+export const ApprovalRequestHost = dynamic(() => import("../../app/(app)/inbox/ApprovalRequestHost").then(module => module.ApprovalRequestHost))
 export const AccountDrawer = dynamic(() => import("../../app/(app)/accounts/AccountDrawer").then(module => module.AccountDrawer))
 export const AccountsHierarchyTable = dynamic(() => import("../../app/(app)/accounts/AccountsHierarchyTable").then(module => module.AccountsHierarchyTable))
 export const AccountsRosterPanel = dynamic(() => import("../../app/(app)/banking/AccountsRoster").then(module => module.AccountsRosterPanel))

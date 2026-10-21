@@ -23,3 +23,12 @@ export function canonicalEngineSpecifier(specifier: string): string | null {
   const canonical = Object.entries(engineExports).find(([, target]) => target === mapped);
   return canonical ? `${prefix}${canonical[0].slice(2)}` : null;
 }
+
+/** One native module keeps one transport double across aliases and relative imports. */
+export function isEngineModuleImport(specifier: string, parentURL: string | undefined, target: string): boolean {
+  const expected = resolveEngineSpecifier(target);
+  if (!expected) return false;
+  if (resolveEngineSpecifier(specifier) === expected) return true;
+  return Boolean(parentURL?.startsWith('file:') && specifier.startsWith('.')
+    && new URL(specifier, parentURL).href === expected);
+}

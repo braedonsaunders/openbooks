@@ -147,7 +147,7 @@ export async function renderSchedulePdf(
     return await renderPdfDocument(schedulePdfInput(preview, recipient));
   } catch (cause) {
     throw new ScheduleError(
-      `The native PDF renderer could not prepare this schedule: ${cause instanceof Error ? cause.message : String(cause)}`,
+      `The native PDF renderer could not prepare this schedule; no report evidence was truncated. ${cause instanceof Error ? cause.message : String(cause)}`,
       {
         code: "schedule_pdf_refused",
         remedy:

@@ -920,6 +920,7 @@ test("relationship edits survive a tab round-trip", async (t) => {
 test("bank-account approval history names the empty state in the host drawer", async (t) => {
   const emptyApprovalState = {
     approvalState: { status: "approved", pendingWith: [], myActions: null },
+    canRetry: false, failedRun: null, neverSubmitted: false, submittedByViewer: false,
     history: [],
   };
   const { done } = await renderDrawer({

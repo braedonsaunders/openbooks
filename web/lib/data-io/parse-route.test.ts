@@ -30,7 +30,7 @@ const hooks = registerHooks({
             return true
           }
           export async function guardPermission() {
-            return { user: { orgId: 'org-1', id: 'actor-1' }, permissions: new Set(), allowedSubsidiaryIds: null }
+            return { user: { roles: [], orgId: 'org-1', id: 'actor-1' }, permissions: new Set(), allowedSubsidiaryIds: null }
           }
         `,
         shortCircuit: true,

@@ -49,9 +49,10 @@ export async function submitCertificateVerification(input: {
         project_id: string | null;
         supersedes_id: string | null;
         revision: number;
-        subsidiary_id: string | null;
+        ownerSubsidiaryId: string | null;
+        [column: string]: unknown;
       }>(sql`
-   select c.status,c.project_id,c.supersedes_id,c.revision,p.subsidiary_id from compliance_records c
+   select c.*,p.subsidiary_id as "ownerSubsidiaryId" from compliance_records c
    join parties p on p.org_id=c.org_id and p.id=c.party_id
    where c.org_id=${input.orgId} and c.id=${input.id} for update of c for share of p`)
     ).rows[0];
@@ -60,10 +61,10 @@ export async function submitCertificateVerification(input: {
       db,
       input.orgId,
       input.actorId,
-      row.subsidiary_id,
+      row.ownerSubsidiaryId,
       "compliance.verify",
     );
-    if (scope !== null && row.subsidiary_id === null && !row.project_id)
+    if (scope !== null && row.ownerSubsidiaryId === null && !row.project_id)
       throw new ScopeNotFoundError();
     if (row.project_id) {
       const project = (
@@ -96,6 +97,8 @@ export async function submitCertificateVerification(input: {
         revision: row.revision,
         status: "pending_approval" as const,
       };
+    const before: Record<string, unknown> = { ...row };
+    delete before.ownerSubsidiaryId;
     let supersession: { supersededId: string | null; stale: boolean } = {
       supersededId: null,
       stale: false,
@@ -109,16 +112,16 @@ export async function submitCertificateVerification(input: {
         : { supersededId: null, stale: true };
     }
     const saved =
-      await db.execute(sql`update compliance_records set status='active',verified_at=now(),verified_by=${input.actorId},
+      await db.execute<Record<string, unknown>>(sql`update compliance_records set status='active',verified_at=now(),verified_by=${input.actorId},
    verified_revision=${input.revision},rejected_reason=null,revision=revision+1,updated_at=now(),updated_by=${input.actorId}
-   where org_id=${input.orgId} and id=${input.id} and revision=${input.revision} returning id`);
+   where org_id=${input.orgId} and id=${input.id} and revision=${input.revision} returning *`);
     if (saved.rows.length !== 1)
       throw new CertificateApprovalError(
         "This certificate changed before verification. Reload its current revision.",
         409,
       );
     await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values
-   (${input.orgId},'compliance_records',${input.id},'verify',${JSON.stringify({ event: "verification_released", revisionBefore: row.revision, revisionAfter: row.revision + 1, mode: input.approvalRunId ? "gated" : "ungated", approvalRunId: input.approvalRunId ?? null, supersession })}::jsonb,${input.actorId})`);
+   (${input.orgId},'compliance_records',${input.id},${'verify'},${JSON.stringify({ before, after: saved.rows[0]!, event: "verification_released", revisionBefore: row.revision, revisionAfter: row.revision + 1, mode: input.approvalRunId ? "gated" : "ungated", approvalRunId: input.approvalRunId ?? null, supersession })}::jsonb,${input.actorId})`);
     return {
       id: input.id,
       revision: row.revision + 1,

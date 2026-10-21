@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
 
-const files = ["calendar.ts", "defaults.ts", "readiness.ts", "task-dependencies.ts", "run-automation.ts", "run-start.ts", "tasks.ts", "approvals.ts", "run-completion.ts", "reopening.ts", "reopen-approvals.ts", "reopen-lifecycle.ts", "features.ts", "automations.ts"];
+const files = ["calendar.ts", "defaults.ts", "readiness.ts", "period-fingerprint.ts", "task-dependencies.ts", "run-automation.ts", "run-start.ts", "tasks.ts", "approvals.ts", "run-completion.ts", "reopening.ts", "reopen-approvals.ts", "reopen-lifecycle.ts", "reclose.ts", "features.ts", "automations.ts"];
 const source = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
 const parse = (name: string) => ts.createSourceFile(name, source(name), ts.ScriptTarget.Latest, true);
 

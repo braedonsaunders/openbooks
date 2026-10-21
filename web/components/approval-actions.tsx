@@ -163,9 +163,12 @@ export function ApprovalActions({
   submitApprovalMethod = 'POST',
   submissionStatuses = ['pending'],
   withdraw,
+  decisionDisabled = false,
 }: {
   subjectKind: string
   subjectId: string
+  /** A changed canonical record requires withdrawal and fresh review. */
+  decisionDisabled?: boolean
   /**
    * POST endpoint that submits a never-submitted record into its current
    * flow (for records created before the flow existed). Passed only by
@@ -198,7 +201,7 @@ export function ApprovalActions({
 
   const decide = useCallback(async(decision:'approved'|'rejected')=>{
     const my=state?.approvalState.myActions
-    if(!my?.gateId||deciding.current)return
+    if(!my?.gateId||deciding.current||decisionDisabled)return
     deciding.current=true
     setBusy(true)
     setNotice(null)
@@ -226,7 +229,7 @@ export function ApprovalActions({
     }finally{
       deciding.current=false;setBusy(false);refreshApprovalState();router.refresh()
     }
-  },[state,router,t])
+  },[state,router,t,decisionDisabled])
 
   const retryRun=useCallback(async()=>{
     const run=state?.failedRun;if(!run||deciding.current)return
@@ -385,7 +388,7 @@ export function ApprovalActions({
     return (
       <>
         <Button
-          disabled={busy}
+          disabled={busy || decisionDisabled}
           aria-busy={busy}
           onClick={() => decide('approved')}
           className="bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800"
@@ -394,7 +397,7 @@ export function ApprovalActions({
         </Button>
         <Button
           variant="outline"
-          disabled={busy}
+          disabled={busy || decisionDisabled}
           aria-busy={busy}
           onClick={() => decide('rejected')}
         >

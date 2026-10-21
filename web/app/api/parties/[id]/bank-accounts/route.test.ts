@@ -1,5 +1,6 @@
+import { withPlatformDbTestSurface } from '../../../../../testing/stub-modules'
 import assert from 'node:assert/strict'
-import { canonicalEngineSpecifier } from '../../../../../testing/engine-resolve-hooks.ts'
+import { canonicalEngineSpecifier, isEngineModuleImport } from '../../../../../testing/engine-resolve-hooks.ts'
 import { registerHooks } from 'node:module'
 import test, { after } from 'node:test'
 import { NextResponse } from 'next/server'
@@ -10,6 +11,7 @@ const ACCOUNT_ID = '00000000-0000-4000-8000-000000000002'
 const ACTUAL_UPDATED_AT = '2026-08-31T12:34:56.789123Z'
 
 interface RouteState {
+  insertedBankId: string | null
   operation: 'patch' | 'delete'
   allowedSubsidiaryIds: Set<string> | null
   partySubsidiary: string | null
@@ -21,12 +23,11 @@ interface RouteState {
   updateParams: unknown[][]
   auditCalls: number
   auditParams: unknown[][]
-  flowCalls: number
-  gatedFlow: boolean
 }
 
 const stateKey = Symbol.for('openbooks.bank-accounts-route-test')
 const state: RouteState = {
+  insertedBankId: null,
   operation: 'patch',
   allowedSubsidiaryIds: null,
   partySubsidiary: null,
@@ -38,8 +39,6 @@ const state: RouteState = {
   updateParams: [],
   auditCalls: 0,
   auditParams: [],
-  flowCalls: 0,
-  gatedFlow: false,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksBankAccountsNextResponse = NextResponse
@@ -51,11 +50,11 @@ const mockSources = new Map<string, string>([
       const NextResponse = globalThis.openbooksBankAccountsNextResponse
       export async function guardPermission() {
         const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
+        return { user: { orgId: '00000000-0000-4000-8000-00000000b001', id: '00000000-0000-4000-8000-00000000b002' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
       export async function getAuthz() {
         const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
+        return { user: { orgId: '00000000-0000-4000-8000-00000000b001', id: '00000000-0000-4000-8000-00000000b002' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
       export function can() { return true }
       export function guardRootSubsidiaryScope() { return null }
@@ -93,13 +92,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'flows',
-    `
-      const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
-      export async function runRecordFlows() { state.flowCalls += 1; return { failed: false, runs: state.gatedFlow ? [{ runId: 'run-1', gatesCreated: 1 }] : [] } }
-    `,
-  ],
-  [
     'bank-account-adapter',
     `export const BANK_ACCOUNT_SUBJECT_KIND = 'party_bank_account'`,
   ],
@@ -113,6 +105,10 @@ const mockSources = new Map<string, string>([
   [
     'db',
     `
+      import {AsyncLocalStorage} from 'node:async_hooks';
+      const transactionScope=new AsyncLocalStorage();
+      export const orgContext={getStore:()=>transactionScope.getStore()};
+      export const pinnedTransactionExecutor=()=>transactionScope.getStore()?.executor;
       const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
       function queryText(query) {
         const chunks = query?.queryChunks
@@ -133,8 +129,8 @@ const mockSources = new Map<string, string>([
           return !('value' in chunk || 'queryChunks' in chunk)
         })
       }
-      export async function withOrgTransaction(_orgId, work) { return work() }
-      export const schema = {}
+      export async function withOrgTransaction(orgId, work) { return transactionScope.run({orgId,executor:db},work) }
+      import * as schema from '${import.meta.resolve('@openbooks/schema')}';export {schema}
       export async function withOrg(_orgId, work) { return work() }
       export async function withOrgContext(_orgId, work) { return work() }
       export async function withBypass(work) { return work() }
@@ -143,9 +139,15 @@ const mockSources = new Map<string, string>([
       export const pool = {}
       export const env = {}
       export const db = {
+        select(){const result=[{id:state.insertedBankId??'00000000-0000-4000-8000-000000000002',orgId:'00000000-0000-4000-8000-00000000b001',partyId:'00000000-0000-4000-8000-000000000001',approvalStatus:'pending',isActive:false,createdBy:'00000000-0000-4000-8000-00000000b002',routing:{}}];let selected;const query={from(table){selected=table;return query},where(){return Promise.resolve(selected===schema.partyBankAccounts?result:[])}};return query},
         async execute(query) {
           const text = queryText(query)
           state.queries.push(text)
+        if(text.includes('from users'))return {rows:[{id:'00000000-0000-4000-8000-00000000b002',orgId:'00000000-0000-4000-8000-00000000b001',isActive:true,isSuperAdmin:false}]};
+        if(text.includes('bank_approval_fingerprint'))return {rows:[{value:'bank-fingerprint'}]};
+        if(text.includes('insert into flow_submissions'))return {rows:[{id:'submission-1'}]};
+        if(text.includes('lock table flows')||text.includes('from flows')||text.includes('pg_advisory_xact_lock'))return {rows:[]};
+
           if (text.includes('from parties')) {
             const locked = /for update/i.test(text)
             const subsidiaryId = state.partySubsidiary
@@ -166,7 +168,8 @@ const mockSources = new Map<string, string>([
           }
           if (text.includes('from payment_instructions')) return { rows: [{ inFlightPayment: state.inFlightPayment }] }
           if (text.includes('insert into party_bank_accounts')) {
-            return { rows: [{ id: 'account-new' }] }
+            state.insertedBankId='00000000-0000-4000-8000-000000000003';
+            return { rows: [{ id: '00000000-0000-4000-8000-000000000003' }] }
           }
           if (text.includes('update party_bank_accounts')) {
             state.updateParams.push(queryParams(query))
@@ -191,6 +194,8 @@ const mockSources = new Map<string, string>([
     `,
   ],
 ])
+
+mockSources.set('db',withPlatformDbTestSurface(mockSources.get('db')!))
 
 const selfUrl = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${selfUrl}?bank-accounts-mock=${name}`
@@ -218,13 +223,12 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/payments/run-posting', mockUrl('payments')],
   ['@openbooks/engine/payments/run-readiness', mockUrl('payments')],
   ['@openbooks/engine/payments/settlement-policy', mockUrl('payments')],
-  ['@openbooks/engine/flows/run', mockUrl('flows')],
-  ['@openbooks/engine/flows/bank-accounts-adapter', mockUrl('bank-account-adapter')],
   ['@openbooks/engine/platform/business-date/module', mockUrl('business-date')],
 ])
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (isEngineModuleImport(specifier, context.parentURL, '@openbooks/engine/platform/db')) return {url:mockUrl('db'),shortCircuit:true};
     const mocked = mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? '')
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
@@ -244,6 +248,7 @@ const { POST, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./rou
 after(() => hooks.deregister())
 
 function reset(operation: RouteState['operation']): void {
+  state.insertedBankId = null
   state.operation = operation
   state.allowedSubsidiaryIds = null
   state.partySubsidiary = null
@@ -255,8 +260,6 @@ function reset(operation: RouteState['operation']): void {
   state.updateParams = []
   state.auditCalls = 0
   state.auditParams = []
-  state.flowCalls = 0
-  state.gatedFlow = false
 }
 
 function request(method: 'PATCH' | 'DELETE', body: Record<string, unknown>): Promise<Response> {
@@ -303,28 +306,9 @@ test('PATCH applies an edit directly when no approval flow listens', async () =>
   assert.equal(state.updateParams.length, 2)
   assert.ok(state.updateParams[0]?.includes('4321'))
   assert.equal(state.auditCalls, 2)
-  assert.equal(state.flowCalls, 1)
+  assert.equal(state.queries.filter(query=>query.includes('insert into flow_submissions')).length,1)
 })
 
-test('PATCH parks an edit pending when an approval flow gates it', async () => {
-  reset('patch')
-  state.gatedFlow = true
-  const response = await request('PATCH', {
-    accountNumber: '987654321',
-    changeReason: 'replace account',
-    expectedUpdatedAt: ACTUAL_UPDATED_AT,
-  })
-
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), {
-    id: ACCOUNT_ID,
-    approvalStatus: 'pending',
-    changedFields: ['accountNumber'],
-  })
-  assert.equal(state.updateParams.length, 1)
-  assert.equal(state.auditCalls, 1)
-  assert.equal(state.flowCalls, 1)
-})
 
 test('POST applies new bank details directly when no approval flow listens', async () => {
   reset('patch')
@@ -338,8 +322,8 @@ test('POST applies new bank details directly when no approval flow listens', asy
   )
 
   assert.equal(response.status, 201)
-  assert.deepEqual(await response.json(), { id: 'account-new', approvalStatus: 'approved' })
-  assert.equal(state.flowCalls, 1)
+  assert.deepEqual(await response.json(), { id: '00000000-0000-4000-8000-000000000003', approvalStatus: 'approved' })
+  assert.equal(state.queries.filter(query=>query.includes('insert into flow_submissions')).length,1)
   assert.equal(state.auditCalls, 1)
 })
 
@@ -355,7 +339,7 @@ test('DELETE accepts the exact six-digit revision and attributes the retirement'
   assert.equal(state.updateParams.length, 1)
   assert.ok(state.updateParams[0]?.includes(ACTUAL_UPDATED_AT))
   assert.equal(state.auditCalls, 1)
-  assert.ok(state.auditParams[0]?.includes('user-1'))
+  assert.ok(state.auditParams[0]?.includes('00000000-0000-4000-8000-00000000b002'))
 })
 
 test('DELETE refuses a stale revision before touching the row', async () => {

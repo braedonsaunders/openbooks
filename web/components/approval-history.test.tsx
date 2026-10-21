@@ -59,6 +59,7 @@ test('shared history component renders its empty body for a bank account subject
   const previousFetch = globalThis.fetch
   globalThis.fetch = (async () => Response.json({
     approvalState: { status: 'approved', pendingWith: [], myActions: null },
+    canRetry: false, failedRun: null, neverSubmitted: false, submittedByViewer: false,
     history: [],
   })) as typeof fetch
   t.after(() => { globalThis.fetch = previousFetch })
@@ -88,6 +89,7 @@ for (const status of ['draft', 'posted']) {
     const previousFetch = globalThis.fetch
     globalThis.fetch = (async () => Response.json({
       approvalState: { status, pendingWith: [], myActions: null },
+      canRetry: false, failedRun: null, neverSubmitted: false, submittedByViewer: false,
       history: [],
     })) as typeof fetch
     t.after(() => { globalThis.fetch = previousFetch })

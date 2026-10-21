@@ -5,7 +5,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { addCalendarDays, isIsoCalendarDate, parseIsoDate } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { ensureCloseDefaults } from "./defaults.ts";
-import { periodFingerprint } from "./readiness.ts";
+import { periodFingerprint } from "./period-fingerprint.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
 import { assertCloseScope } from "../periods/period-locks.ts";
 /** One close_blueprint_steps row materialized into run tasks at run start. */

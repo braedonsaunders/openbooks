@@ -57,6 +57,7 @@ const mockSources = new Map<string, string>([
       export const db = {
         async execute(query) {
           const text = sqlText(query)
+          if (text.includes('from currencies')) return { rows: [{code:'EUR',minor_units:2}] };
           if (text.includes('from tax_filings')) {
             return { rows: [{
               form_code: 'VAT100',

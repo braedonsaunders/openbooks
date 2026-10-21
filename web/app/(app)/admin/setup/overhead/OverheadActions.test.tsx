@@ -77,7 +77,7 @@ test('publication keeps edited rates on a named refusal and safely reports a pro
     const rate = dialog.querySelector<HTMLInputElement>('input[type="number"]')!
     await act(async () => { setJsdomInput(rate, '37.125'); await tick() })
     await click(dialog, copy.publishConfirm)
-    assert.deepEqual(__overheadActions.errors, ['The selected effective date is closed. — Choose an open accounting period.'])
+    assert.deepEqual(__overheadActions.errors, ['The selected effective date is closed. Choose an open accounting period.'])
     assert.equal(rate.value, '37.125')
     assert.equal(__overheadActions.refreshes, 0)
     assert.equal(__overheadActions.successes.length, 0)
@@ -103,7 +103,7 @@ test('the wizard stops on the named policy refusal and preserves selected types 
     await click(dialog, copy.finish)
     assert.deepEqual(mounted.requests.map(payload => payload.action), ['publish', 'apply'])
     assert.deepEqual(mounted.requests[1]!.projectTypeIds, ['type'])
-    assert.deepEqual(__overheadActions.errors, ['The project type changed while this policy was being reviewed. — Reload and review the current policy.'])
+    assert.deepEqual(__overheadActions.errors, ['The project type changed while this policy was being reviewed. Reload and review the current policy.'])
     assert.equal(__overheadActions.successes.length, 0)
     assert.equal(__overheadActions.refreshes, 0)
     assert.equal(dialog.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked, true)

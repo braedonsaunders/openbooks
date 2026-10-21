@@ -171,11 +171,11 @@ test("drafting writes nowhere except ai_decisions", async () => {
         }] };
       }
       if (text.includes("subsidiary_restriction")) {
-        // Stored null is legacy-all: the stubbed actor is unrestricted.
-        return { rows: [{ restriction: null }] };
+        // The configured role explicitly permits every subsidiary.
+        return { rows: [{ restriction: {mode: "all"} }] };
       }
       if (text.includes("from orgs")) {
-        return { rows: [{ features: { hrm: true } }] };
+        return { rows: [{ features: { hrm: true, hrmRecruiting: true } }] };
       }
       if (text.includes("from users")) return { rows: [{ isSuperAdmin: false, isActive: true }] };
       if (text.includes("app_role") || text.includes("role.permissions")) {

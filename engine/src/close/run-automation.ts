@@ -7,7 +7,9 @@ import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { db, withOrgTransaction, withBypassContext, withOrgContext } from "../platform/db.ts";
-import { fingerprintChangeBuckets, periodFingerprintWithEvidence, readinessChecks, type PeriodFingerprintEvidence } from "./readiness.ts";
+import { readinessChecks } from "./readiness.ts";
+
+import { fingerprintChangeBuckets, periodFingerprintWithEvidence, type PeriodFingerprintEvidence } from "./period-fingerprint.ts";
 import { snapshotCommerceCloseEvidence } from "./commerce-close.ts";
 import { resolveTaskDependenciesTx } from "./task-dependencies.ts";
 export async function refreshCloseRun(

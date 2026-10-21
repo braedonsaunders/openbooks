@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { intlServerStubSource } from '../../../../testing/stub-modules'
 
 // Member routes must refuse a non-UUID [id] with HTTP 400 naming that the id
 // must be a UUID, before any uuid-column bind. A 404 is the unknown-id
@@ -177,11 +178,11 @@ registerHooks({
     if (url === 'mock:customization-id-intl') {
       return {
         format: 'module',
-        source: `
+        source: intlServerStubSource(`
           export async function getTranslations() {
             return (key, vars) => vars ? key + ':' + JSON.stringify(vars) : key
           }
-        `,
+        `),
         shortCircuit: true,
       }
     }

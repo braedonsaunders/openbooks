@@ -4,8 +4,8 @@ import test from 'node:test'
 const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
 await bootJsdomEnvironment({ url: 'http://localhost:4800/tax/oss', matchMediaMatches: false })
 ;(globalThis as Record<string, unknown>).Event = window.Event
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: true, intl: false, extra: { sonner: 'export const toast={success(){},error(){}};export function Toaster(){return null}' } })
+const { browserNavigationStubSource, stubModules } = await import('../../../../testing/stub-modules')
+stubModules({ navigation: browserNavigationStubSource(), intl: false, extra: { sonner: 'export const toast={success(){},error(){}};export function Toaster(){return null}' } })
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { act } = React
@@ -17,6 +17,7 @@ const { OssConsole } = await import('./OssConsole')
 const tick = () => new Promise(resolve => setTimeout(resolve, 15))
 
 async function mount(today = '2028-02-15') {
+  window.history.replaceState({}, '', '/tax/oss')
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)

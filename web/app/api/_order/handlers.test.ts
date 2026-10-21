@@ -1,7 +1,14 @@
+import { PgDialect } from 'drizzle-orm/pg-core'
+import type { SQL } from 'drizzle-orm'
+import { withPlatformDbTestSurface } from '../../../testing/stub-modules'
+import { isEngineModuleImport } from '../../../testing/engine-resolve-hooks.ts'
 import assert from 'node:assert/strict'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+
+const realDrizzleUrl = import.meta.resolve('drizzle-orm')
+const realSchemaUrl = import.meta.resolve('@openbooks/schema')
 
 const ORG_ID = '00000000-0000-4000-8000-000000000001'
 const USER_ID = '00000000-0000-4000-8000-000000000002'
@@ -392,6 +399,10 @@ class OrderRouteHarness {
   }
 
   private compile(query: SqlQuery): { text: string; params: unknown[] } {
+    if (!query.__orderTestSql) {
+      const native = new PgDialect().sqlToQuery(query as unknown as SQL)
+      return {text:native.sql,params:native.params}
+    }
     const params: unknown[] = []
     const render = (fragment: SqlQuery): string => {
       let text = fragment.strings[0] ?? ''
@@ -559,7 +570,7 @@ const mockSources = new Map<string, string>([
     export async function segmentRegistry() { return [] }
     export function validateExtraDims(value) { return { ok: true, cleaned: value ?? {} } }
   `],
-  ['mock:crm', `export { CrmLifecycleRefusalError } from ${JSON.stringify(import.meta.resolve('@openbooks/engine/crm/crm'))}; export async function promoteCrmAccount() { return { customerRoleActive: true, lifecycleApplied: true, transitioned: true } }`],
+  ['mock:crm', `export class CrmLifecycleRefusalError extends Error { constructor(message, status=422) { super(message); this.status=status } } export async function promoteCrmAccount() { return { customerRoleActive: true, lifecycleApplied: true, transitioned: true } }`],
   ['mock:features', `
     export async function isFeatureEnabled() { return true }
     export async function subsidiaryFeatureEnabled() { return true }
@@ -621,6 +632,7 @@ const resolutionMocks = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "drizzle-orm") return { url: realDrizzleUrl, shortCircuit: true }
     const mock = resolutionMocks.get(specifier)
     return mock ? { url: mock, shortCircuit: true } : nextResolve(specifier, context)
   },
@@ -860,6 +872,20 @@ class IssuePoolHarness {
     const { text, params } = this.compile(query)
     const normalized = text.replace(/\s+/g, ' ').trim().toLowerCase()
 
+    if(normalized.startsWith('select pg_advisory_xact_lock(hashtextextended')){
+      const [name,orgId,kind,id]=JSON.parse(String(params[0])) as string[]
+      assert.equal(name,'openbooks:flow-subject-decision');assert.equal(orgId,ORG_ID);assert.equal(kind,'quote')
+      assert.ok(this.requireTransaction().lockedDocumentIds.has(id!), 'the subject fence joins the owned document transaction')
+      return this.result([])
+    }
+    if(normalized==='lock table flows in share mode'||normalized.includes('from flows')){
+      this.requireTransaction();return this.result([])
+    }
+    if(normalized.includes('insert into flow_submissions')){
+      this.requireTransaction();return this.result([{id:'30000000-0000-4000-8000-000000000001'}])
+    }
+    if(normalized.includes('from parties p')||normalized.includes('from "parties"'))return this.result([{display_name:'Pool customer',eft_notification_email:null}])
+    if(normalized.includes('from quote_subscription_terms'))return this.result([])
     if (normalized.startsWith('select status, document_date from documents')) {
       const document = this.documentFromParams(params)
       return this.result(document
@@ -887,7 +913,7 @@ class IssuePoolHarness {
       return this.result([{ enabled: true }])
     }
     if (normalized.includes('is_super_admin') && normalized.includes('from users')) {
-      return this.result([{ isSuperAdmin: true, isActive: true }])
+      return this.result([{ id: USER_ID, orgId: ORG_ID, isSuperAdmin: true, isActive: true }])
     }
     if (normalized.startsWith('update user_scripts set last_run_at = now()')) return this.result([])
     // The submit-path consolidation-source probe
@@ -907,6 +933,7 @@ class IssuePoolHarness {
 
   selectRows(table: { __table: string }, projection?: Record<string, unknown>): Record<string, unknown>[] {
     const context = this.requireTransaction()
+    if (table.__table === 'flows') return []
     if (table.__table === 'documents') {
       const document = context.documentId ? this.documents.get(context.documentId) : undefined
       if (!document) return []
@@ -1115,6 +1142,10 @@ class IssuePoolHarness {
   }
 
   private compile(query: SqlQuery): { text: string; params: unknown[] } {
+    if (!query.__orderTestSql) {
+      const native = new PgDialect().sqlToQuery(query as unknown as SQL)
+      return {text:native.sql,params:native.params}
+    }
     const params: unknown[] = []
     const render = (fragment: SqlQuery): string => {
       let text = fragment.strings[0] ?? ''
@@ -1160,9 +1191,13 @@ const poolMockSources = new Map<string, string>([
     export const or = (...values) => ({ op: 'or', values })
   `],
   ['pool:db', `
+    import * as nativeSchema from '${realSchemaUrl}'
+    export const env = {};
     const state = ${poolStateExpression}
     const table = (name, columns) => Object.assign({ __table: name }, columns)
     export const schema = {
+      ...nativeSchema,
+      flows: table('flows',{orgId:'flows.org_id',subjectKind:'flows.subject_kind',enabled:'flows.enabled'}),
       documents: table('documents', { id: 'documents.id', orgId: 'documents.orgId', status: 'documents.status' }),
       documentLines: table('documentLines', { documentId: 'document_lines.document_id', orgId: 'document_lines.org_id' }),
       orgs: table('orgs', { id: 'orgs.id' }),
@@ -1213,10 +1248,19 @@ const poolMockSources = new Map<string, string>([
       },
       transaction(callback) { return state.transaction(() => callback(db)) },
     }
-    export const orgContext = { getStore() { return state.activeTransaction() } }
+    export const orgContext = { getStore() { return {orgId:"${ORG_ID}",transaction:state.activeTransaction()} } }
+    export function pinnedTransactionExecutor(){return state.activeTransaction()?db:undefined}
+    export function withOrgContext(_orgId, callback) { return callback() }
+    export function withMaintenanceTransaction(callback) { throw new Error("Maintenance work is outside document issue transport") }
+    export function inDbTransaction(callback) { return state.transaction(() => callback(db)) }
     export function withOrgTransaction(_orgId, callback) { return state.transaction(callback) }
     export function connectGovernedReadClient() { return state.connectGovernedReadClient() }
     export const pool = { connect() { return state.connectRequestReadClient() } }
+    const outsideIssue = () => { throw new Error('Database operation is outside document issue transport') }
+    export const longPool = {connect:outsideIssue,query:outsideIssue}
+    export const connectBypassLongClient = outsideIssue
+    export const onTransactionRollback = outsideIssue
+    export const assertSafeRuntimeDatabaseRole = outsideIssue
     export function withBypass(work) { return work() }
     export function withBypassContext(work) { return work() }
   `],
@@ -1253,9 +1297,13 @@ const poolMockSources = new Map<string, string>([
   `],
 ])
 
+poolMockSources.set('pool:db',withPlatformDbTestSurface(poolMockSources.get('pool:db')!))
+
 const poolHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'drizzle-orm') return { url: 'pool:drizzle', shortCircuit: true }
+    if (isEngineModuleImport(specifier, context.parentURL, '@openbooks/engine/platform/db')) return {url:'pool:db',shortCircuit:true};
+    if (isEngineModuleImport(specifier, context.parentURL, '@openbooks/engine/organization/actor-permissions')) return {url:new URL('../../../../engine/src/organization/actor-permissions.ts?order-issue-pool-contention-test',import.meta.url).href,shortCircuit:true}
+    if (specifier === 'drizzle-orm') return { url: realDrizzleUrl, shortCircuit: true }
     if (specifier === '@openbooks/engine/platform/db') return { url: 'pool:db', shortCircuit: true }
     if (specifier === '@openbooks/engine/flows/module') {
       return { url: poolSubmitUrl, shortCircuit: true }
@@ -1302,6 +1350,8 @@ const poolHooks = registerHooks({
 })
 
 const { makePATCH: makePoolPATCH } = await import(poolHandlerUrl) as typeof import('./handlers.ts')
+const {installEngineSeams}=await import('@openbooks/engine/composition/install')
+installEngineSeams()
 poolHooks.deregister()
 const POOL_PATCH = makePoolPATCH({ kind: 'quote', readPerm: 'ar.read', createPerm: 'ar.create' })
 

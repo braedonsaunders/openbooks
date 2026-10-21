@@ -1,5 +1,6 @@
+import { withPlatformDbTestSurface } from '../testing/stub-modules'
 import assert from 'node:assert/strict'
-import { canonicalEngineSpecifier } from '../testing/engine-resolve-hooks.ts'
+import { canonicalEngineSpecifier, isEngineModuleImport } from '../testing/engine-resolve-hooks.ts'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -38,11 +39,20 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      import {AsyncLocalStorage} from 'node:async_hooks';
+      const transactionScope=new AsyncLocalStorage();
+      export const orgContext={getStore:()=>transactionScope.getStore()};
+      export const pinnedTransactionExecutor=()=>transactionScope.getStore()?.executor;
       const state = globalThis[Symbol.for('openbooks.party-bank-accounts-route-test')]
       const sqlText = globalThis.openbooksSqlText
       function respond(kind, query) {
         const text = sqlText(query)
         state.calls.push({ kind, text })
+        if(text.includes('from users'))return {rows:[{id:'00000000-0000-4000-8000-00000000b002',orgId:'00000000-0000-4000-8000-00000000b001',isActive:true,isSuperAdmin:false}]};
+        if(text.includes('bank_approval_fingerprint'))return {rows:[{value:'bank-fingerprint'}]};
+        if(text.includes('insert into flow_submissions'))return {rows:[{id:'submission-1'}]};
+        if(text.includes('lock table flows')||text.includes('from flows')||text.includes('pg_advisory_xact_lock'))return {rows:[]};
+
         if (text.includes('from parties')) return { rows: [{ subsidiaryId: null }] }
         if (text.includes('select approval_status')) {
           return { rows: [{ approvalStatus: 'approved', updatedAt: '${EXACT_REVISION}' }] }
@@ -54,11 +64,12 @@ const mockSources = new Map<string, string>([
         return { rows: [] }
       }
       export const db = {
+        select(){const result=[{id:'${ACCOUNT_ID}',orgId:'00000000-0000-4000-8000-00000000b001',partyId:'${PARTY_ID}',approvalStatus:'pending',isActive:false,createdBy:'00000000-0000-4000-8000-00000000b002',routing:{}}];let selected;const query={from(table){selected=table;return query},where(){return Promise.resolve(selected===schema.partyBankAccounts?result:[])}};return query},
         execute: (query) => Promise.resolve(respond('execute', query)),
         transaction: async (work) => work({ execute: (query) => Promise.resolve(respond('tx-execute', query)) }),
       }
-      export const schema = {}
-      export function withOrgTransaction(_orgId, work) { return work() }
+      import * as schema from '${import.meta.resolve('@openbooks/schema')}';export {schema}
+      export function withOrgTransaction(orgId, work) { return transactionScope.run({orgId,executor:db},work) }
       export async function withOrg(_orgId, work) { return work() }
       export async function withOrgContext(_orgId, work) { return work() }
       export async function withBypass(work) { return work() }
@@ -72,10 +83,10 @@ const mockSources = new Map<string, string>([
     'mock:authz',
     `
       export async function guardPermission() {
-        return { user: { id: 'user-1', orgId: '${ORG_ID}' }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
+        return { user: { id: '00000000-0000-4000-8000-00000000b002', orgId: '${ORG_ID}' }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
       }
       export async function getAuthz() {
-        return { user: { id: 'user-1', orgId: '${ORG_ID}' }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
+        return { user: { id: '00000000-0000-4000-8000-00000000b002', orgId: '${ORG_ID}' }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
       }
       export function can(gate, perm) { return gate.permissions.has('*') || gate.permissions.has(perm) }
       export function guardSubsidiaryScope() { return null }
@@ -83,11 +94,12 @@ const mockSources = new Map<string, string>([
   ],
   ['mock:payments', `export class PaymentError extends Error {}
     export function encryptAccountNumber(value) { return 'encrypted:' + value }`],
-  ['mock:flows', `export async function runRecordFlows() { return { runs: [], gatesCreated: 0, failed: false, error: null } }`],
   ['mock:bank-adapter', `export const BANK_ACCOUNT_SUBJECT_KIND = 'party_bank_account'`],
   ['mock:business-date', `export async function businessToday() { return '2026-10-09' }
     export async function businessTodayInTx() { return '2026-10-09' }`],
 ])
+
+mockSources.set('mock:db',withPlatformDbTestSurface(mockSources.get('mock:db')!))
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/platform/db', 'mock:db'],
@@ -109,13 +121,12 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/payments/run-posting', 'mock:payments'],
   ['@openbooks/engine/payments/run-readiness', 'mock:payments'],
   ['@openbooks/engine/payments/settlement-policy', 'mock:payments'],
-  ['@openbooks/engine/flows/run', 'mock:flows'],
-  ['@openbooks/engine/flows/bank-accounts-adapter', 'mock:bank-adapter'],
   ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
 ])
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (isEngineModuleImport(specifier, context.parentURL, '@openbooks/engine/platform/db')) return {url:'mock:db',shortCircuit:true};
     if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', shortCircuit: true }
     const mocked = mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? '')
     if (mocked) return { url: mocked, shortCircuit: true }

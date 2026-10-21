@@ -352,7 +352,28 @@
     "retried": "Freigabe neu angestoßen — der neue Schritt liegt auf der Arbeitsliste",
     "retryFailed": "Erneutes Anstoßen fehlgeschlagen",
     "commandWithdrawn": "Einreichung zurückgezogen. Der Datensatz kann bearbeitet und erneut eingereicht werden.",
-    "decisionRecorded": "Entscheidung erfasst."
+    "decisionRecorded": "Entscheidung erfasst.",
+    "recordReview": {
+      "title": "Genehmigungsantrag",
+      "terms": "Eingereichte Angaben",
+      "changed": "Dieser Datensatz wurde nach der Einreichung geändert. Ziehen Sie den ausstehenden Antrag zurück und reichen Sie die aktuellen Angaben zur erneuten Prüfung ein.",
+      "unavailable": "Dieser Genehmigungsantrag ist nicht verfügbar. Prüfen Sie Ihre Zugriffsrechte oder öffnen Sie den aktuellen Datensatz.",
+      "fields": {
+        "effectiveFrom": "Gültig ab",
+        "expiresOn": "Ablauf",
+        "workedOn": "Arbeitstag",
+        "changeKind": "Änderungsart",
+        "revision": "Revisionsnummer",
+        "commandAction": "Aktion",
+        "month": "Berichtsmonat",
+        "commandReason": "Korrekturgrund",
+        "cutoffOn": "Stichtag",
+        "startsOn": "Beginn",
+        "endsOn": "Ende",
+        "allowance": "Zulage"
+      },
+      "currentTerms": "Aktuelle Angaben"
+    }
   },
   "customFields": {
     "noOptions": "Keine Optionen definiert",

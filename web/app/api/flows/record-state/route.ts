@@ -343,7 +343,7 @@ async function legacyGET(req: Request) {
             }
           : null,
       neverSubmitted: runs.rows.length === 0 && pendingWith.length === 0,
-      canRetry: can(authz, 'flows.manage'),
+      canRetry: session.flowsEnabled && can(authz, 'flows.manage'),
       submittedByViewer,
       canWithdrawCommand:
         !!commandSubmission &&

@@ -135,6 +135,7 @@ async function seedPeriods(orgId: string, monthStarts: string[]): Promise<Map<st
     select id from fiscal_calendars where org_id = ${orgId} and is_default`)).rows[0];
   assert.ok(cal, "scratch org ships a default fiscal calendar");
   const ids = new Map<string, string>();
+  assert.ok(monthStarts.length > 0, "at least one fiscal period is requested");
   for (const month of monthStarts) {
     const id = randomUUID();
     const year = Number(month.slice(0, 4));

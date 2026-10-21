@@ -200,6 +200,18 @@ test('browser suites fan out and claim every workflow spec exactly once', () => 
   )
 })
 
+test('browser builds use the production compiler heap budget', () => {
+  const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8')
+  const productionHeap = /NODE_OPTIONS=--max-old-space-size=(\d+)\s+npx next build/.exec(dockerfile)?.[1]
+  assert.ok(productionHeap, 'the production build declares a bounded compiler heap')
+  for (const job of ['e2e-app', 'e2e-workflows']) {
+    const source = topLevelJob(job)
+    const build = source.slice(source.indexOf('      - name: Build browser application'))
+      .split('\n      - ', 1)[0]
+    assert.match(build, new RegExp(`NODE_OPTIONS: --max-old-space-size=${productionHeap}\\b`))
+  }
+})
+
 test('test workflow propagates tee producer failures and retains its failure guards', (t) => {
   const pipelines = [
     { stepName: 'Integration canary', logFile: 'canary.tap' },

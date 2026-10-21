@@ -8,6 +8,8 @@ interface DisputeRouteState {
   existingDisputes: Set<string>;
   allowedSubsidiaryIds: ReadonlySet<string> | null;
   reviewScopes: Array<ReadonlySet<string> | null>;
+  outcome: string;
+  refusal: boolean;
 }
 
 const stateKey = Symbol.for("openbooks.psp-disputes-route-test");
@@ -17,6 +19,7 @@ const routeState: DisputeRouteState = {
   existingDisputes: new Set(),
   allowedSubsidiaryIds: null,
   reviewScopes: [],
+  outcome: "posted", refusal: false,
 };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
@@ -84,14 +87,9 @@ const mockSources = new Map<string, string>([
 
       export async function approveDisputeReview(orgId, disputeId, actorId, scope) {
         state.reviewScopes.push(scope)
-        state.reviewCalls.push({ action: 'approve', disputeId })
-        return { status: 'posted', disputeId, documents: ['doc-1'] }
-      }
-
-      export async function rejectDisputeReview(orgId, disputeId, actorId, reason, scope) {
-        state.reviewScopes.push(scope)
-        if (reason === 'explode') throw new PspAutomationError('review is posted; only a queued review can be rejected')
-        state.reviewCalls.push({ action: 'reject', disputeId, reason })
+        if(state.refusal)throw new PspAutomationError('This review is resolved; reopen its posted financial record to inspect it.')
+        state.reviewCalls.push({action:'submit',disputeId})
+        return {status:state.outcome,disputeId,documents:state.outcome==='posted'?['doc-1']:[]}
       }
     `,
   ],
@@ -143,73 +141,53 @@ function reset() {
   routeState.existingDisputes = new Set([DISPUTE_ID]);
   routeState.allowedSubsidiaryIds = null;
   routeState.reviewScopes = [];
+  routeState.outcome = "posted"; routeState.refusal = false;
 }
 
-test("both review commands receive the authenticated legal-entity scope", async () => {
+test("native submission receives the authenticated legal-entity scope", async () => {
   reset();
   const scope = new Set(["22222222-2222-4222-8222-222222222222"]);
-  routeState.allowedSubsidiaryIds = scope;
-  assert.equal((await post({ action: "approve", disputeId: DISPUTE_ID })).status, 200);
-  assert.equal((await post({ action: "reject", disputeId: DISPUTE_ID, reason: "duplicate provider advice" })).status, 200);
-  assert.deepEqual(routeState.reviewScopes, [scope, scope]);
+  routeState.allowedSubsidiaryIds=scope;
+  assert.equal((await post({action:'submit',disputeId:DISPUTE_ID})).status,200);
+  assert.deepEqual(routeState.reviewScopes,[scope]);
 });
 
-test("approve posts through the automation and returns its outcome", async () => {
-  reset();
-  const response = await post({ action: "approve", disputeId: DISPUTE_ID });
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
-    status: "posted",
-    disputeId: DISPUTE_ID,
-    documents: ["doc-1"],
-  });
-  assert.deepEqual(routeState.reviewCalls, [
-    { action: "approve", disputeId: DISPUTE_ID },
-  ]);
+test("an ungated native submission returns the posted outcome",async()=>{
+  reset();const response=await post({action:'submit',disputeId:DISPUTE_ID});
+  assert.equal(response.status,200);
+  assert.deepEqual(await response.json(),{status:'posted',disputeId:DISPUTE_ID,documents:['doc-1']});
+  assert.deepEqual(routeState.reviewCalls,[{action:'submit',disputeId:DISPUTE_ID}]);
 });
 
-test("reject records the reason and moves nothing", async () => {
-  reset();
-  const response = await post({
-    action: "reject",
-    disputeId: DISPUTE_ID,
-    reason: "duplicate of the card network advice",
-  });
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true });
-  assert.deepEqual(routeState.reviewCalls, [
-    {
-      action: "reject",
-      disputeId: DISPUTE_ID,
-      reason: "duplicate of the card network advice",
-    },
-  ]);
+test("a tenant-gated submission remains pending with an accepted response",async()=>{
+  reset();routeState.outcome='pending_review';
+  const response=await post({action:'submit',disputeId:DISPUTE_ID});
+  assert.equal(response.status,202);
+  assert.deepEqual(await response.json(),{status:'pending_review',disputeId:DISPUTE_ID,documents:[]});
 });
 
-test("approve of an unknown review is a tenant-opaque 404", async () => {
+test("module decisions cannot bypass tenant Flow gates",async()=>{
   reset();
-  routeState.existingDisputes = new Set();
-  const response = await post({ action: "approve", disputeId: DISPUTE_ID });
-  assert.equal(response.status, 404);
-  assert.deepEqual(routeState.reviewCalls, []);
+  for(const action of ['approve','reject']){
+    assert.equal((await post({action,disputeId:DISPUTE_ID,reason:'Provider advice reviewed'})).status,400);
+  }
+  assert.deepEqual(routeState.reviewCalls,[]);
 });
 
-test("rejecting a resolved review surfaces the engine refusal naming the state", async () => {
-  reset();
-  const response = await post({
-    action: "reject",
-    disputeId: DISPUTE_ID,
-    reason: "explode",
-  });
-  assert.equal(response.status, 422);
-  const body = (await response.json()) as { error?: string };
-  assert.match(body.error ?? "", /only a queued review can be rejected/);
+test("an unknown review is a tenant-opaque refusal before submission",async()=>{
+  reset();routeState.existingDisputes.clear();
+  assert.equal((await post({action:'submit',disputeId:DISPUTE_ID})).status,404);
+  assert.deepEqual(routeState.reviewCalls,[]);
 });
 
-test("a reader without banking.reconcile cannot approve", async () => {
-  reset();
-  routeState.permissions = new Set(["banking.read"]);
-  const response = await post({ action: "approve", disputeId: DISPUTE_ID });
-  assert.equal(response.status, 403);
-  assert.deepEqual(routeState.reviewCalls, []);
+test("a resolved review preserves the native lifecycle refusal",async()=>{
+  reset();routeState.refusal=true;
+  const response=await post({action:'submit',disputeId:DISPUTE_ID});
+  assert.equal(response.status,422);assert.match((await response.json()).error,/review is resolved/);
+});
+
+test("a reader without banking.reconcile cannot submit",async()=>{
+  reset();routeState.permissions=new Set(['banking.read']);
+  assert.equal((await post({action:'submit',disputeId:DISPUTE_ID})).status,403);
+  assert.deepEqual(routeState.reviewCalls,[]);
 });

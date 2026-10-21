@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { stubModules } from "../../../../testing/stub-modules";
+import { intlServerStubSource, stubModules } from "../../../../testing/stub-modules";
 
 // /me/compensation collapsed two states into one refusal — a viewer
 // whose person IS linked but has NO employment saw "no person is linked".
@@ -23,7 +23,7 @@ stubModules({
       'export function redirect() { throw new Error("redirect"); }' +
       'export function notFound() { throw new Error("not-found"); }',
   },
-  intl: `export async function getTranslations(ns) {
+  intl: intlServerStubSource(`export async function getTranslations(ns) {
     const catalogs = globalThis.__myCompCatalogs;
     const lookup = (key) => {
       let node = catalogs[ns];
@@ -36,8 +36,7 @@ stubModules({
     const t = (key, params) => lookup(key);
     t.has = (key) => lookup(key) !== key;
     return t;
-  }
-  export async function getLocale() { return "en"; }`,
+  }`),
   authz: false,
   features: false,
 });

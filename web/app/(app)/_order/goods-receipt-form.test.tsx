@@ -436,7 +436,7 @@ test('a failed prefill offers retry instead of a dead form', async (t) => {
   const { unmount } = await mountPo()
   t.after(unmount)
   await openReceiptForm()
-  assert.match(dialog()?.textContent ?? '', /could not be loaded/, 'the failed prefill says so')
+  assert.match(dialog()?.textContent ?? '', /stalled/, 'the native prefill refusal stays visible')
   const retry = [...(dialog()?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.includes('retry'))
   assert.ok(retry, 'the failed prefill offers retry')
   await click(retry as HTMLButtonElement)

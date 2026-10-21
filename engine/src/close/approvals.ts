@@ -14,7 +14,7 @@ import {
   withOrgTransaction,
   type SqlExecutor,
 } from "../platform/db.ts";
-import { periodFingerprint } from "./readiness.ts";
+import { periodFingerprint } from "./period-fingerprint.ts";
 import { refreshCloseRun } from "./run-automation.ts";
 import { completedGateDecisionPolicy } from "../flows/approval-decision-policy.ts";
 async function assertCloseReadyForApproval(

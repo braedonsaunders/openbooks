@@ -99,6 +99,7 @@ registerHooks({
               if (s && s.error) throw s.error;
               return (s && s.rows) || [];
             }
+            export async function strandedLeavePayrollInputs(){return [];}
             export async function listOrgLeaveRequests() { return { requests: [], truncated: false }; }
             export async function leaveEmploymentBalances(exec, orgId, employmentId, asOf) {
               (globalThis.__myLeaveBalanceCalls ??= []).push([orgId, employmentId, asOf]);

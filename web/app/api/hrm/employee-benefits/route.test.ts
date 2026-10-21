@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { NextResponse } from 'next/server'
 ;(globalThis as typeof globalThis & { __benefitsNextResponse: typeof NextResponse }).__benefitsNextResponse = NextResponse
-import { stubModules } from '../../../../testing/stub-modules'
+import { intlServerStubSource, stubModules } from '../../../../testing/stub-modules'
 const state = { allowed: true, feature: true, visible: true, catalogVisible: true, calls: [] as string[] }
 ;(globalThis as typeof globalThis & { __employeeBenefits: typeof state }).__employeeBenefits = state
-stubModules({ intl: `export async function getTranslations(){return Object.assign(key=>key,{has:()=>true})}`, extra: {
+stubModules({ intl: intlServerStubSource(`export async function getTranslations(){return Object.assign(key=>key,{has:()=>true})}`), extra: {
   'server-only': ``,
   '@/lib/authz': `const s=globalThis.__employeeBenefits;export function can(){return false}export function guardSubsidiaryScope(){return s.visible ? null : Response.json({error:'not_found'},{status:404})}`,
   '@/lib/feature-gates': `const s=globalThis.__employeeBenefits;export async function guardFeaturePermission(permission,feature){if(permission!=='hrm.benefits.read'||feature!=='hrm')throw Error('wrong guard');if(!s.allowed||!s.feature)return globalThis.__benefitsNextResponse.json({error:'not_found'},{status:404});return {user:{orgId:'org-1',id:'actor-1'}}}`,

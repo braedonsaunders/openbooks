@@ -11,24 +11,12 @@ Object.assign(globalThis, {
 })
 
 const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__rebateTestRouter}' })
+stubModules({ navigation: `export function useRouter(){return globalThis.__rebateTestRouter}export function usePathname(){return '/rebates'}export function useSearchParams(){return new URLSearchParams()}` })
 const { registerHooks } = await import('node:module')
 registerHooks({
   resolve(specifier, context, next) {
-    const source = specifier === '@openbooks/ui' ? `
-      export function Badge(p){return globalThis.React.createElement('span',{},p.children)}
-      export function Button(p){return globalThis.React.createElement('button',p,p.children)}
-      export function Input(p){return globalThis.React.createElement('input',p)}
-      export function Label(p){return globalThis.React.createElement('label',p,p.children)}
-      export function Select(p){return globalThis.React.createElement('select',p,p.children)}
-      export function SearchSelect(p){return globalThis.React.createElement('select',{value:p.value,onChange:e=>p.onChange(e.target.value)},p.options.map(o=>globalThis.React.createElement('option',{key:o.value,value:o.value},o.label)))}
-      export function UrlDrawer(p){return globalThis.React.createElement('section',{'data-testid':'rebate-drawer'},globalThis.React.createElement('h1',{},p.title),globalThis.React.createElement('button',{onClick:()=>p.beforeClose?.()},'Close drawer'),p.children)}
-      export function useOwnTabBaseline(){return false}
-      export function useSwitchView(){return run=>run()}
-    ` : specifier === 'next/link' ? `
+    const source = specifier === 'next/link' ? `
       export default function Link(p){return globalThis.React.createElement('a',p,p.children)}
-    ` : specifier === '@/components/date-field' ? `
-      export function DateField(p){return globalThis.React.createElement('input',{value:p.value,onChange:e=>p.onChange(e.target.value)})}
     ` : specifier === './confirm' && context.parentURL?.endsWith('/web/lib/use-dirty-close.ts') ? `
       export async function confirmDialog(){globalThis.__rebateConfirmState.confirmCalls += 1;return false}
     ` : null
@@ -99,13 +87,13 @@ test('a cost draft uses the shared decimal fields and cannot close without disca
     setter?.call(moneyFields[0], '12.34')
     moneyFields[0]!.dispatchEvent(new window.Event('input', { bubbles: true }))
   })
-  const close = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Close drawer')
+  const close = document.querySelector<HTMLButtonElement>('[role=dialog] button[aria-label="Close"]')
   assert.ok(close)
   await act(async () => close.click())
 
   assert.equal(state.confirmCalls, 1)
   assert.deepEqual(state.pushes, [])
-  assert.ok(document.querySelector('[data-testid="rebate-drawer"]'), 'the drawer remains open when discard is declined')
+  assert.ok(document.querySelector('[role=dialog]'), 'the drawer remains open when discard is declined')
 })
 
 test('settlement documents open in their customer or vendor document workspace', async (t) => {
@@ -141,7 +129,7 @@ test('settlement documents open in their customer or vendor document workspace',
       )
     })
     try {
-      const prepare = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Prepare'))
+      const prepare = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Prepare'))
       assert.ok(prepare)
       await act(async () => prepare.click())
       assert.deepEqual(state.pushes, [side === 'customer'
@@ -167,7 +155,7 @@ test('settlement documents open in their customer or vendor document workspace',
       )
     })
     try {
-      assert.ok(settledHost.querySelector(`a[href="${side === 'customer' ? '/ar/invoices' : '/ap/bills'}?doc=settled-document"]`))
+      assert.ok(document.querySelector(`a[href="${side === 'customer' ? '/ar/invoices' : '/ap/bills'}?doc=settled-document"]`))
     } finally {
       await act(async () => settledRoot.unmount())
       settledHost.remove()

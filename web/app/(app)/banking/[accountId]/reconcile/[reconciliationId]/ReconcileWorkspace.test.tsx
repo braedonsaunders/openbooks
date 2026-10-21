@@ -748,7 +748,8 @@ test('a sign-off blocker that is a possible duplicate names the line it duplicat
 test('neutral review obtains the exact basis before its reasoned confirmation, and a refusal remains visible', async (t) => {
   const calls: {method:string;body:unknown}[] = []
   const digest='a'.repeat(64)
-  await mountWorkspace(t,(async (_input,init)=>{
+  await mountWorkspace(t,(async (input,init)=>{
+    if(String(input).startsWith("/api/flows/record-state"))return Response.json({approvalState:{status:"signed_off",pendingWith:[],myActions:null},history:[],canRetry:false,failedRun:null,neverSubmitted:false,submittedByViewer:false});
     calls.push({method:init?.method??'GET',body:init?.body?JSON.parse(String(init.body)):null})
     return init?.method==='POST'
       ? Response.json({error:'The reviewed ledger evidence changed. Reload the review.'},{status:409})
@@ -783,7 +784,8 @@ test('the review discloses a nonzero late movement and its complete zero-net unc
   state.__reconcileTestPrompt=null
   t.after(()=>{if(previous===undefined)delete state.__reconcileTestPrompt;else state.__reconcileTestPrompt=previous})
   const calls:string[]=[]
-  await mountWorkspace(t,(async(_input,init)=>{
+  await mountWorkspace(t,(async(input,init)=>{
+    if(String(input).startsWith("/api/flows/record-state"))return Response.json({approvalState:{status:"signed_off",pendingWith:[],myActions:null},history:[],canRetry:false,failedRun:null,neverSubmitted:false,submittedByViewer:false});
     calls.push(init?.method??'GET')
     return Response.json({reconciliationId:'rec-1',throughDate:'2026-09-10',currency:'CAD',statementBalance:'17070.0100',
       proof:{digest:'b'.repeat(64),lateEntries:1,lateJournalLines:1,lateEffect:'8000.0000',neutralBasis:'outstanding_movements',

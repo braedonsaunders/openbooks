@@ -1,3 +1,4 @@
+import { loadAccounts } from "../../../../lib/setup/ref-options";
 import {
   assetCarryingMinor,
   ContractCostError,
@@ -333,14 +334,9 @@ export async function loadContractCosts(
   // The capitalize and import pickers offer the same postable accounts every
   // company-settings picker offers, narrowed to the expense and liability
   // types an original commission expense can sit in.
-  const expenseAccounts = (await db.execute<{ value: string; label: string }>(sql`
-    select id::text as value,
-           case when coalesce(number, '') <> '' then number || ' · ' || name else name end as label
-      from accounts
-     where org_id = ${orgId} and is_active and not is_summary
-       and (type like 'expense%' or type like 'liability%')
-       ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-     order by number nulls last, name`)).rows;
+  const expenseAccounts = (await loadAccounts(orgId, authz.allowedSubsidiaryIds))
+    .filter((account) => account.accountType?.startsWith('expense') || account.accountType?.startsWith('liability'))
+    .map(({value,label}) => ({value,label}));
 
   const policy = (await db.execute<{
     basis: string;

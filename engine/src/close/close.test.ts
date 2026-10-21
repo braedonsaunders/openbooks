@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { addCloseEvidence } from "./tasks.ts";
 import { CloseError, closeModuleForDocument, NON_POSTING_DOCUMENT_KINDS, periodLockBlocksPosting, periodLockRequiresApprovedReopen } from "../periods/period-policy.ts";
 import { DOCUMENT_PERMISSION_NAMESPACE } from "../records/document-kind-permissions.ts";
-import { fingerprintChangeBuckets } from "./readiness.ts";
+import { fingerprintChangeBuckets } from "./period-fingerprint.ts";
 import { PURCHASE_RECEIPT_DOCUMENT_KIND } from "../inventory/documents-purchasing.ts";
 import { SALES_FULFILLMENT_DOCUMENT_KIND } from "../inventory/documents-customer-credits.ts";
 import {} from "./reopening.ts";

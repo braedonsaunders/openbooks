@@ -352,7 +352,28 @@
     "retried": "审批已重新驱动——新环节已在工作清单中",
     "retryFailed": "重试失败",
     "commandWithdrawn": "已撤回提交。可以编辑记录并重新提交。",
-    "decisionRecorded": "已记录审批决定。"
+    "decisionRecorded": "已记录审批决定。",
+    "recordReview": {
+      "title": "审批申请",
+      "terms": "已提交内容",
+      "changed": "此记录在提交后已更改。请撤回待审批申请，并提交当前内容以重新审核。",
+      "unavailable": "此审批申请不可用。请检查访问权限或打开当前记录。",
+      "fields": {
+        "effectiveFrom": "生效日期",
+        "expiresOn": "到期日期",
+        "workedOn": "工作日期",
+        "changeKind": "变更类型",
+        "revision": "修订版本",
+        "commandAction": "操作",
+        "month": "报告月份",
+        "commandReason": "更正原因",
+        "cutoffOn": "截止日期",
+        "startsOn": "开始日期",
+        "endsOn": "结束日期",
+        "allowance": "津贴"
+      },
+      "currentTerms": "当前内容"
+    }
   },
   "customFields": {
     "noOptions": "未定义选项",

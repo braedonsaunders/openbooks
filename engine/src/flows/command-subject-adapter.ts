@@ -1,3 +1,4 @@
+import { approvalRequestHref } from "./review-links.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { sql, type SQL } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
@@ -15,7 +16,6 @@ interface CommandSubjectDefinition {
   statuses: string[];
   scope: FlowSubjectScope;
   permissions: FlowSubjectAdapter["permissions"];
-  href: (id: string) => string;
   decisionPermissions?: readonly string[];
   where?: SQL;
   statusSql?: SQL;
@@ -123,7 +123,7 @@ export function defineCommandSubject(
     label(id, values) {
       return `${config.label} · ${String(values.name ?? values.number ?? id)}`;
     },
-    deepLink: config.href,
+    deepLink: (id) => approvalRequestHref(config.kind, id),
     async changeStatus() {
       throw new FlowDispatchError(
         "Use the native submission and Flow gates to decide this record.",

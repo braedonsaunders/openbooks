@@ -74,7 +74,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../../../lib/report-pdf', mockUrl('report-pdf')],
 ])
 
-stubModules({ intl: true, navigation: false, authz: false, features: false });
+stubModules({ database: `export * from '${import.meta.resolve('@openbooks/engine/platform/db')}';export const db={execute:async q=>{const text=JSON.stringify(q);if(text.includes('from currencies'))return{rows:[{code:'EUR',minor_units:2},{code:'CAD',minor_units:2}]};if(text.includes('from orgs'))return{rows:[{name:'Test Org',base_currency:'CAD',book:'Primary'}]};throw Error('unexpected export metadata query')}}`, intl: true, navigation: false, authz: false, features: false });
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

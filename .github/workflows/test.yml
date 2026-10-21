@@ -146,7 +146,7 @@ jobs:
         run: |
           bash scripts/prepare-ci-apt.sh "${{ runner.environment }}"
           timeout --signal=TERM --kill-after=10s 4m sudo apt-get update
-          timeout --signal=TERM --kill-after=10s 4m sudo apt-get install -y qpdf
+          timeout --signal=TERM --kill-after=10s 4m sudo apt-get install -y qpdf poppler-utils
       - name: Unit test partition
         shell: bash
         run: |
@@ -258,7 +258,7 @@ jobs:
         run: |
           bash scripts/prepare-ci-apt.sh "${{ runner.environment }}"
           timeout --signal=TERM --kill-after=10s 4m sudo apt-get update
-          timeout --signal=TERM --kill-after=10s 4m sudo apt-get install -y qpdf
+          timeout --signal=TERM --kill-after=10s 4m sudo apt-get install -y qpdf poppler-utils
 
       - name: Load schema
         # The production bootstrap is the authoritative provisioner: tracked
@@ -422,7 +422,7 @@ jobs:
         run: |
           bash scripts/prepare-ci-apt.sh "${{ runner.environment }}"
           timeout --signal=TERM --kill-after=10s 4m sudo apt-get update
-          timeout --signal=TERM --kill-after=10s 4m sudo apt-get install -y qpdf
+          timeout --signal=TERM --kill-after=10s 4m sudo apt-get install -y qpdf poppler-utils
 
       - name: Load schema
         # The production bootstrap is the authoritative provisioner: tracked
@@ -730,7 +730,7 @@ jobs:
         # cold build after a lockfile change stays within the runner.
         env:
           OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
-          NODE_OPTIONS: --max-old-space-size=6144
+          NODE_OPTIONS: --max-old-space-size=8192
         run: npm run build -w web
 
       - name: Save Next compiler cache
@@ -894,7 +894,7 @@ jobs:
         # cold build after a lockfile change stays within the runner.
         env:
           OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
-          NODE_OPTIONS: --max-old-space-size=6144
+          NODE_OPTIONS: --max-old-space-size=8192
         run: npm run build -w web
 
       - name: Playwright workflow suites

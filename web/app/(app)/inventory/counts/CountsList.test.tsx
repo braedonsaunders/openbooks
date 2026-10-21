@@ -283,9 +283,7 @@ test('a poster keeps the actionable empty state', async (t) => {
   assert.match(body, /Open one to snapshot/, 'posters keep the actionable empty copy')
 })
 
-// IN11: while the independent-review requirement is off, the review panel
-// must warn that the same user who counted can post — the visible half of
-// the maker/checker control (the engine refusal is the other half).
+// A reviewed count uses tenant Flow decisions before native inventory posting.
 const REVIEW_DETAIL = {
   header: {
     id: 'count-1',
@@ -328,15 +326,10 @@ async function mountReviewDetail(t: TestContext, reviewRequired: boolean): Promi
   await tick()
 }
 
-test('a review-status count warns while independent review is off', async (t) => {
+test('a reviewed count does not infer a separate independent-review policy', async (t) => {
   await mountReviewDetail(t, false)
-  const note = document.querySelector('[role="note"]')
-  assert.ok(note, 'the review panel must warn while independent review is off')
-  assert.match(
-    note.textContent ?? '',
-    /Independent review is off/,
-    'the warning must say the same user may post',
-  )
+  assert.doesNotMatch(document.body.textContent ?? '', /Independent review is off/)
+  assert.ok(document.querySelector('[role="dialog"]'), 'the selected count keeps its record drawer')
 })
 
 test('a review-status count shows no warning while independent review is required', async (t) => {

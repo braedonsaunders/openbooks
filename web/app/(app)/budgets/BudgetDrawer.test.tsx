@@ -1,3 +1,4 @@
+import { recordApprovalState } from '../../../testing/record-approval-state';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -163,13 +164,14 @@ test("a line-less submit pins the typed refusal on the drawer", async (t) => {
 
 /** A refused self-approval must pin its typed reason on the
  * record, not vanish behind a transient toast. */
-test("a refused self-approval pins the typed refusal on the drawer", async (t) => {
+test("a refused tenant Flow decision stays beside the budget", async (t) => {
   const priorFetch = globalThis.fetch;
   const calls: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if(String(input).startsWith("/api/flows/record-state"))return Response.json(recordApprovalState({status:"pending_approval",gateId:"gate-1",canDecide:true}));
     calls.push(`${(init?.method ?? "GET").toUpperCase()} ${String(input)}`);
-    if (String(input).includes("/actions")) {
-      return Response.json({ error: "self_approval_forbidden" }, { status: 409 });
+    if (String(input)==="/api/flows/gates/decide") {
+      return Response.json({ error: "The tenant Flow requires another assigned reviewer." }, { status: 409 });
     }
     return Response.json({}, { status: 404 });
   }) as typeof fetch;
@@ -186,13 +188,13 @@ test("a refused self-approval pins the typed refusal on the drawer", async (t) =
   await tick();
   await tick();
   assert.ok(
-    calls.some((call) => call.includes(`/api/budgets/${SCENARIO_ID}/actions`)),
+    calls.some((call) => call.includes("/api/flows/gates/decide")),
     "approve must reach the actions API",
   );
   // The read-only drawer also renders a static "locked" info banner with
   // role=alert, so select the pin by its content, not by first match.
   const alert = [...document.querySelectorAll('[role="alert"]')].find((el) =>
-    /cannot approve a budget you submitted/i.test(el.textContent ?? ""),
+    /The tenant Flow requires another assigned reviewer/i.test(el.textContent ?? ""),
   );
   assert.ok(alert, "the typed refusal must persist inline on the drawer");
 });
@@ -201,7 +203,8 @@ test('rejecting a budget captures the checker rationale before sending the decis
   const priorFetch = globalThis.fetch;
   const decisions: Record<string, unknown>[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    if (String(input).includes('/actions')) {
+    if(String(input).startsWith('/api/flows/record-state'))return Response.json(recordApprovalState({status:'pending_approval',gateId:'gate-1',canDecide:true}));
+    if (String(input)==='/api/flows/gates/decide') {
       decisions.push(JSON.parse(String(init?.body)));
       return Response.json({ status: 'draft', revision: 2 });
     }
@@ -213,10 +216,10 @@ test('rejecting a budget captures the checker rationale before sending the decis
   await act(async () => { reject.click(); await tick(); });
   assert.equal(decisions.length, 0);
   const dialog = document.querySelector('[aria-labelledby="prompt-title"]')!;
-  assert.match(dialog.textContent ?? '', /Reason for rejection/);
-  const field = dialog.querySelector('textarea')!;
+  assert.match(dialog.textContent ?? '', /Rejection reason/);
+  const field = dialog.querySelector('input')!;
   await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(field, 'Revenue assumptions need supporting evidence.');
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(field, 'Revenue assumptions need supporting evidence.');
     field.dispatchEvent(new window.Event('input', { bubbles: true }));
     field.dispatchEvent(new window.FocusEvent('focusout', { bubbles: true }));
     await tick();
@@ -224,15 +227,16 @@ test('rejecting a budget captures the checker rationale before sending the decis
     await tick();
   });
   assert.equal(decisions.length, 1);
-  assert.equal(decisions[0]!.reason, 'Revenue assumptions need supporting evidence.');
-  assert.equal(decisions[0]!.expectedRevision, 1);
-  assert.equal(decisions[0]!.action, 'reject');
+  assert.equal(decisions[0]!.comment, 'Revenue assumptions need supporting evidence.');
+  assert.equal(decisions[0]!.gateId, 'gate-1');
+  assert.equal(decisions[0]!.decision, 'rejected');
 });
 
 test('cancelling the rejection reason preserves the pending budget without a write', async (t) => {
   const priorFetch = globalThis.fetch;
   let writes = 0;
-  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if(String(input).startsWith("/api/flows/record-state"))return Response.json(recordApprovalState({status:"pending_approval",gateId:"gate-1",canDecide:true}));
     if (init?.method && init.method !== 'GET') writes++;
     return Response.json({}, { status: 404 });
   }) as typeof fetch;

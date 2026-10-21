@@ -239,7 +239,7 @@ function patchRequest(url: string, body: unknown): Request {
     routeState.serviceThrow = null;
   });
 
-  test("line propose rides the read grant while decide needs approve", async () => {
+  test("line proposals use the read grant and submission uses the manage grant", async () => {
     reset("hrm.compensation.read");
     const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
     const proposed = await lineRoute!.PATCH(
@@ -255,7 +255,7 @@ function patchRequest(url: string, body: unknown): Request {
         args: { orgId: "org-1", actorId: "user-1", lineId: LINE_ID, proposedPct: "3", proposedRate: null, reason: null },
       },
     ]);
-    reset("hrm.compensation.approve");
+    reset("hrm.compensation.manage");
     const approved = await lineRoute!.PATCH(
       patchRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=approve`, {}),
       params as never,

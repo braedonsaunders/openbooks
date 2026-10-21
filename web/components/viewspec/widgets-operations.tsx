@@ -1,5 +1,6 @@
 import { type ComponentProps } from 'react'
 import {
+  ApprovalRequestHost,
   Pagination,
   LienWaiverToolbar,
   LienWaiverDrawer,
@@ -39,6 +40,7 @@ import { str, num, stringRecord, type WidgetRenderer } from './widget-props'
 
 /** Financial operations and controls adapters: approvals, close, accounts, journals, budgets, compliance. Compose native components without changing their props or boundaries. */
 export const OPERATIONS_WIDGETS = {
+  'approval-request-host': () => <ApprovalRequestHost />,
   'contractor-withholding-workspace': (props) => (
     <ContractorWithholdingWorkspace {...(props as ComponentProps<typeof ContractorWithholdingWorkspace>)} />
   ),

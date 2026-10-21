@@ -169,18 +169,10 @@ test("an actionable change set renders French drawer copy", async (t) => {
   );
 });
 
-test("a blocked promotion renders the French segregation reason", async (t) => {
-  // The creator cannot review their own capture: no action, just the reason.
+test("the capture author can record the native review before tenant Flow approval", async (t) => {
   const { unmount } = await renderDrawer("creator");
   t.after(unmount);
   const text = document.body.textContent ?? "";
-  assert.match(text, /quatre utilisateurs différents/, "the segregation reason must read French");
-  assert.ok(
-    !/four different users/.test(text),
-    "no English segregation reason may leak into the French drawer",
-  );
-  assert.ok(
-    !/Enregistrer l'examen/.test(text),
-    "a blocked promotion must offer no action button",
-  );
+  assert.ok(text.includes("Enregistrer l'examen"));
+  assert.doesNotMatch(text, /quatre utilisateurs différents|four different users/);
 });

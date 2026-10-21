@@ -1,3 +1,4 @@
+import { mergeStatutoryFactors } from "./statutory-factors.ts";
 import { vacationBaseIncluded } from './component-statutory-treatment.ts';
 import type { CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
 import { historicalWithholdingProfile } from './historical-withholding.ts';
@@ -640,35 +641,10 @@ export async function calculateStub(
       periodPriors: ctx.periodPriors,
       supplementalTaxMethod: ctx.supplementalTaxMethod,
     });
-    // Per-program period bases merge here, not inside the pack pass: the
-    // generic layer accumulates every declared program's base from the
-    // lines, so the fact is stored durably on the stub under the pack's own
-    // factor key. A pack that already set the key to something else collides
-    // by name rather than merging two bases into one year-to-date.
-    for (const program of pack.contributionPrograms ?? []) {
-      const value = programBases[program.key]!;
-      const key = program.stubFactorKey;
-      if (key in factors && factors[key] !== value) {
-        throw new PayrollError(
-          `program factor "${key}" collides with the ${country} pack's statutory factors — `
-          + "rename the program's stubFactorKey",
-        );
-      }
-      factors[key] = value;
-    }
-    // Employer-aggregate factors merge here, not inside the pack pass: the
-    // pack owns its factor namespace and the levies own theirs, and a key in
-    // both would accumulate two levies into one year-to-date. Refused by
-    // name rather than merged and misattributed.
-    for (const [key, value] of Object.entries(aggregateFactors)) {
-      if (key in factors && factors[key] !== value) {
-        throw new PayrollError(
-          `employer-aggregate factor "${key}" collides with the ${country} pack's statutory factors — `
-          + "rename the levy's factorKey",
-        );
-      }
-      factors[key] = value;
-    }
+    mergeStatutoryFactors(factors,
+      (pack.contributionPrograms ?? []).map((program): [string, unknown] => [program.stubFactorKey, programBases[program.key]!]),
+      "program", country);
+    mergeStatutoryFactors(factors, Object.entries(aggregateFactors), "employer-aggregate", country);
     firstEarningsAssessed ??= earningsAssessedSnapshot(lines);
   };
 

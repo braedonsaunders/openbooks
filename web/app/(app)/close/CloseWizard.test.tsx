@@ -159,7 +159,7 @@ function reviewProps() {
         description: "close.defaultSteps.variance-review.description",
         status: "ready",
         completion_mode: "manual",
-        task_type: "approval",
+        task_type: "manual",
         gate_type: "hard",
         workstream: "review",
         evidence_required: true,
@@ -178,7 +178,7 @@ function reviewProps() {
         description: "close.defaultSteps.controller-approval.description",
         status: "blocked",
         completion_mode: "manual",
-        task_type: "approval",
+        task_type: "manual",
         gate_type: "hard",
         workstream: "review",
         evidence_required: false,
@@ -214,7 +214,7 @@ async function mountReviewStage() {
 /** : a Ready review task must be actionable — Start, evidence, and
  * Complete reach the engine like any manual task, or the run strands short
  * of sign-off with no path forward. */
-test("a ready approval review task offers start and evidence controls", async (t) => {
+test("a ready manual review task offers start and evidence controls", async (t) => {
   const { host, root } = await mountReviewStage();
   t.after(async () => {
     await act(async () => {

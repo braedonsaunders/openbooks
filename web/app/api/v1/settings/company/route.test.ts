@@ -108,7 +108,7 @@ test("PATCH /api/v1/settings/company wraps updateCompanySettings idempotently", 
   assert.equal(response.headers.get("idempotency-replayed"), "false");
   assert.equal(routeState.asserted, "admin.setup.manage");
   assert.deepEqual(routeState.updated, {
-    actor: { orgId: "org-1", id: "user-1" },
+    actor: { orgId: "org-1", id: "user-1", allowedSubsidiaryIds: undefined },
     changes: { name: "Acme Ltd" },
   });
 });

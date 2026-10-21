@@ -190,7 +190,7 @@ test("turning Flows off preserves the submitter's pending-document withdrawal fa
   const body = await response.json() as { submittedByViewer: boolean; approvalState: { status: string } };
   assert.equal(body.submittedByViewer, true);
   assert.equal(body.approvalState.status, "pending_approval");
-  assert.equal(routeState.flowQueries, 0, "disabled workflows are not queried");
+  assert.equal(routeState.flowQueries, 3, "recorded approval evidence remains visible");
 });
 
 test("a restricted caller cannot read approval state for another subsidiary", async () => {
@@ -317,12 +317,13 @@ test("with Flows off a visible record answers an empty approval state", async ()
     approvalState: { status: "pending", pendingWith: [], myActions: null },
     history: [],
     failedRun: null,
-    neverSubmitted: false,
+    neverSubmitted: true,
     canRetry: false,
     submittedByViewer: false,
+    canWithdrawCommand: false,
   });
   assert.deepEqual(routeState.statusCalls, [SUBJECT_ID]);
-  assert.equal(routeState.flowQueries, 0, "no gate, run or role read may run");
+  assert.equal(routeState.flowQueries, 3, "recorded evidence is read under the native scope lock");
 });
 
 test("with Flows off a customer payment answers an empty approval state, draft or posted", async () => {
@@ -338,13 +339,14 @@ test("with Flows off a customer payment answers an empty approval state, draft o
       approvalState: { status, pendingWith: [], myActions: null },
       history: [],
       failedRun: null,
-      neverSubmitted: false,
+      neverSubmitted: true,
       canRetry: false,
       submittedByViewer: false,
+    canWithdrawCommand: false,
     });
     assert.deepEqual(routeState.readChecks, ["customer_payment"], "the receipt's own read grant is enforced");
     assert.deepEqual(routeState.statusCalls, [SUBJECT_ID], "the empty state carries the record's own status");
-    assert.equal(routeState.flowQueries, 0, "no gate, run or role read may run");
+    assert.equal(routeState.flowQueries, 3, "recorded evidence is read under the native scope lock");
   }
 });
 
@@ -360,12 +362,13 @@ test("with Flows off a vendor payment answers an empty approval state", async ()
     approvalState: { status: "draft", pendingWith: [], myActions: null },
     history: [],
     failedRun: null,
-    neverSubmitted: false,
+    neverSubmitted: true,
     canRetry: false,
     submittedByViewer: false,
+    canWithdrawCommand: false,
   });
   assert.deepEqual(routeState.readChecks, ["vendor_payment"], "the payment's own read grant is enforced");
-  assert.equal(routeState.flowQueries, 0, "no gate, run or role read may run");
+  assert.equal(routeState.flowQueries, 3, "recorded evidence is read under the native scope lock");
 });
 
 test("with Flows off a hidden record still meets the missing-record answer", async () => {

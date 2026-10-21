@@ -352,7 +352,28 @@
     "retried": "Approbation relancée — la nouvelle étape est dans la liste de travail",
     "retryFailed": "La relance a échoué",
     "commandWithdrawn": "Soumission retirée. Le dossier peut être modifié et soumis à nouveau.",
-    "decisionRecorded": "Décision enregistrée."
+    "decisionRecorded": "Décision enregistrée.",
+    "recordReview": {
+      "title": "Demande d’approbation",
+      "terms": "Conditions soumises",
+      "changed": "Cet enregistrement a changé depuis sa soumission. Retirez la demande en attente et soumettez les conditions actuelles pour un nouvel examen.",
+      "unavailable": "Cette demande d’approbation est indisponible. Vérifiez vos droits d’accès ou ouvrez l’enregistrement actuel.",
+      "fields": {
+        "effectiveFrom": "Prise d’effet",
+        "expiresOn": "Expiration",
+        "workedOn": "Date de travail",
+        "changeKind": "Type de changement",
+        "revision": "Révision",
+        "commandAction": "Action",
+        "month": "Mois du rapport",
+        "commandReason": "Motif de correction",
+        "cutoffOn": "Date limite",
+        "startsOn": "Début",
+        "endsOn": "Fin",
+        "allowance": "Indemnité"
+      },
+      "currentTerms": "Conditions actuelles"
+    }
   },
   "customFields": {
     "noOptions": "Aucune option définie",

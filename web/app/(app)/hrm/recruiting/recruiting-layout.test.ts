@@ -1,5 +1,5 @@
 const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ intl: 'export async function getTranslations(){return (s)=>s;}' })
+stubModules({ intl: true })
 
 import assert from 'node:assert/strict'
 import test from 'node:test'

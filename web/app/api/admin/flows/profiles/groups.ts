@@ -39,6 +39,16 @@ const DOCUMENTS_SUBJECT_KINDS = new Set([
   'journal',
 ])
 const PEOPLE_SUBJECT_KINDS = new Set([
+  'hrm_calibration_session',
+  'training_course',
+  'headcount_plan_line',
+  'headcount_plan',
+  'compensation_cycle_line',
+  'per_diem_entry',
+  'travel_pay_entry',
+  'employment_change_action',
+  'recruiting_offer',
+
   'schedule_entry_request',
   'schedule_publication',
   'timesheet_week',
@@ -54,6 +64,15 @@ const PEOPLE_SUBJECT_KINDS = new Set([
   'resourcing_request',
 ])
 const OPERATIONS_SUBJECT_KINDS = new Set([
+  'compliance_certificate',
+  'customer_change_order',
+  'compliance_waiver',
+  'sandbox_change_set',
+  'subcontract',
+  'subcontract_change_order',
+  'stock_count',
+  'sales_quota',
+
   'work_order',
   'field_ticket',
   'service_visit_completion',
@@ -63,6 +82,19 @@ const OPERATIONS_SUBJECT_KINDS = new Set([
   'hrm_process_step',
 ])
 const FINANCE_SUBJECT_KINDS = new Set([
+  'close_task',
+  'close_reopen_request',
+  'bank_reconciliation_sign_off',
+  'bank_reconciliation_review',
+  'payment_dispute_review',
+  'vendor_pay_application',
+  'customer_pay_application',
+  'customer_rebate_agreement',
+  'customer_rebate_claim',
+  'vendor_rebate_agreement',
+  'vendor_rebate_claim',
+  'metrics_normalization',
+
   'close_run',
   'allocation_run',
   'budget_scenario',

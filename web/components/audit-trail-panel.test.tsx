@@ -12,7 +12,7 @@ Object.assign(globalThis, {
   __auditPanelRouter: { push() {}, refresh() {}, replace() {}, back() {}, prefetch() {} },
 })
 await bootJsdomEnvironment({ url: 'http://localhost:4800/cash-sales' })
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__auditPanelRouter}' }, intl: false, authz: false, features: false })
+stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__auditPanelRouter} export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false })
 
 const React = await import('react')
 Object.assign(globalThis, { React })

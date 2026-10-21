@@ -5,6 +5,7 @@ import { withdrawApprovalCommand } from '@openbooks/engine/flows/command-approva
 
 export const POST = defineRoute({
   public: 'session',
+  feature: { none: 'Withdrawing an existing submission remains available when Flows are disabled' },
   params: z.strictObject({
     subjectKind: z.string().min(1).max(100),
     id: uuidString(),

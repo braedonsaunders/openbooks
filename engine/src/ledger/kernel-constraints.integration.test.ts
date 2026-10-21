@@ -590,7 +590,7 @@ test(
         ],
       });
     try {
-      const controllerId = await createScratchUser(org.orgId, "Replay controller", "admin");
+      const controllerId = await withBypassContext(() => createScratchUser(org.orgId, "Replay controller", "admin"));
       const connectionId = randomUUID();
       const runId = randomUUID();
       await withBypassContext(() => db.transaction(async (tx) => {

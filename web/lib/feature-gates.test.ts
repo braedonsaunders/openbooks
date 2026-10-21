@@ -65,10 +65,12 @@ function routeGateState(href: string): 'gated' | 'ungated' | 'missing' {
     // Native record workspaces await their gated data loader before rendering.
     // Count only a loader imported and invoked by this page, not an unrelated sibling.
     if (file.endsWith('page.tsx')) {
-      const loaderFile = file.replace(/page\.tsx$/, '_data.ts')
-      const imports = [...source.matchAll(/import\s*\{\s*(load\w+)\s*\}\s*from\s*['"]\.\/_data['"]/g)]
-      if (imports.some((match) => new RegExp(`\\b${match[1]}\\s*\\(`).test(source))
-        && exists(loaderFile) && GATE.test(read(loaderFile))) return 'gated'
+      const imports = [...source.matchAll(/import\s*\{\s*(load\w+)(?:\s+as\s+(\w+))?[^}]*\}\s*from\s*['"]\.\/(loader|_data)['"]/g)]
+      for (const match of imports) {
+        const loaderFile = file.replace(/page\.tsx$/, `${match[3]}.ts`)
+        if (new RegExp(`\\b${match[2] ?? match[1]}\\s*\\(`).test(source)
+          && exists(loaderFile) && GATE.test(read(loaderFile))) return 'gated'
+      }
     }
   }
   return exists(`${dir}page.tsx`) ? 'ungated' : 'missing'
@@ -202,6 +204,13 @@ test('every API route serving a feature consults a gate', () => {
           const correction = read(file)
           assert.match(correction, /permission:\s*['"]close\.run['"]/, 'correction retains its permission boundary')
           assert.match(correction, /feature:\s*\{none:["']Correcting posted OCI remains available when its creation features are disabled["']\}/)
+          continue
+        }
+        if (file === 'app/api/flows/commands/[subjectKind]/[id]/withdraw/route.ts') {
+          const recall = read(file)
+          assert.match(recall, /public:\s*['"]session['"]/)
+          assert.match(recall, /feature:\s*\{ none: 'Withdrawing an existing submission remains available when Flows are disabled' \}/)
+          assert.match(recall, /await withdrawApprovalCommand\(/)
           continue
         }
         if (!GATE.test(read(file))) ungated.push(`${key} → ${file}`)

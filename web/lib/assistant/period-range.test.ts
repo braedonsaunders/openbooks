@@ -10,7 +10,7 @@ describe("resolveRangeArgs", () => {
     assert.deepEqual(resolveRangeArgs({ period: "this_fiscal_year_to_date" }, APRIL, TODAY), {
       from: "2026-04-01",
       to: "2026-08-16",
-      label: "FY 2027 to date",
+      label: "FY 2027 to date", windowName: "FY 2027", toDate: true,
     });
   });
 
@@ -20,7 +20,7 @@ describe("resolveRangeArgs", () => {
       APRIL,
       TODAY,
     );
-    assert.deepEqual(r, { from: "2026-04-01", to: "2026-08-16", label: "FY 2027 to date" });
+    assert.deepEqual(r, { from: "2026-04-01", to: "2026-08-16", label: "FY 2027 to date", windowName: "FY 2027", toDate: true });
   });
 
   it("accepts an explicit custom range", () => {
