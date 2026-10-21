@@ -45,16 +45,6 @@ test(
             foreigntotal: "100.01",
             memo: "Hydraulic press",
           }];
-        } else if (query.includes("from recentactivity")) {
-          items = [{
-            id: "1845",
-            entity: "NS-CUST-1",
-            type: "Note : 9",
-            typecode: "Note : 9",
-            createddate: "05/03/2024",
-            details: "Note - 2024-05-03 09:30am",
-            subdetails: "Meeting at the plant. Went on a site tour and left rate sheets.",
-          }];
         }
         return Response.json({ items, hasMore: false });
       }
@@ -114,7 +104,8 @@ test(
 
       const profiles = await db.execute<{ orgId: string; partyId: string; stage: string }>(sql`
         select org_id as "orgId", party_id as "partyId", lifecycle_stage as stage
-          from crm_account_profiles`);
+          from crm_account_profiles
+         where org_id in (${orgA.orgId}, ${orgB.orgId})`);
       assert.deepEqual(
         profiles.rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
         [
@@ -142,7 +133,8 @@ test(
                projected_amount::text as "projectedAmount",
                weighted_amount::text as "weightedAmount"
           from crm_opportunities
-         where custom -> 'netsuite' ->> 'id' = 'NS-OPP-1'`);
+         where org_id in (${orgA.orgId}, ${orgB.orgId})
+           and custom -> 'netsuite' ->> 'id' = 'NS-OPP-1'`);
       assert.deepEqual(
         opportunities.rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
         [
@@ -153,7 +145,8 @@ test(
 
       const activities = await db.execute<{ orgId: string; id: string; subject: string }>(sql`
         select org_id as "orgId", id, subject from crm_activities
-         where custom -> 'netsuite' ->> 'recordType' = 'note'`);
+         where org_id in (${orgA.orgId}, ${orgB.orgId})
+           and custom -> 'netsuite' ->> 'recordType' = 'note'`);
       assert.equal(activities.rows.length, 2);
       const byOrg = new Map(activities.rows.map((row) => [row.orgId, row]));
       assert.notEqual(byOrg.get(orgA.orgId)!.id, byOrg.get(orgB.orgId)!.id);
@@ -161,6 +154,7 @@ test(
 
       const links = await db.execute<{ orgId: string; n: number }>(sql`
         select org_id as "orgId", count(*)::int as n from crm_activity_links
+         where org_id in (${orgA.orgId}, ${orgB.orgId})
          group by org_id`);
       assert.deepEqual(
         links.rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
