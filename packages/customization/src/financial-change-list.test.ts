@@ -17,7 +17,6 @@ test("the accounting-event register lists the event, subject, and legal entity",
       "reason",
       "effective_on",
       "status",
-      "_actions",
     ],
   );
   assert.equal(meta.listColumns.find((column) => column.key === "reason")?.defaultHidden, true);

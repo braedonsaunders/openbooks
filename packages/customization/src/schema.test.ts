@@ -14,7 +14,7 @@ import { getRecordType, recordTypeForFeatureState } from './registry.ts'
 test('stored project billing-method views retain their columns, filters and sort', () => {
   const view = {
     ...defaultListView('project'),
-    columns: ['name', 'code', 'customer', 'status', 'billing_method', 'contract', 'actual', 'created', '_actions']
+    columns: ['name', 'code', 'customer', 'status', 'billing_method', 'contract', 'actual', 'created']
       .map(key => ({ key, visible: true })),
     sort: { column: 'billing_method', dir: 'asc' as const },
     filters: [{ key: 'billing_method', operator: 'eq' as const, value: 'fixed_price' }],

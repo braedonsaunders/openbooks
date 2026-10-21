@@ -13,6 +13,8 @@
     "customer_payment": "顧客支払い",
     "expense_report": "経費精算書",
     "check": "小切手",
+    "deposit": "銀行預金",
+    "transfer": "振替",
     "card_charge": "カード利用",
     "card_refund": "カード返金",
     "journal": "仕訳",

@@ -220,7 +220,7 @@ test('old aggregate, closed and inapplicable deep links replace the same history
   assert.deepEqual(routes, [], 'normalizing presentation must not fetch or resolve a new record')
 })
 
-test('read-only unbilled rows are inert while worksheet row and action retain native server resolution', async (t) => {
+test('read-only unbilled rows are inert while worksheet rows retain native server resolution', async (t) => {
   routes.length = 0
   push(null, '', '/projects/pre-billing?view=table&keep=scope')
   const screen = await mount({ prebills: [worksheet('draft')] })
@@ -240,14 +240,13 @@ test('read-only unbilled rows are inert while worksheet row and action retain na
   assert.equal(params.get('view'), 'table')
   assert.equal(params.get('stage'), 'draft')
   assert.equal(params.get('keep'), 'scope')
-  await click(button(worksheetRow, 'Open'))
-  assert.equal(routes.length, 2, 'one native navigation per action, without row propagation')
+  assert.equal(worksheetRow.querySelector('button'), null, 'the row has no duplicate action control')
   await act(async () => { worksheetRow.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await tick() })
-  assert.equal(routes.length, 3, 'keyboard row opening retains native resolution')
+  assert.equal(routes.length, 2, 'keyboard row opening retains native resolution')
   await click(button(screen.host, 'Board'))
   await click(lanes(screen.host).find((lane) => lane.getAttribute('aria-label') === 'Draft')!.querySelector<HTMLButtonElement>('button')!)
-  assert.equal(routes.length, 4)
-  assert.equal(new URL(routes[3]!, 'http://localhost').searchParams.get('prebill'), 'worksheet-draft')
+  assert.equal(routes.length, 3)
+  assert.equal(new URL(routes[2]!, 'http://localhost').searchParams.get('prebill'), 'worksheet-draft')
 })
 
 test('native Bill run keeps the selected project and edited draft across view/stage changes and old-stage normalization', async (t) => {
@@ -255,7 +254,7 @@ test('native Bill run keeps the selected project and edited draft across view/st
   push(null, '', '/projects/pre-billing?view=table&keep=scope#work')
   const screen = await mount({ canManage: true, unbilled: [unbilledProject(), unbilledProject({ projectId: 'project-2', projectName: 'Maintenance' })] })
   t.after(screen.close)
-  await click(button(screen.host.querySelector('tbody tr')!, 'Bill run'))
+  await click(screen.host.querySelector<HTMLTableRowElement>('tbody tr')!)
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
   assert.ok(dialog)
   const checks = [...dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]

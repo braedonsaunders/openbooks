@@ -24,7 +24,6 @@ import { cn } from '@openbooks/ui'
 import { PayrollChecklistBanner, PayrollPreviousRun, PayrollManageLinks, PayrollScheduleList, type PayrollPreviousRunProps, type PayrollScheduleListProps } from '../../app/(app)/payroll/sections'
 // HR-21 begin: anomaly checks islands (verbatim adapters only).
 // HR-21 end
-import { ArrowUpRight } from 'lucide-react'
 import { BookOpen } from 'lucide-react'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
@@ -322,18 +321,6 @@ export const PAYROLL_WIDGETS = {
       }
       today={str(props, 'today') ?? ''}
     />
-  ),
-  /** A pay run opens a full wizard page, not a drawer, so its row action is a
-   *  plain link built from the row id. */
-  'pay-run-row-actions': (props) => (
-    <Link
-      href={`/payroll/runs/${String(props.id ?? '')}` as never}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
-      aria-label={str(props, 'label') ?? ''}
-      title={str(props, 'label') ?? ''}
-    >
-      <ArrowUpRight size={15} />
-    </Link>
   ),
   /* --- payroll anomaly checks (HR-21) ------------------------------------------------ */
   /** Scan trigger for the current filter period; the loader gates it on

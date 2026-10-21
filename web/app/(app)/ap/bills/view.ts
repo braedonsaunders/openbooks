@@ -445,7 +445,6 @@ export function apBillsSpec(data: ApBillsData): PageSpec {
       widgetBlock('record-list-view', {
         recordType: 'vendor_bill',
         basePath: '/ap/bills',
-        rowActions: { widget: 'document-row-actions', props: { basePath: '/ap/bills', canPost: data.canPost } },
         sp: data.currentParams,
         drawer: data.drawer ? { widget: 'document-drawer', props: { drawer: data.drawer } } : null,
         emptyAction: data.canCreate ? newBill : null,

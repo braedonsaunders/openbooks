@@ -9,7 +9,8 @@ import { add, mul, normalizeMoney, prorateDays, toUnits, wholeDigits } from "../
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
 import type { Money } from "../money/brands.ts";
-import { advanceAnchoredMonth } from "./cadence.ts";
+import { advanceAnchoredMonth, unbilledBoundary, subscriptionPaidThrough } from "./cadence.ts";
+export { unbilledBoundary, subscriptionPaidThrough } from "./cadence.ts";
 import { refreshEntitlementSnapshot } from "./entitlements.ts";
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
@@ -141,32 +142,6 @@ export interface ActivateLifecycleInput {
    * termStartsOn inside billed service is refused.
    */
   billFromUnbilledBoundary?: boolean;
-}
-
-/**
- * The unbilled boundary: the end of the last billed period. The subscription
- * cursor (next_bill_on) advances atomically with every scheduler-billed
- * invoice, but bill-now invoices post period guards without moving the
- * cursor — so the boundary is the later of the cursor and the latest guarded
- * period end. Pure.
- */
-export function unbilledBoundary(nextBillOn: string, guardedThrough: string | null): string {
-  return guardedThrough && guardedThrough > nextBillOn ? guardedThrough : nextBillOn;
-}
-
-/**
- * The date through which a subscription's service is invoiced: the end of its
- * last billed period. A billed subscription uses the unbilled boundary (the
- * cursor or the latest guarded period end, whichever is later); one never
- * invoiced has no billed period, so its boundary is its start. Pure.
- */
-export function subscriptionPaidThrough(input: {
-  startOn: string;
-  nextBillOn: string;
-  billed: boolean;
-  guardedThrough: string | null;
-}): string {
-  return input.billed ? unbilledBoundary(input.nextBillOn, input.guardedThrough) : input.startOn;
 }
 
 /**

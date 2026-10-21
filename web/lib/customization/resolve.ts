@@ -293,13 +293,7 @@ function mergeCustomFieldsIntoView(
     }
   }
   const live = new Set(showInListDefs.map((d) => `cf_${d.key}`));
-  view.columns = view.columns.filter((c) => !isCustomFieldKey(c.key) || live.has(c.key));
-  // Keep the actions column last — appended custom columns must not push past it.
-  const actionsIdx = view.columns.findIndex((c) => c.key === "_actions");
-  if (actionsIdx !== -1 && actionsIdx !== view.columns.length - 1) {
-    const [actions] = view.columns.splice(actionsIdx, 1);
-    view.columns.push(actions!);
-  }
+  view.columns = view.columns.filter((c) => isCustomFieldKey(c.key) ? live.has(c.key) : !!meta?.listColumns.some(column => column.key === c.key));
   return view;
 }
 

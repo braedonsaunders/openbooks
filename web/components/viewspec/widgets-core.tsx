@@ -144,9 +144,7 @@ export const CORE_WIDGETS: Record<string, WidgetRenderer> = {
   },
   /**
    * The universal record list. `drawer` and `emptyAction` name widgets, one or
-   * several, exactly as `entity-list-view` does. `rowActions` names ONE widget
-   * rendered per row: `renderRowActions` is a function, and a spec can never
-   * carry a function, so the registry builds it from the ref here.
+   * several, exactly as `entity-list-view` does. Record links own navigation.
    */
   'record-list-view': async (props) => {
     const source = str(props, 'recordType') ?? ''
@@ -157,14 +155,9 @@ export const CORE_WIDGETS: Record<string, WidgetRenderer> = {
     const native = route && selected && isUuid(selected) ? candidates.find((item) => item?.widget === route.widget) : null
     const nativeDrawer: NativeListDrawerData | null = native ? { widget: route!.widget, drawer: native.props?.drawer } : null
 
-    const rowActionsRef =
-      props.rowActions && typeof props.rowActions === 'object'
-        ? (props.rowActions as NestedWidgetRef)
-        : undefined
-    const [drawer, emptyAction, rowActionsRenderer] = await Promise.all([
+    const [drawer, emptyAction] = await Promise.all([
       nativeDrawer ? undefined : nestedSlot(props.drawer),
       nestedSlot(props.emptyAction),
-      rowActionsRef?.widget ? loadWidget(rowActionsRef.widget) : undefined,
     ])
     return (
       <RecordListSlot
@@ -176,18 +169,7 @@ export const CORE_WIDGETS: Record<string, WidgetRenderer> = {
         emptyTitle={str(props, 'emptyTitle')}
         emptyDescription={str(props, 'emptyDescription')}
         emptyAction={emptyAction}
-        renderRowActions={
-          rowActionsRenderer
-            ? (row) =>
-                rowActionsRenderer({
-                  ...(rowActionsRef?.props ?? {}),
-                  id: row.id,
-                  status: row.status,
-                  kind: row.kind,
-                  openHref: row.openHref,
-                })
-            : undefined
-        }
+
       />
     )
   },

@@ -40,11 +40,6 @@ import type { ExpenseDrawer } from '../ExpenseDrawer'
  * (a URL-only button that opens the unsaved-create drawer at
  * `?expense=new`, not the NewDocumentButton shape) and `expense-drawer`.
  *
- * The `_actions` column is a per-row WIDGET ref rather than a callback:
- * `renderRowActions` is a function and a spec can never carry one, so the
- * registry builds the callback from the ref and the widget assembles the open
- * href from the row id and the current URL — the same answer bills and
- * invoices use for their row actions.
  */
 
 type ExpenseDrawerProps = Parameters<typeof ExpenseDrawer>[0]
@@ -248,13 +243,6 @@ export function expenseReportsSpec(data: ExpenseReportsData): PageSpec {
         sp: data.currentParams,
         drawer: data.drawer ? { widget: 'expense-drawer', props: { drawer: data.drawer } } : null,
         emptyAction: data.canSubmit ? newExpense : null,
-        // The native page renders ExpenseActions per row. `renderRowActions`
-        // is a function, which a spec can never carry, so the spec names a
-        // per-row WIDGET and the slot builds the callback from it.
-        rowActions: {
-          widget: 'expense-row-actions',
-          props: { canSubmit: data.canSubmit, canPost: data.canPost, sp: data.currentParams },
-        },
       }),
     ],
   })

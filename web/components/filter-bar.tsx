@@ -5,12 +5,66 @@ import Link from 'next/link'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { Check, ChevronDown } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { cn, Popover, SearchSelect } from '@openbooks/ui'
+import { Button, cn, Popover, SearchSelect } from '@openbooks/ui'
 import { mergeHref } from '@/lib/list-params'
 import { menuArrowKeys } from './menu-a11y'
 import { DateField } from './date-field'
 
 type FilterOption = { value: string; label: string; count?: number }
+
+/** A URL-backed set filter. Apply commits all checks together and resets pagination. */
+export function MultiSelectFilter({ basePath, currentParams, paramKey, label, options, selectedValues }: {
+  basePath: string
+  currentParams: Record<string, string | string[] | undefined>
+  paramKey: string
+  label: string
+  options: FilterOption[]
+  selectedValues: readonly string[]
+}) {
+  const t = useTranslations('common')
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState<string[]>([])
+  const all = selectedValues.length === options.length
+  const summary = all ? t('labels.all') : selectedValues.length === 0 ? t('labels.none')
+    : options.filter(option => selectedValues.includes(option.value)).map(option => option.label).join(', ')
+  const changeOpen = (next: boolean) => {
+    if (next) setDraft([...selectedValues])
+    setOpen(next)
+  }
+  const allChecked = draft.length === options.length
+  return (
+    <Popover open={open} onOpenChange={changeOpen} align="start" className="min-w-[15rem] p-1"
+      trigger={<button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => changeOpen(!open)}
+        className={cn('inline-flex h-8 max-w-[20rem] items-center gap-1.5 rounded-md border px-3 text-sm',
+          all ? 'border-slate-200 bg-white text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200'
+            : 'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-800 dark:bg-teal-950/50 dark:text-teal-300')}>
+        <span className="shrink-0">{label}:</span><span className="truncate font-semibold">{summary}</span><ChevronDown size={14} className="shrink-0" />
+      </button>}>
+      <div role="menu" aria-label={label} onKeyDown={menuArrowKeys} className="max-h-72 overflow-auto">
+        <button type="button" role="menuitemcheckbox" aria-checked={allChecked ? true : draft.length ? 'mixed' : false}
+          onClick={() => setDraft(allChecked ? [] : options.map(option => option.value))}
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800">
+          <Check size={14} className={allChecked ? 'text-teal-600' : draft.length ? 'text-slate-400' : 'text-transparent'} /><span>{t('labels.all')}</span>
+        </button>
+        {options.map(option => <button key={option.value} type="button" role="menuitemcheckbox" aria-checked={draft.includes(option.value)}
+          onClick={() => setDraft(values => values.includes(option.value) ? values.filter(value => value !== option.value) : [...values, option.value])}
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800">
+          <Check size={14} className={draft.includes(option.value) ? 'text-teal-600' : 'text-transparent'} />
+          <span className="flex-1">{option.label}</span>{option.count !== undefined ? <span className="tabular-nums text-slate-500">{option.count}</span> : null}
+        </button>)}
+      </div>
+      <div className="mt-1 flex justify-end gap-2 border-t border-slate-200 p-2 dark:border-slate-800">
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>{t('actions.cancel')}</Button>
+        <Button size="sm" onClick={() => {
+          const ordered = options.filter(option => draft.includes(option.value)).map(option => option.value)
+          router.push(mergeHref(basePath, currentParams, { [paramKey]: ordered.length === options.length ? 'all' : ordered.length ? ordered.join(',') : 'none', page: 1 }))
+          setOpen(false)
+        }}>{t('actions.apply')}</Button>
+      </div>
+    </Popover>
+  )
+}
 
 /**
  * Single-select filter rendered as a compact dropdown button. Collapses a

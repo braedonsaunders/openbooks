@@ -113,7 +113,7 @@ export function fieldTicketsSpec(data: FieldTicketsData): PageSpec {
     body: [
       // The universal record list, placed through a slot: it needs an org id,
       // a user id and a permission decision, none of which may travel through
-      // a spec. The native page passes no `renderRowActions`, so the slot's
+      // a spec. The document reference opens the drawer; the slot's
       // built-in eye-link fallback is the byte-identical render.
       widgetBlock('record-list-view', {
         recordType: 'field_ticket',

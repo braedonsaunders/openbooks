@@ -13,6 +13,8 @@
     "customer_payment": "客户付款",
     "expense_report": "费用报告",
     "check": "支票",
+    "deposit": "银行存款",
+    "transfer": "转账",
     "card_charge": "银行卡扣款",
     "card_refund": "银行卡退款",
     "journal": "日记账",

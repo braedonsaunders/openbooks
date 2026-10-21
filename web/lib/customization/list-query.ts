@@ -22,13 +22,13 @@ import type { CustomFieldDef } from "../custom-fields";
  * comes from user input — only catalog keys bind values).
  */
 
-export type ColKind = "reference" | "text" | "date" | "amount" | "status" | "custom" | "actions"
+export type ColKind = "reference" | "text" | "date" | "amount" | "status" | "custom"
 
 export interface ListColDesc {
   key: string
   kind: ColKind
   label: string
-  /** SQL select expression (omitted for the actions column). */
+  /** SQL select expression for a persisted list field. */
   expr?: SQL
   sortable: boolean
   sortKey?: string
@@ -108,13 +108,6 @@ export function columnDescriptors(
   const out: ListColDesc[] = []
   for (const c of view.columns) {
     if (!c.visible) continue
-    if (c.key === "_actions") {
-      // Honor the current catalog for saved views created before an action
-      // column was removed. The record's reference cell still opens its drawer.
-      if (!listColumnMeta(recordType, c.key)) continue
-      out.push({ key: "_actions", kind: "actions", label: labels.actions ?? "Actions", sortable: false, width: 44 })
-      continue
-    }
     if (isCustomFieldKey(c.key)) {
       const defKey = customFieldDefKey(c.key)
       const def = cfByDefKey.get(defKey)
@@ -216,6 +209,7 @@ export const PAYMENT_SORTS: Record<string, SQL> = {
 export interface AdhocFilters {
   q?: string
   status?: string
+  statuses?: readonly string[]
   vendor?: string
   from?: string
   to?: string
@@ -402,6 +396,9 @@ export function documentWhere(
     if (p) parts.push(sql`and ${p}`)
   }
   if (adhoc.status) parts.push(sql`and d.status = ${adhoc.status}`)
+  if (adhoc.statuses !== undefined) parts.push(adhoc.statuses.length
+    ? sql`and d.status in (${sql.join(adhoc.statuses.map(status => sql`${status}`), sql`, `)})`
+    : sql`and false`)
   if (adhoc.kind) parts.push(sql`and d.kind = ${adhoc.kind}`)
   // Reference and date quick-filter values arrive from URL params uncast;
   // a malformed one must empty the list, never 500 it (see uuidOrFalse).

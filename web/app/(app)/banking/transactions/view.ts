@@ -313,17 +313,12 @@ export function bankingTransactionsSpec(data: BankingTransactionsData): PageSpec
     body: [
       // No `when`: the list always renders. `drawer`/`emptyAction` arrive as
       // null when closed/absent and their slots render nothing. The per-row
-      // actions name the SHARED `document-row-actions` widget (verified
-      // below), which re-derives each row's config from its kind — the native
-      // page's `config={DOC_KINDS[row.kind]!}` is the same lookup, so the
-      // two can never disagree about which actions a kind gets.
       widgetBlock('record-list-view', {
         recordType: 'bank_transaction',
         basePath: '/banking/transactions',
         sp: data.currentParams,
         drawer: data.drawer ? { widget: 'document-drawer', props: { drawer: data.drawer } } : null,
         emptyAction: data.canCreate ? newDocument : null,
-        rowActions: { widget: 'document-row-actions', props: { basePath: '/banking/transactions', canPostAp: data.canPostAp, canPostGl: data.canPostGl } },
       }),
     ],
   })

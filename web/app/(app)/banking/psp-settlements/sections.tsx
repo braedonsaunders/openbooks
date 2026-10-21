@@ -8,6 +8,8 @@ import {
   Badge,
   Button,
   Card,
+  ContextMenu,
+  useContextMenu,
   DisclosureSection,
   Drawer,
   Input,
@@ -305,25 +307,7 @@ async function requestSettlement<T>(
   }
 }
 
-/**
- * The PSP settlements workspace, moved verbatim from page.tsx so both render
- * paths share one implementation.
- *
- * One component, not three widgets, and the reason is the lesson from the
- * last round: the import form, the reversal form, and the batch table are
- * one state graph, not three. The reversal reason lives in the batches card
- * but disables every posted row's Reverse button; import/post/reverse all
- * reload the same list; the error/message banners belong to all three
- * mutations. Splitting that graph across widget boundaries would strand
- * state from the controls that read it. The spec therefore places this
- * workspace whole (`psp-settlements`), with the loader resolving only the
- * static shell strings (titles, labels, placeholders) plus the initial rows.
- *
- * `initialRows` is the loader's read of the same GET contract the component
- * fetches itself: when rows are provided the list renders on first paint
- * with no loading flash; the component still reloads after every mutation,
- * exactly as it does natively.
- */
+/** Import, posting and reversal share one settlement state and native detail drawer. */
 export interface PspProviderPullConfig {
   provider: string
   displayName: string
@@ -430,6 +414,8 @@ export function PspSettlementsWorkspace({
   const [fxPayoutRateSource, setFxPayoutRateSource] = useState('')
   const [reversalDate, setReversalDate] = useState(today)
   const [reversalReason, setReversalReason] = useState('')
+  const [reversing, setReversing] = useState(false)
+  const recordMenu = useContextMenu()
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(initialRows === null)
@@ -504,6 +490,9 @@ export function PspSettlementsWorkspace({
     setDetailFailed(false)
     setDetailLoading(true)
     setEvidenceLineNumber(null)
+    setReversing(false)
+    setReversalReason('')
+    recordMenu.close()
     setSelectedBatchId(batchId)
   }
 
@@ -714,7 +703,8 @@ export function PspSettlementsWorkspace({
     }
     setMsg(t('reversedToast', { id: d.data.entryId }))
     setReversalReason('')
-    void load()
+    setReversing(false)
+    await reloadDetail(true)
   }
 
   // Deleting an unposted draft frees its provider reference for a corrected
@@ -1049,22 +1039,6 @@ export function PspSettlementsWorkspace({
             </Select>
           </div>
         </div>
-        <div className="mb-4 grid gap-3 sm:grid-cols-[12rem_1fr]">
-          <div>
-            <Label htmlFor={reversalDateId}>{strings.reversalDate}</Label>
-            <DateField id={reversalDateId} value={reversalDate} onChange={(value) => setReversalDate(value)} />
-          </div>
-          <div>
-            <Label htmlFor={reversalReasonId}>{strings.reversalReason}</Label>
-            <Input
-              id={reversalReasonId}
-              value={reversalReason}
-              onChange={(e) => setReversalReason(e.target.value)}
-              placeholder={strings.reversalPlaceholder}
-              maxLength={500}
-            />
-          </div>
-        </div>
         {loading ? (
           <p className="py-4 text-center text-sm text-muted-foreground">{strings.loadingLabel}</p>
         ) : loadFailed ? (
@@ -1111,35 +1085,6 @@ export function PspSettlementsWorkspace({
                 ),
                 search: (b) => `${b.status} ${b.disputeBadge ?? ''}`,
               },
-              {
-                key: 'actions',
-                header: '',
-                className: 'text-right',
-                cell: (b) => (
-                  <>
-                    {b.rawStatus === 'draft' && canReconcile && (
-                      <Button size="sm" variant="ghost" onClick={() => openSettlementDetail(b.id)}>
-                        {t('reviewAndPost')}
-                      </Button>
-                    )}
-                    {b.rawStatus === 'draft' && canReconcile && (
-                      <Button size="sm" variant="ghost" onClick={() => void removeDraft(b.id)}>
-                        {t('deleteDraft')}
-                      </Button>
-                    )}
-                    {b.rawStatus === 'posted' && canReconcile && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={reversalReason.trim().length < 5}
-                        onClick={() => void reverse(b.id)}
-                      >
-                        {strings.reverse}
-                      </Button>
-                    )}
-                  </>
-                ),
-              },
             ]}
           />
         )}
@@ -1149,10 +1094,13 @@ export function PspSettlementsWorkspace({
         open={selectedBatchId !== null}
         onClose={() => { if (postingBatchId === null) setSelectedBatchId(null) }}
         size="lg"
-        headerActions={detail && !detailLoading && !detailFailed && detail.batch.status === 'draft' && canReconcile ? (
-          <Button disabled={postingBatchId !== null} onClick={() => void post(detail.batch.id)}>
-            {postingBatchId === detail.batch.id ? strings.loadingLabel : strings.postLabel}
-          </Button>
+        headerActions={detail && !detailLoading && !detailFailed && canReconcile ? (
+          <div className="flex items-center gap-2">
+            {detail.batch.status === 'draft' ? <Button disabled={postingBatchId !== null} onClick={() => void post(detail.batch.id)}>
+              {postingBatchId === detail.batch.id ? strings.loadingLabel : strings.postLabel}
+            </Button> : null}
+            {detail.batch.status === 'draft' || detail.batch.status === 'posted' ? <Button variant="outline" size="sm" aria-haspopup="menu" aria-expanded={recordMenu.open} onClick={event => recordMenu.openBelow(event.currentTarget)}>{common('labels.actions')}</Button> : null}
+          </div>
         ) : undefined}
         title={detail ? t('detailTitle', { ref: detail.batch.externalRef }) : strings.recentBatches}
       >
@@ -1189,6 +1137,33 @@ export function PspSettlementsWorkspace({
           <div className="space-y-4">
             {err ? <p role="alert" className="text-sm text-red-600">{err}</p> : null}
             {msg ? <p aria-live="polite" className="text-sm text-teal-700 dark:text-teal-300">{msg}</p> : null}
+            <ContextMenu open={recordMenu.open} position={recordMenu.position} onClose={recordMenu.close} items={canReconcile ? detail.batch.status === 'draft' ? [
+              { key: 'delete', label: t('deleteDraft'), danger: true, disabled: postingBatchId !== null, onSelect: () => void removeDraft(detail.batch.id) },
+            ] : detail.batch.status === 'posted' ? [
+              { key: 'reverse', label: strings.reverse, disabled: postingBatchId !== null, onSelect: () => setReversing(true) },
+            ] : [] : []} />
+            {reversing && canReconcile && detail.batch.status === 'posted' ? <div className="space-y-3 rounded-md border p-3">
+              <div className="mb-4 grid gap-3 sm:grid-cols-[12rem_1fr]">
+                <div>
+                  <Label htmlFor={reversalDateId}>{strings.reversalDate}</Label>
+                  <DateField id={reversalDateId} value={reversalDate} onChange={(value) => setReversalDate(value)} />
+                </div>
+                <div>
+                  <Label htmlFor={reversalReasonId}>{strings.reversalReason}</Label>
+                  <Input
+                    id={reversalReasonId}
+                    value={reversalReason}
+                    onChange={(e) => setReversalReason(e.target.value)}
+                    placeholder={strings.reversalPlaceholder}
+                    maxLength={500}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setReversing(false)}>{common('actions.cancel')}</Button>
+                <Button disabled={reversalReason.trim().length < 5} onClick={() => void reverse(detail.batch.id)}>{strings.reverse}</Button>
+              </div>
+            </div> : null}
             <SettlementDetailBody
               detail={detail}
               money={money}

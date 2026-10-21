@@ -13,6 +13,8 @@
     "customer_payment": "Kundenzahlung",
     "expense_report": "Spesenabrechnung",
     "check": "Scheck",
+    "deposit": "Bankeinzahlung",
+    "transfer": "Umbuchung",
     "card_charge": "Kartenbelastung",
     "card_refund": "Kartenerstattung",
     "journal": "Journal",

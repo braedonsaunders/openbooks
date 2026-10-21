@@ -595,6 +595,8 @@ export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'customer_payment', docTitle: 'Payment Receipt', partyHeading: 'Received from', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'expense_report', docTitle: 'Expense Report', partyHeading: 'Employee', readPermission: 'expenses.read', hasParty: true, hasDue: false, hasReference: true, foreignLines: true }),
   docType({ key: 'check', docTitle: 'Check', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: true }),
+  docType({ key: 'deposit', docTitle: 'Bank Deposit', partyHeading: null, readPermission: 'banking.read', hasParty: false, hasDue: false, hasReference: true }),
+  docType({ key: 'transfer', docTitle: 'Bank Transfer', partyHeading: null, readPermission: 'banking.read', hasParty: false, hasDue: false, hasReference: false }),
   docType({ key: 'card_charge', docTitle: 'Card Charge', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
   docType({ key: 'card_refund', docTitle: 'Card Refund', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
   docType({ key: 'journal', docTitle: 'Journal Entry', partyHeading: null, readPermission: 'gl.read', hasParty: false, hasDue: false, hasReference: false }),

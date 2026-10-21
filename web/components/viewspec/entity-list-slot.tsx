@@ -11,9 +11,6 @@ import { db } from '@openbooks/engine/platform/db'
 import { can, getAuthz } from '../../lib/authz'
 import { summarizeGroup, type ConditionGroup, type FieldDef } from '../../lib/conditions'
 import { EntityListView } from '../entity-list-view'
-import { SuggestionChip } from '../suggestion-chip'
-import { buildListDrawerHref } from '../../lib/list-params'
-import { entityListSource } from '../../lib/list/entity-sources'
 import { Sparkline } from '../module-home/ui'
 
 /**
@@ -195,30 +192,6 @@ export async function EntityListSlot({
   // is a spec that could name the wrong one. Keyed on the record type, the
   // way `bank_rule` above already is.
   const productionConfig = recordType === 'change_set'
-  // The needs-attention queues carry a one-click path into their proposed
-  // fix: the chip opens the row drawer, where the suggestion loads with its
-  // evidence and the approve action. Keyed on the record type like
-  // `formatValue` above, so no other list renders it.
-  let rowTrailing: ((row: Record<string, unknown>) => ReactNode) | undefined
-  if (recordType === 'channel_exception' || recordType === 'psp_settlement_line_unmatched') {
-    const source = entityListSource(recordType)
-    const chipT = recordType === 'channel_exception'
-      ? await getTranslations('channels')
-      : await getTranslations('banking')
-    const chipLabel = recordType === 'channel_exception'
-      ? chipT('assistance.chipLabel')
-      : chipT('payoutAssistance.chipLabel')
-    if (source) {
-      const basePath = source.basePath
-      const drawerParam = source.drawerParam
-      rowTrailing = (row: Record<string, unknown>) => (
-        <SuggestionChip
-          href={buildListDrawerHref(basePath, sp, drawerParam, String(row.id))}
-          label={chipLabel}
-        />
-      )
-    }
-  }
   return (
     <EntityListView
       defaultPresentation={defaultPresentation}
@@ -226,7 +199,6 @@ export async function EntityListSlot({
       basePathOverride={timeBasePath}
       governingFeature={governingFeature}
       formatValue={formatValue}
-      rowTrailing={rowTrailing}
       recordType={recordType}
       orgId={productionConfig ? authz.user.productionOrgId : authz.user.orgId}
       userId={authz.user.id}

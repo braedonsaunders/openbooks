@@ -69,3 +69,29 @@ function shiftAnchoredMonth(
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${String(targetYear).padStart(4, "0")}-${pad(targetMonth1)}-${pad(day)}`;
 }
+
+/**
+ * The unbilled boundary: the end of the last billed period. The subscription
+ * cursor (next_bill_on) advances atomically with every scheduler-billed
+ * invoice, but bill-now invoices post period guards without moving the
+ * cursor — so the boundary is the later of the cursor and the latest guarded
+ * period end. Pure.
+ */
+export function unbilledBoundary(nextBillOn: string, guardedThrough: string | null): string {
+  return guardedThrough && guardedThrough > nextBillOn ? guardedThrough : nextBillOn;
+}
+
+/**
+ * The date through which a subscription's service is invoiced: the end of its
+ * last billed period. A billed subscription uses the unbilled boundary (the
+ * cursor or the latest guarded period end, whichever is later); one never
+ * invoiced has no billed period, so its boundary is its start. Pure.
+ */
+export function subscriptionPaidThrough(input: {
+  startOn: string;
+  nextBillOn: string;
+  billed: boolean;
+  guardedThrough: string | null;
+}): string {
+  return input.billed ? unbilledBoundary(input.nextBillOn, input.guardedThrough) : input.startOn;
+}

@@ -61,6 +61,8 @@ export interface DocListSource {
   /** Suppress the built-in document-status chips (sources whose quick filters
    *  present a richer merged status, e.g. the pay-run lifecycle). */
   hideStatusFilter?: boolean
+  /** Applied only when neither the URL nor the saved view selects a status. */
+  defaultExcludedStatuses?: readonly string[]
   /**
    * Records the viewer reaches by ownership rather than an org-wide grant:
    * an extra predicate over `d` for a viewer limited to their own records,
@@ -105,6 +107,7 @@ function documentSource(cfg: {
   kinds: readonly string[]
   drawerParam: string
   multiKind?: boolean
+  defaultExcludedStatuses?: readonly string[]
   partyRole?: RelatedPartyTarget['role']
   builtInExpr?: Record<string, SQL>
   joins?: SQL
@@ -119,6 +122,7 @@ function documentSource(cfg: {
     kinds: cfg.kinds,
     drawerParam: cfg.drawerParam,
     multiKind: cfg.multiKind,
+    defaultExcludedStatuses: cfg.defaultExcludedStatuses,
     joins: cfg.joins,
     where: cfg.where,
     ownerScope: cfg.ownerScope,
@@ -201,6 +205,7 @@ function fulfillmentSource(recordType: 'pick_list' | 'shipment', drawerParam: st
 const SOURCES: Record<string, DocListSource> = {
   vendor_bill: documentSource({
     recordType: 'vendor_bill',
+    defaultExcludedStatuses: ['voided'],
     kinds: AP_KINDS,
     drawerParam: 'doc',
     multiKind: true,

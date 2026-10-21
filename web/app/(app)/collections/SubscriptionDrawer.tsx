@@ -1,6 +1,8 @@
 'use client'
 
 import { DrawerTabStrip } from '@/components/drawer-tab-strip'
+import { useSubscriptionLifecycle } from './use-subscription-lifecycle'
+import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { RenewalActions } from './RenewalActions'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -27,17 +29,29 @@ function statusVariant(status: SubscriptionDrawerData['status']): 'default' | 's
  * subscription list-drawer route; one drawer shell through loading, refusal
  * and retry.
  */
-export function SubscriptionDrawer({ drawer, closeHref }: { drawer: SubscriptionDrawerData; closeHref: string }) {
+export function SubscriptionDrawer({ drawer: initialDrawer, closeHref }: { drawer: SubscriptionDrawerData; closeHref: string }) {
+  const [drawer, setDrawer] = useState(initialDrawer)
+  const [reloadFailure, setReloadFailure] = useState<string | null>(null)
   const [section,setSection]=useState('billing')
   const t = useTranslations('ar.collections.subscriptions.drawer')
   const common = useTranslations('common')
   const router = useRouter()
   const { money } = useMoney()
+  async function reload() {
+    window.dispatchEvent(new window.Event('openbooks:subscriptions-changed'))
+    const result = await fetchAction<{ drawer: SubscriptionDrawerData }>(`/api/lists/subscription/drawer?subscription=${encodeURIComponent(drawer.id)}`)
+    if (!result.ok) { setReloadFailure(result.error.displayMessage(common('feedback.loadFailed'))); return }
+    if (!result.data.drawer || result.data.drawer.id !== drawer.id) { setReloadFailure(common('feedback.loadFailed')); return }
+    setReloadFailure(null)
+    setDrawer(result.data.drawer)
+    router.refresh()
+  }
   const amount = money(drawer.amount, { currency: drawer.currency })
   const [billTo, setBillTo] = useState<string | null>(drawer.billTo?.id ?? null)
   const [payer, setPayer] = useState<string | null>(drawer.payer?.id ?? null)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const lifecycle = useSubscriptionLifecycle(drawer, reload, reloadFailure !== null || busy)
   const options = drawer.customers.map((c) => ({ value: c.id, label: c.name }))
   const dirty =
     (billTo ?? null) !== (drawer.billTo?.id ?? null) || (payer ?? null) !== (drawer.payer?.id ?? null)
@@ -57,7 +71,7 @@ export function SubscriptionDrawer({ drawer, closeHref }: { drawer: Subscription
         throw new Error(await readApiErrorMessage(res, t('overrides.saveFailed')))
       }
       toast.success(t('overrides.saved'))
-      router.refresh()
+      await reload()
     } catch (error) {
       setFailure(error instanceof Error ? error.message : t('overrides.saveFailed'))
     } finally {
@@ -67,6 +81,7 @@ export function SubscriptionDrawer({ drawer, closeHref }: { drawer: Subscription
 
   const actions = (
     <>
+      {lifecycle.actions}
       {drawer.contract ? (
         <Button variant="outline" asChild>
           <Link href={`/revenue?contract=${encodeURIComponent(drawer.contract.id)}`}>{drawer.contract.number}</Link>
@@ -94,6 +109,9 @@ export function SubscriptionDrawer({ drawer, closeHref }: { drawer: Subscription
       actions={actions}
       detailTabs={[]}
     >
+      {reloadFailure ? <div role="alert" className="flex items-center gap-3 text-sm text-destructive"><p>{reloadFailure}</p><Button variant="outline" onClick={() => void reload()}>{common('actions.retry')}</Button></div> : null}
+      {lifecycle.refusal ? <p role="alert" className="text-sm text-destructive">{lifecycle.refusal}</p> : null}
+      {lifecycle.panel}
       <div className="space-y-2">
         <p className="tabular-nums text-lg font-semibold">
           {amount} <span className="text-sm font-normal text-muted-foreground">/ {t('every', { count: drawer.intervalCount, unit: drawer.interval })}</span>
@@ -145,7 +163,7 @@ export function SubscriptionDrawer({ drawer, closeHref }: { drawer: Subscription
               />
             </div>
             {failure ? <p className="text-sm text-destructive">{failure}</p> : null}
-            <Button variant="outline" disabled={!dirty || busy} onClick={onSaveOverrides}>
+            <Button variant="outline" disabled={!dirty || busy || lifecycle.busy || reloadFailure !== null} onClick={onSaveOverrides}>
               {t('overrides.save')}
             </Button>
           </div>

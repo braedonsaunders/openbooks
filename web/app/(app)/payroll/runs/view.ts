@@ -20,10 +20,7 @@ import type { FinalPayCandidate, RunSchedule } from '../_ui/NewRunButton'
  * 'pay_run', placed through the `record-list-view` slot: the slot re-derives
  * org/user/permissions from the session. A spec that could name an org id is
  * a cross-tenant read. Rows open the pay-run wizard — a full page, not a
- * drawer — so this page needs no drawer widget; the per-row action is a plain
- * link, expressed as the `pay-run-row-actions` widget the slot resolves per
- * row (the same indirection the AR-invoices page uses for its document row
- * actions).
+ * drawer — the document reference opens that wizard directly.
  *
  * Everything else here is loader work copied verbatim from page.tsx: the
  * `payroll.read` gate, the `payroll` feature gate (404 when disabled), the
@@ -157,16 +154,11 @@ export function payRunsSpec(data: PayRunsData): PageSpec {
       }),
     ],
     body: [
-      // The universal record list. Rows open the pay-run wizard (a full
-      // page), so the per-row action is a plain link — carried as a widget
-      // ref the slot resolves per row, exactly like the document row actions
-      // on the AR-invoices page.
       widgetBlock('record-list-view', {
         recordType: 'pay_run',
         basePath: '/payroll/runs',
         sp: data.currentParams,
         emptyAction: data.canRun ? newRun : null,
-        rowActions: { widget: 'pay-run-row-actions', props: { label: data.openLabel } },
       }),
     ],
   })

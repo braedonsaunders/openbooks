@@ -416,7 +416,6 @@ export function arInvoicesSpec(data: ArInvoicesData): PageSpec {
         sp: data.currentParams,
         drawer: data.drawer ? { widget: 'document-drawer', props: { drawer: data.drawer } } : null,
         emptyAction: data.canCreate ? newDocument : null,
-        rowActions: { widget: 'document-row-actions', props: { basePath: '/ar/invoices', canPost: data.canPost } },
       }),
     ],
   })

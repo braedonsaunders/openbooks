@@ -13,6 +13,8 @@
     "customer_payment": "Paiement client",
     "expense_report": "Note de frais",
     "check": "Chèque",
+    "deposit": "Dépôt bancaire",
+    "transfer": "Virement",
     "card_charge": "Débit de carte",
     "card_refund": "Remboursement de carte",
     "journal": "Journal",

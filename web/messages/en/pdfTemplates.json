@@ -13,6 +13,8 @@
     "customer_payment": "Customer payment",
     "expense_report": "Expense report",
     "check": "Check",
+    "deposit": "Bank deposit",
+    "transfer": "Transfer",
     "card_charge": "Card charge",
     "card_refund": "Card refund",
     "journal": "Journal",

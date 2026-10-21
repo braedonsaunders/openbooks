@@ -13,6 +13,8 @@
     "customer_payment": "Pagamento de cliente",
     "expense_report": "Relatório de despesas",
     "check": "Cheque",
+    "deposit": "Depósito bancário",
+    "transfer": "Transferência",
     "card_charge": "Cobrança no cartão",
     "card_refund": "Estorno de cartão",
     "journal": "Diário",

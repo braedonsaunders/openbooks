@@ -23,7 +23,6 @@ import {
   NewMovementButton,
   InventoryActionDrawer,
   NewExpenseButton,
-  ExpenseActions,
   NewOrderButton,
   NewOrderRedirect,
   StoredValueDrawer,
@@ -48,7 +47,6 @@ import { CollectionsShell } from '../../app/(app)/collections/sections'
 import { ItemDrawer } from '../../app/(app)/items/ItemDrawer'
 import { ItemDrawerSlot } from '../../app/(app)/items/ItemDrawerSlot'
 import { InventoryPageHeaderActions, InventoryWorkspace } from '../../app/(app)/inventory/InventoryWorkspace'
-import { buildListDrawerHref } from '../../lib/list-params'
 import Link from 'next/link'
 import type { ChannelOrderDrawerData } from '../../app/(app)/channels/order-detail'
 import { str, type WidgetRenderer } from './widget-props'
@@ -291,20 +289,7 @@ export const COMMERCE_WIDGETS = {
    * spec cannot construct a query string. `canSubmit`/`canPost` arrive as
    * loader-resolved booleans, not as a capability object.
    */
-  'expense-row-actions': (props) => (
-    <ExpenseActions
-      id={String(props.id ?? '')}
-      status={String(props.status ?? '')}
-      canSubmit={props.canSubmit === true}
-      canPost={props.canPost === true}
-      openHref={str(props, 'openHref') ?? buildListDrawerHref(
-        '/expenses/reports',
-        (props.sp as Record<string, string | string[] | undefined>) ?? {},
-        'expense',
-        String(props.id ?? ''),
-      )}
-    />
-  ),
+
   'expense-drawer': (props) => <NativeListDrawer widget="expense-drawer" drawer={props.drawer} />,
 
   /* --- orders (quotes, sales orders, purchase orders) ----------------------- */

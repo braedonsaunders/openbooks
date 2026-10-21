@@ -443,7 +443,6 @@ function PrebillTable({
   money: (value: string) => string;
 }) {
   const t = useTranslations("projects.preBilling");
-  const common = useTranslations("common");
   function open(entry: WorkspaceEntry) {
     if (entry.kind === "prebill") onOpen(entry.source.id);
     else if (canManage) onPrebill(entry.source.projectId);
@@ -465,7 +464,7 @@ function PrebillTable({
           <TableRow>
             <TableCell colSpan={4} className="font-medium">{t("table.total")}</TableCell>
             <TableCell className="text-right font-medium tabular-nums">{money(total)}</TableCell>
-            <TableCell colSpan={2} />
+            <TableCell />
           </TableRow>
         ) : undefined}
         columns={[
@@ -522,14 +521,6 @@ function PrebillTable({
             key: "balance", header: t("table.openBalance"), align: "right", className: "tabular-nums",
             cell: (entry) => entry.kind === "prebill" && entry.source.invoiceStatus === "posted" && entry.source.invoiceOpenBalance != null
               ? money(entry.source.invoiceOpenBalance) : "—",
-          },
-          {
-            key: "actions", header: common("labels.actions"),
-            cell: (entry) => entry.kind === "unbilled" && !canManage ? null : (
-              <Button size="sm" variant="outline" onClick={() => open(entry)}>
-                {entry.kind === "unbilled" ? t("toolbar.billRun") : common("actions.open")}
-              </Button>
-            ),
           },
         ]}
       />

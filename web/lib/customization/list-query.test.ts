@@ -10,14 +10,22 @@ const { defaultListView } = await import("@openbooks/customization");
 const KINDS = ["vendor_bill", "vendor_credit"] as const;
 const view = { ...defaultListView("vendor_bill"), filters: [] };
 
+test("multi-status document queries bind a set and an empty selection matches nothing", () => {
+  const query = sqlText(documentWhere(KINDS, view, { statuses: ['posted', 'pending_approval'] }, 'tenant', null));
+  assert.match(query, /status in/);
+  assert.match(query, /posted/);
+  assert.match(query, /pending_approval/);
+  assert.match(sqlText(documentWhere(KINDS, view, { statuses: [] }, 'tenant', null)), /and false/);
+});
+
 test("account saved views omit the retired row action and keep the account link", () => {
   const accountView = defaultListView("account");
   assert.ok(!accountView.columns.some((column) => column.key === "_actions"));
-  const legacyView = { ...accountView, columns: [...accountView.columns, { key: "_actions", visible: true }] };
-  const cols = columnDescriptors("account", legacyView, [], { name: sql`a.name` }, {});
-  assert.ok(!cols.some((column) => column.kind === "actions"));
+  const storedView = { ...accountView, columns: [...accountView.columns, { key: "_actions", visible: true }] };
+  const cols = columnDescriptors("account", storedView, [], { name: sql`a.name` }, {});
+  assert.ok(!cols.some((column) => column.key === "_actions"));
   assert.ok(cols.some((column) => column.key === "name" && column.kind === "reference"));
-  assert.ok(columnDescriptors("vendor_bill", view, [], {}, {}).some((column) => column.kind === "actions"));
+  assert.ok(!columnDescriptors("vendor_bill", { ...view, columns: [...view.columns, { key: "_actions", visible: true }] }, [], {}, {}).some((column) => column.key === "_actions"));
 });
 
 function sqlText(query: { queryChunks?: unknown[] } | null | undefined): string {

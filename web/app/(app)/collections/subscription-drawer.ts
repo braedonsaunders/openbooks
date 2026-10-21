@@ -1,4 +1,5 @@
 import 'server-only'
+import { subscriptionPaidThrough } from '@openbooks/engine/billing/cadence'
 
 import { isFeatureEnabled } from '../../../lib/features'
 import { sql, type SQL } from 'drizzle-orm'
@@ -25,6 +26,8 @@ export interface SubscriptionDrawerData {
   interval: string
   intervalCount: number
   quantity: string
+  paidThroughOn: string
+  advancedLifecycle: boolean
   amount: string
   currency: string
   autoPost: boolean
@@ -50,6 +53,8 @@ type SubscriptionDrawerRow = {
   interval: string
   intervalCount: number
   quantity: string
+  guardedThrough: string | null
+  advancedLifecycle: boolean
   amount: string
   currency: string
   autoPost: boolean
@@ -96,6 +101,8 @@ export async function loadSubscriptionDrawer(
              s.payer_party_id as "payerId", py.display_name as "payerName",
              s.last_invoice_id as "lastInvoiceId", d.document_number as "lastInvoiceNumber",
              s.last_error as "lastError",
+             (select max(inv.period_ends_on)::text from subscription_period_invoices inv where inv.org_id = s.org_id and inv.subscription_id = s.id) as "guardedThrough",
+             exists(select 1 from subscription_lifecycles l where l.org_id = s.org_id and l.subscription_id = s.id) as "advancedLifecycle",
              rc.id as "contractId", rc.contract_number as "contractNumber"
         from subscriptions s
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
@@ -138,6 +145,8 @@ export async function loadSubscriptionDrawer(
       interval: row.interval,
       intervalCount: row.intervalCount,
       quantity: row.quantity,
+      paidThroughOn: subscriptionPaidThrough({ startOn: row.startOn, nextBillOn: row.nextBillOn, billed: row.lastInvoiceId != null || row.guardedThrough != null, guardedThrough: row.guardedThrough }),
+      advancedLifecycle: row.advancedLifecycle,
       amount: row.amount,
       currency: row.currency,
       autoPost: row.autoPost,

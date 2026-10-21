@@ -163,14 +163,22 @@ async function mount(options?: { canReconcile?: boolean; rows?: typeof ROWS; sub
   return { host, root };
 }
 
-test("PSP reversal fields are associated with their visible labels", async (t) => {
+test("PSP reversal fields belong to the selected record and are associated with their labels", async (t) => {
+  t.after(mockPostedBatchDetail([], {}, {}));
   const { host, root } = await mount({ canReconcile: true, rows: ROWS });
   t.after(async () => {
     await act(async () => root.unmount());
     host.remove();
   });
+  assert.ok(!host.querySelector('input[id*="reversal"]'), 'the list has no reversal editor');
+  await openPostedBatch(host);
+  const actions = [...document.querySelectorAll('button')].find(button => button.textContent === 'Actions')!;
+  await act(async () => actions.click()); await tick();
+  const reverse = [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent?.trim() === STRINGS.reverse) as HTMLButtonElement;
+  assert.ok(reverse, 'the record Actions menu offers reversal');
+  await act(async () => reverse.click()); await tick();
   for (const name of [STRINGS.reversalDate, STRINGS.reversalReason]) {
-    const label = [...host.querySelectorAll("label")].find((candidate) => candidate.textContent?.trim() === name);
+    const label = [...document.querySelectorAll("label")].find((candidate) => candidate.textContent?.trim() === name);
     assert.ok(label, `${name} label renders`);
     assert.ok(label.control, `${name} label controls its input`);
   }
@@ -669,15 +677,13 @@ test("settlement lines address the invoice and receipt drawers", async () => {
   );
 });
 
-/** F1T-9: every import/post/reverse mutation POSTs with banking.reconcile,
- * so a read-only operator must not see the import form or the row buttons —
- * only the batch list. Companion: the permitted path still offers all three
- * mutations. */
+/** Settlement writes require banking.reconcile and are reached through the selected record. */
 for (const [name, canReconcile, present] of [
   ["read-only operators see batches but no import, post or reverse affordances", false, false],
   ["reconcile operators keep the import, post and reverse affordances", true, true],
 ] as Array<[string, boolean, boolean]>) {
   test(name, async (t) => {
+    t.after(mockPostedBatchDetail([], {}, {}));
     const { host, root } = await mount({ canReconcile, rows: ROWS });
     t.after(async () => {
       await act(async () => {
@@ -689,8 +695,10 @@ for (const [name, canReconcile, present] of [
     const buttons = [...host.querySelectorAll("button")].map((b) => b.textContent);
     const verb = present ? "render with" : "stay hidden without";
     assert.equal(buttons.includes(STRINGS.importDraft), present, `the import button must ${verb} banking.reconcile`);
-    assert.equal(buttons.includes("Review & post"), present, `the post button must ${verb} banking.reconcile`);
-    assert.equal(buttons.includes(STRINGS.reverse), present, `the reverse button must ${verb} banking.reconcile`);
+    assert.ok(!buttons.includes("Review & post") && !buttons.includes(STRINGS.reverse), 'record controls do not appear in table rows');
+    await openPostedBatch(host, canReconcile);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    assert.equal([...dialog.querySelectorAll('button')].some(button => button.textContent === 'Actions'), present, `record actions must ${verb} banking.reconcile`);
     if (!present) {
       assert.ok(host.textContent?.includes("po_draft"), "the draft batch row must still render");
       assert.ok(host.textContent?.includes("po_posted"), "the posted batch row must still render");
@@ -769,7 +777,7 @@ test("an unmatched line offers evidence actions and a draft offers delete", asyn
     host.remove();
   });
   await tick();
-  assert.ok(host.textContent?.includes("Delete draft"), "a draft batch offers audited deletion");
+  assert.ok(!host.textContent?.includes("Delete draft"), "the list has no deletion action");
   const opener = [...host.querySelectorAll("button")].find((el) => el.textContent === "po_draft");
   assert.ok(opener, "the draft reference opens the detail drawer");
   const click = async (button: HTMLButtonElement) => {
@@ -786,6 +794,8 @@ test("an unmatched line offers evidence actions and a draft offers delete", asyn
     return found as HTMLButtonElement;
   };
   await click(opener as HTMLButtonElement);
+  await click(buttonNamed("Actions"));
+  assert.ok(document.querySelector('[role="menu"]')?.textContent?.includes("Delete draft"), "the draft record offers audited deletion");
   await click(buttonNamed("Evidence"));
   assert.ok(document.body.textContent?.includes("Settlement line evidence"), "the evidence panel opens for the line");
   const searchBox = document.querySelector('input[placeholder="Search posted sales documents"]');
@@ -849,7 +859,7 @@ function mockPostedBatchDetail(posts: { action?: unknown }[], suggest: unknown, 
   };
 }
 
-async function openPostedBatch(host: HTMLElement) {
+async function openPostedBatch(host: HTMLElement, canReconcile = true) {
   const opener = [...host.querySelectorAll("button")].find((el) => el.textContent === "po_posted") as HTMLButtonElement;
   assert.ok(opener, "the posted reference opens the detail drawer");
   await act(async () => {
@@ -857,9 +867,9 @@ async function openPostedBatch(host: HTMLElement) {
   });
   await tick();
   await tick();
-  assert.ok(
-    document.body.textContent?.includes("Batch sales recognition"),
-    "the posted payout offers batch-level sales recognition",
+  assert.equal(
+    Boolean(document.body.textContent?.includes("Batch sales recognition")), canReconcile,
+    "batch-level sales recognition follows reconciliation permission",
   );
 }
 
@@ -957,7 +967,7 @@ test("posting reviews saved accounts before sending one command and retains a re
   }) as typeof fetch;
   const { host, root } = await mount({ canReconcile: true, rows: ROWS });
   t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = prior; });
-  const review = [...host.querySelectorAll("button")].find(button => button.textContent === "Review & post");
+  const review = [...host.querySelectorAll("button")].find(button => button.textContent === "po_draft");
   assert.ok(review);
   await act(async () => review.click()); await tick(); await tick();
   assert.equal(posts.length, 0, "opening review must not post the payout");
@@ -987,7 +997,7 @@ test("missing settlement review data fails closed without offering Post", async 
     adjustmentAmount: "0", fxAmount: "0", netAmount: "100" }, lines: [] })) as typeof fetch;
   const { host, root } = await mount({ canReconcile: true, rows: ROWS });
   t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch = prior; });
-  const review = [...host.querySelectorAll("button")].find(button => button.textContent === "Review & post");
+  const review = [...host.querySelectorAll("button")].find(button => button.textContent === "po_draft");
   assert.ok(review);
   await act(async () => review.click()); await tick(); await tick();
   const dialog = document.querySelector('[role="dialog"]');
@@ -1013,7 +1023,7 @@ test("successful settlement posting refreshes recorded basis without remounting 
   }) as typeof fetch;
   const { host, root } = await mount({canReconcile:true,rows:ROWS});
   t.after(async () => { await act(async () => root.unmount()); host.remove(); globalThis.fetch=prior; });
-  const review = [...host.querySelectorAll("button")].find(button => button.textContent === "Review & post");
+  const review = [...host.querySelectorAll("button")].find(button => button.textContent === "po_draft");
   assert.ok(review);
   await act(async () => review.click()); await tick(); await tick();
   const dialog = document.querySelector('[role="dialog"]');

@@ -4,7 +4,6 @@ import { RecordBoard } from './record-board'
 import { getMoneyFormatter } from '@/lib/money-server'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { Eye } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
@@ -79,7 +78,6 @@ export async function EntityListView({
   canManage,
   sp,
   drawer,
-  rowTrailing,
   emptyAction,
   emptyTitle,
   emptyDescription,
@@ -125,13 +123,6 @@ export async function EntityListView({
   hrmEmploymentVisible?: boolean
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
-  /**
-   * Optional per-row trailing cell (a suggestion chip, a queue action).
-   * Resolved by the caller keyed on the record type, the way `formatValue`
-   * already is — never through the spec. Lists that pass nothing render
-   * exactly as before: no extra column, no extra queries.
-   */
-  rowTrailing?: (row: Record<string, unknown>) => ReactNode
   emptyAction?: ReactNode
   /**
    * Page-specific "nothing here yet" copy, shown only when NO search, quick
@@ -269,7 +260,7 @@ export async function EntityListView({
     quickValues[quick.filterKey] = requested === 'all' ? undefined : (requested ?? defaultValue)
   }
 
-  const labels: Record<string, string> = { actions: tCommon('labels.actions') }
+  const labels: Record<string, string> = {}
   for (const c of meta.listColumns) labels[c.key] = label(c.labelKey)
 
   const [allowedSubs, today] = await Promise.all([
@@ -522,19 +513,6 @@ export async function EntityListView({
         else display = v != null && v !== '' ? String(v) : '—'
         return <TableCell key={c.key} className="text-slate-700 dark:text-slate-300">{display}</TableCell>
       }
-      case 'actions':
-        return (
-          <TableCell key={c.key} className="w-px whitespace-nowrap px-2 text-center" style={{ width: 44 }}>
-            <RecordLink
-              href={(openHref(String(row.id), row))}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
-              aria-label={tCommon('actions.open')}
-              title={tCommon('actions.open')}
-            >
-              <Eye size={15} />
-            </RecordLink>
-          </TableCell>
-        )
       default: {
         const hasOptions = meta.listFilters.some((f) => f.key === c.key && f.options?.length)
         const display = formatValue?.(row, c.key, v)
@@ -610,25 +588,19 @@ export async function EntityListView({
                   ) : (
                     <TableHead
                       key={c.key}
-                      className={c.kind === 'amount' ? 'text-right' : c.kind === 'actions' ? 'w-px px-2 text-center' : undefined}
-                      style={c.kind === 'actions' ? { width: 64 } : c.width ? { width: c.width } : undefined}
+                      className={c.kind === 'amount' ? 'text-right' : undefined}
+                      style={c.width ? { width: c.width } : undefined}
                     >
                       {c.label}
                     </TableHead>
                   ),
                 )}
-                {rowTrailing ? <TableHead key="__trailing" className="w-px px-2"><span className="sr-only">{labels.actions}</span></TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((row) => (
                 <TableRow key={String(row.id)}>
                   {cols.map((c) => cell(row, c))}
-                  {rowTrailing ? (
-                    <TableCell key="__trailing" className="w-px whitespace-nowrap px-2 text-right">
-                      {rowTrailing(row)}
-                    </TableCell>
-                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

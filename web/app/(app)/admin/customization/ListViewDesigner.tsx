@@ -116,7 +116,6 @@ export function ListViewDesigner({
       case 'reference_number': return tCommon('labels.reference')
       case 'total': return tCommon('labels.total')
       case 'status': return tCommon('labels.status')
-      case '_actions': return tCommon('labels.actions')
       default: return key
     }
   }

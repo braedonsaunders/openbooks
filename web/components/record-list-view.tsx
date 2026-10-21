@@ -2,14 +2,13 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Eye } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { getRecordType, listColumnMeta, recordTypeFeatureKey } from '@openbooks/customization'
 import { SearchInput } from './search-input'
-import { FilterChips, SearchSelectFilter } from './filter-bar'
+import { FilterChips, MultiSelectFilter, SearchSelectFilter } from './filter-bar'
 import { DateRangeFilter } from './date-range-filter'
 import { Pagination } from './pagination'
 import { SortTh } from './sortable-th'
@@ -28,6 +27,7 @@ import { ListDrawerLink } from './list-drawer-link'
 import { ListDrawerHost } from './list-drawer-host'
 import { statusLabel as sharedStatusLabel } from '../lib/status-label'
 import { listDrawerRoute, type NativeListDrawerData } from '../lib/list/drawer-routes'
+import { resolveListStatusFilter, selectedListStatuses } from '../lib/list-status-filter'
 import { can, resolveAuthzByUserId } from '../lib/authz-core'
 import { FeatureUnavailable } from './feature-unavailable'
 
@@ -70,7 +70,6 @@ export async function RecordListView({
   emptyTitle,
   emptyDescription,
   emptyAction,
-  renderRowActions,
 }: {
   recordType: string
   basePath: string
@@ -86,8 +85,6 @@ export async function RecordListView({
   emptyDescription?: string
   /** Action shown in the empty state (usually the New button). */
   emptyAction?: ReactNode
-  /** Per-row actions for the `_actions` column, if the view includes it. */
-  renderRowActions?: (row: Record<string, unknown>) => ReactNode
 }) {
   const { money } = await getMoneyFormatter()
   const meta = getRecordType(recordType)
@@ -146,7 +143,9 @@ export async function RecordListView({
     }
     throw error
   }
-  const view = resolvedView.view
+  const status = pickString(sp.status)
+  const statusFilter = resolveListStatusFilter(resolvedView.view, source.hideStatusFilter ? undefined : status, source.hideStatusFilter ? [] : source.defaultExcludedStatuses)
+  const view = statusFilter.view
   const viewName = displayListViewName(resolvedView.row?.name, tCustom('views.defaultName'))
 
   const allowedSorts = meta.listColumns.filter((c) => c.sortable && c.sortKey).map((c) => c.sortKey!) as string[]
@@ -164,7 +163,6 @@ export async function RecordListView({
     allowedSorts,
   })
 
-  const status = pickString(sp.status)
   const kindParamKey = source.kindParamKey ?? 'kind'
   const kind = source.multiKind ? pickString(sp[kindParamKey]) : undefined
   const from = source.dateRange ? pickString(sp.from) : undefined
@@ -172,7 +170,7 @@ export async function RecordListView({
   const extraQuickValues: Record<string, string | undefined> = {}
   for (const quick of source.quickFilters ?? []) extraQuickValues[quick.filterKey] = pickString(sp[quick.paramKey])
 
-  const labels: Record<string, string> = { actions: tCommon('labels.actions') }
+  const labels: Record<string, string> = {}
   for (const c of meta.listColumns) labels[c.key] = label(c.labelKey)
 
   const cols = columnDescriptors(recordType, view, showInListDefs, source.builtInExpr, labels)
@@ -181,6 +179,7 @@ export async function RecordListView({
     sql`, `,
   )
   const joins = source.joins ?? sql``
+  const fromClause = sql`documents d left join parties p on p.id = d.party_id and p.org_id = d.org_id ${joins}`
   // Role-based subsidiary visibility (null = unrestricted).
   const allowedSubs = await allowedSubsidiaryIds(userId, orgId)
   const baseWhereBuilder = source.where ?? documentWhere
@@ -189,35 +188,30 @@ export async function RecordListView({
   const whereBuilder: typeof baseWhereBuilder = ownerFilter
     ? (...args) => sql`(${baseWhereBuilder(...args)}) and ${ownerFilter}`
     : baseWhereBuilder
-  const where = whereBuilder(source.kinds, view, { q: params.q, status, kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
+  const where = whereBuilder(source.kinds, view, { q: params.q, statuses: statusFilter.statuses, kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
   const statusCountView = { ...view, filters: view.filters.filter((filter) => filter.key !== 'status') }
-  const statusCountWhere = whereBuilder(source.kinds, statusCountView, { kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
+  const statusCountWhere = whereBuilder(source.kinds, statusCountView, { q: params.q, kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
   const kindCountView = { ...view, filters: view.filters.filter((filter) => filter.key !== 'transaction_kind') }
-  const kindCountWhere = whereBuilder(source.kinds, kindCountView, { status, from, to, filters: extraQuickValues }, orgId, allowedSubs)
+  const kindCountWhere = whereBuilder(source.kinds, kindCountView, { q: params.q, statuses: statusFilter.statuses, from, to, filters: extraQuickValues }, orgId, allowedSubs)
   const orderExpr = source.sorts[params.sort] ?? sql`d.document_date`
 
   const [rowsRes, statusCounts, totalRow] = await Promise.all([
     (db.execute(sql`
       select d.id, d.kind, d.currency${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
-        from documents d
-        left join parties p on p.id = d.party_id and p.org_id = d.org_id
-        ${joins}
+        from ${fromClause}
        where ${where}
        order by ${listOrderClause(orderExpr, params.dir)}
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `)),
     (db.execute(sql`
-      select d.status, count(*) as n from documents d
+      select d.status, count(*) as n from ${fromClause}
        where ${statusCountWhere}
        group by d.status`)),
     db.execute<{ n: string }>(sql`
-      select count(*) as n from documents d
-        left join parties p on p.id = d.party_id and p.org_id = d.org_id
-        ${joins}
+      select count(*) as n from ${fromClause}
        where ${where}`),
   ])
   const rows = rowsRes.rows as Record<string, unknown>[]
-  const total = statusCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
   const filteredTotal = Number(totalRow.rows[0]?.n ?? 0)
   // The genuinely-empty list teaches; a filtered one keeps the shared generic.
   const filtersActive = hasActiveListFilters({
@@ -226,11 +220,12 @@ export async function RecordListView({
     savedViewFilterCount: view.filters.length,
   })
 
-  const statusOptions = statusCounts.rows.map((r) => ({
-    value: String(r.status),
-    label: statusLabel(String(r.status)),
-    count: Number(r.n),
-  }))
+  const countByStatus = new Map(statusCounts.rows.map(row => [String(row.status), Number(row.n)]))
+  const statusValues = [...new Set([
+    ...(meta.listFilters.find(filter => filter.key === 'status')?.options ?? []).map(option => option.value),
+    ...countByStatus.keys(),
+  ])]
+  const statusOptions = statusValues.map(value => ({ value, label: statusLabel(value), count: countByStatus.get(value) ?? 0 }))
 
   const extraQuickFilters = await Promise.all((source.quickFilters ?? []).map(async (quick) => {
     const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
@@ -249,7 +244,7 @@ export async function RecordListView({
   let kindOptions: { value: string; label: string; count: number }[] = []
   if (source.multiKind) {
     const kindCounts = ((await db.execute(sql`
-      select d.kind, count(*) as n from documents d
+      select d.kind, count(*) as n from ${fromClause}
        where ${kindCountWhere}
        group by d.kind`)))
     const countByKind = new Map(kindCounts.rows.map((r) => [r.kind, Number(r.n)]))
@@ -336,21 +331,6 @@ export async function RecordListView({
         else display = v != null && v !== '' ? String(v) : '—'
         return <TableCell key={c.key} className="text-slate-700 dark:text-slate-300">{display}</TableCell>
       }
-      case 'actions':
-        return (
-          <TableCell key={c.key} className="w-px whitespace-nowrap px-2 text-center" style={{ width: 44 }}>
-            {renderRowActions ? renderRowActions({ ...row, openHref: openHref(String(row.id)) }) : (
-              <ListDrawerLink
-                href={(openHref(String(row.id)))}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
-                aria-label={tCommon('actions.open')}
-                title={tCommon('actions.open')}
-              >
-                <Eye size={15} />
-              </ListDrawerLink>
-            )}
-          </TableCell>
-        )
       default:
         return (
           <TableCell key={c.key} className={v == null || v === '' ? 'text-slate-400' : ''}>
@@ -368,7 +348,7 @@ export async function RecordListView({
           <FilterChips basePath={basePath} currentParams={sp} paramKey={kindParamKey} label={tCommon('labels.type')} options={kindOptions} />
         ) : null}
         {source.hideStatusFilter ? null : (
-          <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
+          <MultiSelectFilter basePath={basePath} currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} selectedValues={selectedListStatuses(statusOptions.map(option => option.value), view.filters, statusFilter.statuses)} />
         )}
         {extraQuickFilters.map((filter) => filter.options.length ? (
           filter.searchSelect ? (
@@ -401,7 +381,7 @@ export async function RecordListView({
           canManage={canManage}
         />
       </div>
-      {total === 0 ? (
+      {filteredTotal === 0 ? (
         <div className="mt-4">
           <EmptyState
             title={filtersActive ? tCommon('empty.title') : (emptyTitle ?? tCommon('empty.title'))}
@@ -430,8 +410,8 @@ export async function RecordListView({
                   ) : (
                     <TableHead
                       key={c.key}
-                      className={c.kind === 'amount' ? 'text-right' : c.kind === 'actions' ? 'w-px px-2 text-center' : undefined}
-                      style={c.kind === 'actions' ? { width: 64 } : c.width ? { width: c.width } : undefined}
+                      className={c.kind === 'amount' ? 'text-right' : undefined}
+                      style={c.width ? { width: c.width } : undefined}
                     >
                       {c.label}
                     </TableHead>

@@ -6,8 +6,7 @@ import type { ReactElement } from "react";
 // E53: every numeric widget prop crossed Number(), so a non-numeric value
 // ('abc' from a hand-written spec) rendered NaN. Every site now uses the num
 // guard, which treats NaN/Infinity/non-numbers as absent so the widget falls
-// back to its default. E58: an unknown document kind crashed the row through
-// a non-null DOC_KINDS assertion; it renders a refused-row state instead.
+// back to its default.
 
 // The families compose native pages whose graph pulls stylesheets and
 // server-only markers that plain tsx cannot load. Stub those out: calling a
@@ -23,13 +22,11 @@ const hooks = registerHooks({
 
 const React = await import("react");
 Object.assign(globalThis, { React });
-const { renderToStaticMarkup } = await import("react-dom/server");
 const { BANKING_WIDGETS } = await import("./widgets-banking");
 const { AGENTS_WIDGETS } = await import("./widgets-agents");
 const { CONTROLS_WIDGETS } = await import("./widgets-controls");
 const { OPERATIONS_WIDGETS } = await import("./widgets-operations");
 const { SETUP_WIDGETS } = await import("./widgets-setup");
-const { RECORDS_WIDGETS } = await import("./widgets-records");
 hooks.deregister();
 
 function propsOf(node: unknown): Record<string, unknown> {
@@ -71,18 +68,4 @@ test("exact banking amounts pass through untouched", () => {
   assert.equal(propsOf(BANKING_WIDGETS["banking-roster"]({ totalCash: '42.5000' })).totalCash, '42.5000');
   assert.equal(propsOf(AGENTS_WIDGETS["metric-tile"]({ value: 7 })).value, 7);
   assert.equal(propsOf(OPERATIONS_WIDGETS["new-filing"]({ defaultYear: 2026 })).defaultYear, 2026);
-});
-
-test("an unknown document kind renders a refused row, not a crash", () => {
-  const html = renderToStaticMarkup(
-    RECORDS_WIDGETS["document-row-actions"]({ kind: "frobnicator", id: "row-1" }) as ReactElement,
-  );
-  assert.ok(html.includes("Unknown document kind"), "the refusal must be visible");
-  assert.ok(html.includes("frobnicator"), "the refusal must name the kind");
-  assert.ok(html.includes('role="alert"'), "the refusal must be announced");
-});
-
-test("a known document kind still renders its row actions", () => {
-  const node = RECORDS_WIDGETS["document-row-actions"]({ kind: "vendor_bill", id: "row-1" }) as ReactElement;
-  assert.notEqual(node.type, "span", "a known kind must not render the refusal");
 });

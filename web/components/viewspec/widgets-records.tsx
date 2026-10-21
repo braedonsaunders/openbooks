@@ -26,7 +26,6 @@ import {
   ActivityDrawer,
   NewRecordButton,
   RecordDrawer,
-  DocumentRowActions,
   NewDocumentButton,
   NewPartyButton,
   PartyDrawer,
@@ -51,7 +50,6 @@ import {
   QuotaEmptyAction,
   ForecastSnapshotAction,
 } from '../../app/(app)/crm/forecasts/sections'
-import { DOC_KINDS } from '../../lib/document-kinds'
 import { RelatedTxnSlot } from './related-txn-slot'
 import { Badge } from '@openbooks/ui'
 import Link from 'next/link'
@@ -388,49 +386,6 @@ export const RECORDS_WIDGETS = {
   'document-drawer': (props) => (
     <NativeListDrawer widget="document-drawer" drawer={props.drawer} />
   ),
-  /** `config` is re-derived from the row's kind via the static DOC_KINDS map;
-   *  the loader never ships a registry entry as data. The post grant arrives
-   *  as loader-resolved booleans (the same decisions the drawer reads):
-   *  single-namespace pages pass their one decision as `canPost`, while the
-   *  mixed banking list passes per-namespace decisions so an ap.post holder
-   *  never sees an enabled Post on a gl.post transfer row (and vice versa).
-   *  Absent fails closed. */
-  'document-row-actions': (props) => {
-    const kind = String(props.kind ?? '')
-    const config = DOC_KINDS[kind]
-    // An unknown kind must refuse visibly and offer no actions (fail closed):
-    // the non-null assertion this replaces crashed the whole row, and through
-    // it the table, on the first unregistered kind.
-    if (!config) {
-      return (
-        <span role="alert" className="text-xs text-red-600 dark:text-red-400">
-          Unknown document kind &ldquo;{kind}&rdquo;
-        </span>
-      )
-    }
-    const namespace = config.permNamespace
-    const namespaced =
-      namespace === 'gl'
-        ? props.canPostGl
-        : namespace === 'ar'
-          ? props.canPostAr
-          : namespace === 'ap'
-            ? props.canPostAp
-            : undefined
-    return (
-      <DocumentRowActions
-        id={String(props.id ?? '')}
-        status={String(props.status ?? '')}
-        config={config}
-        openHref={
-          str(props, 'openHref') ??
-          `${str(props, 'basePath') ?? ''}?doc=${String(props.id ?? '')}`
-        }
-        canPost={(namespaced ?? props.canPost) === true}
-      />
-    )
-  },
-
   'new-party': (props) => {
     const kind = str(props, 'kind')
     return (

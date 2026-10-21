@@ -593,7 +593,6 @@ export function cashSalesSpec(data: CashSalesData): PageSpec {
         emptyTitle: f('emptyTitle'),
         emptyDescription: f('emptyDescription'),
         emptyAction: data.canCreate ? newDocument : null,
-        rowActions: { widget: 'document-row-actions', props: { basePath: BASE_PATH, canPost: data.canPost } },
       }),
     ],
   })

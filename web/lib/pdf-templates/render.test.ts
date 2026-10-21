@@ -73,6 +73,26 @@ const { PDF_RECORD_TYPE_BY_KEY } = await import('./catalog')
 const { starterTemplate } = await import('./starters')
 const { compileTemplateHtml } = await import('@openbooks/pdf')
 
+test('bank deposits and transfers print through the native document template path', async () => {
+  for (const kind of ['deposit', 'transfer']) {
+    const meta = PDF_RECORD_TYPE_BY_KEY[kind]!
+    assert.ok(meta, kind)
+    assert.equal(meta.readPermission, 'banking.read')
+    assert.equal(meta.docKind, kind)
+    const starter = starterTemplate(meta)
+    const { compiledHtml } = compileTemplateHtml(starter.sourceHtml)
+    await mergeAndPrintPdf({ ...starter, compiledHtml, paperSize: 'letter', orientation: 'portrait', marginMm: 14 }, {
+      document_number: 'BANK-00012', document_date: 'Oct 21, 2026', status: 'Posted',
+      org_name: 'Example Company', currency: 'CAD', subtotal: 'CA$1,250.00', tax_total: 'CA$0.00', total: 'CA$1,250.00',
+      lines: [{ description: 'Operating account funds', amount: 'CA$1,250.00', quantity: '1', unit_price: 'CA$1,250.00' }],
+    })
+    const html = readCapturedInput().bodyHtml
+    assert.ok(html.includes('BANK-00012'))
+    assert.ok(html.includes('Operating account funds'))
+    assert.ok(html.includes('CA$1,250.00'))
+  }
+})
+
 test('the live PDF body path cannot emit triple-brace record markup', async () => {
   state.input = null
   const pdf = await mergeAndPrintPdf(

@@ -159,7 +159,6 @@ function partyListColumns(numberLabelKey: string, partyLabelKey: string): ListCo
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
     { key: "open_balance", labelKey: "common.labels.openBalance", kind: "amount", sortable: true, sortKey: "balance", defaultWidth: 130 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ];
 }
 
@@ -189,7 +188,6 @@ const VENDOR_BILL: RecordTypeMeta = {
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
     { key: "open_balance", labelKey: "common.labels.openBalance", kind: "amount", sortable: true, sortKey: "balance", defaultWidth: 130 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -325,7 +323,6 @@ const RETURN_AUTHORIZATION: RecordTypeMeta = {
     { key: "source_document_number", labelKey: "returns.list.columns.source", kind: "text", sortable: true, sortKey: "source" },
     { key: "return_stage", labelKey: "returns.list.columns.stage", kind: "text", sortable: true, sortKey: "stage" },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     APPROVAL_STATUS_FILTER,
@@ -352,7 +349,6 @@ function cardRecordType(key: string): RecordTypeMeta {
       { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
       { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
       { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
     ],
     listFilters: [DIRECT_POST_STATUS_FILTER, DATE_FILTER],
   };
@@ -428,7 +424,6 @@ const INTERNAL_BILLING: RecordTypeMeta = {
     { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     APPROVAL_STATUS_FILTER,
@@ -459,7 +454,6 @@ const CHECK: RecordTypeMeta = {
     { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     DIRECT_POST_STATUS_FILTER,
@@ -509,7 +503,6 @@ const JOURNAL: RecordTypeMeta = {
     { key: "line_count", labelKey: "common.labels.lines", kind: "text", sortable: true, sortKey: "lines", defaultWidth: 90 },
     { key: "total_debits", labelKey: "journal.list.columns.debits", kind: "amount", sortable: true, sortKey: "debits", defaultWidth: 120 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -575,7 +568,6 @@ function bankDocumentRecordType(key: "deposit" | "transfer"): RecordTypeMeta {
       { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
       { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
       { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
     ],
     listFilters: [DIRECT_POST_STATUS_FILTER, DATE_FILTER],
   };
@@ -611,7 +603,6 @@ function paymentRecordType(key: string, partyLabelKey: string, entitySource: str
       { key: "reference_number", labelKey: "payments.list.columns.ref", kind: "text" },
       { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 130 },
       { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
     ],
     listFilters: [
       DIRECT_POST_STATUS_FILTER,
@@ -658,7 +649,6 @@ function orderRecordType(
       { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
       { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
       { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
     ],
     listFilters: [
       {
@@ -840,7 +830,6 @@ const OPPORTUNITY: RecordTypeMeta = {
     { key: "forecast_category", labelKey: "crm.fields.forecastCategory", kind: "text", sortable: true, sortKey: "category", defaultHidden: true },
     { key: "probability", labelKey: "crm.fields.probability", kind: "text", sortable: true, sortKey: "probability", defaultHidden: true },
     { key: "weighted_amount", labelKey: "crm.fields.weightedAmount", kind: "amount", sortable: true, sortKey: "weighted", defaultHidden: true, defaultWidth: 140 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     { key: "status_id", labelKey: "crm.fields.status", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "crm_opportunity_status" },
@@ -879,7 +868,6 @@ const ACTIVITY: RecordTypeMeta = {
     { key: "assigned_name", labelKey: "crm.fields.assignedTo", kind: "text", sortable: true, sortKey: "owner" },
     { key: "activity_date", labelKey: "crm.fields.date", kind: "date", sortable: true, sortKey: "date", defaultWidth: 150 },
     { key: "priority", labelKey: "crm.fields.priority", kind: "text", defaultHidden: true },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -956,7 +944,6 @@ const ITEM: RecordTypeMeta = {
     { key: "unit", labelKey: "items.labels.unit", kind: "text" },
     { key: "family", labelKey: "items.labels.family", kind: "text", sortable: true, sortKey: "family", defaultHidden: true },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 100 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -1121,7 +1108,6 @@ const BANK_TRANSACTION: RecordTypeMeta = {
     { key: "reference_number", labelKey: "common.labels.reference", kind: "text", defaultHidden: true },
     { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -1378,7 +1364,6 @@ const BUDGET_SCENARIO: RecordTypeMeta = {
     { key: "status", labelKey: "budgets.columns.status", kind: "status", sortable: true, sortKey: "status" },
     { key: "total_amount", labelKey: "budgets.columns.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 130 },
     { key: "updated", labelKey: "budgets.columns.updated", kind: "date", sortable: true, sortKey: "updated", defaultWidth: 150 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -1440,7 +1425,6 @@ const LEASE_AGREEMENT: RecordTypeMeta = {
     {key:"commencement_on",labelKey:"accounting.lifecycle.date",kind:"date",sortable:true,sortKey:"date"},
     {key:"payment_amount",labelKey:"accounting.lifecycle.payment",kind:"amount",sortable:true,sortKey:"payment"},
     {key:"status",labelKey:"accounting.lifecycle.status",kind:"status",sortable:true,sortKey:"status"},
-    {key:"_actions",labelKey:"common.labels.actions",kind:"actions",defaultWidth:44},
   ],
   listFilters: [{key:"status",labelKey:"common.labels.status",kind:"select",operators:OPERATORS_BY_KIND.select,
     options: ["draft","active","terminated","complete"].map(value=>({value,labelKey:`accounting.lifecycle.${value}`}))}],
@@ -1472,7 +1456,6 @@ const FINANCIAL_CHANGE: RecordTypeMeta = {
     {key:"reason",labelKey:"accounting.lifecycle.reason",kind:"text",sortable:true,sortKey:"reason",defaultHidden:true},
     {key:"effective_on",labelKey:"accounting.lifecycle.date",kind:"date",sortable:true,sortKey:"date"},
     {key:"status",labelKey:"accounting.lifecycle.status",kind:"status",sortable:true,sortKey:"status"},
-    {key:"_actions",labelKey:"common.labels.actions",kind:"actions",defaultWidth:44},
   ],
   listFilters: [
     {key:"queue",labelKey:"accounting.lifecycle.queue",kind:"select",operators:OPERATORS_BY_KIND.select,
@@ -1507,7 +1490,6 @@ const REVENUE_CONTRACT: RecordTypeMeta = {
     { key: "starts_on", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "start", defaultHidden: true },
     { key: "ends_on", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "end", defaultHidden: true },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -1542,7 +1524,6 @@ const CONTRACT_COST_ASSET: RecordTypeMeta = {
     { key: "carrying", labelKey: "contractCosts.labels.carrying", kind: "amount", sortable: true, sortKey: "carrying", defaultWidth: 130 },
     { key: "capitalized_on", labelKey: "contractCosts.labels.capitalizedOn", kind: "date", sortable: true, sortKey: "capitalized", defaultHidden: true },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -1574,7 +1555,6 @@ const STORED_VALUE_ACCOUNT: RecordTypeMeta = {
     { key: "issued", labelKey: "storedValue.labels.issued", kind: "amount", sortable: true, sortKey: "issued", defaultWidth: 130 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
     { key: "expires_on", labelKey: "storedValue.labels.expires", kind: "date", sortable: true, sortKey: "expires", defaultHidden: true },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -1607,7 +1587,6 @@ const EQUIPMENT_UNIT: RecordTypeMeta = {
     { key: "recovery", labelKey: "assets.equipment.metrics.recovery", kind: "amount", sortable: true, sortKey: "recovery", defaultWidth: 130 },
     { key: "billable", labelKey: "assets.equipment.metrics.billable", kind: "amount", sortable: true, sortKey: "billable", defaultWidth: 130 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -2270,7 +2249,6 @@ const PROJECT: RecordTypeMeta = {
     { key: "contract", labelKey: "projects.labels.contractValue", kind: "amount", sortable: true, sortKey: "contract", defaultWidth: 130 },
     { key: "actual", labelKey: "projects.labels.actualCost", kind: "amount", sortable: true, sortKey: "actual", defaultWidth: 130 },
     { key: "created", labelKey: "common.labels.created", kind: "date", sortable: true, sortKey: "created", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {key:"workflow",labelKey:"operatingProfiles.filters.workflow",kind:"select",operators:OPERATORS_BY_KIND.select},
@@ -2347,7 +2325,6 @@ const FIXED_ASSET: RecordTypeMeta = {
     { key: "opening_accumulated_as_of", labelKey: "assets.labels.openingAsOf", kind: "date", defaultHidden: true },
     { key: "serial_number", labelKey: "assets.labels.serialNumber", kind: "text", defaultHidden: true },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 130 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -2630,7 +2607,6 @@ const FIELD_TICKET: RecordTypeMeta = {
     { key: "period", labelKey: "fieldTickets.list.period", kind: "text", defaultWidth: 100 },
     { key: "total", labelKey: "fieldTickets.list.itemsTotal", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 110 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 130 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -2733,7 +2709,6 @@ function fulfillmentRecordType(key: "pick_list" | "shipment"): RecordTypeMeta {
         : []),
       { key: "fulfillment_stage", labelKey: "fulfillment.fields.stage", kind: "text", sortable: true, sortKey: "stage", defaultWidth: 110 },
       { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 130 },
-      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
     ],
     listFilters: [
       {
@@ -2791,7 +2766,6 @@ const PAY_RUN: RecordTypeMeta = {
     { key: "net_total", labelKey: "payroll.columns.net", kind: "amount", sortable: true, sortKey: "net", defaultWidth: 120 },
     { key: "employee_count", labelKey: "payroll.columns.employees", kind: "text", sortable: true, sortKey: "employees", defaultWidth: 100 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     {
@@ -2834,7 +2808,6 @@ const FUND: RecordTypeMeta = {
     { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
     { key: "restriction_class", labelKey: "common.labels.class", kind: "text", sortable: true, sortKey: "class" },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     { key: "name", labelKey: "common.labels.name", kind: "text", operators: OPERATORS_BY_KIND.text },
@@ -2865,7 +2838,6 @@ const FUND_RELEASE: RecordTypeMeta = {
     { key: "to_fund", labelKey: "common.labels.to", kind: "text", sortable: true, sortKey: "to_fund" },
     { key: "amount", labelKey: "common.labels.amount", kind: "amount", sortable: true, sortKey: "amount", defaultWidth: 130 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [
     { key: "release_number", labelKey: "common.labels.number", kind: "text", operators: OPERATORS_BY_KIND.text },
@@ -2897,7 +2869,6 @@ const GRANT: RecordTypeMeta = {
     { key: "period_to", labelKey: "nonprofit.grants.periodTo", kind: "date", sortable: true, sortKey: "period_to", defaultWidth: 120 },
     { key: "fund", labelKey: "nonprofit.grants.fund", kind: "text", sortable: true, sortKey: "fund" },
     { key: "status", labelKey: "nonprofit.grants.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [{ key: "status", labelKey: "nonprofit.grants.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: ["draft", "awarded", "active", "closed_out", "closed", "void"].map((value) => ({ value })) }],
   defaultSort: { sortKey: "code", dir: "asc" },
@@ -2924,7 +2895,6 @@ const ENCUMBRANCE: RecordTypeMeta = {
     { key: "subsidiary", labelKey: "nonprofit.encumbrances.subsidiary", kind: "text", sortable: true, sortKey: "subsidiary", legalEntity: true },
     { key: "amount", labelKey: "nonprofit.encumbrances.amount", kind: "amount", sortable: true, sortKey: "amount", defaultWidth: 130 },
     { key: "status", labelKey: "nonprofit.encumbrances.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [{ key: "status", labelKey: "nonprofit.encumbrances.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: ["open", "closed", "void"].map((value) => ({ value })) }],
   defaultSort: { sortKey: "number", dir: "asc" },
@@ -2953,7 +2923,6 @@ const COLLECTION_ATTEMPT: RecordTypeMeta = {
     { key: "next_retry_on", labelKey: "ar.collections.attempts.nextRetryHeader", kind: "date", sortable: true, sortKey: "next_retry_on", defaultWidth: 120 },
     { key: "created_at", labelKey: "ar.collections.attempts.attemptedAt", kind: "date", sortable: true, sortKey: "created_at", defaultWidth: 120 },
     { key: "status", labelKey: "ar.collections.attempts.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [{ key: "status", labelKey: "ar.collections.attempts.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: ["initiated", "processing", "succeeded", "failed", "canceled"].map((value) => ({ value })) }],
   defaultSort: { sortKey: "created_at", dir: "desc" },
@@ -2980,7 +2949,6 @@ const TAX_PROVIDER_TRANSACTION: RecordTypeMeta = {
     { key: "created_at", labelKey: "common.labels.created", kind: "date", sortable: true, sortKey: "created_at", defaultWidth: 120 },
     { key: "next_attempt_at", labelKey: "tax.activity.columns.nextAttempt", kind: "date", sortable: true, sortKey: "next_attempt_at", defaultWidth: 120 },
     { key: "committed_at", labelKey: "tax.activity.columns.committedAt", kind: "date", sortable: true, sortKey: "committed_at", defaultWidth: 120 },
-    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
   listFilters: [{ key: "status", labelKey: "tax.activity.columns.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: ["pending", "committed", "voided", "failed", "skipped"].map((value) => ({ value })) }],
   defaultSort: { sortKey: "created_at", dir: "desc" },

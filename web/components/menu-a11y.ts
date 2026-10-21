@@ -11,7 +11,7 @@ export function menuArrowKeys(e: KeyboardEvent<HTMLElement>) {
   if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return
   const items = Array.from(
     e.currentTarget.querySelectorAll<HTMLElement>(
-      '[role="menuitem"]:not(:disabled):not([aria-disabled="true"])',
+      ':is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):not(:disabled):not([aria-disabled="true"])',
     ),
   )
   if (items.length === 0) return

@@ -2,6 +2,7 @@
 
 import { PagedTable } from "@/components/paged-table";
 import { ListPageLayout } from "@/components/page-layout";
+import { CatchUpPickerDialog, type CatchUpPick } from "./CatchUpPickerDialog";
 import { SetupDrawer } from "../admin/setup/[entity]/SetupDrawer";
 import { BILLING_ENTITIES } from "@/lib/setup/entities/billing";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -307,7 +308,6 @@ function SubscriptionsPanel({
   const [subPreview, setSubPreview] = useState<SubCatchUpPreview | null>(null);
   const [subCatchUpMode, setSubCatchUpMode] = useState<CatchUpChoice | null>(null);
   const [subSelectedPeriods, setSubSelectedPeriods] = useState<string[]>([]);
-  const [subPicker, setSubPicker] = useState<{ id: string; preview: SubCatchUpPreview } | null>(null);
 
   const reportSubCatchUp = (data: unknown) => {
     const outcome = (data as { catchUp?: { results?: { status?: string }[]; stopped?: string; error?: string } } | null)?.catchUp;
@@ -333,49 +333,6 @@ function SubscriptionsPanel({
     );
   };
 
-  const resumeSubscriptionWithChoice = async (id: string) => {
-    setError(null);
-    const params = new URLSearchParams({ subscriptionId: id });
-    const res = await fetch(`/api/subscriptions/preview?${params.toString()}`);
-    if (!res.ok) {
-      setError(tErrors("actionFailed"));
-      return;
-    }
-    const previewed = (await res.json()) as SubCatchUpPreview;
-    if (previewed.periods.length < 2) {
-      await post({ action: "updateSubscription", id, status: "active" });
-      return;
-    }
-    // A backlog resumes through the picker: the exact missed periods with
-    // tick boxes, so some bill, some draft, all post, or all skip.
-    setSubPicker({ id, preview: previewed });
-  };
-
-  const pickSubCatchUp = async (pick: CatchUpPick) => {
-    if (!subPicker) return;
-    const r = await post({
-      action: "updateSubscription",
-      id: subPicker.id,
-      status: "active",
-      catchUp:
-        pick.mode === "selected"
-          ? { mode: "selected", dates: pick.dates, post: pick.post }
-          : { mode: pick.mode },
-    });
-    if (!r) return;
-    setSubPicker(null);
-    reportSubCatchUp(r);
-  };
-  const [changing, setChanging] = useState<string | null>(null);
-  const [changeQty, setChangeQty] = useState("");
-  // Cancellation ends billing on a chosen date; the server refuses any date
-  // other than the paid-through boundary, so the dialog opens on it.
-  const [cancelling, setCancelling] = useState<{
-    id: string;
-    customerName: string | null;
-    paidThroughOn: string;
-  } | null>(null);
-  const [cancelOn, setCancelOn] = useState("");
   const action = useAppAction();
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
@@ -410,6 +367,9 @@ function SubscriptionsPanel({
   }, [tErrors, view]);
   useEffect(() => {
     void Promise.resolve().then(load);
+    const changed = () => { void load(); };
+    window.addEventListener('openbooks:subscriptions-changed', changed);
+    return () => window.removeEventListener('openbooks:subscriptions-changed', changed);
   }, [load]);
 
   const post = async (
@@ -495,7 +455,7 @@ function SubscriptionsPanel({
         <p className="text-xs text-muted-foreground">{t("retentionUnavailable")}</p>
       )}
 
-      {error && !creating && !changing && (
+      {error && !creating && (
         <p role="alert" className="text-sm text-red-600">
           {error}{" "}
           <Button
@@ -716,6 +676,7 @@ function SubscriptionsPanel({
         <>
           <PagedTable
             source="collections_subscriptions"
+            onRowClick={row => window.history.pushState(null, '', (() => { const next = new URL(window.location.href); next.searchParams.set('subscription', row.id); return next.pathname + next.search + next.hash; })())}
             searchable
             rows={subs}
             rowKey={(s) => s.id}
@@ -780,90 +741,7 @@ function SubscriptionsPanel({
                   </>
                 ),
               },
-              {
-                key: "actions",
-                header: <></>,
-                cell: (s) => (
-                  <>
-                    <>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={action.busy}
-                        onClick={async () => {
-                          const r = await post({ action: "billNow", id: s.id });
-                          if (r?.invoiceId && r.documentNumber)
-                            setMsg(
-                              t("toasts.billed", {
-                                documentNumber: r.documentNumber,
-                              }),
-                            );
-                        }}
-                      >
-                        {t("billNow")}
-                      </Button>
-                      {s.status === "active" && !s.advancedLifecycle && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={action.busy}
-                          onClick={() => {
-                            setChanging(s.id);
-                            setChangeQty(s.quantity);
-                          }}
-                        >
-                          {t("changeQty")}
-                        </Button>
-                      )}
-                      {s.status === "active" ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={action.busy}
-                          onClick={() =>
-                            post({
-                              action: "updateSubscription",
-                              id: s.id,
-                              status: "paused",
-                            })
-                          }
-                        >
-                          {t("pause")}
-                        </Button>
-                      ) : s.status === "paused" ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={action.busy}
-                          onClick={() => void resumeSubscriptionWithChoice(s.id)}
-                        >
-                          {t("resume")}
-                        </Button>
-                      ) : null}
-                      {s.status !== "canceled" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={action.busy}
-                          onClick={() => {
-                            setError(null);
-                            setCancelling({
-                              id: s.id,
-                              customerName: s.customerName,
-                              paidThroughOn: s.paidThroughOn,
-                            });
-                            // Service ends where invoicing ends: the paid-through
-                            // date is the one date the cancellation accepts.
-                            setCancelOn(s.paidThroughOn);
-                          }}
-                        >
-                          {t("cancelSub")}
-                        </Button>
-                      )}
-                    </>
-                  </>
-                ),
-              },
+
             ]}
           />
           <Drawer
@@ -1098,134 +976,7 @@ function SubscriptionsPanel({
           </Drawer>
         </>
       )}
-      <Drawer
-        open={!!changing}
-        onClose={() => setChanging(null)}
-        title={t("changeQty")}
-        description={subs.find((sub) => sub.id === changing)?.planName}
-        size="lg"
-        headerActions={
-          <Button
-            disabled={action.busy}
-            onClick={async () => {
-              const r = await post({
-                action: "changeSubscription",
-                id: changing,
-                quantity: changeQty,
-              });
-              if (!r) return;
-              setMsg(
-                r.documentNumber
-                  ? t("toasts.prorated", {
-                      adjustment: money(r.adjustment),
-                      documentNumber: r.documentNumber,
-                    })
-                  : t("toasts.qtyUpdatedNoProration"),
-              );
-              setChanging(null);
-            }}
-          >
-            {t("apply")}
-          </Button>
-        }
-      >
-        {error && (
-          <p role="alert" className="mb-4 text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        <InspectorPanel
-          title={forms("subscriptionDetails")}
-          description={subs.find((sub) => sub.id === changing)?.customerName}
-        >
-          <Field label={t("subsTable.qty")} required>
-            <Input
-              inputMode="decimal"
-              value={changeQty}
-              onChange={(e) => setChangeQty(e.target.value)}
-            />
-          </Field>
-        </InspectorPanel>
-      </Drawer>
-      <Drawer
-        open={cancelling !== null}
-        onClose={() => setCancelling(null)}
-        title={t("cancelConfirmTitle")}
-        description={cancelling?.customerName ?? undefined}
-        size="lg"
-      >
-        {error && (
-          <p role="alert" className="mb-4 text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        <div className="space-y-5">
-          <p className="text-sm text-muted-foreground">
-            {t("cancelConfirmBody")}
-          </p>
-          <InspectorPanel title={forms("subscriptionDetails")}>
-            <Field label={t("cancelEffectiveOn")} required>
-              <DateField
-                value={cancelOn}
-                onChange={(value) => setCancelOn(value)}
-              />
-            </Field>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t("cancelPaidThroughHint", {
-                date: cancelling?.paidThroughOn ?? "",
-              })}
-            </p>
-          </InspectorPanel>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              variant="outline"
-              disabled={action.busy}
-              onClick={() => setCancelling(null)}
-            >
-              {t("keepSubscription")}
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={action.busy || !cancelOn || !cancelling}
-              onClick={async () => {
-                if (!cancelling) return;
-                const result = await post({
-                  action: "updateSubscription",
-                  id: cancelling.id,
-                  status: "canceled",
-                  canceledOn: cancelOn,
-                });
-                if (result) setCancelling(null);
-              }}
-            >
-              {t("cancelSubscription")}
-            </Button>
-          </div>
-        </div>
-      </Drawer>
-      <CatchUpPickerDialog
-        open={subPicker !== null}
-        title={t("catchUpTitle")}
-        message={
-          subPicker
-            ? t("catchUpResumeMessage", {
-                count: String(subPicker.preview.periods.length),
-                total: `${subPicker.preview.estimatedTotal} ${subPicker.preview.currency ?? ""}`.trim(),
-              })
-            : ""
-        }
-        selectHint={t("catchUpSelectHint")}
-        dates={subPicker?.preview.periods ?? []}
-        postSelectedLabel={t("catchUpSelectedPost")}
-        draftSelectedLabel={t("catchUpSelectedDrafts")}
-        postAllLabel={t("catchUpPostAll")}
-        draftsLabel={t("catchUpDrafts")}
-        skipLabel={t("catchUpSkip")}
-        cancelLabel={tc("confirm.cancel")}
-        busy={action.busy}
-        onPick={(pick) => void pickSubCatchUp(pick)}
-        onClose={() => setSubPicker(null)}
-      />
+
     </div>
   );
 }
@@ -1252,10 +1003,6 @@ type SubCatchUpPreview = {
 
 type CatchUpChoice = "post_all" | "drafts" | "skip" | "selected_post" | "selected_drafts";
 
-type CatchUpPick =
-  | { mode: "post_all" | "drafts" | "skip" }
-  | { mode: "selected"; post: boolean; dates: string[] };
-
 /** Map a dialog choice to the catch-up request body the API routes accept. */
 function catchUpRequestBody(choice: CatchUpChoice, selectedDates: string[]): unknown {
   if (choice === "selected_post") return { mode: "selected", dates: selectedDates, post: true };
@@ -1269,96 +1016,6 @@ function catchUpRequestBody(choice: CatchUpChoice, selectedDates: string[]): unk
  * subset to generate. Shared by recurring schedules and subscriptions —
  * both catch-up runs take the same choice shape.
  */
-function CatchUpPickerDialog({
-  open,
-  title,
-  message,
-  selectHint,
-  dates,
-  postSelectedLabel,
-  draftSelectedLabel,
-  postAllLabel,
-  draftsLabel,
-  skipLabel,
-  cancelLabel,
-  busy,
-  onPick,
-  onClose,
-}: {
-  open: boolean;
-  title: string;
-  message: string;
-  selectHint: string;
-  dates: string[];
-  postSelectedLabel: string;
-  draftSelectedLabel: string;
-  postAllLabel: string;
-  draftsLabel: string;
-  skipLabel: string;
-  cancelLabel: string;
-  busy: boolean;
-  onPick: (pick: CatchUpPick) => void;
-  onClose: () => void;
-}) {
-  // Every period starts ticked: the usual resume bills all of them, and
-  // unticking the out-of-season ones is the shortcut to a partial run.
-  // Reset while rendering when a new backlog opens (same committed value,
-  // no extra render).
-  const datesKey = dates.join(",");
-  const [checked, setChecked] = useState<string[]>(dates);
-  const [seenKey, setSeenKey] = useState(datesKey);
-  if (seenKey !== datesKey) {
-    setSeenKey(datesKey);
-    setChecked(dates);
-  }
-  const toggle = (date: string) =>
-    setChecked((prev) => (prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date]));
-  return (
-    <Drawer open={open} onClose={onClose} title={title} size="lg">
-      <div className="space-y-5">
-        <p className="text-sm text-muted-foreground">{message}</p>
-        <div>
-          <p className="mb-2 text-sm text-muted-foreground">{selectHint}</p>
-          <ul className="max-h-56 space-y-1 overflow-y-auto text-sm">
-            {dates.map((date) => (
-              <li key={date}>
-                <label className="flex cursor-pointer items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={checked.includes(date)}
-                    onChange={() => toggle(date)}
-                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <span className="tabular-nums">{date}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="flex flex-col gap-2">
-          <Button disabled={busy || checked.length === 0} onClick={() => onPick({ mode: "selected", post: true, dates: checked })}>
-            {postSelectedLabel}
-          </Button>
-          <Button disabled={busy || checked.length === 0} variant="outline" onClick={() => onPick({ mode: "selected", post: false, dates: checked })}>
-            {draftSelectedLabel}
-          </Button>
-          <Button disabled={busy} variant="outline" onClick={() => onPick({ mode: "post_all" })}>
-            {postAllLabel}
-          </Button>
-          <Button disabled={busy} variant="outline" onClick={() => onPick({ mode: "drafts" })}>
-            {draftsLabel}
-          </Button>
-          <Button disabled={busy} variant="outline" onClick={() => onPick({ mode: "skip" })}>
-            {skipLabel}
-          </Button>
-          <Button disabled={busy} variant="ghost" onClick={onClose}>
-            {cancelLabel}
-          </Button>
-        </div>
-      </div>
-    </Drawer>
-  );
-}
 
 function RecurringPanel({ creating, onClose }: EditorProps) {
   const forms = useTranslations("ar.collections.forms");
