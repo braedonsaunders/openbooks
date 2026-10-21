@@ -1,3 +1,4 @@
+import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -45,9 +46,8 @@ async function postedRun(mixed = false) {
       }
       await db.execute(sql`update employee_payroll_profiles set payment_method='eft'
         where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
-      await db.execute(sql`insert into party_bank_accounts(org_id,party_id,bank_name,country,currency,
-        account_last_four,approval_status,is_active,created_by,updated_by)
-        values(${fx.orgId},${fx.employeeId},'Test Bank','CA','CAD','1234','approved',true,${fx.actorId},${fx.actorId})`);
+      await seedApprovedBankAccountFixture({orgId:fx.orgId,actorId:fx.actorId,partyId:fx.employeeId,
+        bankName:'Test Bank',country:'CA',currency:'CAD',routing:{},lastFour:'1234'});
     }
     const { input } = await calculatedRun(fx);
     await commitPayRun(input);

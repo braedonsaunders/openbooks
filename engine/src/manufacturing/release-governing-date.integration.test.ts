@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { approveFixtureRouting, createManufacturingOperator } from "../testing/manufacturing.ts";
@@ -13,8 +13,8 @@ import { createWorkOrder, releaseWorkOrder } from "./work-orders.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-  return withBypassContext(() => db.transaction(work));
+function run<T>(orgId: string, work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
+  return withOrgTransaction(orgId, () => work(db));
 }
 
 async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmentId: string }> {
@@ -54,16 +54,16 @@ async function routeWithBareCenter(
   effectiveFrom: string,
   effectiveTo: string | null,
 ): Promise<void> {
-  const center = await run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+  const center = await run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
     code: `WC-${randomUUID()}`, name: "Backdated center", kind: "machine",
     capacityHoursPerDay: "8", efficiencyPct: "100", absorbsOverhead: false,
   }));
-  const routing = await run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
+  const routing = await run(f.org.orgId, (tx) => createRouting(tx, f.org.orgId, f.actorId, {
     producedItemId: f.org.items.assembly, code: `RT-${randomUUID()}`, name: "Backdated route",
     effectiveFrom, effectiveTo,
     defaultIssueLocationId: f.org.stockLocationId, defaultReceiptLocationId: f.org.stockLocationId2, overheadBasis: "units",
   }));
-  await run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String((routing as Record<string, unknown>).id), {
+  await run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String((routing as Record<string, unknown>).id), {
     sequence: 10, name: "Assemble", workCenterId: String((center as Record<string, unknown>).id), setupMinutes: "0", runMinutesPerUnit: "1",
   }));
   await approveFixtureRouting(f.org.orgId, f.actorId, String((routing as Record<string, unknown>).id));
@@ -74,11 +74,11 @@ test("back-dated release resolves the rates and routing effective on the order d
   try {
     const oldRateId = await rate(f, "2025-01-01", "2025-12-31", "25");
     await routeWithBareCenter(f, "2025-01-01", "2025-12-31");
-    const draft = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
+    const draft = await run(f.org.orgId, (tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
       producedItemId: f.org.items.assembly, quantityOrdered: "1", subsidiaryId: f.org.subsidiaryId,
       issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: "2025-10-27",
     }));
-    const released = await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
+    const released = await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
     assert.equal(released.status, "released");
     const operation = (await withBypassContext(async () => (await db.execute<{ wageId: string; wageFrom: string }>(sql`
       select standard_labor_wage_id as "wageId", standard_labor_effective_from::text as "wageFrom"
@@ -95,11 +95,11 @@ test("back-dated release names the order date when no rate covers it", { skip: !
   try {
     await rate(f, "2026-01-01", null, "30");
     await routeWithBareCenter(f, "2025-01-01", null);
-    const draft = await run((tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
+    const draft = await run(f.org.orgId, (tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
       producedItemId: f.org.items.assembly, quantityOrdered: "1", subsidiaryId: f.org.subsidiaryId,
       issueLocationId: f.org.stockLocationId, receiptLocationId: f.org.stockLocationId2, plannedStart: "2025-10-27",
     }));
-    await assert.rejects(run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), (error: unknown) => {
+    await assert.rejects(run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), (error: unknown) => {
       assert.ok(error instanceof ManufacturingError && error.code === "standard_labor_rate_missing");
       assert.match(error.message, /2025-10-27/, "the refusal must name the order date, never today");
       return true;

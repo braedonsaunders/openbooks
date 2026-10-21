@@ -122,12 +122,12 @@ const { POST: documentAction } = await import("../app/api/documents/actions/rout
  * visible but which carries an employee outside the caller's subsidiary
  * scope is opaque — its stub PDF is a 404 and emailing its stubs is refused.
  */
-async function opaqueFixture() {
+async function opaqueFixture(commit = true) {
   const fx = await withBypassContext(() => seedAdoption());
   await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
     where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
   const { input } = await withBypassContext(() => calculatedRun(fx));
-  await withOrgContext(fx.orgId, () => commitPayRun(input));
+  if (commit) await withOrgContext(fx.orgId, () => commitPayRun(input));
   const hidden = randomUUID();
   await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden stub employer', 'CAD', 'CA')`));
@@ -193,7 +193,7 @@ test("stub email refuses a run carrying an out-of-scope employee", { skip: !proc
 });
 
 test("approval submission refuses a run carrying an out-of-scope employee", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { fx, documentId } = await opaqueFixture();
+  const { fx, documentId } = await opaqueFixture(false);
   try {
     // The evidence package (journal + register + GL preview) names every
     // employee's pay, so submitting it for an opaque run must fail closed
@@ -273,8 +273,8 @@ test("document submit refuses evidence assembly for a run carrying an out-of-sco
         body: JSON.stringify({ action: "submit", documentId: input.documentId }),
       }),
     ));
-    assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()).slice(0, 300));
-    assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
+    assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()).slice(0, 300));
+    assert.equal((await refused.json() as { error: string }).error,"not_found");
     assert.equal(state.reportResolutions, 0, "a refused submission must resolve no evidence report");
 
     state.gate = { ...scopedGate(fx, "payroll.run"), allowedSubsidiaryIds: null };

@@ -17,7 +17,6 @@ import { commitPayRun } from './run-commit.ts';
 import { calculatePayRun } from './run-calculation.ts';
 import { createPayRun } from './run-lifecycle.ts';
 import { payRunCalculationSource } from './run-calculation-evidence.ts';
-import { submitAndReleaseIfUngated } from '../flows/submit.ts';
 import { postDocument } from '../ledger/posting-document.ts';
 import { requestDocumentVoid } from '../ledger/document-void.ts';
 import { filingArtifact, filingSubmissions, recordFilingIssue } from './yearend-amendments.ts';
@@ -139,8 +138,8 @@ async function commitAndPost(f: AdoptionFixture) {
   const source = await payRunCalculationSource(f.orgId, input.documentId);
   assert.ok(source);
   await commitPayRun(input);
-  const release = await submitAndReleaseIfUngated('pay_run', input.documentId, f.actorId);
-  assert.equal(release.autoApproved, true); assert.equal(release.flowError, null);
+  const approved=(await db.execute<{status:string}>(sql`select status from documents where org_id=${f.orgId} and id=${input.documentId}`)).rows[0];
+  assert.equal(approved?.status,'approved','native payroll commitment retains its zero-gate approval release');
   const accounts = (await db.execute<{ id: string; type: string }>(sql`select id,type from accounts where org_id=${f.orgId}`)).rows;
   const account = (type: string) => {
     const id = accounts.find(row => row.type === type)?.id;

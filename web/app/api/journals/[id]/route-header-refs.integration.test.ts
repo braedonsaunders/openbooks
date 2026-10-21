@@ -16,7 +16,7 @@ import { sql } from "drizzle-orm";
 const stateKey = Symbol.for("openbooks.journal-header-refs-test");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { orgId: string; id: string; roles: Array<{ key: string }> };
     permissions: Set<string>;
     allowedSubsidiaryIds: string[] | null;
   } | null;
@@ -108,7 +108,7 @@ test(
     try {
       const { adminId } = await withBypassContext(() => seedFlowActors(orgA.orgId));
       routeState.authz = {
-        user: { orgId: orgA.orgId, id: adminId },
+        user: { orgId: orgA.orgId, id: adminId, roles: [{key:"admin"}] },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
@@ -139,7 +139,7 @@ test(
     try {
       const { adminId } = await withBypassContext(() => seedFlowActors(orgA.orgId));
       routeState.authz = {
-        user: { orgId: orgA.orgId, id: adminId },
+        user: { orgId: orgA.orgId, id: adminId, roles: [{key:"admin"}] },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
@@ -175,7 +175,7 @@ test(
     try {
       const { adminId } = await withBypassContext(() => seedFlowActors(orgA.orgId));
       routeState.authz = {
-        user: { orgId: orgA.orgId, id: adminId },
+        user: { orgId: orgA.orgId, id: adminId, roles: [{key:"admin"}] },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
@@ -207,7 +207,7 @@ test(
     try {
       const { adminId } = await withBypassContext(() => seedFlowActors(orgA.orgId));
       routeState.authz = {
-        user: { orgId: orgA.orgId, id: adminId },
+        user: { orgId: orgA.orgId, id: adminId, roles: [{key:"admin"}] },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };

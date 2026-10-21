@@ -94,7 +94,7 @@ test("bounded native retirement keeps complete journal entries and restores all 
       await db.execute(sql`set constraints all deferred`);
       const removed = await deleteRetiredTenantRows(await loadCatalog(), target.orgId, { batchSize: 1 });
       assert.equal(removed.journal_lines, expectedLines, "complete entries pass the unchanged balance and FX statement guards");
-      assert.ok(BigInt(removed.depreciation_schedule_lines ?? "0") > 0n, "the exact retirement claim removes posted depreciation evidence");
+      assert.equal((await db.execute(sql`select id from depreciation_schedule_lines where org_id=${target.orgId}`)).rows.length, 0, "the exact retirement claim removes posted depreciation evidence, including cascaded rows");
       assert.equal(removed.orgs, "1");
       assert.equal((await db.execute(sql`select id from orgs where id=${target.orgId}`)).rows.length, 0);
       throw new Error("Roll back every completed deletion batch");

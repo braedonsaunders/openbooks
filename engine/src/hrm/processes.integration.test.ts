@@ -206,7 +206,7 @@ processTest("step evidence, required skips, and process completion refuse by nam
 
     await assert.rejects(
       completeProcessStep({ orgId: h.org.orgId, actorId: h.managerId, stepId: upload }),
-      checklistRefusal("EVIDENCE_REQUIRED", /requires attachment evidence/),
+      checklistRefusal("EVIDENCE_REQUIRED", /Attach the supporting file/),
     );
     await assert.rejects(
       completeProcessStep({ orgId: h.org.orgId, actorId: h.managerId, stepId: upload, attachmentId: randomUUID() }),

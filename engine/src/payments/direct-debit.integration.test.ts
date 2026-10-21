@@ -1,20 +1,22 @@
+import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { createDirectDebitRun } from "./direct-debit.ts";
-import { db, withBypass, withOrgContext } from "../platform/db.ts";
+import { db, withBypass, withOrgTransaction, withOrgContext } from "../platform/db.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 test("duplicate direct-debit selection is a domain failure", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const options = await withBypass(async () => {
+    const options = await withOrgTransaction(org.orgId, async () => {
       const actorId = await createScratchUser(org.orgId, "Collection Operator", "accountant");
+      await grantScratchPermissions(org.orgId,actorId,["parties.manage"]);
       const formatId = randomUUID();
       const profileId = randomUUID();
       const partyBankAccountId = randomUUID();
@@ -35,13 +37,8 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
         values
           (${profileId}, ${org.orgId}, 'Duplicate collection profile', ${org.accounts.bank},
            ${org.subsidiaryId}, ${formatId}, 'CAD', 'CA', ${actorId}, ${actorId})`);
-      await db.execute(sql`
-        insert into party_bank_accounts
-          (id, org_id, party_id, bank_name, country, currency, routing,
-           account_last_four, approved_at, approved_by, created_by, updated_by)
-        values
-          (${partyBankAccountId}, ${org.orgId}, ${org.customerId}, 'Customer bank',
-           'CA', 'CAD', '{}'::jsonb, '1234', ${org.date}, ${actorId}, ${actorId}, ${actorId})`);
+      await seedApprovedBankAccountFixture({id:partyBankAccountId,orgId:org.orgId,actorId,partyId:org.customerId,
+        bankName:'Customer bank',country:'CA',currency:'CAD',routing:{},lastFour:'1234'});
       await db.execute(sql`
         insert into payment_mandates
           (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference,
@@ -198,8 +195,9 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
 test("direct-debit collection uses the transaction-ledger open, not base divided by rate", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const ids = await withBypass(async () => {
+    const ids = await withOrgTransaction(org.orgId, async () => {
       const actorId = await createScratchUser(org.orgId, "FX Collection Operator", "accountant");
+      await grantScratchPermissions(org.orgId,actorId,["parties.manage"]);
       const formatId = randomUUID();
       const profileId = randomUUID();
       const partyBankAccountId = randomUUID();
@@ -219,13 +217,8 @@ test("direct-debit collection uses the transaction-ledger open, not base divided
         values
           (${profileId}, ${org.orgId}, 'FX collection profile', ${org.accounts.bank},
            ${org.subsidiaryId}, ${formatId}, 'USD', 'DE', ${actorId}, ${actorId})`);
-      await db.execute(sql`
-        insert into party_bank_accounts
-          (id, org_id, party_id, bank_name, country, currency, routing,
-           account_last_four, approved_at, approved_by, created_by, updated_by)
-        values
-          (${partyBankAccountId}, ${org.orgId}, ${org.customerId}, 'Customer bank',
-           'DE', 'USD', '{}'::jsonb, '1234', ${org.date}, ${actorId}, ${actorId}, ${actorId})`);
+      await seedApprovedBankAccountFixture({id:partyBankAccountId,orgId:org.orgId,actorId,partyId:org.customerId,
+        bankName:'Customer bank',country:'DE',currency:'USD',routing:{},lastFour:'1234'});
       await db.execute(sql`
         insert into payment_mandates
           (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference,

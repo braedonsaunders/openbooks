@@ -21,7 +21,7 @@ import type { Client } from "pg";
 const stateKey = Symbol.for("openbooks.account-route-test");
 interface RouteState {
   authz: {
-    user: { orgId: string; id: string };
+    user: { orgId: string; id: string; roles: Array<{ key: string }> };
     permissions: Set<string>;
     allowedSubsidiaryIds: Set<string> | null;
   } | null;
@@ -297,7 +297,7 @@ test("concurrent reciprocal reparents commit at most one edge and refuse the cyc
   let holder: Client | null = null;
   try {
     const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-    routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+    routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] }, permissions: new Set(), allowedSubsidiaryIds: null };
     const a = await seedSummaryAccount(org.orgId, "9101");
     const b = await seedSummaryAccount(org.orgId, "9102");
 
@@ -361,7 +361,7 @@ test("concurrent valid reparents serialize on the hierarchy lock and both commit
   const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-    routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+    routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] }, permissions: new Set(), allowedSubsidiaryIds: null };
     const m1 = await seedSummaryAccount(org.orgId, "9201");
     const m2 = await seedSummaryAccount(org.orgId, "9202");
     const p1 = await seedSummaryAccount(org.orgId, "9203");
@@ -398,7 +398,7 @@ test(
     try {
       const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
       routeState.authz = {
-        user: { orgId: org.orgId, id: adminId },
+        user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
@@ -499,7 +499,7 @@ test(
     try {
       const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
       routeState.authz = {
-        user: { orgId: org.orgId, id: adminId },
+        user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
@@ -522,7 +522,7 @@ test(
     try {
       const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
       routeState.authz = {
-        user: { orgId: org.orgId, id: adminId },
+        user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
@@ -566,7 +566,7 @@ test(
          where id = ${hiddenAccount} and org_id = ${org.orgId}
       `)));
       routeState.authz = {
-        user: { orgId: org.orgId, id: adminId },
+        user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] },
         permissions: new Set(),
         allowedSubsidiaryIds: new Set([org.subsidiaryId]),
       };

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { ManufacturingError } from "./errors.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { addWorkCenterRate, createWorkCenter, deactivateWorkCenter, endWorkCenterRate, reactivateWorkCenter, updateWorkCenter } from "./work-centers.ts";
@@ -22,22 +22,22 @@ async function setup(): Promise<Fixture> {
   });
   return { org, actorId };
 }
-function run<T>(fn: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>) {
-  return withBypassContext(() => db.transaction(fn));
+function run<T>(orgId: string, fn: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>) {
+  return withOrgTransaction(orgId, () => fn(db));
 }
 function center(f: Fixture, code = `WC-${randomUUID()}`, patch: Partial<Parameters<typeof createWorkCenter>[3]> = {}) {
-  return run((tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
+  return run(f.org.orgId, (tx) => createWorkCenter(tx, f.org.orgId, f.actorId, {
     code, name: code, kind: "machine", capacityHoursPerDay: "8", efficiencyPct: "95",
     absorbsOverhead: false, ...patch,
   }));
 }
 function routing(f: Fixture, itemId: string, code = `RT-${randomUUID()}`) {
-  return run((tx) => createRouting(tx, f.org.orgId, f.actorId, {
+  return run(f.org.orgId, (tx) => createRouting(tx, f.org.orgId, f.actorId, {
     producedItemId: itemId, code, name: code, effectiveFrom: "2026-01-01", overheadBasis: "labor_hours",
   }));
 }
 async function operation(f: Fixture, routingId: string, centerId: string, sequence = 10, setupMinutes = "5") {
-  return run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, routingId, {
+  return run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, routingId, {
     sequence, name: `Operation ${sequence}`, workCenterId: centerId, setupMinutes, runMinutesPerUnit: "1",
   }));
 }
@@ -61,13 +61,13 @@ const refusalCases: Array<{ name: string; run: (f: Fixture) => Promise<unknown>;
   { name: "calendar belongs to this organization", code: "invalid_calendar", run: (f) => center(f, undefined, { calendarId: randomUUID() }) },
   { name: "rate periods collide only within their own center", code: "rate_overlap", phrase: "2026-01-01 to 2026-02-01", run: async (f) => {
     const first = await center(f); const second = await center(f);
-    await run((tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(first.id), { machineRatePerHour: "12.50", effectiveFrom: "2026-01-01", effectiveTo: "2026-02-01" }));
-    await run((tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(second.id), { machineRatePerHour: "9", effectiveFrom: "2026-01-01", effectiveTo: "2026-02-01" }));
-    return run((tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(first.id), { machineRatePerHour: "13", effectiveFrom: "2026-01-15", effectiveTo: "2026-03-01" }));
+    await run(f.org.orgId, (tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(first.id), { machineRatePerHour: "12.50", effectiveFrom: "2026-01-01", effectiveTo: "2026-02-01" }));
+    await run(f.org.orgId, (tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(second.id), { machineRatePerHour: "9", effectiveFrom: "2026-01-01", effectiveTo: "2026-02-01" }));
+    return run(f.org.orgId, (tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(first.id), { machineRatePerHour: "13", effectiveFrom: "2026-01-15", effectiveTo: "2026-03-01" }));
   } },
   { name: "operation cannot consume zero time", code: "operation_no_time", phrase: "delete it or give it time", run: async (f) => {
     const wc = await center(f); const rt = await routing(f, f.org.items.standard);
-    return run((tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(rt.id), { sequence: 10, name: "Zero time", workCenterId: String(wc.id), setupMinutes: "0", runMinutesPerUnit: "0" }));
+    return run(f.org.orgId, (tx) => createRoutingOperation(tx, f.org.orgId, f.actorId, String(rt.id), { sequence: 10, name: "Zero time", workCenterId: String(wc.id), setupMinutes: "0", runMinutesPerUnit: "0" }));
   } },
   { name: "operation sequence is unique within a routing", code: "operation_sequence_duplicate", phrase: "Operation 10", run: async (f) => {
     const wc = await center(f); const rt = await routing(f, f.org.items.component); await operation(f, String(rt.id), String(wc.id));
@@ -76,27 +76,27 @@ const refusalCases: Array<{ name: string; run: (f: Fixture) => Promise<unknown>;
   { name: "active routing versions cannot be edited", code: "routing_not_draft", phrase: "create a new version", run: async (f) => {
     const wc = await center(f); const rt = await routing(f, f.org.items.fifo); await operation(f, String(rt.id), String(wc.id));
     await approveFixtureRouting(f.org.orgId, f.actorId, String(rt.id));
-    return run((tx) => updateRouting(tx, f.org.orgId, f.actorId, String(rt.id), { name: "Changed" }));
+    return run(f.org.orgId, (tx) => updateRouting(tx, f.org.orgId, f.actorId, String(rt.id), { name: "Changed" }));
   } },
   { name: "active versions report the other version and effectivity", code: "routing_version_overlap", phrase: "version 1 (2026-01-01 to open-ended)", run: async (f) => {
     const wc = await center(f); const first = await routing(f, f.org.items.assembly, "ROUTING-A"); await operation(f, String(first.id), String(wc.id));
-    const next = await run((tx) => createNextRoutingVersion(tx, f.org.orgId, f.actorId, String(first.id)));
+    const next = await run(f.org.orgId, (tx) => createNextRoutingVersion(tx, f.org.orgId, f.actorId, String(first.id)));
     await approveFixtureRouting(f.org.orgId, f.actorId, String(first.id));
     return approveFixtureRouting(f.org.orgId, f.actorId, String(next.id));
   } },
   { name: "archive names open work orders", code: "routing_in_use", phrase: "WO-OPEN-42", run: async (f) => {
     const rt = await routing(f, f.org.items.service);
-    await run(async (tx) => { await tx.execute(sql`insert into mfg_work_orders (org_id, number, produced_item_id, routing_id, quantity_ordered, unit, status, source) values (${f.org.orgId}, 'WO-OPEN-42', ${f.org.items.service}, ${String(rt.id)}, '1', 'ea', 'draft', 'manual')`); });
-    return run((tx) => archiveRouting(tx, f.org.orgId, f.actorId, String(rt.id)));
+    await run(f.org.orgId, async (tx) => { await tx.execute(sql`insert into mfg_work_orders (org_id, number, produced_item_id, routing_id, quantity_ordered, unit, status, source) values (${f.org.orgId}, 'WO-OPEN-42', ${f.org.items.service}, ${String(rt.id)}, '1', 'ea', 'draft', 'manual')`); });
+    return run(f.org.orgId, (tx) => archiveRouting(tx, f.org.orgId, f.actorId, String(rt.id)));
   } },
   { name: "transfer needs two active stock locations", code: "transfer_locations_required", run: async (f) => {
     await withBypassContext(async () => { const rows = await db.execute(sql`update stock_locations set is_active=false where org_id=${f.org.orgId} and id=${f.org.stockLocationId2} returning id`); assert.equal(rows.rows.length, 1); });
-    return run((tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...basePolicy, supplyMethod: "transfer" }));
+    return run(f.org.orgId, (tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...basePolicy, supplyMethod: "transfer" }));
   } },
-  { name: "lead time is a non-negative integer", code: "invalid_lead_time", run: (f) => run((tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...basePolicy, leadTimeDays: 1.5 })) },
-  { name: "planning quantities are non-negative exact decimals", code: "invalid_decimal", run: (f) => run((tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...basePolicy, safetyStockQty: "-0.1" })) },
-  { name: "planned scrap remains below one hundred percent", code: "invalid_scrap_pct", run: (f) => run((tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...basePolicy, scrapPctPlanned: "100" })) },
-  { name: "completion tolerance cannot exceed one hundred", code: "invalid_tolerance", run: (f) => run((tx) => updateManufacturingPolicies(tx, f.org.orgId, f.actorId, { shortagePolicy: "warn", completionTolerancePct: "100.1", abnormalScrapApprovalThreshold: null })) },
+  { name: "lead time is a non-negative integer", code: "invalid_lead_time", run: (f) => run(f.org.orgId, (tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...basePolicy, leadTimeDays: 1.5 })) },
+  { name: "planning quantities are non-negative exact decimals", code: "invalid_decimal", run: (f) => run(f.org.orgId, (tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...basePolicy, safetyStockQty: "-0.1" })) },
+  { name: "planned scrap remains below one hundred percent", code: "invalid_scrap_pct", run: (f) => run(f.org.orgId, (tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...basePolicy, scrapPctPlanned: "100" })) },
+  { name: "completion tolerance cannot exceed one hundred", code: "invalid_tolerance", run: (f) => run(f.org.orgId, (tx) => updateManufacturingPolicies(tx, f.org.orgId, f.actorId, { shortagePolicy: "warn", completionTolerancePct: "100.1", abnormalScrapApprovalThreshold: null })) },
 ];
 
 test("manufacturing master refusal cases", { skip: !DB }, async () => {
@@ -110,33 +110,33 @@ test("manufacturing masters create, update, transition, and read their configura
   const f = await setup();
   try {
     const wc = await center(f, "WC-HAPPY");
-    const updatedCenter = await run((tx) => updateWorkCenter(tx, f.org.orgId, f.actorId, String(wc.id), { name: "Assembly machine", efficiencyPct: "100" }));
+    const updatedCenter = await run(f.org.orgId, (tx) => updateWorkCenter(tx, f.org.orgId, f.actorId, String(wc.id), { name: "Assembly machine", efficiencyPct: "100" }));
     assert.equal(updatedCenter.efficiencyPct, "100.0000");
-    const rate = await run((tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(wc.id), { machineRatePerHour: "25.75", effectiveFrom: "2026-01-01" }));
-    const endedRate = await run((tx) => endWorkCenterRate(tx, f.org.orgId, f.actorId, String(wc.id), String(rate.id), "2026-05-01"));
+    const rate = await run(f.org.orgId, (tx) => addWorkCenterRate(tx, f.org.orgId, f.actorId, String(wc.id), { machineRatePerHour: "25.75", effectiveFrom: "2026-01-01" }));
+    const endedRate = await run(f.org.orgId, (tx) => endWorkCenterRate(tx, f.org.orgId, f.actorId, String(wc.id), String(rate.id), "2026-05-01"));
     assert.equal(endedRate.effectiveTo, "2026-05-01");
-    await run((tx) => deactivateWorkCenter(tx, f.org.orgId, f.actorId, String(wc.id)));
-    await run((tx) => reactivateWorkCenter(tx, f.org.orgId, f.actorId, String(wc.id)));
+    await run(f.org.orgId, (tx) => deactivateWorkCenter(tx, f.org.orgId, f.actorId, String(wc.id)));
+    await run(f.org.orgId, (tx) => reactivateWorkCenter(tx, f.org.orgId, f.actorId, String(wc.id)));
 
     const first = await routing(f, f.org.items.assembly, "RT-HAPPY");
     const op = await operation(f, String(first.id), String(wc.id));
-    await run((tx) => updateRoutingOperation(tx, f.org.orgId, f.actorId, String(first.id), String(op.id), { name: "Cut" }));
-    await run((tx) => updateRouting(tx, f.org.orgId, f.actorId, String(first.id), { name: "Assembly route", effectiveTo: "2027-01-01" }));
+    await run(f.org.orgId, (tx) => updateRoutingOperation(tx, f.org.orgId, f.actorId, String(first.id), String(op.id), { name: "Cut" }));
+    await run(f.org.orgId, (tx) => updateRouting(tx, f.org.orgId, f.actorId, String(first.id), { name: "Assembly route", effectiveTo: "2027-01-01" }));
     await approveFixtureRouting(f.org.orgId, f.actorId, String(first.id));
-    const second = await run((tx) => createNextRoutingVersion(tx, f.org.orgId, f.actorId, String(first.id)));
+    const second = await run(f.org.orgId, (tx) => createNextRoutingVersion(tx, f.org.orgId, f.actorId, String(first.id)));
     assert.equal(second.operations.length, 1);
-    await run((tx) => updateRouting(tx, f.org.orgId, f.actorId, String(second.id), { effectiveFrom: "2027-01-01", effectiveTo: null }));
+    await run(f.org.orgId, (tx) => updateRouting(tx, f.org.orgId, f.actorId, String(second.id), { effectiveFrom: "2027-01-01", effectiveTo: null }));
     await approveFixtureRouting(f.org.orgId, f.actorId, String(second.id));
-    await run((tx) => archiveRouting(tx, f.org.orgId, f.actorId, String(first.id)));
-    await run((tx) => archiveRouting(tx, f.org.orgId, f.actorId, String(second.id)));
+    await run(f.org.orgId, (tx) => archiveRouting(tx, f.org.orgId, f.actorId, String(first.id)));
+    await run(f.org.orgId, (tx) => archiveRouting(tx, f.org.orgId, f.actorId, String(second.id)));
 
-    const policy = await run((tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.assembly, basePolicy));
+    const policy = await run(f.org.orgId, (tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.assembly, basePolicy));
     assert.equal(policy.supplyMethod, "buy");
-    const updatedPolicy = await run((tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.assembly, { ...basePolicy, supplyMethod: "transfer" }));
-    assert.equal((await run((tx) => getItemPolicy(tx, f.org.orgId, f.org.items.assembly)))?.id, updatedPolicy.id);
-    const defaults = await run((tx) => getManufacturingPolicies(tx, f.org.orgId));
+    const updatedPolicy = await run(f.org.orgId, (tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.assembly, { ...basePolicy, supplyMethod: "transfer" }));
+    assert.equal((await run(f.org.orgId, (tx) => getItemPolicy(tx, f.org.orgId, f.org.items.assembly)))?.id, updatedPolicy.id);
+    const defaults = await run(f.org.orgId, (tx) => getManufacturingPolicies(tx, f.org.orgId));
     assert.deepEqual(defaults, { shortagePolicy: "warn", completionTolerancePct: "1", abnormalScrapApprovalThreshold: null });
-    const policies = await run((tx) => updateManufacturingPolicies(tx, f.org.orgId, f.actorId, { shortagePolicy: "refuse", completionTolerancePct: "1.5", abnormalScrapApprovalThreshold: "20.25" }));
+    const policies = await run(f.org.orgId, (tx) => updateManufacturingPolicies(tx, f.org.orgId, f.actorId, { shortagePolicy: "refuse", completionTolerancePct: "1.5", abnormalScrapApprovalThreshold: "20.25" }));
     assert.deepEqual(policies, { shortagePolicy: "refuse", completionTolerancePct: "1.5", abnormalScrapApprovalThreshold: "20.2500" });
   } finally { await dropScratchOrg(f.org.orgId); }
 });
@@ -149,11 +149,11 @@ test("master commands pin live authority, reject narrower shared policies and pr
     const wc = await center(f,"WC-AUTHORITY",{subsidiaryId:f.org.subsidiaryId});
     const rt = await routing(f,f.org.items.assembly,"RT-AUTHORITY");
     const op = await operation(f,String(rt.id),String(wc.id));
-    const rate = await run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,String(wc.id),{machineRatePerHour:"10",effectiveFrom:"2026-01-01"}));
-    await run(tx=>deactivateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id)));
-    await run(tx=>reactivateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id)));
-    await run(tx=>upsertItemPolicy(tx,f.org.orgId,f.actorId,f.org.items.component,basePolicy));
-    const state = () => run(async tx=>(await tx.execute(sql`select
+    const rate = await run(f.org.orgId, tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,String(wc.id),{machineRatePerHour:"10",effectiveFrom:"2026-01-01"}));
+    await run(f.org.orgId, tx=>deactivateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id)));
+    await run(f.org.orgId, tx=>reactivateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id)));
+    await run(f.org.orgId, tx=>upsertItemPolicy(tx,f.org.orgId,f.actorId,f.org.items.component,basePolicy));
+    const state = () => run(f.org.orgId, async tx=>(await tx.execute(sql`select
       (select jsonb_agg(to_jsonb(c) order by id) from mfg_work_centers c where org_id=${f.org.orgId}) as centers,
       (select jsonb_agg(to_jsonb(r) order by id) from mfg_routings r where org_id=${f.org.orgId}) as routings,
       (select jsonb_agg(to_jsonb(o) order by id) from mfg_routing_operations o where org_id=${f.org.orgId}) as operations,
@@ -161,36 +161,36 @@ test("master commands pin live authority, reject narrower shared policies and pr
       (select jsonb_agg(to_jsonb(p) order by id) from mfg_item_policies p where org_id=${f.org.orgId}) as policies,
       (select count(*)::text from audit_log where org_id=${f.org.orgId}) as audits`)).rows[0]);
     const before = await state();
-    await run(async tx=>assert.ok((await tx.execute(sql`update app_roles set permissions='["manufacturing.read"]'::jsonb
+    await run(f.org.orgId, async tx=>assert.ok((await tx.execute(sql`update app_roles set permissions='["manufacturing.read"]'::jsonb
       where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`)).rows.length));
     const denied = [
       ()=>center(f,"WC-REVOKED"),
-      ()=>run(tx=>updateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id),{name:"Denied"})),
-      ()=>run(tx=>reactivateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id))),
-      ()=>run(tx=>deactivateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id))),
-      ()=>run(tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,String(wc.id),{machineRatePerHour:"11",effectiveFrom:"2027-01-01"})),
-      ()=>run(tx=>endWorkCenterRate(tx,f.org.orgId,f.actorId,String(wc.id),String(rate.id),"2026-12-31")),
+      ()=>run(f.org.orgId, tx=>updateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id),{name:"Denied"})),
+      ()=>run(f.org.orgId, tx=>reactivateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id))),
+      ()=>run(f.org.orgId, tx=>deactivateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id))),
+      ()=>run(f.org.orgId, tx=>addWorkCenterRate(tx,f.org.orgId,f.actorId,String(wc.id),{machineRatePerHour:"11",effectiveFrom:"2027-01-01"})),
+      ()=>run(f.org.orgId, tx=>endWorkCenterRate(tx,f.org.orgId,f.actorId,String(wc.id),String(rate.id),"2026-12-31")),
       ()=>routing(f,f.org.items.standard,"RT-REVOKED"),
-      ()=>run(tx=>createNextRoutingVersion(tx,f.org.orgId,f.actorId,String(rt.id))),
-      ()=>run(tx=>updateRouting(tx,f.org.orgId,f.actorId,String(rt.id),{name:"Denied"})),
+      ()=>run(f.org.orgId, tx=>createNextRoutingVersion(tx,f.org.orgId,f.actorId,String(rt.id))),
+      ()=>run(f.org.orgId, tx=>updateRouting(tx,f.org.orgId,f.actorId,String(rt.id),{name:"Denied"})),
       ()=>operation(f,String(rt.id),String(wc.id),20),
-      ()=>run(tx=>updateRoutingOperation(tx,f.org.orgId,f.actorId,String(rt.id),String(op.id),{name:"Denied"})),
-      ()=>run(tx=>deleteRoutingOperation(tx,f.org.orgId,f.actorId,String(rt.id),String(op.id))),
-      ()=>run(tx=>archiveRouting(tx,f.org.orgId,f.actorId,String(rt.id))),
-      ()=>run(tx=>upsertItemPolicy(tx,f.org.orgId,f.actorId,f.org.items.component,basePolicy)),
-      ()=>run(tx=>updateManufacturingPolicies(tx,f.org.orgId,f.actorId,{shortagePolicy:"refuse",completionTolerancePct:"1",abnormalScrapApprovalThreshold:null})),
-      ()=>run(tx=>updateWorkCenter(tx,f.org.orgId,foreign.actorId,String(wc.id),{name:"Wrong organization"})),
-      ()=>run(tx=>updateWorkCenter(tx,f.org.orgId,randomUUID(),String(wc.id),{name:"Unknown actor"})),
+      ()=>run(f.org.orgId, tx=>updateRoutingOperation(tx,f.org.orgId,f.actorId,String(rt.id),String(op.id),{name:"Denied"})),
+      ()=>run(f.org.orgId, tx=>deleteRoutingOperation(tx,f.org.orgId,f.actorId,String(rt.id),String(op.id))),
+      ()=>run(f.org.orgId, tx=>archiveRouting(tx,f.org.orgId,f.actorId,String(rt.id))),
+      ()=>run(f.org.orgId, tx=>upsertItemPolicy(tx,f.org.orgId,f.actorId,f.org.items.component,basePolicy)),
+      ()=>run(f.org.orgId, tx=>updateManufacturingPolicies(tx,f.org.orgId,f.actorId,{shortagePolicy:"refuse",completionTolerancePct:"1",abnormalScrapApprovalThreshold:null})),
+      ()=>run(f.org.orgId, tx=>updateWorkCenter(tx,f.org.orgId,foreign.actorId,String(wc.id),{name:"Wrong organization"})),
+      ()=>run(f.org.orgId, tx=>updateWorkCenter(tx,f.org.orgId,randomUUID(),String(wc.id),{name:"Unknown actor"})),
     ];
     for (const command of denied) await assert.rejects(command());
     assert.deepEqual(await state(),before);
-    await run(tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.manage"]'::jsonb,
+    await run(f.org.orgId, tx=>tx.execute(sql`update app_roles set permissions='["manufacturing.manage"]'::jsonb,
       subsidiary_restriction=${JSON.stringify({mode:"list",subsidiaryIds:[f.org.subsidiaryId]})}::jsonb
       where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`));
-    await run(tx=>updateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id),{name:"Allowed entity"}));
+    await run(f.org.orgId, tx=>updateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id),{name:"Allowed entity"}));
     await assert.rejects(center(f,"WC-NARROW-ORG-WIDE"));
-    await rejected(run(tx=>upsertItemPolicy(tx,f.org.orgId,f.actorId,f.org.items.component,basePolicy)),"manufacturing_policy_scope_required");
-    await rejected(run(tx=>updateManufacturingPolicies(tx,f.org.orgId,f.actorId,{shortagePolicy:"refuse",completionTolerancePct:"1",abnormalScrapApprovalThreshold:null})),"manufacturing_policy_scope_required");
+    await rejected(run(f.org.orgId, tx=>upsertItemPolicy(tx,f.org.orgId,f.actorId,f.org.items.component,basePolicy)),"manufacturing_policy_scope_required");
+    await rejected(run(f.org.orgId, tx=>updateManufacturingPolicies(tx,f.org.orgId,f.actorId,{shortagePolicy:"refuse",completionTolerancePct:"1",abnormalScrapApprovalThreshold:null})),"manufacturing_policy_scope_required");
   } finally {
     await dropScratchOrg(foreign.org.orgId);
     await dropScratchOrg(f.org.orgId);

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import { db, withBypassContext, withOrgTransaction } from "@openbooks/engine/platform/db";
 import type { SqlExecutor } from "@openbooks/engine/platform/db";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
 import { receiveInventory } from "@openbooks/engine/inventory/movements";
@@ -47,7 +47,7 @@ async function reverse(body: Record<string, unknown>): Promise<{ status: number;
 }
 
 function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> {
-  return withBypassContext(() => db.transaction(work));
+  return withOrgTransaction(state.user.orgId, () => work(db));
 }
 
 test("API reverse of an assembly build restores stock, replays retries, and conflicts on key reuse", async () => {

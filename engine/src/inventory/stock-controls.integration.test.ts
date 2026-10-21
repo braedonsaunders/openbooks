@@ -1,3 +1,5 @@
+import { decideGate } from "../flows/gates.ts";
+import { stockCountsFlowAdapter } from "../flows/stock-counts-adapter.ts";
 import { before as initializeNativeComposition } from "node:test";
 initializeNativeComposition(async () => {
   if (!process.env.OPENBOOKS_DB_URL) return;
@@ -9,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, seedApprovalFlow, dropScratchOrg } from "../testing/fixtures.ts";
 import { receiveInventory, issueInventory } from "./movements.ts";
 
 import { ensureLot, ensureSerial } from "./tracking.ts";
@@ -543,11 +545,8 @@ test(
       const reviewer = await run(() =>
         createInventoryOperator(org.orgId, "Count reviewer"),
       );
-      await run(() =>
-        db.execute(
-          sql`update orgs set settings=jsonb_set(settings,'{approvals}',coalesce(settings->'approvals','{}'::jsonb)||'{"requireStockCountReview":true}'::jsonb) where id=${org.orgId}`,
-        ),
-      );
+      await run(() => seedApprovalFlow(org.orgId, { subjectKind: "stock_count", mode: "all", preventSelfApproval: true,
+        assignees: [{type:"user",userId:second},{type:"user",userId:reviewer}] }));
       await run(() =>
         receiveInventory(org.orgId, first, {
           itemId: org.items.fifo,
@@ -603,28 +602,24 @@ test(
         }),
       );
       await run(() => submitStockCountForReview(org.orgId, first, count.id));
-      await assert.rejects(
-        run(() =>
-          withOrgTransaction(org.orgId, () =>
-            postStockCount(org.orgId, second, count.id),
-          ),
-        ),
-        /Second counter.*independent review/,
-      );
+      const subject = await run(() => stockCountsFlowAdapter.loadContext(count.id));
+      assert.deepEqual(new Set(subject?.makerUserIds), new Set([first,second]), "all historical observers remain count makers");
+      const gates = (await run(() => db.execute<{id:string;assignee_user_id:string}>(sql`select id,assignee_user_id from flow_gates
+        where org_id=${org.orgId} and subject_id=${count.id} and status='pending'`))).rows;
+      assert.deepEqual(gates.map(gate => gate.assignee_user_id), [reviewer], "tenant self-approval prevention excludes every historical observer");
+      await assert.rejects(run(() => postStockCount(org.orgId,second,count.id)), /approval|review|Flow/);
+      await decideGate({ gateId:gates[0]!.id,decision:"approved",userId:reviewer,allowedSubsidiaryIds:null });
       const posted = await run(() =>
         withOrgTransaction(org.orgId, () =>
           postStockCount(org.orgId, reviewer, count.id),
         ),
       );
       assert.equal(posted.status, "posted");
-      const audit = (
-        await run(() =>
-          db.execute<{ contributors: string[] }>(
-            sql`select changes->'review'->'contributors' as contributors from audit_log where org_id=${org.orgId} and table_name='stock_counts' and row_id=${count.id} and changes->>'operation'='post'`,
-          ),
-        )
-      ).rows[0]!;
-      assert.deepEqual(new Set(audit.contributors), new Set([first, second]));
+      const audit = (await run(() => db.execute<{actor_id:string;changes:Record<string,unknown>}>(sql`
+        select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='stock_counts'
+          and row_id=${count.id} and changes->>'operation'='post'`))).rows[0]!;
+      assert.equal(audit.actor_id,reviewer);
+      assert.ok(audit.changes.review, "native posting retains its reviewed policy evidence");
     } finally {
       await run(() => dropScratchOrg(org.orgId));
     }

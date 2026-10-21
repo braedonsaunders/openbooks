@@ -99,6 +99,12 @@ if (process.argv.includes("--owner")) {
     getScratchOrgLifecycleMetrics,
     releaseOutstandingScratchOrgLeases,
   } = await import("@openbooks/engine/testing/fixtures");
+  // Database integration workers exercise the same initialized services as
+  // application entry points, before transport doubles install module hooks.
+  if (process.env.OPENBOOKS_DB_URL) {
+    const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+    installEngineSeams();
+  }
   // Legacy integration tests often lease a scratch org without an explicit
   // drop call. Preserve a small file-scoped working set (some suites build a
   // shared fixture in a module-level harness), but drain it once the fixed

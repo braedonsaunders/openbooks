@@ -1,3 +1,4 @@
+import { decideGate } from "../flows/gates.ts";
 import { before as initializeNativeComposition } from "node:test";
 initializeNativeComposition(async () => {
   if (!process.env.OPENBOOKS_DB_URL) return;
@@ -9,7 +10,7 @@ import test from 'node:test';
 import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {db,withOrg,withBypassContext} from '../platform/db.ts';
-import {createScratchOrg,dropScratchOrg,seedFlowActors,grantScratchPermissions,type ScratchOrg} from '../testing/fixtures.ts';
+import {createScratchOrg,dropScratchOrg,seedFlowActors,seedApprovalFlow,grantScratchPermissions,type ScratchOrg} from '../testing/fixtures.ts';
 import {createDocument} from '../ledger/document-write.ts';
 import {postDocument} from '../ledger/posting-document.ts';
 import {controlRecognition} from './recognition-controls.ts';
@@ -69,7 +70,7 @@ test('hold/release requires live authority and revision, skips journals, and res
  } finally {await dropScratchOrg(org.orgId);}
 });
 
-test('retrospective tiers append balanced catch-up facts and claims enforce independent approval, replay and reversal',{skip:!enabled},async()=>{
+test('retrospective tiers append balanced catch-up facts and claims follow tenant Flow approval, replay and reversal',{skip:!enabled},async()=>{
  const org=await createScratchOrg();
  try {
   const actors=await commercialActors(org);
@@ -82,8 +83,14 @@ test('retrospective tiers append balanced catch-up facts and claims enforce inde
   assert.equal((await withOrg(org.orgId,()=>db.execute<{amount:string}>(sql`select amount::text from rebate_accruals where org_id=${org.orgId} and id=${original.id}`))).rows[0]!.amount,original.amount);
   await accrueRebatesForDocument(org.orgId,first,actors.adminId);assert.equal(await earned(org.orgId,agreementId),'100.0000');
   const claim=await generateRebateClaim(org.orgId,actors.submitterId,agreementId,org.customerId,org.date,'Claim period reconciled');
-  await assert.rejects(()=>approveRebateClaim(org.orgId,actors.submitterId,claim.id,'Own claim cannot be approved'),/independent/);
-  await approveRebateClaim(org.orgId,actors.adminId,claim.id,'Independent claim reconciliation');
+  await seedApprovalFlow(org.orgId,{subjectKind:'customer_rebate_claim',mode:'all',preventSelfApproval:true,
+    assignees:[{type:'user',userId:actors.submitterId},{type:'user',userId:actors.adminId}]});
+  const submitted=await approveRebateClaim(org.orgId,actors.submitterId,claim.id,'Claim reconciled for settlement');
+  assert.ok("pendingApproval" in submitted && submitted.pendingApproval);
+  const gates=(await withOrg(org.orgId,()=>db.execute<{id:string;assignee_user_id:string}>(sql`select id,assignee_user_id from flow_gates
+    where org_id=${org.orgId} and subject_id=${claim.id} and status='pending'`))).rows;
+  assert.deepEqual(gates.map(gate=>gate.assignee_user_id),[actors.adminId],'tenant policy excludes the claim maker');
+  await decideGate({gateId:gates[0]!.id,decision:'approved',userId:actors.adminId,allowedSubsidiaryIds:null,comment:'Independent claim reconciliation'});
   const input={postingDate:org.date,bankAccountId:org.accounts.bank,fxRate:'1',reason:'Paid contractual earned rebate'};
   const settlement=await settleRebatePayment(org.orgId,actors.adminId,claim.id,input);
   assert.equal((await settleRebatePayment(org.orgId,actors.adminId,claim.id,input)).entryId,settlement.entryId);

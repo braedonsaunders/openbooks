@@ -1,7 +1,6 @@
-import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts'
 import { sql, type SQL } from "drizzle-orm";
-import { db, inDbTransaction, type SqlExecutor } from "../platform/db.ts";
+import { db, inDbTransaction, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
@@ -1148,8 +1147,7 @@ export async function postPayrollVariance(opts: {
   // period-end). The stored entry number is unique per physical journal because re-runs
   // reverse the prior generation and repost (journal_entries_org_number).
   const entryNumberBase = `PVAR-${periodEnd}-${subsidiaryId.slice(0, 8)}`;
-  return inDbTransaction(async (tx) => {
-    if (!await lockActorIdentity(tx, orgId, actorId)) throw Object.assign(new Error('Record not found.'), { status: 404 })
+  return withOrgTransaction(orgId, () => inDbTransaction(async (tx) => {
     await lockActorCommandAuthority(tx,orgId,actorId,subsidiaryId,'gl.post')
     // The shared setup fence protects both account mappings for the complete
     // reverse/recompute/repost unit without serializing unrelated posting.
@@ -1262,5 +1260,5 @@ export async function postPayrollVariance(opts: {
       ],
     });
     return { entryId, variance };
-  });
+  }));
 }

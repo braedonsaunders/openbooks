@@ -5,7 +5,9 @@ import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { documentRevisionSql } from '@openbooks/engine/records/revision'
-import { db } from '@openbooks/engine/platform/db'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { lockActorCommandAuthority } from '@openbooks/engine/organization/actor-command-authority'
+import { assertUnrestrictedScope } from '@openbooks/engine/organization/scope'
 import {
   boardAuthority,
   getBoard,
@@ -137,10 +139,11 @@ export const POST = defineRoute({
   feature: 'flows',
   scope: 'unrestricted',
   body: requestBodySchema,
-  handler: async ({ request, body, authz: routeAuthz }) => {
+  handler: async ({ request, body, authz: routeAuthz }) => withOrgTransaction(routeAuthz.user.orgId, async () => {
     const gate = routeAuthz
 
     const user = gate.user
+    assertUnrestrictedScope(await lockActorCommandAuthority(db,user.orgId,user.id,null,"flows.manage"))
 
     const name = String(body.name ?? '').trim()
     if (!name || name.length > 200) {
@@ -199,5 +202,5 @@ export const POST = defineRoute({
       return created.id
     })
     return NextResponse.json({ id })
-  },
+  }),
 })

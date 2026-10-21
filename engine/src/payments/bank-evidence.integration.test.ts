@@ -1,9 +1,10 @@
+import { seedApprovedBankAccountFixture, approvePendingBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import type { PoolClient } from "pg";
 import { sql } from "drizzle-orm";
-import { db, pool, withBypass } from "../platform/db.ts";
+import { db, pool, withBypass, withOrgTransaction } from "../platform/db.ts";
 import {
   generatePaymentFileArtifact,
   recordPaymentFileDownload,
@@ -86,7 +87,7 @@ async function seedRailRun(
   method: RailBankMethod,
 ): Promise<RailFixture> {
   const actorId = await createScratchUser(org.orgId, "Payment Operator", "accountant");
-  await grantScratchPermissions(org.orgId, actorId, ["ap.pay"]);
+  await grantScratchPermissions(org.orgId, actorId, ["ap.pay","parties.manage"]);
   const formatId = randomUUID();
   const profileId = randomUUID();
   const runId = randomUUID();
@@ -105,18 +106,9 @@ async function seedRailRun(
     values (${profileId}, ${org.orgId}, ${`Bank evidence profile ${method} ${profileId.slice(0, 8)}`}, ${org.accounts.bank},
             ${formatId}, 'CAD', 'CA', ${sealJson(ORIGINATOR_SECRETS[method], { orgId: org.orgId, purpose: "payment.originator.secrets" })},
             true, ${actorId}, ${actorId})`);
-  await db.execute(sql`
-    insert into party_bank_accounts
-      (id, org_id, party_id, bank_name, country, currency, routing,
-       account_number_encrypted, account_last_four,
-       approval_status, is_active, approved_at, approved_by,
-       submitted_by, submitted_at, created_by, updated_by)
-    values (${accountId}, ${org.orgId}, ${org.vendorId}, 'Vendor Bank A', 'CA', 'CAD',
-            ${JSON.stringify(APPROVED_A[method].routing)}::jsonb,
-            ${encryptAccountNumber(APPROVED_A[method].account, { orgId: org.orgId })},
-            ${APPROVED_A[method].account.slice(-4)},
-            'approved', true, ${org.date}, ${actorId},
-            ${actorId}, now(), ${actorId}, ${actorId})`);
+  await seedApprovedBankAccountFixture({ id:accountId,orgId:org.orgId,actorId,partyId:org.vendorId,
+    bankName:'Vendor Bank A',country:'CA',currency:'CAD',routing:APPROVED_A[method].routing,
+    sealedAccount:encryptAccountNumber(APPROVED_A[method].account,{orgId:org.orgId}),lastFour:APPROVED_A[method].account.slice(-4) });
   await db.execute(sql`
     insert into payment_runs
       (id, org_id, run_number, bank_account_id, method, status, scheduled_for,
@@ -155,18 +147,13 @@ async function applyPendingBankDetailEdit(
   `);
 }
 
-/** Re-approve the edited revision B as an independent checker would. */
+/** Submit edited revision B through the tenant’s configured bank-details policy. */
 async function approveCurrentRevision(
   orgId: string,
   accountId: string,
   approverId: string,
 ): Promise<void> {
-  await db.execute(sql`
-    update party_bank_accounts set
-      approval_status = 'approved', is_active = true, approved_at = current_date,
-      approved_by = ${approverId}
-     where id = ${accountId} and org_id = ${orgId}
-  `);
+  await approvePendingBankAccountFixture({orgId,actorId:approverId,id:accountId});
 }
 
 /**
@@ -254,7 +241,7 @@ test("payment files export only approved bank details on ACH, SEPA and EFT", { s
   try {
     const fixtures = [] as RailFixture[];
     for (const method of ["ach", "sepa", "eft"] as RailBankMethod[]) {
-      fixtures.push(await withBypass(() => seedRailRun(org, method)));
+      fixtures.push(await withOrgTransaction(org.orgId, () => seedRailRun(org, method)));
     }
 
     for (const fixture of fixtures) {
@@ -303,7 +290,7 @@ test("a concurrent maker edit can never steer an export: lock-first wins with ap
   const org = await withBypass(() => createScratchOrg());
   try {
     for (const method of ["ach", "sepa", "eft"] as RailBankMethod[]) {
-      const fixture = await withBypass(() => seedRailRun(org, method));
+      const fixture = await withOrgTransaction(org.orgId, () => seedRailRun(org, method));
       const loader = railLoader(method);
 
       // Race 1 — the edit holds the row lock first. The export must really
@@ -347,10 +334,11 @@ test("a concurrent maker edit can never steer an export: lock-first wins with ap
 test("a blocked export writes no partial file and no partial audit, and delivery serves the locked-in evidence version", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const checkerId = await createScratchUser(org.orgId, "Independent Checker", "approver");
+    const checkerId = await createScratchUser(org.orgId, "Bank details reviewer", "approver");
+    await grantScratchPermissions(org.orgId,checkerId,["parties.manage"]);
 
     // Run 1 generates successfully from the APPROVED revision.
-    const good = await withBypass(() => seedRailRun(org, "ach"));
+    const good = await withOrgTransaction(org.orgId, () => seedRailRun(org, "ach"));
     const artifact = await generatePaymentFileArtifact(good.runId, org.orgId, good.actorId);
     assert.match(artifact.content.toString("utf8"), new RegExp(APPROVED_A.ach.marker));
 
@@ -366,7 +354,7 @@ test("a blocked export writes no partial file and no partial audit, and delivery
     assert.equal(storedBefore.contentHash, createHash("sha256").update(artifact.content).digest("hex"));
 
     // Run 2 shares the same bank account but has no artifact yet.
-    const doomed = await withBypass(() => seedRailRun(org, "ach"));
+    const doomed = await withOrgTransaction(org.orgId, () => seedRailRun(org, "ach"));
     const countsBefore = (await withBypass(() => db.execute<{ files: number; events: number }>(sql`
       select
         (select count(*)::int from payment_files where payment_run_id = ${doomed.runId}) as files,
@@ -415,7 +403,7 @@ test("a blocked export writes no partial file and no partial audit, and delivery
     // legitimately export B — the control is approval state, not the values.
     // (Maker-checker itself is enforced upstream by the bank-account flow
     // gate's preventSelfApproval, untouched here.)
-    await withBypass(() => approveCurrentRevision(org.orgId, doomed.accountId, checkerId));
+    await withOrgTransaction(org.orgId, () => approveCurrentRevision(org.orgId, doomed.accountId, checkerId));
     const regenerated = await generatePaymentFileArtifact(doomed.runId, org.orgId, doomed.actorId);
     assert.match(regenerated.content.toString("utf8"), new RegExp(PENDING_B.ach.account));
     assert.doesNotMatch(regenerated.content.toString("utf8"), new RegExp(APPROVED_A.ach.account));
@@ -428,7 +416,7 @@ test("regenerating a run reuses its stamped creation instant, reproducing byte-i
   const org = await withBypass(() => createScratchOrg());
   try {
     for (const method of ["ach", "sepa", "eft"] as RailBankMethod[]) {
-      const fixture = await withBypass(() => seedRailRun(org, method));
+      const fixture = await withOrgTransaction(org.orgId, () => seedRailRun(org, method));
       const first = await generatePaymentFileArtifact(fixture.runId, org.orgId, fixture.actorId, {
         now: new Date("2026-07-10T12:00:00Z"),
       });

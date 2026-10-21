@@ -606,7 +606,7 @@ test("tax registration windows exclude concurrent overlaps at storage", { skip: 
       db.execute(sql`
         insert into tax_registrations (org_id, jurisdiction_id, effective_to)
         values (${org.orgId}, ${jurisdictionId}, '2027-06-30')`),
-      /exclusion constraint/,
+      /exclusion constraint|tax registrations overlap for this legal entity, jurisdiction and return form/,
       "tax_registrations NULL effective_from must overlap every window",
     );
   } finally {

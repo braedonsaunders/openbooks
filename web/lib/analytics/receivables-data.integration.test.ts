@@ -32,7 +32,7 @@ async function postReceivable(org: Org, actor: string, input: {
   assert.equal(approved.rows.length, 1, 'the fixture document must reach its approved state before posting')
   // Missing due dates represent imported history; ordinary posting resolves
   // current due-on-receipt terms and cannot create that historical condition.
-  return await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }, { migration: input.due === null })
+  return await postDocument(id, { migration: input.due === null, control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })
 }
 
 async function withFixture(action: (org: Org, actor: string) => Promise<void>) {

@@ -1,3 +1,4 @@
+import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -7,11 +8,12 @@ import { generatePaymentFileArtifact, submitPaymentRun } from "./operations.ts";
 import { paymentRunReadiness } from "./run-readiness.ts";
 import { encryptAccountNumber } from "../payments-core/rail-settings.ts";
 import { sealJson } from "../platform/secrets.ts";
-import { db, withBypass, withOrgContext } from "../platform/db.ts";
+import { db, withBypass, withOrgTransaction, withOrgContext } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import {
   createScratchOrg,
   createScratchUser,
+  grantScratchPermissions,
   dropScratchOrgReporting,
 } from "../testing/fixtures.ts";
 
@@ -51,15 +53,14 @@ async function seedSepaDebitRun(
   bank: {
     routing: Record<string, string>;
     account: string | null;
-    approved: boolean;
-    active: boolean;
   },
 ): Promise<DebitFixture> {
   // Phase 1 (committed before phase 2): the run builder opens its own
   // transaction on a separate connection, so the profile, mandate, and posted
   // invoice must be committed — never siblings in one uncommitted seed tx.
-  const seeded = await withBypass(async () => {
+  const seeded = await withOrgTransaction(org.orgId, async () => {
     const actorId = await createScratchUser(org.orgId, "Collection Operator", "accountant");
+    await grantScratchPermissions(org.orgId,actorId,["parties.manage"]);
     const formatId = randomUUID();
     const profileId = randomUUID();
     const accountId = randomUUID();
@@ -81,20 +82,10 @@ async function seedSepaDebitRun(
         (${profileId}, ${org.orgId}, 'SEPA collection profile', ${org.accounts.bank},
          ${org.subsidiaryId}, ${formatId}, 'CAD', 'DE', ${sealJson(ORIGINATOR_SECRETS, { orgId: org.orgId, purpose: "payment.originator.secrets" })},
          true, ${actorId}, ${actorId})`);
-    await db.execute(sql`
-      insert into party_bank_accounts
-        (id, org_id, party_id, bank_name, country, currency, routing,
-         account_number_encrypted, account_last_four,
-         approval_status, is_active, approved_at, approved_by,
-         created_by, updated_by)
-      values
-        (${accountId}, ${org.orgId}, ${org.customerId}, 'Customer bank',
-         'DE', 'CAD', ${JSON.stringify(bank.routing)}::jsonb,
-         ${bank.account === null ? null : encryptAccountNumber(bank.account, { orgId: org.orgId })},
-         ${bank.account === null ? null : bank.account.slice(-4)},
-         ${bank.approved ? "approved" : "pending"}, ${bank.active},
-         ${bank.approved ? org.date : null}, ${bank.approved ? actorId : null},
-         ${actorId}, ${actorId})`);
+    await seedApprovedBankAccountFixture({id:accountId,orgId:org.orgId,actorId,partyId:org.customerId,
+      bankName:'Customer bank',country:'DE',currency:'CAD',routing:bank.routing,
+      sealedAccount:bank.account===null?null:encryptAccountNumber(bank.account,{orgId:org.orgId}),
+      lastFour:bank.account===null?null:bank.account.slice(-4)});
     await db.execute(sql`
       insert into payment_mandates
         (id, org_id, party_id, party_bank_account_id, scheme, mandate_reference,
@@ -191,8 +182,6 @@ test("an approved typo-checksum IBAN refuses generation, stores nothing, and blo
     const fixture = await seedSepaDebitRun(org, {
       routing: { iban: TYPO_IBAN, bic: VALID_BIC },
       account: TYPO_IBAN,
-      approved: true,
-      active: true,
     });
     const before = await runState(org.orgId, fixture.runId);
 
@@ -227,8 +216,6 @@ test("an absent debtor IBAN refuses generation and stores nothing", { skip: !DB 
     const fixture = await seedSepaDebitRun(org, {
       routing: {},
       account: null,
-      approved: true,
-      active: true,
     });
 
     await assert.rejects(
@@ -255,8 +242,6 @@ test("an inactive/unapproved bank at generation refuses and stores nothing", { s
     const fixture = await seedSepaDebitRun(org, {
       routing: { iban: VALID_IBAN, bic: VALID_BIC },
       account: VALID_IBAN,
-      approved: true,
-      active: true,
     });
     // The exact material-edit write the bank-account flow performs: new
     // revision re-enters approval as pending + inactive.
@@ -292,8 +277,6 @@ test("a valid SEPA debit run still generates its pain.008 artifact", { skip: !DB
     const fixture = await seedSepaDebitRun(org, {
       routing: { iban: VALID_IBAN, bic: VALID_BIC },
       account: VALID_IBAN,
-      approved: true,
-      active: true,
     });
 
     const readiness = await paymentRunReadiness(fixture.runId, org.orgId);
