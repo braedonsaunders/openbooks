@@ -82,11 +82,13 @@ test("order-line progress quantities keep eight decimals in storage and the gove
       select pg_get_viewdef('openbooks_query.document_lines'::regclass, true) as definition`, 'objects');
     assert.match(view[0]!.definition, /openbooks_query_org_id\(\)/, "the governed view filters by the query tenant");
 
-    const governed = await runUserSql(
-      `select id::text as id, quantity_fulfilled::text as fulfilled, quantity_billed::text as billed
-         from document_lines order by line_number`,
-      { orgId: org.orgId },
-    );
+    const query = `select id::text as id, quantity_fulfilled::text as fulfilled, quantity_billed::text as billed
+         from document_lines order by line_number`;
+    await assert.rejects(runUserSql(query, { orgId: org.orgId }), /payroll\.read/,
+      "raw document lines retain their payroll permission requirement");
+    const governed = await runUserSql(query, {
+      orgId: org.orgId, payrollRead: true, expenseRead: true,
+    });
     assert.deepEqual(governed.rows, [
       { id: exact.lineId, fulfilled: "1.23456789", billed: "0.00000001" },
       { id: defaulted.lineId, fulfilled: "0.00000000", billed: "0.00000000" },
