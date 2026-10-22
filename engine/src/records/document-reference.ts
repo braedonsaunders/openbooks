@@ -88,7 +88,7 @@ export async function findPossibleDuplicateDocuments(
     reason = "party_date_total";
     match = sql`and d.document_date = ${input.documentDate}::date and d.total = ${input.total}::numeric`;
   }
-  const rows = (await exec.execute<Omit<PossibleDuplicate, "reason">>(sql`
+  const rows = await exec.execute<Omit<PossibleDuplicate, "reason">>(sql`
     select d.id, d.document_number as "documentNumber", d.document_date::text as "documentDate",
            d.total::text as total, d.status, d.reference_number as "referenceNumber"
       from documents d
@@ -99,6 +99,6 @@ export async function findPossibleDuplicateDocuments(
        ${input.excludeId ? sql`and d.id <> ${input.excludeId}::uuid` : sql``}
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
      order by d.document_date desc, d.created_at desc, d.id
-     limit 5`)).rows;
+     limit 5`, 'objects');
   return rows.map((row) => ({ ...row, reason }));
 }

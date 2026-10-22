@@ -341,13 +341,13 @@ export async function resolvePartyLineDefault(
       ? sql`select tax_code_id, null::uuid as default_expense_account_id from customer_roles
              where org_id = ${orgId} and party_id = ${input.partyId} and is_active`
       : sql`select tax_code_id, default_expense_account_id from vendor_roles
-             where org_id = ${orgId} and party_id = ${input.partyId} and is_active`,
-  )).rows[0]
+             where org_id = ${orgId} and party_id = ${input.partyId} and is_active`, 'objects',
+  ))[0]
   if (!party) return NO_PARTY_LINE_DEFAULT
 
   const taxCodeId = cfg.hasTax && party.tax_code_id
     ? (await exec.execute<{ id: string }>(sql`
-        select id from tax_codes where org_id = ${orgId} and id = ${party.tax_code_id} and is_active`)).rows[0]?.id ?? null
+        select id from tax_codes where org_id = ${orgId} and id = ${party.tax_code_id} and is_active`, 'objects'))[0]?.id ?? null
     : null
   const tax = { taxCodeId, taxSource: taxCodeId ? 'party' as const : null }
 
@@ -355,12 +355,12 @@ export async function resolvePartyLineDefault(
     ? (await exec.execute<{ id: string }>(sql`
         select id from accounts
          where org_id = ${orgId} and id = ${party.default_expense_account_id}
-           and is_active and not is_summary ${accountTypeFilter(cfg, sql`type`)}`)).rows[0]?.id ?? null
+           and is_active and not is_summary ${accountTypeFilter(cfg, sql`type`)}`, 'objects'))[0]?.id ?? null
     : null
   if (vendorDefault) return { accountId: vendorDefault, accountSource: 'party_default', ...tax }
 
   const asOf = input.asOfDate ?? await businessTodayInTx(exec, orgId)
-  const usage = (await exec.execute<PartyAccountUsage>(sql`
+  const usage = await exec.execute<PartyAccountUsage>(sql`
     select l.account_id as "accountId",
            count(distinct d.id)::int as "documentCount",
            max(d.document_date)::text as "lastDocumentDate",
@@ -375,7 +375,7 @@ export async function resolvePartyLineDefault(
        and d.document_date between ${addCalendarDays(asOf, -PARTY_HISTORY_WINDOW_DAYS)}::date and ${asOf}::date
        and l.item_id is null and l.promotion_id is null
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
-     group by l.account_id`)).rows
+     group by l.account_id`, 'objects')
   const top = rankPartyAccountUsage(usage.map((row) => ({ ...row, documentCount: Number(row.documentCount) })))
   return top
     ? { accountId: top.accountId, accountSource: 'party_history', ...tax, historyCount: top.documentCount }
@@ -434,7 +434,7 @@ export async function resolveRecentPartyDocument(
        and d.status <> 'voided'
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
      order by d.document_date desc, d.created_at desc, d.id desc
-     limit 1`)).rows[0]
+     limit 1`, 'objects'))[0]
   if (!header) return null
   const dimension = (table: string, alias: string, column: string) => {
     const t = sql.raw(table)
@@ -443,7 +443,7 @@ export async function resolveRecentPartyDocument(
     return sql`left join ${t} ${a} on ${a}.org_id = l.org_id and ${a}.id = l.${c} and ${a}.is_active
       ${subsidiaryVisibleFilter(sql`${a}.subsidiary_id`, scope, { orgWideNull: true })}`
   }
-  const lines = (await exec.execute<RecalledDocumentLine>(sql`
+  const lines = await exec.execute<RecalledDocumentLine>(sql`
     select a.id as "accountId", i.id as "itemId", l.description,
            l.quantity::text as quantity, l.unit_price::text as "unitPrice", l.amount::text as amount,
            dep.id as "departmentId", prj.id as "projectId", loc.id as "locationId", cls.id as "classId",
@@ -458,6 +458,6 @@ export async function resolveRecentPartyDocument(
       ${dimension('locations', 'loc', 'location_id')}
       ${dimension('classes', 'cls', 'class_id')}
      where l.org_id = ${orgId} and l.document_id = ${header.id} and l.promotion_id is null
-     order by l.line_number, l.id`)).rows
+     order by l.line_number, l.id`, 'objects')
   return { ...header, lines }
 }

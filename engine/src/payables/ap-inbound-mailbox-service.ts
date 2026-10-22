@@ -60,8 +60,8 @@ export async function resolveMailboxByToken(token: string): Promise<ResolvedMail
   // bypass: public-token-lookup — the webhook names only its address token, so the owning org is resolved from that one row before every read and write runs in that org's scope.
   const owner = await withBypassContext(() => db.execute<{ orgId: string }>(sql`
     select org_id as "orgId" from ap_capture_mailboxes where token = ${token}
-  `));
-  const orgId = owner.rows[0]?.orgId;
+  `, 'objects'));
+  const orgId = owner[0]?.orgId;
   if (!orgId) return null;
   return withOrgContext(orgId, async () => {
     const row = (await db.execute<{
@@ -78,7 +78,7 @@ export async function resolveMailboxByToken(token: string): Promise<ResolvedMail
         from ap_capture_mailboxes m
         left join ap_capture_mailbox_credentials c on c.org_id = m.org_id and c.mailbox_id = m.id
        where m.org_id = ${orgId} and m.token = ${token}
-    `)).rows[0];
+    `, 'objects'))[0];
     if (!row) return null;
     return {
       id: row.id,
@@ -105,7 +105,7 @@ export async function consumeMailboxDelivery(orgId: string, mailboxId: string, p
            rate_window_start = date_trunc('minute', now())
      where org_id = ${orgId} and id = ${mailboxId}
      returning rate_window_count as count
-  `)).rows[0];
+  `, 'objects'))[0];
   if (!counted) throw new MailboxConfigurationError("The inbound address no longer exists", 404);
   return Number(counted.count) <= perMinute;
 }
@@ -168,7 +168,7 @@ export async function beginInboundMessage(input: {
        where org_id = ${input.orgId} and mailbox_id = ${input.mailboxId}
          and provider_nonce = ${nonce}
          and (message_id <> ${messageId} or content_digest <> ${input.contentDigest})
-    `)).rows[0];
+    `, 'objects'))[0];
     if (reused) throw replayRefusal();
   }
   let inserted: { id: string; attempt: number } | undefined;
@@ -182,7 +182,7 @@ export async function beginInboundMessage(input: {
       -- A conflict is the same message delivered again: the existing row answers it below.
       on conflict (org_id, mailbox_id, message_id) do nothing
       returning id, claim_attempt as attempt
-    `)).rows[0];
+    `, 'objects'))[0];
   } catch (error) {
     // A concurrent delivery recorded the same token for another message.
     if (isNonceConflict(error)) throw replayRefusal();
@@ -204,12 +204,12 @@ export async function beginInboundMessage(input: {
        and content_digest = ${input.contentDigest}
        and signature_verified = ${input.signature.verified}
      returning id, claim_attempt as attempt
-  `)).rows[0];
+  `, 'objects'))[0];
   if (reclaimed) return { status: "new", id: reclaimed.id, attempt: Number(reclaimed.attempt), reclaimed: true };
   const existing = (await db.execute<{ id: string; outcome: string; captureItemIds: string[] }>(sql`
     select id, outcome, capture_item_ids as "captureItemIds" from ap_capture_inbound_messages
      where org_id = ${input.orgId} and mailbox_id = ${input.mailboxId} and message_id = ${messageId}
-  `)).rows[0];
+  `, 'objects'))[0];
   if (!existing) throw new Error("The inbound message could not be logged or found; retry the delivery.");
   return { status: "repeat", id: existing.id, outcome: existing.outcome, captureItemIds: existing.captureItemIds ?? [] };
 }
@@ -235,7 +235,7 @@ export async function finishInboundMessage(input: {
      where org_id = ${input.orgId} and id = ${input.id} and outcome = 'received'
        and claim_attempt = ${input.attempt}
      returning id
-  `)).rows[0];
+  `, 'objects'))[0];
   if (!updated) throw new Error("The inbound message outcome was already recorded, its claim moved to a retry, or the message is missing.");
 }
 
@@ -323,7 +323,7 @@ async function snapshot(orgId: string, id: string): Promise<MailboxSnapshot | nu
       from ap_capture_mailboxes m
      where m.org_id = ${orgId} and m.id = ${id}
      for update of m
-  `)).rows[0] ?? null;
+  `, 'objects'))[0] ?? null;
 }
 
 async function audit(orgId: string, id: string, action: string, actorId: string, before: unknown, after: unknown, extra: Record<string, unknown> = {}) {
@@ -338,7 +338,7 @@ async function assertEntity(orgId: string, subsidiaryId: string, allowed: Readon
   if (allowed !== null && !allowed.has(subsidiaryId)) throw new MailboxConfigurationError("Choose a legal entity you can manage", 404);
   const entity = (await db.execute(sql`
     select 1 from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination
-  `)).rows[0];
+  `, 'objects'))[0];
   if (!entity) throw new MailboxConfigurationError("Choose an active legal entity for this address");
 }
 
@@ -350,7 +350,7 @@ async function storeSecret(orgId: string, mailboxId: string, actorId: string, se
     on conflict (org_id, mailbox_id) do update
       set sealed_secret = excluded.sealed_secret, updated_at = now(), updated_by = excluded.updated_by
     returning id
-  `)).rows[0];
+  `, 'objects'))[0];
   if (!stored) throw new Error("The signing secret was not stored; retry the save.");
 }
 
@@ -383,7 +383,7 @@ export async function createMailbox(input: MailboxInput & {
               ${input.provider}, ${JSON.stringify(allowedSenders)}::jsonb, ${input.isActive}, ${input.actorId},
               ${input.actorId}, ${input.actorId})
       returning id
-    `)).rows[0];
+    `, 'objects'))[0];
     if (!created) throw new Error("The inbound address was not created; retry the save.");
     if (input.signingSecret) await storeSecret(input.orgId, created.id, input.actorId, input.signingSecret);
     const after = await snapshot(input.orgId, created.id);
@@ -427,7 +427,7 @@ export async function updateMailbox(input: Omit<MailboxInput, "subsidiaryId"> & 
              updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${input.id}
        returning id
-    `)).rows[0];
+    `, 'objects'))[0];
     if (!updated) throw new MailboxConfigurationError("Inbound address not found", 404);
     if (input.signingSecret) {
       await storeSecret(input.orgId, input.id, input.actorId, input.signingSecret);
@@ -471,7 +471,7 @@ export async function takeMailboxOwnership(input: {
     if (before.ownerId === input.actorId) throw new MailboxConfigurationError("You already own this address", 409);
     const member = (await db.execute(sql`
       select 1 from users where org_id = ${input.orgId} and id = ${input.actorId} and is_active
-    `)).rows[0];
+    `, 'objects'))[0];
     if (!member) throw new MailboxConfigurationError("Only an active user of this organization can own an inbound address");
     const authority = await mailboxOwnerAuthority(db, input.orgId, input.actorId, before.subsidiaryId);
     if (!authority.ok) {
@@ -482,7 +482,7 @@ export async function takeMailboxOwnership(input: {
          set owner_user_id = ${input.actorId}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${input.id}
        returning id
-    `)).rows[0];
+    `, 'objects'))[0];
     if (!updated) throw new MailboxConfigurationError("Inbound address not found", 404);
     const after = await snapshot(input.orgId, input.id);
     if (after?.ownerId !== input.actorId) throw new Error("The ownership change was not recorded; retry.");
@@ -521,7 +521,7 @@ export async function listMailboxes(
   allowed: ReadonlySet<string> | null,
   options: { includeTokens?: boolean } = {},
 ): Promise<MailboxListRow[]> {
-  return (await db.execute<MailboxListRow>(sql`
+  return await db.execute<MailboxListRow>(sql`
     select m.id, m.label, m.subsidiary_id as "subsidiaryId", coalesce(s.legal_name, s.name) as "subsidiaryName",
            m.email_address as "emailAddress", ${options.includeTokens === true ? sql`m.token` : sql`null::text`} as token,
            m.provider, m.is_active as "isActive", m.owner_user_id as "ownerId", u.name as "ownerName"
@@ -530,7 +530,7 @@ export async function listMailboxes(
       left join users u on u.org_id = m.org_id and u.id = m.owner_user_id
      where m.org_id = ${orgId} ${entityScope(sql.raw("m.subsidiary_id"), allowed)}
      order by m.is_active desc, m.label, m.id
-  `)).rows;
+  `, 'objects');
 }
 
 export type InboundMessageListRow = {
@@ -562,13 +562,13 @@ export async function listInboundMessages(
        where im.org_id = ${orgId} ${scope}
        order by im.received_at desc, im.id desc
        limit ${page.limit} offset ${page.offset}
-    `),
+    `, 'objects'),
     db.execute<{ n: number }>(sql`
       select count(*)::int as n
         from ap_capture_inbound_messages im
         join ap_capture_mailboxes m on m.org_id = im.org_id and m.id = im.mailbox_id
        where im.org_id = ${orgId} ${scope}
-    `),
+    `, 'objects'),
   ]);
-  return { rows: rows.rows, total: Number(total.rows[0]?.n ?? 0) };
+  return { rows: rows, total: Number(total[0]?.n ?? 0) };
 }

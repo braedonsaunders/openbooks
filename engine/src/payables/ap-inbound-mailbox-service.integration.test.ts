@@ -48,12 +48,12 @@ test("an address resolves by its token, with the secret sealed apart from the co
     const admin = await seedAdmin(org);
     const created = await createMailbox({ ...BASE, orgId: org.orgId, actorId: admin, subsidiaryId: org.subsidiaryId, allowedSubsidiaryIds: null });
     assert.match(created.token, /^[a-z2-7]{32}$/);
-    const row = (await db.execute<Record<string, unknown>>(sql`select * from ap_capture_mailboxes where id = ${created.id}`)).rows[0]!;
+    const row = (await db.execute<Record<string, unknown>>(sql`select * from ap_capture_mailboxes where id = ${created.id}`, 'objects'))[0]!;
     assert.equal(Object.values(row).some((value) => value === BASE.signingSecret), false, "the configuration row never holds the secret");
     assert.deepEqual(row.allowed_senders, ["@vendor.example", "ap@other.example"]);
     const sealed = (await db.execute<{ sealed: string }>(sql`
       select sealed_secret as sealed from ap_capture_mailbox_credentials where mailbox_id = ${created.id}
-    `)).rows[0]!;
+    `, 'objects'))[0]!;
     assert.notEqual(sealed.sealed, BASE.signingSecret);
     const resolved = await resolveMailboxByToken(created.token);
     assert.equal(resolved?.orgId, org.orgId);
@@ -61,9 +61,9 @@ test("an address resolves by its token, with the secret sealed apart from the co
     assert.equal(resolved?.ownerId, admin);
     assert.equal(await resolveMailboxByToken("a".repeat(32)), null, "an unknown token resolves nothing");
     assert.equal(await resolveMailboxByToken("not-a-token"), null);
-    const audit = (await db.execute<{ action: string; changes: { after: { hasSigningSecret: boolean } } }>(sql`
+    const audit = await db.execute<{ action: string; changes: { after: { hasSigningSecret: boolean } } }>(sql`
       select action, changes from audit_log where org_id = ${org.orgId} and table_name = 'ap_capture_mailboxes' and row_id = ${created.id}
-    `)).rows;
+    `, 'objects');
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.changes.after.hasSigningSecret, true);
     assert.equal(JSON.stringify(audit).includes(BASE.signingSecret), false, "the audit trail never carries the secret");
@@ -126,7 +126,7 @@ test("a message id is logged once, its outcome is written once, and its facts ar
     assert.deepEqual(again, { status: "repeat", id: first.id, outcome: "captured", captureItemIds: [captureId] });
     await assert.rejects(finishInboundMessage({ orgId: org.orgId, id: first.id, attempt: 1, outcome: "error", reason: "late" }));
     await assert.rejects(db.execute(sql`update ap_capture_inbound_messages set from_address = 'forged@example.test' where id = ${first.id}`));
-    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from ap_capture_inbound_messages where mailbox_id = ${created.id}`)).rows[0]!.n;
+    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from ap_capture_inbound_messages where mailbox_id = ${created.id}`, 'objects'))[0]!.n;
     assert.equal(count, 1);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -158,7 +158,7 @@ test("a signed one-time token authenticates one message; reusing it for another 
     assert.equal(first.status, "new");
     const stored = (await db.execute<{ verified: boolean; nonce: string }>(sql`
       select signature_verified as verified, provider_nonce as nonce from ap_capture_inbound_messages where id = ${first.id}
-    `)).rows[0]!;
+    `, 'objects'))[0]!;
     assert.deepEqual(stored, { verified: true, nonce: "mailgun-token-0001" });
     const forged = { ...original, subject: "Pay this instead", messageId: "<forged@attacker.example>" };
     await assert.rejects(
@@ -178,7 +178,7 @@ test("a signed one-time token authenticates one message; reusing it for another 
       contentDigest: "a".repeat(64), signature: { verified: false, nonce: "mailgun-token-0001" },
     });
     assert.equal(unverified.status, "new", "an unverified token is not recorded and claims nothing");
-    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from ap_capture_inbound_messages where mailbox_id = ${created.id}`)).rows[0]!.n;
+    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from ap_capture_inbound_messages where mailbox_id = ${created.id}`, 'objects'))[0]!.n;
     assert.equal(count, 2, "the replay logged nothing");
     await assert.rejects(db.execute(sql`update ap_capture_inbound_messages set signature_verified = false where id = ${first.id}`),
       "signature evidence is an immutable fact");
@@ -224,7 +224,7 @@ test("the owner's standing is re-checked: inactive, unpermitted and out-of-scope
   try {
     const owner = await createScratchUser(org.orgId, "AP Owner", "clerk");
     const roleId = (await db.execute<{ id: string }>(sql`
-      select role_id as id from role_assignments where org_id = ${org.orgId} and user_id = ${owner}`)).rows[0]!.id;
+      select role_id as id from role_assignments where org_id = ${org.orgId} and user_id = ${owner}`, 'objects'))[0]!.id;
     await db.execute(sql`update app_roles set permissions = '["ap.read","ap.create","admin.setup.manage"]'::jsonb,
       subsidiary_restriction = '{"mode":"all"}'::jsonb where org_id = ${org.orgId} and id = ${roleId}`);
     const standing = () => mailboxOwnerAuthority(db, org.orgId, owner, org.subsidiaryId);
@@ -282,10 +282,10 @@ test("an administrator takes ownership of an address with a reason, audited befo
     const [listed] = await listMailboxes(org.orgId, null);
     assert.equal(listed!.ownerId, successor);
     assert.equal(listed!.ownerName, "Successor");
-    const audit = (await db.execute<{ actorId: string; changes: { before: { ownerId: string }; after: { ownerId: string }; reason: string } }>(sql`
+    const audit = await db.execute<{ actorId: string; changes: { before: { ownerId: string }; after: { ownerId: string }; reason: string } }>(sql`
       select actor_id as "actorId", changes from audit_log
        where org_id = ${org.orgId} and table_name = 'ap_capture_mailboxes' and row_id = ${created.id} and action = 'take_ownership'
-    `)).rows;
+    `, 'objects');
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.actorId, successor);
     assert.equal(audit[0]!.changes.before.ownerId, creator);

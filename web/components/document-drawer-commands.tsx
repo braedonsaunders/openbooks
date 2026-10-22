@@ -278,25 +278,23 @@ export function buildDocumentDrawerCommands(
 
   /** The native post command submits drafts, honors approval Flows and posts atomically. */
   async function postSaved(documentId: string, documentNumber: string): Promise<'posted' | 'pending' | 'refused'> {
-    const posted = await fetchAppAction('/api/documents/actions', {
+    const result: { outcome: 'posted' | 'pending' | 'refused' } = { outcome: 'refused' }
+    await execute(() => fetchAppAction('/api/documents/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'post', documentId }),
-    }, { fallback: t('toasts.actionFailed') })
-    if (!posted.ok) {
-      refuse(posted.error.serverMessage, t('toasts.actionFailed'))
-      return 'refused'
-    }
-    if ((posted.data as { pendingApproval?: unknown } | null)?.pendingApproval === true) {
-      toast.success(tEntry('postAfterSave.pending', { number: documentNumber }))
-      return 'pending'
-    }
-    toast.success(tEntry('postAfterSave.posted', { number: documentNumber }))
-    return 'posted'
+    }, { fallback: t('toasts.actionFailed') }), {
+      fallbackMessage: t('toasts.actionFailed'),
+      onOk: (data) => {
+        result.outcome = (data as { pendingApproval?: unknown } | null)?.pendingApproval === true ? 'pending' : 'posted'
+        toast.success(tEntry(result.outcome === 'pending' ? 'postAfterSave.pending' : 'postAfterSave.posted', { number: documentNumber }))
+      },
+    })
+    return result.outcome
   }
 
   const save = runExclusive(async (then: DocumentSaveThen = 'view') => {
-    let postContinuation: Promise<void> | undefined
+    const postContinuation: { run?: () => Promise<void> } = {}
     // Copy for a save the server failed to answer; a reason the server named
     // still pins verbatim, and only this exact copy marks the footer state.
     const unavailableCopy = t('drawer.saveState.unavailableDetail')
@@ -339,7 +337,7 @@ export function buildDocumentDrawerCommands(
             const saved = (payload as DocPayload).doc
             const recordHref = `${basePath}?doc=${String(saved.id)}`
             if (then === 'post' || then === 'postNew') {
-              postContinuation = postSavedThenLand(String(saved.id), String(saved.document_number ?? ''), then, recordHref)
+              postContinuation.run = () => postSavedThenLand(String(saved.id), String(saved.document_number ?? ''), then, recordHref)
               return
             }
             toast.success(t('toasts.saved', { documentNumber: String(saved.document_number ?? '') }))
@@ -353,7 +351,7 @@ export function buildDocumentDrawerCommands(
           },
         },
       )
-      await postContinuation
+      await postContinuation.run?.()
       return
     }
     const request = prepared.request
@@ -410,7 +408,7 @@ export function buildDocumentDrawerCommands(
           setMode('view')
           const recordHref = hrefForDocument(String(data.doc.id), searchParams.get('form') ?? undefined)
           if ((then === 'post' || then === 'postNew') && (data.doc.status === 'draft' || data.doc.status === 'approved')) {
-            postContinuation = postSavedThenLand(String(data.doc.id), String(data.doc.document_number ?? ''), then, recordHref)
+            postContinuation.run = () => postSavedThenLand(String(data.doc.id), String(data.doc.document_number ?? ''), then, recordHref)
             return
           }
           toast.success(t('toasts.saved', { documentNumber: String(data.doc.document_number ?? '') }))
@@ -428,7 +426,7 @@ export function buildDocumentDrawerCommands(
         },
       },
     )
-    await postContinuation
+    await postContinuation.run?.()
   })
 
   /** After a save that asked to post: run the lifecycle, then land. */

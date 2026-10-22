@@ -71,6 +71,7 @@
     "confirm": "Enregistrer quand même"
   },
   "refusals": {
+    "totalChanged": "Le total enregistré diffère du total du lot. Ouvrez la facture enregistrée pour vérifier la taxe et le montant avant de la comptabiliser.",
     "taxUnresolved": "La taxe n’a pas pu être calculée à la date d’une facture. Vérifiez les taux en vigueur dans Configuration, puis réessayez d’enregistrer.",
     "nothingToSave": "Ce lot ne contient aucune facture non enregistrée.",
     "rowsNeedAttention": "{count, plural, one {# facture est à corriger} other {# factures sont à corriger}} avant tout enregistrement. {first}",

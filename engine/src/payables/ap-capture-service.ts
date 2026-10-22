@@ -1103,7 +1103,7 @@ export async function materializeCapture(input: {
       ? (await tx.execute<{ id: string; base_currency: string | null }>(sql`
           select id, base_currency from subsidiaries
            where org_id = ${input.orgId} and id = ${item.subsidiary_id} and is_active and not is_elimination
-        `)).rows[0] ?? null
+        `, 'objects'))[0] ?? null
       : null;
     if (item.subsidiary_id && !intakeEntity) {
       throw new CaptureMaterializationError(

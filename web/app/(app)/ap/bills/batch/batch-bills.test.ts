@@ -416,3 +416,17 @@ test('tax control totals resolve each bill at its own effective date and refuse 
   assert.equal(batchRowTotal(row, profiles), '105.0000')
   assert.equal(await fetchBatchTaxProfiles(async () => Response.json({}, { status: 403 }), row.documentDate), null)
 })
+
+test('a changed server total keeps the saved draft and refuses automatic posting', async () => {
+  const row = bill()
+  const { transport, calls } = scriptedTransport(() => json({ doc: { id: row.idempotencyKey, document_number: 'BILL-90', total: '113.0000' } }, 201))
+  const result = await saveBatchRow(row, { post: true, hasTax: true, expectedTotal: '105.0000', transport,
+    copy: { ...copy, totalChanged: 'Review the saved bill total' } })
+  assert.equal(result.documentId, row.idempotencyKey)
+  assert.equal(result.savedTotal, '113.0000')
+  assert.equal(result.outcome, 'saved')
+  assert.equal(result.error, 'Review the saved bill total')
+  assert.equal(calls.length, 1, 'no lifecycle write runs after an amount mismatch')
+  assert.equal(batchRowTotal({ ...row, ...result, taxProfileId: `code:${TAX_CODE}` }, new Map()), '113.0000',
+    'the saved bill total remains authoritative even after effective rates change')
+})

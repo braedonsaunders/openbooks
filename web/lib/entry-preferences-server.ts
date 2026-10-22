@@ -15,8 +15,8 @@ export const loadEntryPreferences = cache(async (user: PreferenceUser): Promise<
   // bypass: user-keyed-lookup — read the personal preference of the verified preference identity across tenant scope.
   const row = await withBypassContext(() => db.execute<{ entry_preferences: unknown }>(sql`
     select entry_preferences from users
-     where id = ${identity.id} and org_id = ${identity.orgId} and is_active`))
-  return resolveEntryPreferences(row.rows[0]?.entry_preferences)
+     where id = ${identity.id} and org_id = ${identity.orgId} and is_active`, 'objects'))
+  return resolveEntryPreferences(row[0]?.entry_preferences)
 })
 
 /**
@@ -34,16 +34,16 @@ export async function saveEntryPreferences(
     const current = await db.execute<{ entry_preferences: unknown }>(sql`
       select entry_preferences from users
        where id = ${identity.id} and org_id = ${identity.orgId} and is_active
-       for update`)
-    if (current.rows.length !== 1) return null
-    const before = resolveEntryPreferences(current.rows[0]!.entry_preferences)
+       for update`, 'objects')
+    if (current.length !== 1) return null
+    const before = resolveEntryPreferences(current[0]!.entry_preferences)
     const after: EntryPreferences = { ...before, ...patch }
     const updated = await db.execute<{ id: string }>(sql`
       update users
          set entry_preferences = ${JSON.stringify(after)}::jsonb, updated_at = now(), updated_by = ${user.id}
        where id = ${identity.id} and org_id = ${identity.orgId} and is_active
-       returning id`)
-    if (updated.rows.length !== 1) return null
+       returning id`, 'objects')
+    if (updated.length !== 1) return null
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${identity.orgId}, 'users', ${identity.id}, 'update',

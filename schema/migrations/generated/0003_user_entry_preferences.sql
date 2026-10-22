@@ -7,7 +7,7 @@ SET client_min_messages = warning;
 SET search_path = public, pg_catalog;
 
 ALTER TABLE public.users
-  ADD COLUMN IF NOT EXISTS entry_preferences jsonb NOT NULL DEFAULT '{}'::jsonb;
+  ADD COLUMN entry_preferences jsonb NOT NULL DEFAULT '{}'::jsonb;
 
 ALTER TABLE public.users
   ADD CONSTRAINT users_entry_preferences_object CHECK (jsonb_typeof(entry_preferences) = 'object');

@@ -3,24 +3,11 @@
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { queryDrawerRouteGuard } from '@openbooks/ui'
-import { useGlobalCreate, type GlobalCreateKey, type GlobalCreatePermissions } from '../global-create-menu'
+import { useGlobalCreate, type GlobalCreatePermissions } from '../global-create-menu'
 import type { SidebarNavGroup } from '../sidebar-nav'
 import { useShortcuts } from './shortcut-provider'
+import { GLOBAL_CREATE_SHORTCUTS, GLOBAL_GO_SHORTCUTS } from './shortcut-catalog'
 import type { ShortcutCommand } from './shortcut-keys'
-
-const CREATE_SHORTCUTS: ReadonlyArray<{ id: string; create: GlobalCreateKey; code: string }> = [
-  { id: 'newInvoice', create: 'invoice', code: 'KeyI' },
-  { id: 'newBill', create: 'bill', code: 'KeyB' },
-  { id: 'newJournal', create: 'journal', code: 'KeyJ' },
-  { id: 'newExpense', create: 'expense', code: 'KeyX' },
-  { id: 'newCustomerPayment', create: 'customerPayment', code: 'KeyR' },
-]
-
-const GO_SHORTCUTS: ReadonlyArray<{ id: string; href: string; code: string }> = [
-  { id: 'goDashboard', href: '/dashboard', code: 'KeyH' },
-  { id: 'goReports', href: '/reports', code: 'KeyP' },
-  { id: 'goBanking', href: '/banking', code: 'KeyK' },
-]
 
 /** Whether the reader's resolved navigation offers `href` (permission, feature and tenant menu applied). */
 function navigationOffers(groups: readonly SidebarNavGroup[], href: string): boolean {
@@ -46,14 +33,14 @@ export function GlobalShortcuts({
   const offered = new Set(available.map((action) => action.key))
 
   const commands: ShortcutCommand[] = [
-    ...CREATE_SHORTCUTS.filter((shortcut) => offered.has(shortcut.create)).map((shortcut): ShortcutCommand => ({
+    ...GLOBAL_CREATE_SHORTCUTS.filter((shortcut) => offered.has(shortcut.create)).map((shortcut): ShortcutCommand => ({
       id: shortcut.id,
       label: t(shortcut.id),
       binding: { modifier: 'chord', code: shortcut.code },
       scope: 'global',
       run: () => void create(shortcut.create),
     })),
-    ...GO_SHORTCUTS.filter((shortcut) => navigationOffers(groups, shortcut.href)).map((shortcut): ShortcutCommand => ({
+    ...GLOBAL_GO_SHORTCUTS.filter((shortcut) => navigationOffers(groups, shortcut.href)).map((shortcut): ShortcutCommand => ({
       id: shortcut.id,
       label: t(shortcut.id),
       binding: { modifier: 'chord', code: shortcut.code },

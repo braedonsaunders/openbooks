@@ -26,7 +26,7 @@ export interface CanadianGoodsSelection {
 export async function nativeGoodsTaxAvailable(orgId:string,exec:SqlExecutor=db):Promise<boolean> {
   const row=(await exec.execute<{available:boolean}>(sql`select
       exists(select 1 from tax_country_pack_installations where org_id=${orgId} and pack_code=${CANADA_TAX_PACK.code} and country='CA' and status='active')
-      and exists(select 1 from subsidiaries where org_id=${orgId} and country='CA' and is_active and not is_elimination) as available`)).rows[0]
+      and exists(select 1 from subsidiaries where org_id=${orgId} and country='CA' and is_active and not is_elimination) as available`, 'objects'))[0]
   return row?.available===true
 }
 

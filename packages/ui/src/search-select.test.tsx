@@ -38,7 +38,7 @@ async function mount(props: Partial<React.ComponentProps<typeof SearchSelect>> =
             options={options}
             onCreate={async (name) => {
               state.created.push(name)
-              const option = { value: `new-${name}`, label: name }
+              const option = { value: `new-${name}`, label: name, keywords: undefined }
               setOptions((current) => [...current, option])
               return option
             }}

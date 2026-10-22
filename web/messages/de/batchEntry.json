@@ -71,6 +71,7 @@
     "confirm": "Trotzdem speichern"
   },
   "refusals": {
+    "totalChanged": "Der gespeicherte Rechnungsbetrag weicht vom Stapelbetrag ab. Öffnen Sie die Rechnung und prüfen Sie Steuer und Betrag vor der Buchung.",
     "taxUnresolved": "Die Steuer konnte für ein Rechnungsdatum nicht ermittelt werden. Prüfen Sie die gültigen Steuersätze in der Einrichtung und speichern Sie erneut.",
     "nothingToSave": "Dieser Stapel enthält keine ungespeicherten Rechnungen.",
     "rowsNeedAttention": "{count, plural, one {# Rechnung muss} other {# Rechnungen müssen}} korrigiert werden, bevor etwas gespeichert wird. {first}",

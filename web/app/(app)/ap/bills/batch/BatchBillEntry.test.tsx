@@ -78,7 +78,7 @@ function scriptFetch(options: { duplicates?: (url: string) => unknown[]; post?: 
     if (url.startsWith('/api/documents/duplicates')) return Response.json({ duplicates: options.duplicates?.(url) ?? [] })
     if (url === '/api/documents' && call.method === 'POST') {
       number += 1
-      return Response.json({ doc: { id: call.key, document_number: `BILL-0004${number}` }, lines: [] }, { status: 201 })
+      return Response.json({ doc: { id: call.key, document_number: `BILL-0004${number}`, total: (call.body.lines as { amount: string }[])[0]?.amount }, lines: [] }, { status: 201 })
     }
     if (url === '/api/documents/actions') {
       return Response.json(call.body.action === 'post' ? (options.post?.() ?? { ok: true }) : { ok: true })

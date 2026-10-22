@@ -71,6 +71,7 @@
     "confirm": "仍然保存"
   },
   "refusals": {
+    "totalChanged": "已保存账单的合计与批次合计不同。请打开已保存的账单，核对税额和金额后再过账。",
     "taxUnresolved": "无法确定某张账单日期适用的税额。请在设置中检查生效税率，然后重试保存。",
     "nothingToSave": "此批次中没有未保存的账单。",
     "rowsNeedAttention": "有 {count} 张账单需要修正后才能保存。{first}",

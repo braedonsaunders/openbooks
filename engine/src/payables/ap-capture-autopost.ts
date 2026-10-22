@@ -123,7 +123,7 @@ export async function considerCaptureAutoPost(input: {
            ci.validation_issues as issues, ci.normalized->>'total' as total, ci.normalized->>'currency' as currency
       from ap_capture_items ci
      where ci.org_id = ${input.orgId} and ci.id = ${input.captureItemId}
-  `)).rows[0];
+  `, 'objects'))[0];
   if (!capture) return { kind: "not_applicable" };
   const trust = capture.vendorId
     ? await vendorCaptureTrust(db, input.orgId, capture.vendorId, policy.cleanStreak, input.captureItemId)
@@ -179,7 +179,7 @@ export async function considerCaptureAutoPost(input: {
       const locked = (await db.execute<{ status: string; total: string | null; currency: string | null }>(sql`
         select status, total::text as total, currency from documents
          where org_id = ${input.orgId} and id = ${documentId} for update
-      `)).rows[0];
+      `, 'objects'))[0];
       if (locked?.status !== "draft") {
         throw new AutoPostRefusal(`The bill is ${locked?.status ?? "missing"}, not a draft, and was not posted automatically.`);
       }

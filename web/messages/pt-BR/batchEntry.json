@@ -71,6 +71,7 @@
     "confirm": "Salvar mesmo assim"
   },
   "refusals": {
+    "totalChanged": "O total salvo difere do total do lote. Abra a fatura salva para revisar o imposto e o valor antes de contabilizar.",
     "taxUnresolved": "Não foi possível calcular o imposto para a data de uma fatura. Verifique as alíquotas vigentes em Configuração e tente salvar novamente.",
     "nothingToSave": "Este lote não tem contas não salvas.",
     "rowsNeedAttention": "{count, plural, one {# conta precisa} other {# contas precisam}} de correção antes de salvar qualquer coisa. {first}",

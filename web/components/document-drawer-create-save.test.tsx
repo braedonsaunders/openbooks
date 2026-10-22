@@ -719,6 +719,7 @@ test('save and post remains exclusive while the saved document is being posted',
   assert.ok(post)
   await act(async () => { post.click(); await tick(); await tick() })
   assert.ok(release)
+  assert.equal(post.disabled, true, 'the posting command keeps the form busy')
   await act(async () => { post.click(); await tick() })
   assert.equal(creates, 1)
   assert.deepEqual(actions, ['post'])

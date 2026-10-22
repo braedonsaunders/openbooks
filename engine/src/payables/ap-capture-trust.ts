@@ -48,7 +48,7 @@ export async function resolveAutoPostPolicy(exec: SqlExecutor, orgId: string, on
      where org_id = ${orgId} and effective_from <= ${onDate}::date
      order by effective_from desc
      limit 1
-  `)).rows[0];
+  `, 'objects'))[0];
   return row ? { ...row, cleanStreak: Number(row.cleanStreak) } : null;
 }
 
@@ -132,7 +132,7 @@ export async function loadVendorCaptureHistory(
   limit: number,
   excludeCaptureItemId: string | null = null,
 ): Promise<VendorCaptureEvidence[]> {
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     captureItemId: string;
     documentId: string;
     corrected: boolean;
@@ -169,7 +169,7 @@ export async function loadVendorCaptureHistory(
      where (not automated and reviewed_rank <= ${limit})
         or (automated and reviewed_rank < ${limit} and (voided or corrected or draft_edited))
      order by materialized_at desc nulls last, id desc
-  `)).rows;
+  `, 'objects');
   return rows.map((row) => ({
     captureItemId: row.captureItemId,
     documentId: row.documentId,
@@ -295,7 +295,7 @@ export async function vendorTrustSummary(
     select p.subsidiary_id as "subsidiaryId" from parties p
       join vendor_roles vr on vr.org_id = p.org_id and vr.party_id = p.id
      where p.org_id = ${orgId} and p.id = ${vendorId}
-  `)).rows[0];
+  `, 'objects'))[0];
   if (!vendor) return null;
   if (allowedSubsidiaryIds !== null && vendor.subsidiaryId !== null && !allowedSubsidiaryIds.has(vendor.subsidiaryId)) return null;
   const policy = await resolveAutoPostPolicy(exec, orgId, onDate);

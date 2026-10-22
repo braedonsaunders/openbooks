@@ -126,7 +126,7 @@ export async function ingestCaptureFiles(input: {
         select distinct content_hash as hash from ap_capture_items
          where org_id = ${input.orgId} and status not in ('rejected', 'failed')
            and content_hash = any(${`{${prepared.map((upload) => upload.hash).join(',')}}`}::text[])
-      `)).rows.map((row) => row.hash))
+      `, 'objects')).map((row) => row.hash))
     : new Set<string>()
   const folderId = await ensureApCaptureRoot(input.orgId, input.actorId)
   const created: string[] = []
@@ -156,8 +156,8 @@ export async function ingestCaptureFiles(input: {
           values (${input.orgId}, ${stored.id}, 'queued', ${input.source}, ${upload.filename},
                   ${upload.hash}, ${input.subsidiaryId ?? null}, ${input.actorId}, ${input.actorId})
           returning id
-        `))
-        const id = inserted.rows[0]!.id
+        `, 'objects'))
+        const id = inserted[0]!.id
         await tx.execute(sql`
           insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
           values (${input.orgId}, ${id}, ${input.source === 'email' ? 'email_received' : 'uploaded'},
@@ -173,11 +173,11 @@ export async function ingestCaptureFiles(input: {
       // for every staged version, then keep the existing failure handling.
       if (storedId) {
         try {
-          const staged = (await db.execute<{ id: string }>(sql`
+          const staged = await db.execute<{ id: string }>(sql`
             select fv.id from file_versions fv
             join files fi on fi.id = fv.file_id and fi.org_id = ${input.orgId}
             where fv.file_id = ${storedId} and fv.storage_kind = 's3'
-          `)).rows
+          `, 'objects')
           for (const version of staged) {
             await enqueueStorageCleanupStandalone({
               orgId: input.orgId,

@@ -37,7 +37,9 @@ export const runtime = 'nodejs'
  * `include=party` adds `party` (null without a `partyId`): the account and tax
  * code an item-less line takes for that party (its default, else its own
  * history as of `documentDate`), and its most recent document of the kind for
- * recall. Both stay inside the caller's subsidiary scope.
+ * recall. Both stay inside the caller's subsidiary scope. `include=tax`
+ * returns the native tax components effective on the document date, so
+ * batch control totals use the same rates as the persisted bills.
  */
 export const GET = defineRoute({
   public: 'session',
@@ -51,7 +53,7 @@ export const GET = defineRoute({
       include: params.getAll('include'),
     })
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Name a document kind, and use a valid party, document date (YYYY-MM-DD), item ids and include=party' }, { status: 400 })
+      return NextResponse.json({ error: 'Name a document kind, and use a valid party, document date (YYYY-MM-DD), item ids and include=party or include=tax' }, { status: 400 })
     }
     const query = parsed.data
     const gate = await guardPermission(documentEditPermission(query.kind))

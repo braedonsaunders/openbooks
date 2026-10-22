@@ -46,6 +46,8 @@ export interface BatchBillRow extends Record<string, unknown> {
   defaultsFor: string
   documentId: string
   documentNumber: string
+  /** The persisted bill total; finished rows never reinterpret historical tax rates. */
+  savedTotal?: string
   outcome: BatchRowOutcome
   /** The server's refusal for this row's last save or post. */
   error: string
@@ -75,6 +77,7 @@ export function blankBatchRow(documentDate = ''): BatchBillRow {
     defaultsFor: '',
     documentId: '',
     documentNumber: '',
+    savedTotal: '',
     outcome: '',
     error: '',
     conflict: false,
@@ -89,6 +92,7 @@ export function cloneBatchRow(row: BatchBillRow): BatchBillRow {
     idempotencyKey: mintKey(),
     documentId: '',
     documentNumber: '',
+    savedTotal: '',
     outcome: '',
     error: '',
     conflict: false,
@@ -158,6 +162,7 @@ export function batchRowTotal(
   row: BatchBillRow,
   taxByProfile: BatchTaxSource,
 ): string | null {
+  if (row.documentId && row.savedTotal) return exactAmount(row.savedTotal)
   const amount = exactAmount(row.amount)
   if (amount === null) return null
   const profiles = typeof taxByProfile === 'function' ? taxByProfile(row) : taxByProfile
@@ -318,11 +323,14 @@ export interface BatchSaveCopy {
   unavailable: string
   /** Shown when the create key was already used for a different bill. */
   conflict: string
+  totalChanged?: string
 }
 
 export interface BatchRowResult {
   documentId: string
   documentNumber: string
+  /** The persisted bill total; finished rows never reinterpret historical tax rates. */
+  savedTotal?: string
   outcome: BatchRowOutcome
   error: string
   conflict: boolean
@@ -363,6 +371,7 @@ export async function saveBatchRow(
     post: boolean
     hasTax: boolean
     subsidiaryId?: string | null
+    expectedTotal?: string | null
     transport: Transport
     copy: BatchSaveCopy
   },
@@ -370,6 +379,8 @@ export async function saveBatchRow(
   let documentId = row.documentId
   let documentNumber = row.documentNumber
   let outcome: BatchRowOutcome = row.outcome
+  let savedTotal = row.savedTotal
+  const persisted = () => savedTotal ? { savedTotal } : {}
   if (!documentId) {
     const request = buildDocumentCreateRequest(
       BATCH_BILL_KIND,
@@ -397,9 +408,13 @@ export async function saveBatchRow(
     const number = (created.data as { doc?: { document_number?: unknown } } | null)?.doc?.document_number
     documentNumber = typeof number === 'string' ? number : ''
     outcome = 'saved'
+    savedTotal = exactAmount((created.data as { doc?: { total?: unknown } } | null)?.doc?.total) ?? undefined
+  }
+  if (options.expectedTotal !== undefined && (!savedTotal || options.expectedTotal === null || cmp(savedTotal, options.expectedTotal) !== 0)) {
+    return { documentId, documentNumber, outcome: 'saved', ...persisted(), error: options.copy.totalChanged ?? options.copy.fallback, conflict: false }
   }
   if (!options.post || outcome === 'posted' || outcome === 'pending') {
-    return { documentId, documentNumber, outcome, error: '', conflict: false }
+    return { documentId, documentNumber, outcome, ...persisted(), error: '', conflict: false }
   }
   const act = (action: 'post') => call(options.transport, '/api/documents/actions', {
     method: 'POST',
@@ -407,9 +422,9 @@ export async function saveBatchRow(
     body: JSON.stringify({ action, documentId }),
   }, options.copy)
   const posted = await act('post')
-  if (!posted.ok) return { documentId, documentNumber, outcome: 'saved', error: posted.message, conflict: false }
+  if (!posted.ok) return { documentId, documentNumber, outcome: 'saved', ...persisted(), error: posted.message, conflict: false }
   const held = (posted.data as { pendingApproval?: unknown } | null)?.pendingApproval === true
-  return { documentId, documentNumber, outcome: held ? 'pending' : 'posted', error: '', conflict: false }
+  return { documentId, documentNumber, outcome: held ? 'pending' : 'posted', ...persisted(), error: '', conflict: false }
 }
 
 /** Run `worker` over `items` with at most `concurrency` in flight, reporting
@@ -589,7 +604,7 @@ export function hasUnsavedWork(rows: readonly BatchBillRow[]): boolean {
 
 const ROW_TEXT_FIELDS = [
   'key', 'idempotencyKey', 'partyId', 'referenceNumber', 'documentDate', 'dueDate', 'accountId', 'memo', 'amount',
-  'taxProfileId', 'defaultedAccountId', 'defaultedTaxProfileId', 'defaultsFor', 'documentId', 'documentNumber', 'error',
+  'taxProfileId', 'defaultedAccountId', 'defaultedTaxProfileId', 'defaultsFor', 'documentId', 'documentNumber', 'savedTotal', 'error',
 ] as const
 const OUTCOMES: readonly BatchRowOutcome[] = ['', 'saved', 'posted', 'pending']
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

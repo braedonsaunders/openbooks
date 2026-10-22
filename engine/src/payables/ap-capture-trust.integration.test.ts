@@ -176,11 +176,11 @@ test("with the policy off nothing is recorded; with it on an untrusted vendor's 
     const on = await considerCaptureAutoPost({ orgId: org.orgId, captureItemId: captureId, actorId: null, materialize, onDate: "2026-10-21" });
     assert.deepEqual(on, { kind: "skipped", reason: "vendor_not_trusted" });
     assert.equal(materialized, 0, "no draft is created for an untrusted vendor");
-    const events = (await db.execute<{ kind: string; reason: string }>(sql`
+    const events = await db.execute<{ kind: string; reason: string }>(sql`
       select event_kind as kind, detail->>'reason' as reason from ap_capture_events where capture_item_id = ${captureId}
-    `)).rows;
+    `, 'objects');
     assert.deepEqual(events, [{ kind: "auto_post_skipped", reason: "vendor_not_trusted" }]);
-    const status = (await db.execute<{ status: string }>(sql`select status from ap_capture_items where id = ${captureId}`)).rows[0]!.status;
+    const status = (await db.execute<{ status: string }>(sql`select status from ap_capture_items where id = ${captureId}`, 'objects'))[0]!.status;
     assert.equal(status, "ready");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -264,7 +264,7 @@ test("an emailed capture auto-posts only when its delivery signature verified ag
     });
     const reason = async (captureId: string) => (await db.execute<{ reason: string }>(sql`
       select detail->>'reason' as reason from ap_capture_events where capture_item_id = ${captureId} and event_kind = 'auto_post_skipped'
-    `)).rows.map((row) => row.reason);
+    `, 'objects')).map((row) => row.reason);
 
     const forged = await emailed(unsigned.id, "E-1", false);
     assert.deepEqual(await decide(forged), { kind: "skipped", reason: "unsigned_email" }, "the address token alone never auto-posts");
@@ -322,12 +322,12 @@ test("the created draft's own currency and total are checked against the limit b
     const documentId = outcome.kind === "refused" ? outcome.documentId : null;
     assert.ok(documentId, "the draft remains for review");
     assert.deepEqual(posted, [], "nothing posts");
-    const document = (await db.execute<{ status: string }>(sql`select status from documents where id = ${documentId}`)).rows[0]!;
+    const document = (await db.execute<{ status: string }>(sql`select status from documents where id = ${documentId}`, 'objects'))[0]!;
     assert.equal(document.status, "draft");
-    const event = (await db.execute<{ stage: string; reason: string; message: string }>(sql`
+    const event = await db.execute<{ stage: string; reason: string; message: string }>(sql`
       select detail->>'stage' as stage, detail->>'reason' as reason, detail->>'message' as message
         from ap_capture_events where capture_item_id = ${captureId} and event_kind = 'auto_post_refused'
-    `)).rows;
+    `, 'objects');
     assert.equal(event.length, 1);
     assert.equal(event[0]!.stage, "limit");
     assert.equal(event[0]!.reason, "currency_differs");

@@ -1,4 +1,4 @@
--- Inbound email addresses for AP capture per legal entity with their accountable owners, sealed signing secrets, the inbound message log with signature evidence and delivery leases, the capture's receiving entity, and the effective-dated auto-post policy.
+-- Add legal-entity AP inboxes, authenticated delivery evidence, and effective-dated posting policies.
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';

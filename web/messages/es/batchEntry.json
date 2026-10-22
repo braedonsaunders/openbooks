@@ -71,6 +71,7 @@
     "confirm": "Guardar de todos modos"
   },
   "refusals": {
+    "totalChanged": "El total guardado difiere del total del lote. Abra la factura guardada y revise el impuesto y el importe antes de contabilizarla.",
     "taxUnresolved": "No se pudo calcular el impuesto para la fecha de una factura. Revise las tasas vigentes en Configuración e intente guardar de nuevo.",
     "nothingToSave": "Este lote no tiene facturas sin guardar.",
     "rowsNeedAttention": "{count, plural, one {# factura necesita} other {# facturas necesitan}} correcciones antes de guardar nada. {first}",

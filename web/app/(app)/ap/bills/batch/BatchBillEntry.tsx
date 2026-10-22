@@ -437,7 +437,7 @@ export function BatchBillEntry({
 
       setBusy(new Set(targets.map((row) => row.key)))
       setProgress({ done: 0, total: targets.length })
-      const copy = { fallback: t('refusals.saveFailed'), unavailable: t('refusals.unavailable'), conflict: t('refusals.conflict') }
+      const copy = { fallback: t('refusals.saveFailed'), unavailable: t('refusals.unavailable'), conflict: t('refusals.conflict'), totalChanged: t('refusals.totalChanged') }
       const results = await runWithConcurrency(
         targets.map((row) => row.key),
         async (key) => {
@@ -447,6 +447,7 @@ export function BatchBillEntry({
           return saveBatchRow(row, {
             post,
             hasTax,
+            expectedTotal: batchRowTotal(row, saveTaxes),
             subsidiaryId: subsidiaries ? subsidiaryId || null : null,
             transport: browserFetch,
             copy,
