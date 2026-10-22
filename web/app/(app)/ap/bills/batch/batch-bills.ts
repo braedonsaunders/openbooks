@@ -1,3 +1,4 @@
+import { normalizeDocumentReference as normalizeVendorReference } from '@openbooks/engine/records/document-reference-normalize'
 import { add, cmp, neg, normalizeMoney, sum } from '@openbooks/engine/money/money'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/tax/tax'
 import { buildDocumentCreateRequest, createdDocumentId } from '../../../../../components/document-drawer-save'
@@ -150,13 +151,18 @@ export function exactAmount(value: unknown): string | null {
 
 /** The bill's total: the amount plus the tax its tax choice computes (or the
  *  amount itself for tax-inclusive codes). Null when the amount is not exact. */
+export type BatchTaxProfiles = ReadonlyMap<string, readonly TaxComponentConfig[]>
+export type BatchTaxSource = BatchTaxProfiles | ((row: BatchBillRow) => BatchTaxProfiles)
+
 export function batchRowTotal(
   row: BatchBillRow,
-  taxByProfile: ReadonlyMap<string, readonly TaxComponentConfig[]>,
+  taxByProfile: BatchTaxSource,
 ): string | null {
   const amount = exactAmount(row.amount)
   if (amount === null) return null
-  const components = row.taxProfileId ? taxByProfile.get(row.taxProfileId) ?? [] : []
+  const profiles = typeof taxByProfile === 'function' ? taxByProfile(row) : taxByProfile
+  const components = row.taxProfileId ? profiles.get(row.taxProfileId) : []
+  if (!components || (row.taxProfileId && components.length === 0)) return null
   if (components.length === 0) return amount
   try {
     return normalizeMoney(computeLineTaxes(amount, [...components]).total)
@@ -174,7 +180,7 @@ export interface BatchEntered {
 
 export function batchEntered(
   rows: readonly BatchBillRow[],
-  taxByProfile: ReadonlyMap<string, readonly TaxComponentConfig[]>,
+  taxByProfile: BatchTaxSource,
 ): BatchEntered {
   const bills = rows.filter((row) => !isBlankBatchRow(row))
   const totals = bills.map((row) => batchRowTotal(row, taxByProfile)).filter((total): total is string => total !== null)
@@ -226,11 +232,7 @@ export function controlVariance(control: ControlTotalsInput, entered: BatchEnter
  * but letters and digits ("INV-0042" = "inv 0042"). The same rule the server
  * applies to stored bills, so a batch warning and a saved-bill warning agree.
  */
-export function normalizeVendorReference(raw: string | null | undefined): string | null {
-  if (typeof raw !== 'string') return null
-  const normalized = raw.toLowerCase().replace(/[^a-z0-9]/g, '')
-  return normalized === '' ? null : normalized
-}
+export { normalizeDocumentReference as normalizeVendorReference } from '@openbooks/engine/records/document-reference-normalize'
 
 /** Rows that repeat another row's vendor and normalised invoice number:
  *  row key → the other rows' 1-based numbers. */
@@ -350,8 +352,8 @@ async function call(
  *
  * - The create runs only while the row has no bill, with the row's create
  *   key, so a retry after a lost response replays instead of duplicating.
- * - Posting submits first; a bill that the approval policy holds stops at
- *   pending approval and is never posted around it.
+ * - The native post command submits and posts atomically; an approval Flow
+ *   holds the bill pending approval without posting around it.
  * - A refused submit or post keeps the bill (saved as a draft) and its
  *   refusal; retrying resumes from the lifecycle step, never re-creates.
  */
@@ -399,16 +401,11 @@ export async function saveBatchRow(
   if (!options.post || outcome === 'posted' || outcome === 'pending') {
     return { documentId, documentNumber, outcome, error: '', conflict: false }
   }
-  const act = (action: 'submit' | 'post') => call(options.transport, '/api/documents/actions', {
+  const act = (action: 'post') => call(options.transport, '/api/documents/actions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, documentId }),
   }, options.copy)
-  const submitted = await act('submit')
-  if (!submitted.ok) return { documentId, documentNumber, outcome: 'saved', error: submitted.message, conflict: false }
-  if ((submitted.data as { pendingApproval?: unknown } | null)?.pendingApproval === true) {
-    return { documentId, documentNumber, outcome: 'pending', error: '', conflict: false }
-  }
   const posted = await act('post')
   if (!posted.ok) return { documentId, documentNumber, outcome: 'saved', error: posted.message, conflict: false }
   const held = (posted.data as { pendingApproval?: unknown } | null)?.pendingApproval === true
@@ -436,6 +433,23 @@ export async function runWithConcurrency<T, R>(
   })
   await Promise.all(lanes)
   return results
+}
+
+/** Effective tax components for the bill date, from the native document resolver. */
+export async function fetchBatchTaxProfiles(transport: Transport, documentDate: string): Promise<BatchTaxProfiles | null> {
+  const query = new URLSearchParams({ kind: BATCH_BILL_KIND, documentDate, include: 'tax' })
+  try {
+    const response = await transport(`/api/documents/defaults?${query}`, { headers: { accept: 'application/json' } })
+    if (!response.ok) return null
+    const body = await response.json() as { taxes?: { codes?: Record<string, TaxComponentConfig[]>; groups?: Record<string, TaxComponentConfig[]> } }
+    if (!body.taxes?.codes || !body.taxes.groups) return null
+    return new Map([
+      ...Object.entries(body.taxes.codes).map(([id, components]) => [`code:${id}`, components] as const),
+      ...Object.entries(body.taxes.groups).map(([id, components]) => [`group:${id}`, components] as const),
+    ])
+  } catch {
+    return null
+  }
 }
 
 // -- vendor defaults and duplicate checks ------------------------------------
@@ -654,7 +668,7 @@ export function readBatchDraft(storage: DraftStorage, key: string): BatchDraft |
 export function clearFinishedRows(
   rows: readonly BatchBillRow[],
   control: ControlTotalsInput,
-  taxByProfile: ReadonlyMap<string, readonly TaxComponentConfig[]>,
+  taxByProfile: BatchTaxSource,
   today: string,
 ): { rows: BatchBillRow[]; control: ControlTotalsInput } {
   const finished = rows.filter(isFinishedBatchRow)

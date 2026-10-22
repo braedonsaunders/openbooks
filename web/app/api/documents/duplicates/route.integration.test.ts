@@ -252,3 +252,20 @@ test("vendor credits match their own kind by reference", async () => {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("international invoice references have identical entry and database duplicate identity", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await seedRole(org.orgId, "ap_clerk", ["ap.read"]);
+    const original = await seedDocument(org.orgId, { kind: "vendor_bill", status: "draft", number: "BILL-00051",
+      partyId: org.vendorId, date: "2026-10-01", total: "10.00", reference: "发票-１２３" });
+    const response = await withOrgContext(org.orgId, () =>
+      GET(probe({ kind: "vendor_bill", partyId: org.vendorId, referenceNumber: "发票 １２３" })));
+    assert.equal(response.status, 200);
+    const matches = ((await response.json()) as { duplicates: Match[] }).duplicates;
+    assert.deepEqual(matches.map((match) => match.id), [original]);
+  } finally {
+    state.user = null;
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});

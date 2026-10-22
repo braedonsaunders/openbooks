@@ -16,15 +16,12 @@ import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
  * share one definition. `normalizeDocumentReference` is its in-process twin,
  * used to decide whether a probe has anything to compare at all.
  */
-export function normalizeDocumentReference(raw: string | null | undefined): string | null {
-  if (typeof raw !== "string") return null;
-  const normalized = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return normalized === "" ? null : normalized;
-}
+export { normalizeDocumentReference } from "./document-reference-normalize.ts";
+import { normalizeDocumentReference } from "./document-reference-normalize.ts";
 
 /** SQL twin of `normalizeDocumentReference`; null when nothing identifying remains. */
 export function normalizedDocumentReferenceSql(expression: SQL): SQL {
-  return sql`nullif(regexp_replace(lower(${expression}), '[^a-z0-9]', '', 'g'), '')`;
+  return sql`nullif(regexp_replace(lower(${expression}), '[^[:alnum:]]', '', 'g'), '')`;
 }
 
 /** Kinds whose duplicate key is the party's own reference (the vendor invoice number). */

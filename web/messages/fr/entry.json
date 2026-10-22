@@ -85,7 +85,7 @@
     "gridMenu": "Menu de la ligne",
     "gridPaste": "Coller des lignes copiées depuis un tableur",
     "pickerType": "Saisir pour rechercher dans une liste (noms et codes)",
-    "pickerTab": "Accepter la correspondance en surbrillance et continuer",
+    "pickerTab": "Accepter un nom ou un code correspondant précisément et continuer",
     "pickerOpen": "Ouvrir la liste",
     "pickerClose": "Fermer une liste et conserver la valeur",
     "pickerCreate": "Créer le fournisseur ou le client saisi",

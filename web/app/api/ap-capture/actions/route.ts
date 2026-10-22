@@ -10,7 +10,7 @@ import { lockScopeRows, ScopeNotFoundError } from '@openbooks/engine/organizatio
 import { CaptureMaterializationError, materializeCapture, type ActivatedCaptureRule } from '@openbooks/engine/payables/ap-capture-service'
 import '../../../../lib/authz';
 import { parseBulkActionIds } from '../../../../lib/api/bulk-ids'
-import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+import { apCaptureSubsidiaryScope } from '@openbooks/engine/records/file-cabinet-access'
 
 const captureIds = z.array(uuidString()).min(1).max(50)
 const requestBodySchema = z.discriminatedUnion('action', [
@@ -21,20 +21,6 @@ const requestBodySchema = z.discriminatedUnion('action', [
 
 
 export const runtime = 'nodejs'
-
-/**
- * Same vendor/PO visibility the inbox list and `?capture=` flyout apply
- * (`web/app/(app)/ap/capture/view.ts`). Bulk reject/reprocess/materialize
- * must not reach a capture the restricted caller cannot list. Empty allowed
- * set denies every capture; null vendor/PO subsidiaries stay org-wide.
- */
-function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null) {
-  if (allowed === null) return sql``
-  if (allowed.size === 0) return sql` and false`
-  return sql`${subsidiaryVisibleFilter(sql`po.subsidiary_id`, allowed, { orgWideNull: true })}
-             ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}
-             ${subsidiaryVisibleFilter(sql`ci.subsidiary_id`, allowed, { orgWideNull: true })}`
-}
 
 function apCaptureVisibleExists(orgId: string, id: string, allowed: ReadonlySet<string> | null) {
   return sql`exists (

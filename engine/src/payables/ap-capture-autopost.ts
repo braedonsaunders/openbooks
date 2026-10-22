@@ -5,6 +5,7 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { submitAndReleaseIfUngated } from "../flows/index.ts";
 import type { CaptureIssue } from "./ap-capture.ts";
 import {
+  autoPostAmountDecision,
   autoPostEligibility,
   resolveAutoPostPolicy,
   vendorCaptureTrust,
@@ -57,6 +58,23 @@ export type CaptureAutoPostOutcome =
 
 class AutoPostRefusal extends Error {}
 
+/** The created draft's own total or currency falls outside the policy limit. */
+class AutoPostLimitRefusal extends AutoPostRefusal {
+  constructor(readonly reason: AutoPostSkipReason, message: string) {
+    super(message);
+  }
+}
+
+function limitRefusalMessage(reason: AutoPostSkipReason, draft: { total: string | null; currency: string | null }, policy: AutoPostPolicy): string {
+  const amount = `${draft.total ?? "?"} ${draft.currency ?? ""}`.trim();
+  const limit = `${policy.maxAmount ?? ""} ${policy.maxAmountCurrency ?? ""}`.trim();
+  if (reason === "currency_differs") {
+    return `The draft bill is in ${draft.currency ?? "an unknown currency"}, not the policy limit currency ${policy.maxAmountCurrency ?? ""}; it was left as a draft for review.`;
+  }
+  if (reason === "over_limit") return `The draft bill total ${amount} is over the auto-post limit of ${limit}; it was left as a draft for review.`;
+  return "The draft bill total could not be read; it was left as a draft for review.";
+}
+
 async function recordEvent(orgId: string, captureItemId: string, kind: string, detail: Record<string, unknown>, actorId: string | null) {
   await db.execute(sql`
     insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
@@ -80,18 +98,31 @@ export async function considerCaptureAutoPost(input: {
   const onDate = input.onDate ?? (await businessToday(input.orgId));
   const policy = await resolveAutoPostPolicy(db, input.orgId, onDate);
   if (!policy?.enabled) return { kind: "not_applicable" };
+  // An emailed capture is verified only when its delivery's signature
+  // verified and the receiving address still has a signing secret.
   const capture = (await db.execute<{
     status: string;
     documentKind: string;
+    source: string;
+    emailVerified: boolean | null;
     vendorId: string | null;
     issues: CaptureIssue[] | null;
     total: string | null;
     currency: string | null;
   }>(sql`
-    select status, document_kind as "documentKind", vendor_candidate_id as "vendorId",
-           validation_issues as issues, normalized->>'total' as total, normalized->>'currency' as currency
-      from ap_capture_items
-     where org_id = ${input.orgId} and id = ${input.captureItemId}
+    select ci.status, ci.document_kind as "documentKind", ci.source,
+           (select im.signature_verified
+                   and exists (select 1 from ap_capture_mailbox_credentials c
+                                where c.org_id = im.org_id and c.mailbox_id = im.mailbox_id)
+              from ap_capture_events ev
+              join ap_capture_inbound_messages im
+                on im.org_id = ev.org_id and im.id::text = ev.detail->>'inboundMessageId'
+             where ev.org_id = ci.org_id and ev.capture_item_id = ci.id and ev.event_kind = 'email_received'
+             order by ev.at limit 1) as "emailVerified",
+           ci.vendor_candidate_id as "vendorId",
+           ci.validation_issues as issues, ci.normalized->>'total' as total, ci.normalized->>'currency' as currency
+      from ap_capture_items ci
+     where ci.org_id = ${input.orgId} and ci.id = ${input.captureItemId}
   `)).rows[0];
   if (!capture) return { kind: "not_applicable" };
   const trust = capture.vendorId
@@ -100,7 +131,11 @@ export async function considerCaptureAutoPost(input: {
   const decision = autoPostEligibility({
     policy,
     trust,
-    capture: { ...capture, issues: Array.isArray(capture.issues) ? capture.issues : [] },
+    capture: {
+      ...capture,
+      emailVerified: capture.emailVerified === true,
+      issues: Array.isArray(capture.issues) ? capture.issues : [],
+    },
   });
   const policyEvidence = { policyId: policy.id, effectiveFrom: policy.effectiveFrom, cleanStreak: policy.cleanStreak };
   if (!decision.eligible) {
@@ -141,12 +176,18 @@ export async function considerCaptureAutoPost(input: {
   const reason = autoPostReason(policy);
   try {
     const outcome = await withOrgTransaction(input.orgId, async () => {
-      const locked = (await db.execute<{ status: string }>(sql`
-        select status from documents where org_id = ${input.orgId} and id = ${documentId} for update
+      const locked = (await db.execute<{ status: string; total: string | null; currency: string | null }>(sql`
+        select status, total::text as total, currency from documents
+         where org_id = ${input.orgId} and id = ${documentId} for update
       `)).rows[0];
       if (locked?.status !== "draft") {
         throw new AutoPostRefusal(`The bill is ${locked?.status ?? "missing"}, not a draft, and was not posted automatically.`);
       }
+      // The draft's total and currency come from the capture's own draft
+      // command (purchase-order currency, recalculated tax), not the
+      // extraction the eligibility screen read; the limit binds what posts.
+      const limit = autoPostAmountDecision(policy, locked);
+      if (!limit.eligible) throw new AutoPostLimitRefusal(limit.reason, limitRefusalMessage(limit.reason, locked, policy));
       const submission = await submitAndReleaseIfUngated("vendor_bill", documentId, actorId);
       // A Flow that matched but could not route never auto-approves: the
       // rollback leaves the draft untouched and the refusal names the Flow.
@@ -185,7 +226,8 @@ export async function considerCaptureAutoPost(input: {
     return outcome;
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Posting was refused";
-    await recordEvent(input.orgId, input.captureItemId, "auto_post_refused", { ...evidence, stage: "post", documentId, message }, actorId);
+    const limitDetail = error instanceof AutoPostLimitRefusal ? { stage: "limit", reason: error.reason } : { stage: "post" };
+    await recordEvent(input.orgId, input.captureItemId, "auto_post_refused", { ...evidence, ...limitDetail, documentId, message }, actorId);
     return { kind: "refused", documentId, message };
   }
 }

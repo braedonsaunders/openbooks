@@ -1,15 +1,20 @@
+import { createHash } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { withOrgContext } from '@openbooks/engine/platform/db'
+import { db, withOrgContext } from '@openbooks/engine/platform/db'
 import {
   beginInboundMessage,
   captureAttachments,
   consumeMailboxDelivery,
   finishInboundMessage,
+  INBOUND_MESSAGE_LEASE_MINUTES,
   InboundEmailError,
+  mailboxOwnerAuthority,
   parseInboundEmail,
   resolveMailboxByToken,
   senderAllowed,
   verifyInboundSignature,
+  type InboundSignatureEvidence,
+  type MailboxOwnerAuthority,
 } from '@openbooks/engine/payables/ap-capture-service'
 import { readBoundedBodyBytes } from '@/lib/bounded-body'
 import {
@@ -30,6 +35,7 @@ export type InboundDeps = {
   consumeMailboxDelivery: typeof consumeMailboxDelivery
   beginInboundMessage: typeof beginInboundMessage
   finishInboundMessage: typeof finishInboundMessage
+  authorizeMailboxOwner: (orgId: string, ownerId: string, subsidiaryId: string) => Promise<MailboxOwnerAuthority>
   ingestCaptureFiles: typeof ingestCaptureFiles
   withOrgContext: <T>(orgId: string, fn: () => Promise<T>) => Promise<T>
   now?: () => Date
@@ -40,22 +46,42 @@ const DEFAULT_DEPS: InboundDeps = {
   consumeMailboxDelivery,
   beginInboundMessage,
   finishInboundMessage,
+  authorizeMailboxOwner: (orgId, ownerId, subsidiaryId) => mailboxOwnerAuthority(db, orgId, ownerId, subsidiaryId),
   ingestCaptureFiles,
   withOrgContext,
 }
 
-const SIGNATURE_CODES = new Set(['signature_required', 'signature_invalid'])
+const SIGNATURE_CODES = new Set(['signature_required', 'signature_invalid', 'signature_replayed'])
+
+type RecordedOutcome = 'captured' | 'rejected_sender' | 'no_attachments' | 'duplicate' | 'error'
+
+/**
+ * The webhook reply names the outcome class only. Detailed reasons (sender
+ * addresses, file names, configuration and decoder errors) are recorded on
+ * the message, where administrators read them in the inbox activity; the
+ * sender's mail system never sees them.
+ */
+const REPLY_MESSAGES: Record<RecordedOutcome, string | null> = {
+  captured: null,
+  rejected_sender: 'The sender is not allowed for this address.',
+  no_attachments: 'The message carries no bill attachment.',
+  duplicate: 'The message was already captured.',
+  error: 'The message was received but could not be captured.',
+}
 
 /**
  * Receive one inbound AP email for the address its token names.
  *
  * Order matters: an unknown token answers 404 with no detail before anything
  * is read; an inactive address refuses; the per-address rate limit and the
- * body cap apply before parsing; the provider signature is verified before
- * anything is logged. Every authenticated delivery is then logged exactly
- * once per message id, and its attachments go through the same capture
- * intake the upload button uses. Sender and attachment refusals are recorded
- * outcomes answered with 200, so providers do not retry a decision.
+ * body cap apply before parsing; the provider signature is verified (and a
+ * replayed signed token refused) before anything is logged. Every
+ * authenticated delivery is then logged exactly once per message id with
+ * what its signature established, the address owner's standing is re-checked,
+ * and its attachments go through the same capture intake the upload button
+ * uses. Sender, owner and attachment refusals are recorded outcomes answered
+ * with 200, so providers do not retry a decision; a message another attempt
+ * is still processing answers 409 so the provider retries after the lease.
  */
 export async function receiveInboundApEmail(request: Request, token: string, deps: InboundDeps = DEFAULT_DEPS): Promise<NextResponse> {
   const mailbox = await deps.resolveMailboxByToken(token)
@@ -74,9 +100,10 @@ export async function receiveInboundApEmail(request: Request, token: string, dep
     const headers: Record<string, string> = {}
     request.headers.forEach((value, key) => { headers[key.toLowerCase()] = value })
     let email
+    let signature: InboundSignatureEvidence
     try {
       email = await parseInboundEmail({ contentType: headers['content-type'] ?? '', body: bounded.bytes, expectedProvider: mailbox.provider })
-      verifyInboundSignature({
+      signature = verifyInboundSignature({
         provider: mailbox.provider,
         secret: mailbox.signingSecret,
         headers,
@@ -91,18 +118,36 @@ export async function receiveInboundApEmail(request: Request, token: string, dep
       }
       throw error
     }
-    const begun = await deps.beginInboundMessage({
-      orgId: mailbox.orgId,
-      mailboxId: mailbox.id,
-      email,
-      attachmentCount: email.attachments.length,
-    })
+    let begun: Awaited<ReturnType<InboundDeps['beginInboundMessage']>>
+    try {
+      begun = await deps.beginInboundMessage({
+        orgId: mailbox.orgId,
+        mailboxId: mailbox.id,
+        email,
+        attachmentCount: email.attachments.length,
+        signature,
+        contentDigest: createHash('sha256').update(bounded.bytes).digest('hex'),
+      })
+    } catch (error) {
+      if (error instanceof InboundEmailError && SIGNATURE_CODES.has(error.code)) {
+        return NextResponse.json({ error: 'invalid signature' }, { status: 401 })
+      }
+      throw error
+    }
     if (begun.status === 'repeat') {
+      if (begun.outcome === 'received') {
+        return NextResponse.json(
+          { error: 'This message is still being processed; retry later.' },
+          { status: 409, headers: { 'retry-after': String(INBOUND_MESSAGE_LEASE_MINUTES * 60) } },
+        )
+      }
       return NextResponse.json({ status: 'duplicate', outcome: begun.outcome, captureIds: begun.captureItemIds })
     }
-    const finish = async (outcome: 'captured' | 'rejected_sender' | 'no_attachments' | 'duplicate' | 'error', reason: string | null, captureItemIds: string[] = []) => {
-      await deps.finishInboundMessage({ orgId: mailbox.orgId, id: begun.id, outcome, reason, captureItemIds })
-      return NextResponse.json({ status: outcome, captureIds: captureItemIds, ...(reason ? { reason } : {}) })
+    const attempt = begun.attempt
+    const finish = async (outcome: RecordedOutcome, reason: string | null, captureItemIds: string[] = []) => {
+      await deps.finishInboundMessage({ orgId: mailbox.orgId, id: begun.id, attempt, outcome, reason, captureItemIds })
+      const message = REPLY_MESSAGES[outcome]
+      return NextResponse.json({ status: outcome, captureIds: captureItemIds, ...(message ? { message } : {}) })
     }
     try {
       if (!senderAllowed(email.from, mailbox.allowedSenders)) {
@@ -114,12 +159,17 @@ export async function receiveInboundApEmail(request: Request, token: string, dep
           ? 'No attachment is a PDF, image or XML invoice'
           : null)
       }
+      // Captures are attributed to the owner, so the owner's standing is
+      // re-checked on every delivery: an owner who left, lost AP create or
+      // lost access to the address's entity refuses with the remedy.
+      const owner = await deps.authorizeMailboxOwner(mailbox.orgId, mailbox.ownerId, mailbox.subsidiaryId)
+      if (!owner.ok) return await finish('error', owner.message)
       const intake = await deps.ingestCaptureFiles({
         orgId: mailbox.orgId,
         actorId: mailbox.ownerId,
-        // The address belongs to one legal entity: extraction and any
-        // auto-created draft stay within it.
-        allowedSubsidiaryIds: new Set([mailbox.subsidiaryId]),
+        // The address's entity intersected with the owner's current access:
+        // extraction and any auto-created draft stay within it.
+        allowedSubsidiaryIds: owner.allowedSubsidiaryIds,
         subsidiaryId: mailbox.subsidiaryId,
         source: 'email',
         files: attachments,
@@ -142,7 +192,7 @@ export async function receiveInboundApEmail(request: Request, token: string, dep
       // The outcome must still be recorded: a provider retry finds this
       // message logged and is answered with the same refusal.
       const reason = error instanceof Error ? error.message.slice(0, 500) : 'Processing failed'
-      await deps.finishInboundMessage({ orgId: mailbox.orgId, id: begun.id, outcome: 'error', reason }).catch(() => undefined)
+      await deps.finishInboundMessage({ orgId: mailbox.orgId, id: begun.id, attempt, outcome: 'error', reason }).catch(() => undefined)
       throw error
     }
   })

@@ -71,6 +71,7 @@
     "confirm": "Save anyway"
   },
   "refusals": {
+    "taxUnresolved": "Tax could not be resolved for a bill date. Check the effective tax rates in Setup and retry saving.",
     "nothingToSave": "There are no unsaved bills in this batch.",
     "rowsNeedAttention": "{count, plural, one {# bill needs} other {# bills need}} attention before anything is saved. {first}",
     "rowIssue": "Row {row}: {issue}.",

@@ -12,7 +12,17 @@
     "copied": "Copied to the clipboard",
     "copyFailed": "Could not copy. Select the text and copy it manually.",
     "none": "No inbound address is active yet.",
-    "manage": "Manage addresses"
+    "manage": "Manage addresses",
+    "owner": "Owner: {name}",
+    "ownerProblem": "Owner cannot receive bills",
+    "ownerProblemHint": "The owner is inactive, may not create bills, or cannot access this legal entity, so email to this address is refused. Take ownership or re-create the address.",
+    "takeOwnership": "Take ownership",
+    "takeOwnershipAria": "Take ownership of the {label} address",
+    "takeOwnershipTitle": "Take ownership of {label}",
+    "takeOwnershipMessage": "Bills emailed to this address will be attributed to you, and your permissions decide what happens to them.",
+    "takeOwnershipReason": "Reason",
+    "ownershipTaken": "You now own this address",
+    "takeOwnershipFailed": "Could not take ownership of the address."
   },
   "inbox": {
     "columns": {
@@ -49,6 +59,7 @@
     "refused": "Not posted automatically: {message}",
     "skipped": {
       "policy_off": "Auto-post was off when this bill arrived.",
+      "unsigned_email": "Not posted automatically: emailed bills post automatically only when the address has a signing secret and the message signature verified.",
       "not_a_bill": "Vendor credits are never posted automatically.",
       "needs_review": "Not posted automatically: a field or line needs review.",
       "duplicate": "Not posted automatically: this may be a duplicate.",

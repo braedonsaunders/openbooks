@@ -710,14 +710,15 @@ export function LineGrid<Row extends Record<string, unknown>>({
   }
   function copyFromAbove(i: number, colIndex: number) {
     const column = columns[colIndex]
-    const above = rowsRef.current[i - 1]
-    const row = rowsRef.current[i]
+    const base = takeCommittedRows()
+    const above = base[i - 1]
+    const row = base[i]
     if (!column || !above || !row || column.type === 'readonly') return
     if (column.type === 'tax') {
       column.onTaxChange?.(i, { taxAmount: String(above.taxAmount ?? ''), overridden: above.taxOverridden === true })
       return
     }
-    commitCell(resolveKey(row, i), column.key, above[column.key] ?? '')
+    onRowsChange(base.map((current, index) => index === i ? applyRowFields(current, { [column.key]: above[column.key] ?? '' }) : current))
     focusCell(i, colIndex)
   }
 
@@ -822,8 +823,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
       }
       case 'decimal': {
         if (raw === '') return { ok: true, value: '' }
-        const amount = parsePastedAmount(raw)
-        const normalized = amount === null ? null : normalizeLineDecimal(amount, column.decimalScale ?? 8)
+        const normalized = normalizeLineDecimal(raw, column.decimalScale ?? 8)
         return normalized === null ? { ok: false } : { ok: true, value: normalized }
       }
       case 'date': {
@@ -849,11 +849,11 @@ export function LineGrid<Row extends Record<string, unknown>>({
     const text = event.clipboardData.getData('text/plain')
     const startRow = Number(cell.dataset.lgRow)
     const startCol = Number(cell.dataset.lgCol)
-    const lines = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '').split('\n').slice(0, 500)
+    const lines = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '').split('\n')
     const isBlock = lines.length > 1 || lines[0]!.includes('\t')
     const target = event.target as HTMLElement
     // A single value into a text box pastes natively; into a list it resolves.
-    if (!isBlock && target.tagName === 'INPUT') return
+    if (!isBlock && target.tagName === 'INPUT' && columns[startCol]?.type !== 'amount') return
     event.preventDefault()
     const grid = lines.map((line) => line.split('\t'))
     const pastable = columns.map((column, index) => ({ column, index })).filter(({ column }) => column.type !== 'readonly' && column.type !== 'tax')
@@ -863,17 +863,26 @@ export function LineGrid<Row extends Record<string, unknown>>({
     const headerMatches = byHeader.filter((index) => index !== -1).length
     const useHeader = grid.length > 1 && headerMatches >= Math.min(2, header.length) && headerMatches > 0
     const body = useHeader ? grid.slice(1) : grid
+    if (body.length > 500) {
+      setPasteNotice(t('paste.tooManyRows', { count: 500 }))
+      return
+    }
     const firstPastable = pastable.findIndex(({ index }) => index >= startCol)
     const mapping = useHeader
       ? byHeader
-      : grid[0]!.map((_value, offset) => pastable[(firstPastable === -1 ? pastable.length : firstPastable) + offset]?.index ?? -1)
+      : grid[0]!.length === columns.length - startCol
+        ? grid[0]!.map((_value, offset) => startCol + offset)
+        : grid[0]!.map((_value, offset) => pastable[(firstPastable === -1 ? pastable.length : firstPastable) + offset]?.index ?? -1)
     const next = [...takeCommittedRows()]
     const nextFlags = new Map(flags)
     let unmatched = 0
     body.forEach((cells, offset) => {
       const rowIndex = startRow + offset
       if (rowIndex >= next.length) {
-        if (fixedRows) return
+        if (fixedRows) {
+          unmatched += cells.filter((raw) => raw.trim() !== '').length
+          return
+        }
         next.push(emptyRow())
       }
       let row = next[rowIndex]!
@@ -881,8 +890,10 @@ export function LineGrid<Row extends Record<string, unknown>>({
       cells.forEach((raw, cellOffset) => {
         const colIndex = mapping[cellOffset] ?? -1
         const column = colIndex === -1 ? undefined : columns[colIndex]
-        if (!column) return
-        if (column.isCellEditable && !column.isCellEditable(row, rowIndex)) return
+        if (!column || column.type === 'readonly' || column.type === 'tax' || (column.isCellEditable && !column.isCellEditable(row, rowIndex))) {
+          if (raw.trim() !== '') unmatched += 1
+          return
+        }
         const resolved = pastedCellValue(column, row, rowIndex, raw)
         const cols = new Map(nextFlags.get(rowKey))
         if (resolved.ok) {
@@ -899,6 +910,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
     })
     setFlags(nextFlags)
     onRowsChange(next)
+    focusCell(startRow, startCol)
     setPasteNotice(unmatched > 0 ? t('paste.unmatched', { count: unmatched }) : t('paste.done', { count: body.length }))
   }
 

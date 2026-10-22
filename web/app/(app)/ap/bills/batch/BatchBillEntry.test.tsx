@@ -58,7 +58,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
 type Call = { url: string; method: string; key: string | null; body: Record<string, unknown> }
 
-function scriptFetch(options: { duplicates?: (url: string) => unknown[]; submit?: () => Record<string, unknown> } = {}) {
+function scriptFetch(options: { duplicates?: (url: string) => unknown[]; post?: () => Record<string, unknown> } = {}) {
   const prior = globalThis.fetch
   const calls: Call[] = []
   let number = 0
@@ -81,7 +81,7 @@ function scriptFetch(options: { duplicates?: (url: string) => unknown[]; submit?
       return Response.json({ doc: { id: call.key, document_number: `BILL-0004${number}` }, lines: [] }, { status: 201 })
     }
     if (url === '/api/documents/actions') {
-      return Response.json(call.body.action === 'submit' ? (options.submit?.() ?? { ok: true }) : { ok: true })
+      return Response.json(call.body.action === 'post' ? (options.post?.() ?? { ok: true }) : { ok: true })
     }
     return Response.json({})
   }) as typeof fetch
@@ -250,7 +250,7 @@ test('a possible duplicate needs confirmation, with Cancel as the default choice
 
 test('Ctrl+Enter posts each bill, and a bill held for approval is not posted around it', async (t) => {
   resetBrowserState()
-  const fetchScript = scriptFetch({ submit: () => ({ ok: true, pendingApproval: true }) })
+  const fetchScript = scriptFetch({ post: () => ({ ok: true, pendingApproval: true }) })
   t.after(fetchScript.restore)
   const { host, done } = await mount()
   t.after(done)
@@ -258,7 +258,7 @@ test('Ctrl+Enter posts each bill, and a bill held for approval is not posted aro
   await paste(cell(host, 0, 0), 'Vendor\tVendor ref #\tAmount\nACME\tINV-9\t40')
   await press({ key: 'Enter', code: 'Enter', ...PRIMARY })
   const actions = fetchScript.calls.filter((call) => call.url === '/api/documents/actions').map((call) => call.body.action)
-  assert.deepEqual(actions, ['submit'])
+  assert.deepEqual(actions, ['post'])
   assert.match(host.textContent ?? '', /BILL-00041 awaiting approval/)
 })
 

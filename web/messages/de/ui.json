@@ -123,6 +123,7 @@
     },
     "keyboardHintEnterAdvances": "Enter nächstes Feld · Shift+Enter vorherige Zeile · F8 kopiert von oben · Alt+Enter fügt ein · ⌘D dupliziert · ⌘⌫ entfernt · Zeilen aus einer Tabellenkalkulation einfügen",
     "paste": {
+      "tooManyRows": "Fügen Sie höchstens {count} Zeilen auf einmal ein. Es wurden keine Werte eingefügt.",
       "done": "{count, plural, one {# Zeile eingefügt} other {# Zeilen eingefügt}}.",
       "unmatched": "{count, plural, one {# eingefügter Wert erfordert} other {# eingefügte Werte erfordern}} Ihre Aufmerksamkeit — die markierten Zellen zeigen, was eingefügt wurde.",
       "unmatchedCell": "Der eingefügte Wert „{value}“ entspricht hier keiner Auswahl und keinem Betrag"

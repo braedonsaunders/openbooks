@@ -12,7 +12,17 @@
     "copied": "已复制到剪贴板",
     "copyFailed": "无法复制。请选中文本后手动复制。",
     "none": "尚无已启用的接收地址。",
-    "manage": "管理地址"
+    "manage": "管理地址",
+    "owner": "所有者：{name}",
+    "ownerProblem": "所有者无法接收账单",
+    "ownerProblemHint": "所有者已停用、无权创建账单或无法访问此法律实体，因此发送到此地址的电子邮件会被拒绝。请接管此地址或重新创建地址。",
+    "takeOwnership": "接管",
+    "takeOwnershipAria": "接管 {label} 地址",
+    "takeOwnershipTitle": "接管 {label}",
+    "takeOwnershipMessage": "发送到此地址的账单将归属于您，并由您的权限决定其处理方式。",
+    "takeOwnershipReason": "原因",
+    "ownershipTaken": "您现在是此地址的所有者",
+    "takeOwnershipFailed": "无法接管此地址。"
   },
   "inbox": {
     "columns": {
@@ -49,6 +59,7 @@
     "refused": "未自动过账：{message}",
     "skipped": {
       "policy_off": "此账单到达时自动过账处于关闭状态。",
+      "unsigned_email": "未自动过账：仅当地址配置了签名密钥且邮件签名已验证时，通过电子邮件收到的账单才会自动过账。",
       "not_a_bill": "供应商贷记从不自动过账。",
       "needs_review": "未自动过账：有字段或行需要审阅。",
       "duplicate": "未自动过账：可能是重复账单。",

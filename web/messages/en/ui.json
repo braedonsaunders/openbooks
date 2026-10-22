@@ -123,6 +123,7 @@
     },
     "keyboardHintEnterAdvances": "Enter next field · Shift+Enter previous line · F8 copies from above · Alt+Enter inserts · ⌘D duplicates · ⌘⌫ removes · paste rows from a spreadsheet",
     "paste": {
+      "tooManyRows": "Paste at most {count} rows at once. No values were pasted.",
       "done": "{count, plural, one {# row pasted} other {# rows pasted}}.",
       "unmatched": "{count, plural, one {# pasted value needs} other {# pasted values need}} attention — the flagged cells show what was pasted.",
       "unmatchedCell": "Pasted “{value}” did not match a choice or amount here"

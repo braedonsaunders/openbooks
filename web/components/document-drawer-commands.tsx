@@ -31,8 +31,7 @@ import type { DocumentDrawerPayloadScope } from './document-drawer-payload'
 /**
  * Where a successful save lands: the saved record in view mode, a fresh
  * create form for the same kind, or the list the drawer opened from. `post`
- * and `postNew` continue the saved draft through submit and post (each with
- * its own permission and refusals); an approval Flow that gates the record
+ * and `postNew` continue through the native atomic post command; an approval Flow that gates the record
  * leaves it pending approval, exactly as Submit would.
  */
 export type DocumentSaveThen = 'view' | 'new' | 'close' | 'post' | 'postNew'
@@ -99,7 +98,7 @@ export function buildDocumentDrawerCommands(
   // open: the save itself stays server-validated, so a down lookup must not
   // block persistence.
   async function confirmNoDuplicate(): Promise<boolean> {
-    if (!isCreate || (config.kind !== 'customer_invoice' && config.kind !== 'vendor_bill')) return true
+    if (!isCreate || (config.kind !== 'customer_invoice' && config.kind !== 'vendor_bill' && config.kind !== 'vendor_credit')) return true
     if (!partyId || !documentDate || !positiveAmount(effectiveTotals.total)) return true
     const query = new URLSearchParams({
       kind: config.kind,
@@ -107,7 +106,7 @@ export function buildDocumentDrawerCommands(
       documentDate,
       total: effectiveTotals.total,
     })
-    if (config.kind === 'vendor_bill' && referenceNumber.trim()) {
+    if ((config.kind === 'vendor_bill' || config.kind === 'vendor_credit') && referenceNumber.trim()) {
       query.set('referenceNumber', referenceNumber.trim())
     }
     let duplicates: { id: string; documentNumber: string; reason?: string }[] = []
@@ -277,37 +276,27 @@ export function buildDocumentDrawerCommands(
     router.refresh()
   }
 
-  /**
-   * Continue a just-saved draft through submit and post. Each step runs the
-   * same command (and permission) as the record's own buttons. Returns where
-   * to land: a refusal keeps the clerk on the saved record with the reason
-   * pinned, so nothing is lost and nothing is silently skipped.
-   */
-  async function submitAndPostSaved(documentId: string, documentNumber: string): Promise<'posted' | 'pending' | 'refused'> {
-    const call = (action: 'submit' | 'post') => fetchAppAction('/api/documents/actions', {
+  /** The native post command submits drafts, honors approval Flows and posts atomically. */
+  async function postSaved(documentId: string, documentNumber: string): Promise<'posted' | 'pending' | 'refused'> {
+    const posted = await fetchAppAction('/api/documents/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, documentId }),
+      body: JSON.stringify({ action: 'post', documentId }),
     }, { fallback: t('toasts.actionFailed') })
-    const submitted = await call('submit')
-    if (!submitted.ok) {
-      refuse(submitted.error.serverMessage, t('toasts.actionFailed'))
-      return 'refused'
-    }
-    if ((submitted.data as { pendingApproval?: unknown } | null)?.pendingApproval === true) {
-      toast.success(tEntry('postAfterSave.pending', { number: documentNumber }))
-      return 'pending'
-    }
-    const posted = await call('post')
     if (!posted.ok) {
       refuse(posted.error.serverMessage, t('toasts.actionFailed'))
       return 'refused'
+    }
+    if ((posted.data as { pendingApproval?: unknown } | null)?.pendingApproval === true) {
+      toast.success(tEntry('postAfterSave.pending', { number: documentNumber }))
+      return 'pending'
     }
     toast.success(tEntry('postAfterSave.posted', { number: documentNumber }))
     return 'posted'
   }
 
   const save = runExclusive(async (then: DocumentSaveThen = 'view') => {
+    let postContinuation: Promise<void> | undefined
     // Copy for a save the server failed to answer; a reason the server named
     // still pins verbatim, and only this exact copy marks the footer state.
     const unavailableCopy = t('drawer.saveState.unavailableDetail')
@@ -350,7 +339,7 @@ export function buildDocumentDrawerCommands(
             const saved = (payload as DocPayload).doc
             const recordHref = `${basePath}?doc=${String(saved.id)}`
             if (then === 'post' || then === 'postNew') {
-              postSavedThenLand(String(saved.id), String(saved.document_number ?? ''), then, recordHref)
+              postContinuation = postSavedThenLand(String(saved.id), String(saved.document_number ?? ''), then, recordHref)
               return
             }
             toast.success(t('toasts.saved', { documentNumber: String(saved.document_number ?? '') }))
@@ -364,6 +353,7 @@ export function buildDocumentDrawerCommands(
           },
         },
       )
+      await postContinuation
       return
     }
     const request = prepared.request
@@ -419,8 +409,8 @@ export function buildDocumentDrawerCommands(
           setDirty(false)
           setMode('view')
           const recordHref = hrefForDocument(String(data.doc.id), searchParams.get('form') ?? undefined)
-          if ((then === 'post' || then === 'postNew') && data.doc.status === 'draft') {
-            postSavedThenLand(String(data.doc.id), String(data.doc.document_number ?? ''), then, recordHref)
+          if ((then === 'post' || then === 'postNew') && (data.doc.status === 'draft' || data.doc.status === 'approved')) {
+            postContinuation = postSavedThenLand(String(data.doc.id), String(data.doc.document_number ?? ''), then, recordHref)
             return
           }
           toast.success(t('toasts.saved', { documentNumber: String(data.doc.document_number ?? '') }))
@@ -438,11 +428,12 @@ export function buildDocumentDrawerCommands(
         },
       },
     )
+    await postContinuation
   })
 
   /** After a save that asked to post: run the lifecycle, then land. */
   function postSavedThenLand(documentId: string, documentNumber: string, then: 'post' | 'postNew', recordHref: string) {
-    void submitAndPostSaved(documentId, documentNumber).then((outcome) => {
+    return postSaved(documentId, documentNumber).then((outcome) => {
       // A refused post stays on the saved draft so the pinned reason is read.
       if (outcome === 'refused') {
         router.push(recordHref)

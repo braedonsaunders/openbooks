@@ -85,7 +85,7 @@
     "gridMenu": "Line menu",
     "gridPaste": "Paste rows copied from a spreadsheet",
     "pickerType": "Type to search a list (names and codes)",
-    "pickerTab": "Accept the highlighted match and move on",
+    "pickerTab": "Accept a strong matching name or code and move on",
     "pickerOpen": "Open the list",
     "pickerClose": "Close a list and keep the value",
     "pickerCreate": "Create the vendor or customer you typed",

@@ -86,7 +86,7 @@ test('posting runs each document through its own commands and reports approvals 
     const body = JSON.parse(String(init?.body)) as { action: string; documentId: string }
     calls.push(body)
     const respond = (status: number, payload: unknown) => new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
-    if (body.documentId === 'd3' && body.action === 'submit') return respond(200, { pendingApproval: true })
+    if (body.documentId === 'd3' && body.action === 'post') return respond(200, { pendingApproval: true })
     if (body.documentId === 'd2' && body.action === 'post') return respond(422, { error: 'The period is closed. Reopen it in Close or choose an open date.' })
     return respond(200, { ok: true })
   }) as typeof fetch
@@ -102,11 +102,10 @@ test('posting runs each document through its own commands and reports approvals 
   const confirm = [...document.querySelectorAll('button')].find((button) => /^Post 3 documents$/.test(button.textContent ?? '') && button !== postButton)!
   await act(async () => { confirm.click(); await tick(); await tick(); await tick() })
   assert.deepEqual(calls, [
-    { action: 'submit', documentId: 'd1' },
     { action: 'post', documentId: 'd1' },
     { action: 'post', documentId: 'd2' },
-    { action: 'submit', documentId: 'd3' },
-  ], 'drafts submit before posting, an approved bill only posts, a gated draft stops at approval, a posted bill is never touched')
+    { action: 'post', documentId: 'd3' },
+  ], 'drafts and approved bills use native posting, approval-gated drafts stop at approval, posted bills are untouched')
   assert.match(host.textContent ?? '', /1 posted · 1 sent for approval · 1 refused/)
   assert.match(host.textContent ?? '', /BILL-2 — The period is closed/)
   const stillSelected = [...host.querySelectorAll<HTMLInputElement>('[data-bulk-row] input[type="checkbox"]')].map((box) => box.checked)

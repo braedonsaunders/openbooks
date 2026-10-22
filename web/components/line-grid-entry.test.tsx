@@ -23,6 +23,8 @@ const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../messages/en')).default
 const { LineGrid } = await import('./line-grid')
+const { EntryPreferencesProvider } = await import('../lib/entry-preferences-context')
+const { DEFAULT_ENTRY_PREFERENCES } = await import('../lib/entry-preferences')
 type LineGridColumn<Row extends Record<string, unknown>> = import('./line-grid').LineGridColumn<Row>
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
@@ -67,13 +69,14 @@ const columns: LineGridColumn<Row>[] = [
   { key: 'amount', label: 'Amount', width: '120px', type: 'amount', align: 'right' },
 ]
 
-function Probe({ initial }: { initial: Row[] }) {
+function Probe({ initial, autoDecimal, gridColumns }: { initial: Row[]; autoDecimal: boolean; gridColumns: LineGridColumn<Row>[] }) {
   const [rows, setRows] = useState(initial)
   return (
     <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <EntryPreferencesProvider initial={{ ...DEFAULT_ENTRY_PREFERENCES, autoDecimal }}>
       <div role="dialog">
         <LineGrid<Row>
-          columns={columns}
+          columns={gridColumns}
           rows={rows}
           onRowsChange={(next) => { store.rows = next; setRows(next) }}
           emptyRow={blank}
@@ -82,16 +85,17 @@ function Probe({ initial }: { initial: Row[] }) {
         />
         <button type="button">After grid</button>
       </div>
+      </EntryPreferencesProvider>
     </NextIntlClientProvider>
   )
 }
 
-async function mount(initial: Row[]) {
+async function mount(initial: Row[], autoDecimal = false, gridColumns = columns) {
   store.rows = initial
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
-  await act(async () => { root.render(<Probe initial={initial} />); await tick() })
+  await act(async () => { root.render(<Probe initial={initial} autoDecimal={autoDecimal} gridColumns={gridColumns} />); await tick() })
   await tick()
   return { host, async done() { await act(async () => root.unmount()); host.remove() } }
 }
@@ -226,4 +230,93 @@ test('short lists without a search box jump to the option typed and choose it wi
   await key(kind, { key: 'Enter' })
   assert.equal(store.rows[0]!.kind, 'services')
   assert.ok(document.activeElement === control(host, 0, 2), 'the choice advanced to the next cell')
+})
+
+test('copy above into a focused amount survives refocus, blur and later row edits', async (t) => {
+  const { host, done } = await mount([{ ...blank(), amount: '250.0000' }, blank()])
+  t.after(done)
+  const below = control(host, 1, 3) as HTMLInputElement
+  await act(async () => { below.focus(); await tick() })
+  await key(below, { key: 'F8' })
+  assert.equal(below.value, '250.00')
+  await act(async () => { below.blur(); await tick() })
+  assert.equal(store.rows[1]!.amount, '250.0000')
+  await key(control(host, 1, 2), { key: 'Enter', altKey: true })
+  assert.equal(store.rows[1]!.amount, '250.0000')
+})
+
+test('single-value money paste settles exactly and refuses excess precision', async (t) => {
+  const { host, done } = await mount([blank()], true)
+  t.after(done)
+  const amount = control(host, 0, 3) as HTMLInputElement
+  await act(async () => { amount.focus(); await tick() })
+  const paste = async (text: string) => {
+    const event = new window.Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', { value: { getData: () => text } })
+    await act(async () => { amount.dispatchEvent(event); await tick() })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)) })
+    assert.equal(event.defaultPrevented, true)
+  }
+  await paste('1785')
+  assert.equal(store.rows[0]!.amount, '1785.0000')
+  await act(async () => { amount.blur(); await tick() })
+  assert.equal(store.rows[0]!.amount, '1785.0000')
+  await paste('12.34567')
+  assert.equal(store.rows[0]!.amount, '1785.0000', 'invalid paste preserves the prior amount and flags the cell')
+  assert.match(host.textContent ?? '', /1 pasted value needs attention/)
+})
+
+ test('decimal block paste preserves eight places instead of rounding to money scale', async (t) => {
+  const { host, done } = await mount([blank()], false, [
+    { key: 'quantity', label: 'Quantity', type: 'decimal', decimalScale: 8, width: '150px' },
+  ])
+  t.after(done)
+  const input = control(host, 0, 0)
+  const event = new window.Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', { value: { getData: () => 'Quantity\n1.23456789\n2.12345678' } })
+  await act(async () => { input.dispatchEvent(event); await tick() })
+  assert.deepEqual(store.rows.map((row) => row.quantity), ['1.23456789', '2.12345678'])
+})
+
+test('copy above commits focused decimal and date cells before replacing their drafts', async (t) => {
+  const { host, done } = await mount([{ ...blank(), quantity: '1.23456789', date: '2026-10-12' }, blank()], false, [
+    { key: 'quantity', label: 'Quantity', type: 'decimal', decimalScale: 8, width: '150px' },
+    { key: 'date', label: 'Date', type: 'date', width: '150px' },
+  ])
+  t.after(done)
+  for (const [col, field, expected] of [[0, 'quantity', '1.23456789'], [1, 'date', '2026-10-12']] as const) {
+    const input = control(host, 1, col) as HTMLInputElement
+    await act(async () => { input.focus(); await tick() })
+    await key(input, { key: 'F8' })
+    await act(async () => { input.blur(); await tick() })
+    assert.equal(store.rows[1]![field], expected)
+  }
+})
+
+test('an oversized spreadsheet paste is refused as a whole instead of truncating financial lines', async (t) => {
+  const { host, done } = await mount([blank()])
+  t.after(done)
+  const input = control(host, 0, 0)
+  const event = new window.Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', { value: { getData: () => Array.from({ length: 501 }, () => '6300\tgoods\tPaper\t10.00').join('\n') } })
+  await act(async () => { input.dispatchEvent(event); await tick() })
+  assert.equal(store.rows.length, 1)
+  assert.equal(store.rows[0]!.amount, '')
+  assert.match(host.textContent ?? '', /Paste at most 500 rows/)
+})
+
+test('a full-width spreadsheet paste preserves positions across computed columns', async (t) => {
+  const { host, done } = await mount([blank()], false, [
+    { key: 'description', label: 'Description', type: 'text', width: '150px' },
+    { key: 'computed', label: 'Computed', type: 'readonly', width: '150px' },
+    { key: 'amount', label: 'Amount', type: 'amount', width: '150px' },
+  ])
+  t.after(done)
+  const input = control(host, 0, 0)
+  const event = new window.Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', { value: { getData: () => 'Paper\t99.00\t10.00' } })
+  await act(async () => { input.dispatchEvent(event); await tick() })
+  assert.equal(store.rows[0]!.description, 'Paper')
+  assert.equal(store.rows[0]!.amount, '10.0000')
+  assert.match(host.textContent ?? '', /1 pasted value needs attention/)
 })

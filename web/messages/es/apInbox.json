@@ -12,7 +12,17 @@
     "copied": "Copiado al portapapeles",
     "copyFailed": "No se pudo copiar. Seleccione el texto y cópielo manualmente.",
     "none": "Todavía no hay ninguna dirección de recepción activa.",
-    "manage": "Administrar direcciones"
+    "manage": "Administrar direcciones",
+    "owner": "Propietario: {name}",
+    "ownerProblem": "El propietario no puede recibir facturas",
+    "ownerProblemHint": "El propietario está inactivo, no puede crear facturas o no tiene acceso a esta entidad legal, por lo que se rechazan los correos enviados a esta dirección. Asuma la propiedad o vuelva a crear la dirección.",
+    "takeOwnership": "Asumir la propiedad",
+    "takeOwnershipAria": "Asumir la propiedad de la dirección {label}",
+    "takeOwnershipTitle": "Asumir la propiedad de {label}",
+    "takeOwnershipMessage": "Las facturas enviadas a esta dirección se le atribuirán a usted, y sus permisos determinan qué ocurre con ellas.",
+    "takeOwnershipReason": "Motivo",
+    "ownershipTaken": "Ahora es el propietario de esta dirección",
+    "takeOwnershipFailed": "No se pudo asumir la propiedad de la dirección."
   },
   "inbox": {
     "columns": {
@@ -49,6 +59,7 @@
     "refused": "No se contabilizó automáticamente: {message}",
     "skipped": {
       "policy_off": "La contabilización automática estaba desactivada cuando llegó esta factura.",
+      "unsigned_email": "No se contabilizó automáticamente: las facturas recibidas por correo solo se contabilizan automáticamente cuando la dirección tiene un secreto de firma y se verificó la firma del mensaje.",
       "not_a_bill": "Los abonos de proveedor nunca se contabilizan automáticamente.",
       "needs_review": "No se contabilizó automáticamente: un campo o una línea requiere revisión.",
       "duplicate": "No se contabilizó automáticamente: podría ser un duplicado.",

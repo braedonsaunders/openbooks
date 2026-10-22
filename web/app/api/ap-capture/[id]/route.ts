@@ -14,6 +14,7 @@ import { guardSubsidiaryScope } from '../../../../lib/authz';
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+import { apCaptureSubsidiaryScope } from '@openbooks/engine/records/file-cabinet-access'
 import { notFound } from "@/lib/api/responses";
 import { isUuid, uuidString } from '@openbooks/engine/platform/identifiers'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
@@ -68,21 +69,6 @@ const requestBodySchema = z.strictObject({
 
 
 export const runtime = 'nodejs'
-
-/**
- * Same vendor/PO visibility the inbox list and `?capture=` flyout apply
- * (`web/app/(app)/ap/capture/view.ts`). A restricted caller who cannot see
- * the row in the list must get the same not_found by id. Empty allowed set
- * denies every capture (`and false`); null vendor/PO subsidiaries stay
- * org-wide, matching the inbox `is null or in allowed` predicate.
- */
-function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null) {
-  if (allowed === null) return sql``
-  if (allowed.size === 0) return sql` and false`
-  return sql`${subsidiaryVisibleFilter(sql`po.subsidiary_id`, allowed, { orgWideNull: true })}
-             ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}
-             ${subsidiaryVisibleFilter(sql`ci.subsidiary_id`, allowed, { orgWideNull: true })}`
-}
 
 /** Write-side twin: the associations the UPDATE will persist, not the pre-update row. */
 function resolvedAssociationsInScope(

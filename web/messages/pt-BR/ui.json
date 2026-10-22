@@ -123,6 +123,7 @@
     },
     "keyboardHintEnterAdvances": "Enter próximo campo · Shift+Enter linha anterior · F8 copia de cima · Alt+Enter insere · ⌘D duplica · ⌘⌫ remove · cole linhas de uma planilha",
     "paste": {
+      "tooManyRows": "Cole no máximo {count} linhas por vez. Nenhum valor foi colado.",
       "done": "{count, plural, one {# linha colada} other {# linhas coladas}}.",
       "unmatched": "{count, plural, one {# valor colado precisa} other {# valores colados precisam}} de atenção — as células sinalizadas mostram o que foi colado.",
       "unmatchedCell": "O valor colado “{value}” não corresponde a nenhuma opção ou valor aqui"

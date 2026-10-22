@@ -13,6 +13,7 @@ import {
   DEFAULT_TRUST_STREAK,
   listInboundMessages,
   listMailboxes,
+  mailboxOwnerAuthority,
   resolveAutoPostPolicy,
   vendorCaptureTrust,
 } from '@openbooks/engine/payables/ap-capture-service'
@@ -163,6 +164,9 @@ export async function loadApCapture(
   const authz = await requirePermission('ap.read')
   return withScopeSnapshot(authz.user.orgId, async () => {
   const canCreate = can(authz, 'ap.create')
+  // The webhook URL embeds the address token, which is the delivery
+  // credential: only administrators who manage addresses receive it.
+  const canManageMailboxes = can(authz, 'admin.setup.manage')
   const t = await getTranslations('ap.capture')
   const ti = await getTranslations('apInbox')
   const tc = await getTranslations('common')
@@ -202,3 +206,401 @@ export async function loadApCapture(
   const offset = (list.page - 1) * list.perPage
   const [rowsResult, totalResult, countsResult, providerOperational, mailboxRows] = await Promise.all([
     db.execute(sql`
+      select ci.id, ci.status, ci.original_filename as "filename", ci.document_kind as "documentKind",
+             ci.normalized->>'vendorName' as "vendorName", ci.normalized->>'invoiceNumber' as "invoiceNumber",
+             ci.normalized->>'invoiceDate' as "invoiceDate", ci.normalized->>'currency' as currency,
+             ci.normalized->>'total' as total, ci.overall_confidence as "overallConfidence",
+             ci.validation_issues as "validationIssues", ci.document_id as "documentId",
+             ci.received_at as "receivedAt", vendor.display_name as "resolvedVendor", ci.source
+        from ap_capture_items ci
+        left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+        left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+       where ${where} order by ${order} limit ${list.perPage} offset ${offset}
+    `),
+    db.execute(sql`
+      select count(*)::int as n from ap_capture_items ci
+      left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+      left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+      where ${where}
+    `),
+    db.execute(sql`
+      select ci.status, count(*)::int as n from ap_capture_items ci
+      left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+      left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+       where ci.org_id = ${authz.user.orgId}
+         ${subsidiaryScope}
+       group by ci.status
+    `),
+    documentCaptureOperational(authz.user.orgId),
+    listMailboxes(authz.user.orgId, allowedSet, { includeTokens: canManageMailboxes }),
+  ])
+  const rows = (rowsResult as unknown as { rows: CaptureListRow[] }).rows
+  const total = Number(((totalResult) as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0)
+  const counts = new Map<string, number>(((countsResult) as unknown as { rows: { status: string; n: number }[] }).rows.map((row) => [row.status, Number(row.n)]))
+  const activeMailboxes = mailboxRows.filter((row) => row.isActive)
+  const origin = canManageMailboxes && activeMailboxes.length ? await publicOrigin() : ''
+  // Each address shows whether its owner can still receive bills, by the
+  // same rule the webhook applies on every delivery.
+  const ownerStanding = await Promise.all(activeMailboxes.map((row) =>
+    mailboxOwnerAuthority(db, authz.user.orgId, row.ownerId, row.subsidiaryId)))
+  const mailboxes: CaptureMailbox[] = activeMailboxes.map((row, index) => ({
+    id: row.id,
+    label: row.label,
+    entity: row.subsidiaryName,
+    emailAddress: row.emailAddress,
+    webhookUrl: canManageMailboxes && row.token ? `${origin}/api/inbound/ap/${row.token}` : null,
+    ownerName: row.ownerName,
+    ownerReady: ownerStanding[index]!.ok,
+    canTakeOwnership: canManageMailboxes && row.ownerId !== authz.user.id,
+  }))
+  // Only a real capture id reaches SQL: a malformed ?capture= must never
+  // bind to a uuid column and render a 500.
+  const rawSelectedId = tab === 'queue' ? pickString(sp.capture) : undefined
+  const selectedId = rawSelectedId && isUuid(rawSelectedId) ? rawSelectedId : undefined
+  let detail: CaptureDetail | null = null
+  let options: { vendors: { id: string; label: string }[]; accounts: { id: string; label: string }[]; purchaseOrders: { id: string; label: string }[] } | null = null
+  let canLookupPurchaseOrders = false
+  let navigation: CaptureNavigation = { listHref: mergeHref('/ap/capture', sp, { capture: undefined }), previousHref: null, nextHref: null, nextReviewHref: null }
+  let trust: CaptureTrustState | null = null
+  let autoPost: CaptureAutoPostState | null = null
+  let attentionThreshold = '0.9000'
+  if (selectedId) {
+    const selected = (await db.execute<CaptureDetail>(sql`
+      select ci.*, f.content_type as "contentType", f.size_bytes as "sizeBytes",
+             vendor.display_name as "resolvedVendor", po.document_number as "purchaseOrderNumber",
+             ${documentRevisionCounterSql(sql`ci.revision_seq`)} as "updatedAt"
+        from ap_capture_items ci join files f on f.id = ci.file_id and f.org_id = ci.org_id
+        left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+        left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+       where ci.org_id = ${authz.user.orgId} and ci.id = ${selectedId}
+       ${subsidiaryScope}
+    `))
+    detail = selected.rows[0] ?? null
+    if (detail) {
+      const vendorScope = allowed === null
+        ? sql``
+        : allowed.length === 0
+          ? sql`and false`
+          : sql`and (p.subsidiary_id is null or p.subsidiary_id in (${sql.join(allowed.map((id) => sql`${id}`), sql`, `)}))`
+      const poScope = allowed === null
+        ? sql``
+        : allowed.length === 0
+          ? sql`and false`
+          : sql`and (d.subsidiary_id is null or d.subsidiary_id in (${sql.join(allowed.map((id) => sql`${id}`), sql`, `)}))`
+      // The vendor/PO lists above are caller-scoped; the account list was
+      // not: a subsidiary-A caller saw
+      // subsidiary-B accounts. Org-wide rows (subsidiary_id null) stay
+      // visible, exactly as for vendors and purchase orders.
+      const accountScope = allowed === null
+        ? sql``
+        : allowed.length === 0
+          ? sql`and false`
+          : sql`and (subsidiary_id is null or subsidiary_id in (${sql.join(allowed.map((id) => sql`${id}`), sql`, `)}))`
+      canLookupPurchaseOrders = await isDocKindEnabled(authz.user.orgId, 'purchase_order')
+      const [vendors, accounts, purchaseOrders, evidence, neighbours, lastAutoPost, settings, today] = await Promise.all([
+        db.execute(sql`
+          select p.id, p.display_name as label from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
+           where p.org_id = ${authz.user.orgId} and p.is_active and vr.is_active ${vendorScope}
+           order by p.display_name limit 2000
+        `),
+        db.execute(sql`
+          select id, concat_ws(' · ', number, name) as label from accounts
+           where org_id = ${authz.user.orgId} and is_active and not is_summary ${accountScope} order by number nulls last limit 3000
+        `),
+        canLookupPurchaseOrders
+          ? db.execute(sql`
+          select d.id, d.document_number as label from documents d
+           where d.org_id = ${authz.user.orgId} and d.kind = 'purchase_order' and d.status = 'approved' ${poScope}
+           order by d.document_date desc limit 1000
+        `)
+          : Promise.resolve({ rows: [] }),
+        db.execute(sql`
+          select af.field_key as "fieldKey", af.line_index as "lineIndex", af.confidence,
+                 af.page_number as "pageNumber", af.polygon
+            from ap_capture_fields af join ap_capture_runs ar on ar.id = af.run_id and ar.org_id = af.org_id
+           where af.org_id = ${authz.user.orgId} and ar.capture_item_id = ${selectedId}
+             and ar.attempt = (select max(attempt) from ap_capture_runs where capture_item_id = ${selectedId} and org_id = ${authz.user.orgId})
+        `),
+        // The selected capture's neighbours in the list's own filter and
+        // order, plus the next capture still awaiting review (wrapping to the
+        // first earlier one), so review can move on without the mouse.
+        db.execute<{ previousId: string | null; nextId: string | null; nextReviewId: string | null }>(sql`
+          with ordered as (
+            select ci.id, ci.status, row_number() over (order by ${order}) as pos
+              from ap_capture_items ci
+              left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+              left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+             where ${where}
+          ), me as (select pos from ordered where id = ${selectedId})
+          select
+            (select o.id from ordered o, me where o.pos = me.pos - 1) as "previousId",
+            (select o.id from ordered o, me where o.pos = me.pos + 1) as "nextId",
+            coalesce(
+              (select o.id from ordered o, me where o.pos > me.pos and o.status in ('ready', 'needs_review') order by o.pos limit 1),
+              (select o.id from ordered o, me where o.pos < me.pos and o.status in ('ready', 'needs_review') order by o.pos limit 1)
+            ) as "nextReviewId"
+        `),
+        db.execute<{ kind: string; detail: { reason?: string; message?: string } }>(sql`
+          select event_kind as kind, detail from ap_capture_events
+           where org_id = ${authz.user.orgId} and capture_item_id = ${selectedId}
+             and event_kind in (${sql.join(AUTO_POST_EVENTS.map((kind) => sql`${kind}`), sql`, `)})
+           order by at desc limit 1
+        `),
+        getDocumentCaptureSettings(authz.user.orgId),
+        businessToday(authz.user.orgId),
+      ])
+      detail.evidence = (evidence as unknown as { rows: CaptureDetail['evidence'] }).rows
+      options = {
+        vendors: ((vendors) as unknown as { rows: { id: string; label: string }[] }).rows,
+        accounts: ((accounts) as unknown as { rows: { id: string; label: string }[] }).rows,
+        purchaseOrders: ((purchaseOrders) as unknown as { rows: { id: string; label: string }[] }).rows,
+      }
+      const near = neighbours.rows[0]
+      const captureHref = (id: string | null | undefined) => (id ? mergeHref('/ap/capture', sp, { capture: id }) : null)
+      navigation = {
+        ...navigation,
+        previousHref: captureHref(near?.previousId),
+        nextHref: captureHref(near?.nextId),
+        nextReviewHref: captureHref(near?.nextReviewId),
+      }
+      attentionThreshold = settings.confidenceThreshold
+      if (detail.vendor_candidate_id) {
+        const policy = await resolveAutoPostPolicy(db, authz.user.orgId, today)
+        const threshold = policy?.cleanStreak ?? DEFAULT_TRUST_STREAK
+        const vendorTrust = await vendorCaptureTrust(db, authz.user.orgId, detail.vendor_candidate_id, threshold, detail.id)
+        trust = {
+          trusted: vendorTrust.trusted,
+          cleanStreak: vendorTrust.cleanStreak,
+          threshold,
+          policyEnabled: policy?.enabled === true,
+          brokenBy: vendorTrust.brokenBy?.reason ?? null,
+        }
+      }
+      const latest = lastAutoPost.rows[0]
+      if (latest) {
+        autoPost = {
+          kind: latest.kind as CaptureAutoPostState['kind'],
+          reason: typeof latest.detail?.reason === 'string' ? latest.detail.reason : null,
+          message: typeof latest.detail?.message === 'string' ? latest.detail.message : null,
+        }
+      }
+    }
+  }
+  const structuredInvoicesEnabled = await isFeatureEnabled(authz.user.orgId, 'einvoicing')
+  // Either provider (Azure or the AI model) counts, by the same rule the capture APIs use.
+  const captureOperational = structuredInvoicesEnabled || providerOperational
+  const drawer: ApCaptureDrawer | null = detail && options
+    ? {
+        remountKey: String(detail.id),
+        initial: detail,
+        vendors: options.vendors,
+        accounts: options.accounts,
+        purchaseOrders: options.purchaseOrders,
+        canLookupPurchaseOrders,
+        canCreate,
+        canApprovePriceOverride: can(authz, 'ap.approve'),
+        canPost: can(authz, 'ap.post'),
+        navigation,
+        trust,
+        autoPost,
+        attentionThreshold,
+      }
+    : null
+
+  const inboxPage = parseListParams(sp, { sort: 'received', dir: 'desc', perPage: 50, allowedSorts: ['received'] as const })
+  const inboxRows = tab === 'inbox'
+    ? await listInboundMessages(authz.user.orgId, allowedSet, { limit: inboxPage.perPage, offset: (inboxPage.page - 1) * inboxPage.perPage })
+    : { rows: [], total: 0 }
+  const inbox: ApCaptureData['inbox'] = {
+    rows: inboxRows.rows.map((row) => {
+      const outcome = OUTCOMES.includes(row.outcome as (typeof OUTCOMES)[number]) ? row.outcome : 'error'
+      const firstCapture = row.captureItemIds?.[0]
+      return {
+        id: row.id,
+        receivedLine: dateTime(row.receivedAt, locale),
+        mailboxLabel: row.mailboxLabel,
+        fromLine: row.fromAddress ?? '—',
+        subjectLine: row.subject ?? '—',
+        attachmentCount: Number(row.attachmentCount),
+        outcomeLabel: ti(`inbox.outcomes.${outcome}`),
+        outcomeVariant: OUTCOME_VARIANT[outcome] ?? 'outline',
+        detailLine: row.outcomeReason ?? (row.captureItemIds?.length ? ti('inbox.capturedCount', { count: row.captureItemIds.length }) : '—'),
+        captureHref: firstCapture ? `/ap/capture?capture=${firstCapture}` : '',
+        captureLabel: firstCapture ? ti('inbox.openCapture') : '',
+      }
+    }),
+    hasRows: inboxRows.rows.length > 0,
+    empty: tab === 'inbox' && inboxRows.total === 0,
+    emptyTitle: ti('inbox.emptyTitle'),
+    emptyDescription: mailboxRows.length ? ti('inbox.emptyDescription') : ti('inbox.emptyNoMailbox'),
+    total: inboxRows.total,
+    currentPage: inboxPage.page,
+    perPage: inboxPage.perPage,
+    columns: {
+      received: ti('inbox.columns.received'),
+      address: ti('inbox.columns.address'),
+      from: ti('inbox.columns.from'),
+      subject: ti('inbox.columns.subject'),
+      attachments: ti('inbox.columns.attachments'),
+      outcome: ti('inbox.columns.outcome'),
+      detail: ti('inbox.columns.detail'),
+      capture: ti('inbox.columns.capture'),
+    },
+  }
+  return {
+    title: t('title'),
+    description: t('description'),
+    backHref: '/ap',
+    backLabel: t('backToBills'),
+    currentParams: sp,
+    tabs: [
+      { href: '/ap/capture', label: ti('tabs.queue'), active: tab === 'queue' },
+      { href: '/ap/capture?tab=inbox', label: ti('tabs.inbox'), active: tab === 'inbox' },
+    ],
+    onQueue: tab === 'queue',
+    onInbox: tab === 'inbox',
+    canCreate,
+    showBanner: !captureOperational,
+    notConfiguredText: t('notConfigured'),
+    showConfigureLink: can(authz, 'admin.ai.manage'),
+    configureHref: '/admin/ai',
+    configureLabel: t('configure'),
+    searchPlaceholder: t('search'),
+    statusLabel: tc('labels.status'),
+    statusOptions: STATUSES.map((value) => ({ value, label: t(`status.${value}`), count: counts.get(value) ?? 0 })),
+    uploadDisabled: !captureOperational,
+    sort: list.sort,
+    dir: list.dir,
+    rows,
+    mailboxes,
+    manageMailboxesHref: can(authz, 'admin.setup.manage') ? '/admin/setup/ap-capture-mailboxes' : null,
+    total,
+    currentPage: list.page,
+    perPage: list.perPage,
+    drawerOpen: Boolean(drawer),
+    drawer,
+    inbox,
+  }
+  })
+}
+
+const f = ref<ApCaptureData>()
+const item = field
+
+export function apCaptureSpec(data: ApCaptureData): PageSpec {
+  const upload = {
+    widget: 'capture-upload',
+    props: { disabled: data.uploadDisabled },
+  }
+  return page({
+    route: '/ap/capture',
+    layout: 'list',
+    header: [
+      pageHeader({
+        title: f('title'),
+        description: f('description'),
+        actionsClassName: 'flex flex-wrap items-center gap-2',
+        actions: [
+          widget('back-link-button', { href: data.backHref, label: data.backLabel }),
+          widget(upload.widget, upload.props, f('canCreate')),
+          // The tabs are the last header action, the house position for the
+          // shared subtab strip.
+          widget('module-home-tabs', { tabs: data.tabs }),
+        ],
+      }),
+      {
+        ...grid('rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300', [
+          widgetBlock('capture-not-configured', {
+            text: data.notConfiguredText,
+            configureHref: data.configureHref,
+            configureLabel: data.configureLabel,
+            showConfigureLink: data.showConfigureLink,
+          }),
+        ]),
+        when: f('showBanner'),
+      },
+      {
+        ...grid('flex flex-wrap gap-2', [
+          widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
+          widgetBlock('filter-chips', {
+            basePath: '/ap/capture',
+            currentParams: data.currentParams,
+            paramKey: 'status',
+            label: data.statusLabel,
+            options: data.statusOptions,
+          }),
+        ]),
+        when: f('onQueue'),
+      },
+    ],
+    body: [
+      {
+        ...widgetBlock('capture-list', {
+          rows: data.rows,
+          mailboxes: data.mailboxes,
+          manageMailboxesHref: data.manageMailboxesHref,
+          currentParams: data.currentParams,
+          canCreate: data.canCreate,
+          uploadDisabled: data.uploadDisabled,
+          sort: data.sort,
+          dir: data.dir,
+        }),
+        when: f('onQueue'),
+      },
+      {
+        ...pagination({
+          basePath: '/ap/capture',
+          total: f('total'),
+          page: f('currentPage'),
+          perPage: f('perPage'),
+          // The native pager is unwrapped here — no `mt-3` spacer.
+          bare: true,
+        }),
+        when: f('onQueue'),
+      },
+      {
+        ...widgetBlock('capture-review-drawer', {
+          drawer: data.drawer,
+        }),
+        when: f('drawerOpen'),
+      },
+      {
+        ...widgetBlock('empty-state', {
+          title: data.inbox.emptyTitle,
+          description: data.inbox.emptyDescription,
+        }),
+        when: f('inbox.empty'),
+      },
+      {
+        ...grid('rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900', [
+          table({
+            variant: 'app',
+            rows: f('inbox.rows'),
+            rowKey: item('id'),
+            columns: [
+              column(f('inbox.columns.received'), text(item('receivedLine')), { className: 'whitespace-nowrap text-xs text-slate-500' }),
+              column(f('inbox.columns.address'), text(item('mailboxLabel'))),
+              column(f('inbox.columns.from'), text(item('fromLine'))),
+              column(f('inbox.columns.subject'), text(item('subjectLine'))),
+              column(f('inbox.columns.attachments'), number(item('attachmentCount')), { align: 'right' }),
+              column(f('inbox.columns.outcome'), badge(item('outcomeLabel'), { variant: item('outcomeVariant') })),
+              column(f('inbox.columns.detail'), text(item('detailLine')), { className: 'text-xs text-slate-500' }),
+              column(f('inbox.columns.capture'), link(item('captureLabel'), item('captureHref')), { srOnlyHeader: true }),
+            ],
+          }),
+        ]),
+        when: f('inbox.hasRows'),
+      },
+      {
+        ...pagination({
+          basePath: '/ap/capture',
+          total: f('inbox.total'),
+          page: f('inbox.currentPage'),
+          perPage: f('inbox.perPage'),
+          bare: true,
+        }),
+        when: f('inbox.hasRows'),
+      },
+    ],
+  })
+}

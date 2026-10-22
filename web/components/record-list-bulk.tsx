@@ -55,7 +55,7 @@ export function RecordListBulkTable({
   const [active, setActive] = useState<number>(-1)
   const [running, setRunning] = useState<{ done: number; total: number } | null>(null)
   const [outcomes, setOutcomes] = useState<Outcome[] | null>(null)
-  const anchor = useRef<number | null>(null)
+  const anchor = useRef<string | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
   const selectable = actions !== null && (actions.post || actions.submit)
 
@@ -68,10 +68,10 @@ export function RecordListBulkTable({
     const row = rows[index]
     if (!row) return
     // The range starts at the previous toggle, read before it moves here.
-    const from0 = anchor.current
+    const from0 = anchor.current === null ? -1 : rows.findIndex((candidate) => candidate.id === anchor.current)
     setSelected((current) => {
       const next = new Set(current)
-      if (extend && from0 !== null) {
+      if (extend && from0 >= 0) {
         const [from, to] = [Math.min(from0, index), Math.max(from0, index)]
         const adding = !current.has(row.id)
         for (let i = from; i <= to; i += 1) {
@@ -83,7 +83,7 @@ export function RecordListBulkTable({
       else next.add(row.id)
       return next
     })
-    anchor.current = index
+    anchor.current = row.id
   }, [rows])
 
   const focusRow = useCallback((index: number) => {
@@ -119,24 +119,13 @@ export function RecordListBulkTable({
       body: JSON.stringify({ action: name, documentId }),
     }, { fallback: t('refusedFallback') })
     for (const row of targets) {
-      let outcome: Outcome
-      if (row.status === 'draft') {
-        const submitted = await call('submit', row.id)
-        if (!submitted.ok) outcome = { id: row.id, number: row.number, result: 'refused', reason: submitted.error.displayMessage(t('refusedFallback')) }
-        else if ((submitted.data as { pendingApproval?: unknown } | null)?.pendingApproval === true) outcome = { id: row.id, number: row.number, result: 'pending' }
-        else if (action === 'submit') outcome = { id: row.id, number: row.number, result: 'submitted' }
-        else {
-          const posted = await call('post', row.id)
-          outcome = posted.ok
-            ? { id: row.id, number: row.number, result: 'posted' }
-            : { id: row.id, number: row.number, result: 'refused', reason: posted.error.displayMessage(t('refusedFallback')) }
-        }
-      } else {
-        const posted = await call('post', row.id)
-        outcome = posted.ok
-          ? { id: row.id, number: row.number, result: 'posted' }
-          : { id: row.id, number: row.number, result: 'refused', reason: posted.error.displayMessage(t('refusedFallback')) }
-      }
+      // Posting a draft uses the native atomic submit/release/post command.
+      const answer = await call(action, row.id)
+      const outcome: Outcome = !answer.ok
+        ? { id: row.id, number: row.number, result: 'refused', reason: answer.error.displayMessage(t('refusedFallback')) }
+        : (answer.data as { pendingApproval?: unknown } | null)?.pendingApproval === true
+          ? { id: row.id, number: row.number, result: 'pending' }
+          : { id: row.id, number: row.number, result: action === 'post' ? 'posted' : 'submitted' }
       results.push(outcome)
       setRunning({ done: results.length, total: targets.length })
     }

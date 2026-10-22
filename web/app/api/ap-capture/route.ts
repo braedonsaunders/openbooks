@@ -31,3 +31,5 @@ export const POST = defineRoute({
     }
     const failed = intake.results.some((result) => result.status === 'failed')
     return NextResponse.json({ ids: intake.ids, results: intake.results }, { status: failed ? 207 : 201 })
+  },
+})

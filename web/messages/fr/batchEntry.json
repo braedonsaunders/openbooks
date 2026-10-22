@@ -71,6 +71,7 @@
     "confirm": "Enregistrer quand même"
   },
   "refusals": {
+    "taxUnresolved": "La taxe n’a pas pu être calculée à la date d’une facture. Vérifiez les taux en vigueur dans Configuration, puis réessayez d’enregistrer.",
     "nothingToSave": "Ce lot ne contient aucune facture non enregistrée.",
     "rowsNeedAttention": "{count, plural, one {# facture est à corriger} other {# factures sont à corriger}} avant tout enregistrement. {first}",
     "rowIssue": "Ligne {row} : {issue}.",

@@ -85,7 +85,7 @@
     "gridMenu": "行菜单",
     "gridPaste": "粘贴从电子表格复制的行",
     "pickerType": "输入以搜索列表（名称和代码）",
-    "pickerTab": "接受高亮的匹配项并继续",
+    "pickerTab": "接受明确匹配的名称或代码并移至下一项",
     "pickerOpen": "打开列表",
     "pickerClose": "关闭列表并保留当前值",
     "pickerCreate": "创建所输入的供应商或客户",

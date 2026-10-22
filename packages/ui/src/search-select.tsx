@@ -18,7 +18,7 @@ import { cn } from './utils'
 import { anchoredMenuPosition } from './anchored-menu-position'
 import { useHydrated } from './use-hydrated'
 import { useMediaQuery } from './use-media-query'
-import { hasExactMatch, rankOptions, readRecentChoices, rememberRecentChoice } from './search-select-ranking'
+import { hasExactMatch, matchTier, rankOptions, readRecentChoices, rememberRecentChoice } from './search-select-ranking'
 import { focusAdjacentField } from './focus-navigation'
 
 export type SelectOption = {
@@ -556,7 +556,18 @@ export function SearchSelect({
         // ⌘/Ctrl+Enter belongs to the form (save, post): close the list
         // without choosing and let the command run.
         if (event.metaKey || event.ctrlKey) {
+          consume()
           close('trigger')
+          const forwarded = new KeyboardEvent('keydown', {
+            key: event.key, code: event.code, metaKey: event.metaKey, ctrlKey: event.ctrlKey,
+            altKey: event.altKey, shiftKey: event.shiftKey, bubbles: true, cancelable: true,
+          })
+          // Forward after the picker has closed, so its own key handler
+          // cannot consume the form command a second time.
+          requestAnimationFrame(() => {
+            triggerRef.current?.focus()
+            triggerRef.current?.dispatchEvent(forwarded)
+          })
           return
         }
         consume()
@@ -573,7 +584,7 @@ export function SearchSelect({
         consume()
         const direction = event.shiftKey ? 'previous' : 'next'
         const o = filtered[highlight]
-        if (trimmedQuery && o && !o.disabled && (o.value !== CREATE_VALUE)) choose(o.value, direction)
+        if (trimmedQuery && o && !o.disabled && (o.value !== CREATE_VALUE) && (matchTier(o, trimmedQuery) ?? Infinity) <= 2) choose(o.value, direction)
         else close(direction)
         return
       }

@@ -1,3 +1,5 @@
+import { taxProfileMap } from '@openbooks/engine/documents/totals'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'
 import { z } from 'zod'
 import { uuidString } from '@openbooks/engine/platform/identifiers'
 import { defineRoute } from '@/lib/api/route'
@@ -19,9 +21,9 @@ import { DOC_KINDS, documentEditPermission } from '../../../../lib/document-kind
 const DefaultsQuerySchema = z.object({
   kind: z.enum(Object.keys(DOC_KINDS) as [string, ...string[]]),
   partyId: uuidString().optional(),
-  documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  documentDate: z.string().refine(isIsoCalendarDate).optional(),
   itemIds: z.array(uuidString()).max(200),
-  include: z.array(z.enum(['party'])).max(1),
+  include: z.array(z.enum(['party', 'tax'])).max(2),
 })
 
 export const runtime = 'nodejs'
@@ -60,7 +62,7 @@ export const GET = defineRoute({
     const scope = gate.allowedSubsidiaryIds
     const includeParty = query.include.includes('party')
     try {
-      const [terms, lines, party] = await Promise.all([
+      const [terms, lines, party, taxes] = await Promise.all([
         query.documentDate
           ? resolveTermsDueDate(db, orgId, { kind: query.kind, partyId, documentDate: query.documentDate })
           : Promise.resolve(null),
@@ -71,8 +73,11 @@ export const GET = defineRoute({
               resolveRecentPartyDocument(db, orgId, { kind: query.kind, partyId, allowedSubsidiaryIds: scope }),
             ]).then(([line, recent]) => ({ line, recent }))
           : Promise.resolve(null),
+        query.include.includes('tax') ? taxProfileMap(orgId, query.documentDate) : Promise.resolve(null),
       ])
-      return NextResponse.json(includeParty ? { terms, lines, party } : { terms, lines })
+      return NextResponse.json({ terms, lines, ...(includeParty ? { party } : {}),
+        ...(taxes ? { taxes: { codes: Object.fromEntries(taxes.codes), groups: Object.fromEntries(taxes.groups) } } : {}),
+      })
     } catch (error) {
       if (error instanceof DocumentDefaultsError) return apiErrorResponse(error)
       throw error

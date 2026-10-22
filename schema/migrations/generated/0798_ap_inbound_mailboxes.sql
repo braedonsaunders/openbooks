@@ -1,4 +1,4 @@
--- Inbound email addresses for AP capture per legal entity, their sealed signing secrets, the inbound message log, the capture's receiving entity, and the effective-dated auto-post policy.
+-- Inbound email addresses for AP capture per legal entity with their accountable owners, sealed signing secrets, the inbound message log with signature evidence and delivery leases, the capture's receiving entity, and the effective-dated auto-post policy.
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
@@ -32,6 +32,7 @@ CREATE TABLE public.ap_capture_mailboxes (
   is_active boolean NOT NULL DEFAULT true,
   rate_window_start timestamptz,
   rate_window_count integer NOT NULL DEFAULT 0 CHECK (rate_window_count >= 0),
+  owner_user_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   created_by uuid NOT NULL,
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -40,6 +41,9 @@ CREATE TABLE public.ap_capture_mailboxes (
   CONSTRAINT ap_capture_mailboxes_token_unique UNIQUE (token),
   CONSTRAINT ap_capture_mailboxes_subsidiary_fkey
     FOREIGN KEY (org_id, subsidiary_id) REFERENCES public.subsidiaries (org_id, id)
+    DEFERRABLE INITIALLY DEFERRED,
+  CONSTRAINT ap_capture_mailboxes_owner_fkey
+    FOREIGN KEY (org_id, owner_user_id) REFERENCES public.users (org_id, id)
     DEFERRABLE INITIALLY DEFERRED,
   CONSTRAINT ap_capture_mailboxes_created_by_fkey
     FOREIGN KEY (org_id, created_by) REFERENCES public.users (org_id, id)
@@ -51,6 +55,8 @@ CREATE TABLE public.ap_capture_mailboxes (
 CREATE INDEX ap_capture_mailboxes_subsidiary_idx ON public.ap_capture_mailboxes (org_id, subsidiary_id);
 COMMENT ON TABLE public.ap_capture_mailboxes IS
   'Inbound email address for AP capture. The unguessable token authenticates the provider webhook; attachments become captures for the address''s legal entity.';
+COMMENT ON COLUMN public.ap_capture_mailboxes.owner_user_id IS
+  'User captures from this address are attributed to. Receipt refuses unless the owner is active, holds AP create and can access the address''s legal entity.';
 
 CREATE TABLE public.ap_capture_mailbox_credentials (
   id uuid PRIMARY KEY DEFAULT public.uuid_generate_v7(),
@@ -85,7 +91,12 @@ CREATE TABLE public.ap_capture_inbound_messages (
   from_address text CHECK (from_address IS NULL OR length(from_address) <= 320),
   subject text CHECK (subject IS NULL OR length(subject) <= 998),
   attachment_count integer NOT NULL CHECK (attachment_count >= 0),
+  content_digest text NOT NULL CHECK (content_digest ~ '^[0-9a-f]{64}$'),
+  signature_verified boolean NOT NULL DEFAULT false,
+  provider_nonce text CHECK (provider_nonce IS NULL OR length(provider_nonce) BETWEEN 1 AND 512),
   received_at timestamptz NOT NULL DEFAULT now(),
+  claimed_at timestamptz NOT NULL DEFAULT now(),
+  claim_attempt integer NOT NULL DEFAULT 1 CHECK (claim_attempt >= 1),
   outcome text NOT NULL DEFAULT 'received'
     CHECK (outcome IN ('received', 'captured', 'rejected_sender', 'no_attachments', 'duplicate', 'error')),
   outcome_reason text CHECK (outcome_reason IS NULL OR length(outcome_reason) <= 1000),
@@ -101,10 +112,21 @@ CREATE TABLE public.ap_capture_inbound_messages (
 );
 CREATE INDEX ap_capture_inbound_messages_recent_idx
   ON public.ap_capture_inbound_messages (org_id, received_at DESC);
+-- A provider signature that covers only a timestamp and a one-time token
+-- (Mailgun) is accepted once per address; a second message presenting the
+-- same token is a replay.
+CREATE UNIQUE INDEX ap_capture_inbound_messages_nonce_unique
+  ON public.ap_capture_inbound_messages (org_id, mailbox_id, provider_nonce)
+  WHERE provider_nonce IS NOT NULL;
 COMMENT ON TABLE public.ap_capture_inbound_messages IS
   'One row per inbound AP email, idempotent on the address and message id. The received facts are immutable; the outcome is written once when processing finishes.';
+COMMENT ON COLUMN public.ap_capture_inbound_messages.signature_verified IS
+  'True when the address had a provider signing secret and the delivery''s signature verified against it. Only verified email may auto-post.';
+COMMENT ON COLUMN public.ap_capture_inbound_messages.claimed_at IS
+  'Processing lease. A message still received after the lease expires may be claimed again by a provider retry.';
 
--- The received facts never change, and an outcome is written exactly once.
+-- The received facts never change, an outcome is written exactly once, and
+-- an unfinished message's processing claim only moves forward.
 CREATE FUNCTION public.ap_capture_inbound_message_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = public, pg_catalog AS $$
 BEGIN
@@ -115,8 +137,14 @@ BEGIN
      OR NEW.mailbox_id IS DISTINCT FROM OLD.mailbox_id OR NEW.message_id IS DISTINCT FROM OLD.message_id
      OR NEW.provider IS DISTINCT FROM OLD.provider OR NEW.from_address IS DISTINCT FROM OLD.from_address
      OR NEW.subject IS DISTINCT FROM OLD.subject OR NEW.attachment_count IS DISTINCT FROM OLD.attachment_count
+     OR NEW.content_digest IS DISTINCT FROM OLD.content_digest
+     OR NEW.signature_verified IS DISTINCT FROM OLD.signature_verified
+     OR NEW.provider_nonce IS DISTINCT FROM OLD.provider_nonce
      OR NEW.received_at IS DISTINCT FROM OLD.received_at THEN
     RAISE EXCEPTION 'Inbound AP email facts are immutable; only the processing outcome may be recorded.' USING ERRCODE = '23514';
+  END IF;
+  IF NEW.claim_attempt < OLD.claim_attempt THEN
+    RAISE EXCEPTION 'An inbound AP email processing claim only moves forward.' USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
 END $$;

@@ -104,7 +104,7 @@ async function fixture() {
     session.user = null
     await dropScratchOrg(org.orgId)
   }
-  return { org, hiddenCapture, visibleCapture, hiddenVendor, hiddenPo, normalized, asJson, getItem, getFile, patch, materialize, actions, associations, revision, close }
+  return { org, actor, folder, hiddenSub, hiddenCapture, visibleCapture, hiddenVendor, hiddenPo, normalized, asJson, getItem, getFile, patch, materialize, actions, associations, revision, close }
 }
 
 test('a restricted caller cannot reach another entity’s capture by id', async () => {
@@ -145,6 +145,41 @@ test('a restricted caller cannot reach another entity’s capture by id', async 
       assert.equal(hiddenAct.body?.results?.[0]?.ok, false)
       assert.equal(hiddenAct.body?.results?.[0]?.error, missingAct.body?.results?.[0]?.error)
     }
+  } finally {
+    await f.close()
+  }
+})
+
+test('an emailed capture received by another entity is unreachable by id, including its source file', async () => {
+  const f = await fixture()
+  try {
+    const emailedFile = randomUUID()
+    const emailedCapture = randomUUID()
+    // The vendor is org-wide and there is no purchase order: only the
+    // receiving entity named by the inbound address fences this capture.
+    const versionId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+        values (${emailedFile}, ${f.org.orgId}, ${f.folder}, 'emailed.pdf', 'application/pdf', 8)`)
+      await db.execute(sql`insert into file_versions (id, file_id, version_number, content_type, size_bytes, storage_kind)
+        values (${versionId}, ${emailedFile}, 1, 'application/pdf', 8, 'db')`)
+      await db.execute(sql`insert into file_blobs (version_id, bytes) values (${versionId}, '%PDF-1.4'::bytea)`)
+      await db.execute(sql`update files set current_version_id = ${versionId} where id = ${emailedFile} and org_id = ${f.org.orgId}`)
+      await db.execute(sql`
+        insert into ap_capture_items (id, org_id, file_id, status, source, subsidiary_id, original_filename, content_hash, document_kind, normalized, vendor_candidate_id, created_by, updated_by)
+        values (${emailedCapture}, ${f.org.orgId}, ${emailedFile}, 'needs_review', 'email', ${f.org.subsidiaryId}, 'emailed.pdf', ${randomUUID()}, 'vendor_bill', ${JSON.stringify(f.normalized)}::jsonb, ${f.org.vendorId}, ${f.actor}, ${f.actor})
+      `)
+    })
+    const ownEntity = await f.getFile(emailedCapture)
+    assert.equal(ownEntity.status, 200, 'the source file is readable while the capture belongs to the caller’s entity')
+    await withBypassContext(() => db.execute(sql`update ap_capture_items set subsidiary_id = ${f.hiddenSub} where id = ${emailedCapture}`))
+    const missing = randomUUID()
+    const hiddenFile = await f.asJson(await f.getFile(emailedCapture))
+    assert.deepEqual(hiddenFile, await f.asJson(await f.getFile(missing)))
+    assert.equal(hiddenFile.status, 404)
+    const hiddenGet = await f.asJson(await f.getItem(emailedCapture))
+    assert.deepEqual(hiddenGet, await f.asJson(await f.getItem(missing)))
+    assert.equal(hiddenGet.status, 404)
   } finally {
     await f.close()
   }

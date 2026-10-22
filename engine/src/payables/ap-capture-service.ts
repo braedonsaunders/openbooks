@@ -1416,13 +1416,17 @@ export {
   consumeMailboxDelivery,
   createMailbox,
   finishInboundMessage,
+  INBOUND_MESSAGE_LEASE_MINUTES,
   listInboundMessages,
   listMailboxes,
   MailboxConfigurationError,
+  mailboxOwnerAuthority,
   resolveMailboxByToken,
+  takeMailboxOwnership,
   updateMailbox,
   type InboundMessageListRow,
   type MailboxListRow,
+  type MailboxOwnerAuthority,
   type ResolvedMailbox,
 } from "./ap-inbound-mailbox-service.ts";
 export {
@@ -1435,6 +1439,7 @@ export {
   type InboundAttachment,
   type InboundEmail,
   type InboundEmailProvider,
+  type InboundSignatureEvidence,
 } from "./ap-inbound-email.ts";
 export {
   DEFAULT_TRUST_STREAK,

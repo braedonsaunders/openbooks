@@ -71,6 +71,7 @@
     "confirm": "このまま保存"
   },
   "refusals": {
+    "taxUnresolved": "請求書の日付に適用される税額を確定できません。設定で有効な税率を確認して、保存を再試行してください。",
     "nothingToSave": "このバッチに未保存の請求書はありません。",
     "rowsNeedAttention": "保存する前に {count} 件の請求書を修正する必要があります。{first}",
     "rowIssue": "{row} 行目：{issue}。",

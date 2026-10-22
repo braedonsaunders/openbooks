@@ -129,13 +129,13 @@ test("an envelope without a message id derives the same id for the same content"
   assert.match(derivedMessageId(base), /^sha256:[0-9a-f]{64}$/);
 });
 
-test("Mailgun signatures verify under the signing key and refuse a wrong key or a stale timestamp", () => {
+test("Mailgun signatures verify under the signing key, name the token to record, and refuse a wrong key or a stale timestamp", () => {
   const now = new Date("2026-10-21T12:00:00Z");
   const timestamp = String(Math.floor(now.getTime() / 1000));
   const signature = createHmac("sha256", "key-1").update(`${timestamp}tok`).digest("hex");
   const email = { mailgunSignature: { timestamp, token: "tok", signature } };
   const base = { provider: "mailgun" as const, headers: {}, rawBody: Buffer.alloc(0), email, now };
-  verifyInboundSignature({ ...base, secret: "key-1" });
+  assert.deepEqual(verifyInboundSignature({ ...base, secret: "key-1" }), { verified: true, nonce: "tok" });
   assert.throws(() => verifyInboundSignature({ ...base, secret: "key-2" }), (error: unknown) => (error as InboundEmailError).code === "signature_invalid");
   assert.throws(
     () => verifyInboundSignature({ ...base, secret: "key-1", now: new Date(now.getTime() + 16 * 60_000) }),
@@ -150,7 +150,10 @@ test("Mailgun signatures verify under the signing key and refuse a wrong key or 
 test("Postmark and SendGrid authenticate with the Basic password; generic with a body HMAC", () => {
   const basic = (password: string) => `Basic ${Buffer.from(`inbound:${password}`).toString("base64")}`;
   for (const provider of ["postmark", "sendgrid"] as const) {
-    verifyInboundSignature({ provider, secret: "s3cret", headers: { authorization: basic("s3cret") }, rawBody: Buffer.alloc(0), email: {} });
+    assert.deepEqual(
+      verifyInboundSignature({ provider, secret: "s3cret", headers: { authorization: basic("s3cret") }, rawBody: Buffer.alloc(0), email: {} }),
+      { verified: true, nonce: null },
+    );
     assert.throws(
       () => verifyInboundSignature({ provider, secret: "s3cret", headers: { authorization: basic("guess") }, rawBody: Buffer.alloc(0), email: {} }),
       (error: unknown) => (error as InboundEmailError).code === "signature_invalid",
@@ -162,15 +165,21 @@ test("Postmark and SendGrid authenticate with the Basic password; generic with a
   }
   const rawBody = Buffer.from("{\"attachments\":[]}");
   const good = `sha256=${createHmac("sha256", "s3cret").update(rawBody).digest("hex")}`;
-  verifyInboundSignature({ provider: "generic", secret: "s3cret", headers: { "x-openbooks-signature": good }, rawBody, email: {} });
+  assert.deepEqual(
+    verifyInboundSignature({ provider: "generic", secret: "s3cret", headers: { "x-openbooks-signature": good }, rawBody, email: {} }),
+    { verified: true, nonce: null },
+  );
   assert.throws(
     () => verifyInboundSignature({ provider: "generic", secret: "s3cret", headers: { "x-openbooks-signature": good }, rawBody: Buffer.from("{}"), email: {} }),
     (error: unknown) => (error as InboundEmailError).code === "signature_invalid",
   );
 });
 
-test("with no signing secret the token alone authenticates", () => {
-  verifyInboundSignature({ provider: "mailgun", secret: null, headers: {}, rawBody: Buffer.alloc(0), email: {} });
+test("with no signing secret the token alone authenticates, and the delivery is unverified", () => {
+  assert.deepEqual(
+    verifyInboundSignature({ provider: "mailgun", secret: null, headers: {}, rawBody: Buffer.alloc(0), email: {} }),
+    { verified: false, nonce: null },
+  );
 });
 
 test("the sender allow-list matches exact addresses and whole domains, never subdomains", () => {

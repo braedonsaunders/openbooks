@@ -12,7 +12,17 @@
     "copied": "In die Zwischenablage kopiert",
     "copyFailed": "Kopieren nicht möglich. Markieren Sie den Text und kopieren Sie ihn manuell.",
     "none": "Es ist noch keine Eingangsadresse aktiv.",
-    "manage": "Adressen verwalten"
+    "manage": "Adressen verwalten",
+    "owner": "Inhaber: {name}",
+    "ownerProblem": "Inhaber kann keine Rechnungen empfangen",
+    "ownerProblemHint": "Der Inhaber ist inaktiv, darf keine Rechnungen erstellen oder hat keinen Zugriff auf diese juristische Einheit; E-Mails an diese Adresse werden daher abgelehnt. Übernehmen Sie die Adresse oder legen Sie sie neu an.",
+    "takeOwnership": "Übernehmen",
+    "takeOwnershipAria": "Adresse {label} übernehmen",
+    "takeOwnershipTitle": "{label} übernehmen",
+    "takeOwnershipMessage": "Rechnungen, die an diese Adresse gesendet werden, werden Ihnen zugeordnet, und Ihre Berechtigungen bestimmen, was mit ihnen geschieht.",
+    "takeOwnershipReason": "Grund",
+    "ownershipTaken": "Sie sind jetzt Inhaber dieser Adresse",
+    "takeOwnershipFailed": "Die Adresse konnte nicht übernommen werden."
   },
   "inbox": {
     "columns": {
@@ -49,6 +59,7 @@
     "refused": "Nicht automatisch gebucht: {message}",
     "skipped": {
       "policy_off": "Automatisches Buchen war beim Eingang dieser Rechnung deaktiviert.",
+      "unsigned_email": "Nicht automatisch gebucht: Per E-Mail eingegangene Rechnungen werden nur automatisch gebucht, wenn die Adresse ein Signaturgeheimnis hat und die Signatur der Nachricht geprüft wurde.",
       "not_a_bill": "Lieferantengutschriften werden nie automatisch gebucht.",
       "needs_review": "Nicht automatisch gebucht: Ein Feld oder eine Position muss geprüft werden.",
       "duplicate": "Nicht automatisch gebucht: Dies könnte ein Duplikat sein.",

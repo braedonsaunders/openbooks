@@ -2,14 +2,18 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db, type SqlExecutor } from '../platform/db.ts'
 import { subsidiaryVisibleFilter } from '../organization/subsidiary-scope.ts'
 
-/** AP intake packets follow both the matched vendor and purchase order.
- * Null references are org-wide; an empty actor scope admits no packet.
- * Consumers join those records as `vendor` and `po`. */
+/** AP intake packets follow the matched vendor, the matched purchase order
+ * and the receiving legal entity an intake channel named (an inbound email
+ * address belongs to one entity). Null references are org-wide; an empty
+ * actor scope admits no packet. Consumers alias the capture as `ci` and join
+ * the matched records as `vendor` and `po`. This is the one visibility rule
+ * for captures: lists, item reads, actions and source-file reads share it. */
 export function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null): SQL {
   if (allowed === null) return sql``
   if (allowed.size === 0) return sql` and false`
   return sql`${subsidiaryVisibleFilter(sql`po.subsidiary_id`, allowed, { orgWideNull: true })}
-             ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}`
+             ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}
+             ${subsidiaryVisibleFilter(sql`ci.subsidiary_id`, allowed, { orgWideNull: true })}`
 }
 
 /**

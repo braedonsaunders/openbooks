@@ -142,14 +142,17 @@ export function resolveEnteredAmount(
   if (source === '') return { kind: 'empty' }
   if (source.startsWith('=')) source = source.slice(1)
   const minorUnits = options.minorUnits ?? 2
-  if (options.autoDecimal && minorUnits > 0 && /^-?\d+$/.test(source)) {
+  if (options.autoDecimal && !isAmountExpression(text) && minorUnits > 0 && /^[+-]?\d+$/.test(source)) {
     const negative = source.startsWith('-')
-    const digits = (negative ? source.slice(1) : source).padStart(minorUnits + 1, '0')
+    const digits = source.replace(/^[+-]/, '').padStart(minorUnits + 1, '0')
     source = `${negative ? '-' : ''}${digits.slice(0, -minorUnits)}.${digits.slice(-minorUnits)}`
   }
   try {
     const computed = isAmountExpression(text)
-    const value = toLedgerString(evaluate(tokenize(source)))
+    if (!computed && !/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(source)) return { kind: 'invalid' }
+    const rational = evaluate(tokenize(source))
+    if (!computed && (rational.n * LEDGER_SCALE) % rational.d !== 0n) return { kind: 'invalid' }
+    const value = toLedgerString(rational)
     // Fifteen whole digits is the ledger's numeric(19,4) range.
     if (value.replace('-', '').split('.')[0]!.length > 15) return { kind: 'invalid' }
     return { kind: 'amount', value, computed }
@@ -167,7 +170,7 @@ export function displayEnteredAmount(value: unknown, minorUnits = 2): string {
   if (value === null || value === undefined) return ''
   const text = String(value)
   const match = /^(-?\d+)\.(\d+)$/.exec(text)
-  if (!match) return text
+  if (!match) return /^-?\d+$/.test(text) && minorUnits > 0 ? `${text}.${'0'.repeat(minorUnits)}` : text
   const [, whole, fraction] = match
   const trimmed = fraction!.replace(/0+$/, '')
   const kept = trimmed.length >= minorUnits ? trimmed : fraction!.slice(0, minorUnits).padEnd(minorUnits, '0')

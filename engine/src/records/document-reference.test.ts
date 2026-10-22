@@ -20,3 +20,9 @@ test("bills and vendor credits match by reference; customer invoices do not", ()
   assert.equal(isReferenceDuplicateKind("vendor_credit"), true);
   assert.equal(isReferenceDuplicateKind("customer_invoice"), false);
 });
+
+test("international references retain their identifying letters and digits", () => {
+  assert.equal(normalizeDocumentReference("発票-１２３"), "発票１２３");
+  assert.equal(normalizeDocumentReference("事实-42"), "事实42");
+  assert.notEqual(normalizeDocumentReference("发票-42"), normalizeDocumentReference("事实-42"));
+});

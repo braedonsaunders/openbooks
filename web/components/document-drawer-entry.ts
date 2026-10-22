@@ -193,8 +193,8 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
       if (previous !== undefined && !partyChanged) return row
       let accountId = row.accountId
       let taxProfileId = row.taxProfileId
-      if (follows(row.accountId, previous?.accountId) && defaultAccount) accountId = defaultAccount
-      if (config.hasTax && follows(row.taxProfileId, previous?.taxProfileId) && defaultTax) taxProfileId = defaultTax
+      if (follows(row.accountId, previous?.accountId) ) accountId = defaultAccount
+      if (config.hasTax && follows(row.taxProfileId, previous?.taxProfileId) ) taxProfileId = defaultTax
       applied.current.set(row.clientKey, { accountId, taxProfileId })
       if (accountId === row.accountId && taxProfileId === row.taxProfileId) return row
       changed = true
@@ -225,13 +225,16 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
   }, [accountIds, itemIds, taxValues, config.hasTax])
 
   const recallFrom = useCallback((source: RecentPartyDocument, forParty: string) => {
+    if (!source.currency || source.currency !== doc.currency) return
     const undo = { ...latest.current }
     const next = recentToRows(source)
-    for (const row of next) applied.current.set(row.clientKey, { accountId: row.accountId, taxProfileId: row.taxProfileId })
+    appliedParty.current = forParty
+    // Recalled coding belongs to the source lines, never to party defaults.
+    applied.current.clear()
     setRows(next)
     if (!undo.memo && source.memo) setMemo(source.memo)
     setRecall({ key: `${forParty}:${source.id}`, documentNumber: source.documentNumber, undo })
-  }, [recentToRows, setRows, setMemo])
+  }, [recentToRows, setRows, setMemo, doc.currency])
   const applyRecall = useCallback(() => {
     if (recent) recallFrom(recent, partyId)
   }, [recent, partyId, recallFrom])
@@ -246,6 +249,7 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
   // "Apply" recalls automatically when the party's answer arrives on a new
   // document whose lines are still empty; "suggest" offers the same as a
   // one-key action.
+  const carriedParty = useRef<string | null>(null)
   const autoRecall = isCreate && preferences.recallLastDocument === 'apply'
   useEffect(() => {
     if (!partyKey) return
@@ -257,7 +261,7 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
         if (!live) return
         const answer = { partyId: partyKey, line: body?.party?.line ?? null, recent: body?.party?.recent ?? null }
         setPartyAnswer(answer)
-        if (autoRecall && answer.recent && latest.current.rows.every((row) => isBlankDrawerLine(row))) recallFrom(answer.recent, partyKey)
+        if (autoRecall && carriedParty.current !== partyKey && answer.recent && latest.current.rows.every((row) => isBlankDrawerLine(row))) recallFrom(answer.recent, partyKey)
       })
       // Defaults are a convenience: an unavailable lookup leaves lines blank
       // for the clerk to code, and the save validates them as always.
@@ -267,7 +271,7 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
     }
   }, [config.kind, partyKey, autoRecall, recallFrom])
 
-  const recallAvailable = Boolean(recent) && editable && preferences.recallLastDocument !== 'off' && recall === null
+  const recallAvailable = Boolean(recent?.currency && recent.currency === doc.currency) && editable && preferences.recallLastDocument !== 'off' && recall === null
 
   // -- live duplicate reference --------------------------------------------
   const referenceKinds = config.kind === 'vendor_bill' || config.kind === 'vendor_credit'
@@ -303,7 +307,10 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
     const carry = takeEntryCarry(config.kind)
     if (!carry) return
     if (carry.documentDate) setDocumentDate(carry.documentDate)
-    if (carry.partyId && (parties ?? []).some((party) => party.id === carry.partyId)) changeParty(carry.partyId)
+    if (carry.partyId && (parties ?? []).some((party) => party.id === carry.partyId)) {
+      carriedParty.current = carry.partyId
+      changeParty(carry.partyId)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const stashCarry = useCallback(() => {

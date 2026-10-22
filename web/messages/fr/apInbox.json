@@ -12,7 +12,17 @@
     "copied": "Copié dans le presse-papiers",
     "copyFailed": "Copie impossible. Sélectionnez le texte et copiez-le manuellement.",
     "none": "Aucune adresse de réception n’est encore active.",
-    "manage": "Gérer les adresses"
+    "manage": "Gérer les adresses",
+    "owner": "Propriétaire : {name}",
+    "ownerProblem": "Le propriétaire ne peut pas recevoir de factures",
+    "ownerProblemHint": "Le propriétaire est inactif, n’est pas autorisé à créer des factures ou n’a pas accès à cette entité juridique ; les e-mails envoyés à cette adresse sont donc refusés. Prenez-en la propriété ou recréez l’adresse.",
+    "takeOwnership": "Prendre la propriété",
+    "takeOwnershipAria": "Prendre la propriété de l’adresse {label}",
+    "takeOwnershipTitle": "Prendre la propriété de {label}",
+    "takeOwnershipMessage": "Les factures envoyées à cette adresse vous seront attribuées, et vos autorisations déterminent leur traitement.",
+    "takeOwnershipReason": "Motif",
+    "ownershipTaken": "Vous êtes maintenant propriétaire de cette adresse",
+    "takeOwnershipFailed": "Impossible de prendre la propriété de l’adresse."
   },
   "inbox": {
     "columns": {
@@ -49,6 +59,7 @@
     "refused": "Non comptabilisée automatiquement : {message}",
     "skipped": {
       "policy_off": "La comptabilisation automatique était désactivée à la réception de cette facture.",
+      "unsigned_email": "Non comptabilisée automatiquement : une facture reçue par e-mail n’est comptabilisée automatiquement que si l’adresse dispose d’un secret de signature et que la signature du message a été vérifiée.",
       "not_a_bill": "Les avoirs fournisseurs ne sont jamais comptabilisés automatiquement.",
       "needs_review": "Non comptabilisée automatiquement : un champ ou une ligne doit être révisé.",
       "duplicate": "Non comptabilisée automatiquement : il peut s’agir d’un doublon.",

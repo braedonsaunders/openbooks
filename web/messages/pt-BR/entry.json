@@ -85,7 +85,7 @@
     "gridMenu": "Menu da linha",
     "gridPaste": "Colar linhas copiadas de uma planilha",
     "pickerType": "Digite para buscar em uma lista (nomes e códigos)",
-    "pickerTab": "Aceitar a correspondência destacada e avançar",
+    "pickerTab": "Aceitar um nome ou código com correspondência clara e continuar",
     "pickerOpen": "Abrir a lista",
     "pickerClose": "Fechar uma lista e manter o valor",
     "pickerCreate": "Criar o fornecedor ou cliente digitado",

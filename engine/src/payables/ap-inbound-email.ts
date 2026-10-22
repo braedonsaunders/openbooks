@@ -38,7 +38,8 @@ export type InboundEmailErrorCode =
   | "provider_mismatch"
   | "unsupported_delivery"
   | "signature_required"
-  | "signature_invalid";
+  | "signature_invalid"
+  | "signature_replayed";
 
 /** A delivery the adapters cannot accept, with an operator-facing remedy. */
 export class InboundEmailError extends Error {
@@ -168,12 +169,25 @@ export function basicAuthPassword(authorization: string | null | undefined): str
   return separator < 0 ? null : decoded.slice(separator + 1);
 }
 
+/** What signature verification established about one delivery. */
+export type InboundSignatureEvidence = {
+  /** The address has a signing secret and the delivery's signature verified against it. */
+  verified: boolean;
+  /**
+   * The one-time value the signature covers when the provider signs only a
+   * timestamp and token (Mailgun). It is recorded with the message so the
+   * same signed token cannot authenticate a second message.
+   */
+  nonce: string | null;
+};
+
 /**
  * Verify a delivery against the address's signing secret. With no secret
- * configured the unguessable token is the only credential. With one:
+ * configured the unguessable token is the only credential and the delivery
+ * is unverified. With one:
  *
  * - Mailgun: HMAC-SHA256 of timestamp + token under the signing key, within
- *   the replay window;
+ *   the replay window; the token is returned as the nonce to record;
  * - Postmark and SendGrid: HTTP Basic credentials in the webhook URL, whose
  *   password must equal the secret;
  * - generic: `X-OpenBooks-Signature: sha256=<hex>`, an HMAC-SHA256 of the raw
@@ -186,8 +200,8 @@ export function verifyInboundSignature(input: {
   rawBody: Buffer;
   email: Pick<InboundEmail, "mailgunSignature">;
   now?: Date;
-}): void {
-  if (!input.secret) return;
+}): InboundSignatureEvidence {
+  if (!input.secret) return { verified: false, nonce: null };
   if (input.provider === "mailgun") {
     const signed = input.email.mailgunSignature;
     if (!signed) throw new InboundEmailError("signature_required", "The delivery carries no Mailgun signature.");
@@ -200,7 +214,10 @@ export function verifyInboundSignature(input: {
     if (!safeEqual(expected, signed.signature.toLowerCase())) {
       throw new InboundEmailError("signature_invalid", "The Mailgun signature does not match this address's signing key.");
     }
-    return;
+    if (!signed.token || signed.token.length > 512) {
+      throw new InboundEmailError("signature_invalid", "The Mailgun signature token is missing or too long.");
+    }
+    return { verified: true, nonce: signed.token };
   }
   if (input.provider === "generic") {
     const header = input.headers["x-openbooks-signature"] ?? "";
@@ -210,7 +227,7 @@ export function verifyInboundSignature(input: {
     if (!safeEqual(expected, supplied)) {
       throw new InboundEmailError("signature_invalid", "The X-OpenBooks-Signature does not match this address's secret.");
     }
-    return;
+    return { verified: true, nonce: null };
   }
   const password = basicAuthPassword(input.headers["authorization"]);
   if (password === null) {
@@ -219,6 +236,7 @@ export function verifyInboundSignature(input: {
   if (!safeEqual(password, input.secret)) {
     throw new InboundEmailError("signature_invalid", "The HTTP Basic credentials do not match this address's secret.");
   }
+  return { verified: true, nonce: null };
 }
 
 function text(value: unknown, max: number): string | null {

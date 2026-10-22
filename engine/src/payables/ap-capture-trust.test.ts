@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  autoPostAmountDecision,
   autoPostEligibility,
   evaluateVendorTrust,
   type AutoPostPolicy,
@@ -8,7 +9,11 @@ import {
 } from "./ap-capture-trust.ts";
 
 function clean(id: string): VendorCaptureEvidence {
-  return { captureItemId: id, documentId: `doc-${id}`, corrected: false, draftEdited: false, documentStatus: "posted", voided: false };
+  return { captureItemId: id, documentId: `doc-${id}`, corrected: false, draftEdited: false, documentStatus: "posted", voided: false, automated: false };
+}
+
+function automated(id: string, overrides: Partial<VendorCaptureEvidence> = {}): VendorCaptureEvidence {
+  return { ...clean(id), automated: true, ...overrides };
 }
 
 test("three clean, posted captures in a row earn trust and name exactly that evidence", () => {
@@ -52,9 +57,42 @@ test("fewer captures than the threshold never earn trust", () => {
   assert.throws(() => evaluateVendorTrust([], 0));
 });
 
+test("bills the policy posted are never evidence: they neither extend nor end a reviewed streak", () => {
+  const trust = evaluateVendorTrust([automated("a3"), automated("a2"), clean("c2"), automated("a1"), clean("c1")], 2);
+  assert.equal(trust.trusted, true);
+  assert.equal(trust.cleanStreak, 2, "only reviewed captures count toward the streak");
+  assert.deepEqual(trust.evidence, ["c2", "c1"]);
+  const pending = evaluateVendorTrust([automated("a2", { documentStatus: "pending_approval" }), clean("c2"), clean("c1")], 2);
+  assert.equal(pending.trusted, true, "an automated bill awaiting approval does not end the streak");
+  const onlyAutomated = evaluateVendorTrust([automated("a3"), automated("a2"), automated("a1")], 2);
+  assert.equal(onlyAutomated.trusted, false, "automated postings alone never earn trust");
+  assert.equal(onlyAutomated.cleanStreak, 0);
+});
+
+test("a void or edit of an automated bill still ends the streak, which reviewers must earn again", () => {
+  const voided = evaluateVendorTrust([clean("c3"), automated("a1", { voided: true }), clean("c2"), clean("c1")], 2);
+  assert.equal(voided.trusted, false);
+  assert.equal(voided.cleanStreak, 1);
+  assert.deepEqual(voided.brokenBy, { captureItemId: "a1", reason: "voided" });
+  const edited = evaluateVendorTrust([automated("a2", { draftEdited: true }), clean("c2"), clean("c1")], 2);
+  assert.deepEqual(edited.brokenBy, { captureItemId: "a2", reason: "edited" });
+  const reEarned = evaluateVendorTrust([clean("c5"), automated("a3"), clean("c4"), automated("a2", { voided: true }), clean("c2")], 2);
+  assert.equal(reEarned.trusted, true, "reviewed captures after the break re-earn trust");
+  assert.deepEqual(reEarned.evidence, ["c5", "c4"]);
+});
+
 const ON: AutoPostPolicy = { id: "p1", effectiveFrom: "2026-10-01", enabled: true, cleanStreak: 3, maxAmount: null, maxAmountCurrency: null };
 type CaptureFacts = Parameters<typeof autoPostEligibility>[0]["capture"];
-const READY: CaptureFacts = { status: "ready", documentKind: "vendor_bill", vendorId: "v1", issues: [], total: "1250.00", currency: "USD" };
+const READY: CaptureFacts = {
+  status: "ready",
+  documentKind: "vendor_bill",
+  source: "upload",
+  emailVerified: null,
+  vendorId: "v1",
+  issues: [],
+  total: "1250.00",
+  currency: "USD",
+};
 
 test("a ready bill from a trusted vendor is eligible under an enabled policy", () => {
   assert.deepEqual(autoPostEligibility({ policy: ON, trust: { trusted: true }, capture: READY }), { eligible: true });
@@ -99,4 +137,22 @@ test("the amount limit compares exact decimals in the policy currency only", () 
     autoPostEligibility({ policy: ON, trust: { trusted: true }, capture: { ...READY, total: "12,50" } }),
     { eligible: false, reason: "amount_unreadable" },
   );
+});
+
+test("emailed bills qualify only when the delivery signature verified against the address's secret", () => {
+  const decide = (capture: Partial<CaptureFacts>) =>
+    autoPostEligibility({ policy: ON, trust: { trusted: true }, capture: { ...READY, ...capture } });
+  assert.deepEqual(decide({ source: "email", emailVerified: false }), { eligible: false, reason: "unsigned_email" });
+  assert.deepEqual(decide({ source: "email", emailVerified: null }), { eligible: false, reason: "unsigned_email" });
+  assert.deepEqual(decide({ source: "email", emailVerified: true }), { eligible: true });
+  assert.deepEqual(decide({ source: "api", emailVerified: null }), { eligible: false, reason: "unsigned_email" }, "an unknown channel fails closed");
+});
+
+test("the posting-time limit check reads the draft's own total and currency", () => {
+  const limited = { maxAmount: "1000.0000", maxAmountCurrency: "USD" };
+  assert.deepEqual(autoPostAmountDecision(limited, { total: "1000.0000", currency: "USD" }), { eligible: true });
+  assert.deepEqual(autoPostAmountDecision(limited, { total: "1013.0000", currency: "USD" }), { eligible: false, reason: "over_limit" });
+  assert.deepEqual(autoPostAmountDecision(limited, { total: "900.0000", currency: "CAD" }), { eligible: false, reason: "currency_differs" });
+  assert.deepEqual(autoPostAmountDecision(limited, { total: null, currency: "USD" }), { eligible: false, reason: "amount_unreadable" });
+  assert.deepEqual(autoPostAmountDecision({ maxAmount: null, maxAmountCurrency: null }, { total: "99999.0000", currency: "EUR" }), { eligible: true });
 });

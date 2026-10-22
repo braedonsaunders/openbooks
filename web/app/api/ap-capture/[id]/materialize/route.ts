@@ -8,29 +8,13 @@ import { db } from '@openbooks/engine/platform/db'
 import { materializeCapture, CaptureMaterializationError } from '@openbooks/engine/payables/ap-capture-service'
 import '../../../../../lib/authz';
 import { isUuid } from '../../../../../lib/list-params'
-import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
+import { apCaptureSubsidiaryScope } from '@openbooks/engine/records/file-cabinet-access'
 import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = 'nodejs'
 
 const materializeBodySchema = z.strictObject({ priceOverride: z.boolean().optional() }).optional()
-
-/**
- * Same vendor/PO visibility the inbox list and `?capture=` flyout apply
- * (`web/app/(app)/ap/capture/view.ts`). The probe fails fast; the engine
- * re-checks under the capture FOR UPDATE (and locks vendor/PO) so a
- * concurrent association change cannot sneak through. A miss uses the
- * engine's missing-item shape so hidden and nonexistent stay
- * indistinguishable.
- */
-function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null) {
-  if (allowed === null) return sql``
-  if (allowed.size === 0) return sql` and false`
-  return sql`${subsidiaryVisibleFilter(sql`po.subsidiary_id`, allowed, { orgWideNull: true })}
-             ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}
-             ${subsidiaryVisibleFilter(sql`ci.subsidiary_id`, allowed, { orgWideNull: true })}`
-}
 
 export const POST = defineRoute({
   permission: 'ap.create',

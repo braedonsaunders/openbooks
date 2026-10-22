@@ -12,7 +12,17 @@
     "copied": "Copiado para a área de transferência",
     "copyFailed": "Não foi possível copiar. Selecione o texto e copie manualmente.",
     "none": "Nenhum endereço de recebimento está ativo ainda.",
-    "manage": "Gerenciar endereços"
+    "manage": "Gerenciar endereços",
+    "owner": "Proprietário: {name}",
+    "ownerProblem": "O proprietário não pode receber faturas",
+    "ownerProblemHint": "O proprietário está inativo, não tem permissão para criar faturas ou não tem acesso a esta entidade jurídica; por isso, os e-mails enviados para este endereço são recusados. Assuma a propriedade ou recrie o endereço.",
+    "takeOwnership": "Assumir a propriedade",
+    "takeOwnershipAria": "Assumir a propriedade do endereço {label}",
+    "takeOwnershipTitle": "Assumir a propriedade de {label}",
+    "takeOwnershipMessage": "As faturas enviadas para este endereço serão atribuídas a você, e suas permissões determinam o que acontece com elas.",
+    "takeOwnershipReason": "Motivo",
+    "ownershipTaken": "Agora você é o proprietário deste endereço",
+    "takeOwnershipFailed": "Não foi possível assumir a propriedade do endereço."
   },
   "inbox": {
     "columns": {
@@ -49,6 +59,7 @@
     "refused": "Não lançada automaticamente: {message}",
     "skipped": {
       "policy_off": "O lançamento automático estava desativado quando esta fatura chegou.",
+      "unsigned_email": "Não lançada automaticamente: faturas recebidas por e-mail só são lançadas automaticamente quando o endereço tem um segredo de assinatura e a assinatura da mensagem foi verificada.",
       "not_a_bill": "Créditos de fornecedor nunca são lançados automaticamente.",
       "needs_review": "Não lançada automaticamente: um campo ou uma linha precisa de revisão.",
       "duplicate": "Não lançada automaticamente: pode ser uma duplicata.",

@@ -138,6 +138,12 @@ test('native source authority preserves privacy, grants, entity fences and ownin
     await refused(intakeFile)
     await db.execute(sql`update ap_capture_items set purchase_order_id=null where org_id=${org.orgId} and id=${captureId}`)
     await read(intakeFile)
+    // An emailed capture belongs to the entity whose address received it; a
+    // caller fenced to another entity cannot read its source document.
+    await db.execute(sql`update ap_capture_items set source='email', subsidiary_id=${branchId} where org_id=${org.orgId} and id=${captureId}`)
+    await refused(intakeFile)
+    await db.execute(sql`update ap_capture_items set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${captureId}`)
+    await read(intakeFile)
     await db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb where org_id=${org.orgId} and id=${roleId}`)
     await refused(intakeFile)
     await db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and id=${roleId}`)

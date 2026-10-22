@@ -98,7 +98,7 @@ function blankCreateDoc() {
   };
 }
 
-async function mountCreate({ shortcuts = false }: { shortcuts?: boolean } = {}) {
+async function mountCreate({ shortcuts = false, persistedStatus }: { shortcuts?: boolean; persistedStatus?: 'draft' | 'approved' } = {}) {
   const pushed: string[] = [];
   globalThis.__drawerRouter = {
     push(url: string) { pushed.push(url); },
@@ -116,7 +116,8 @@ async function mountCreate({ shortcuts = false }: { shortcuts?: boolean } = {}) 
           <OptionalShortcuts enabled={shortcuts}>
           <DocumentDrawer
             payload={{
-              doc: blankCreateDoc(),
+              doc: persistedStatus ? { ...blankCreateDoc(), id: '11111111-1111-4111-8111-111111111111', status: persistedStatus,
+                document_number: 'INV-00001', updated_at: '2026-09-17T12:00:00.000000Z' } : blankCreateDoc(),
               lines: [
                 {
                   id: "", account_id: "income-1", item_id: null, description: "Services",
@@ -142,7 +143,7 @@ async function mountCreate({ shortcuts = false }: { shortcuts?: boolean } = {}) 
             lineDefs={[]}
             canCreate
             canPost
-            createMode
+            createMode={persistedStatus === undefined}
             initialMode="edit"
             layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "submit", visible: true }] } as never}
           />
@@ -667,3 +668,60 @@ test("save and close lands on the list instead of the record", async (t) => {
   await pressChord("KeyD");
   assert.deepEqual(pushed, ["/ar/invoices"]);
 });
+
+for (const status of ['draft', 'approved'] as const) {
+  test(`save and post follows the server-acknowledged ${status} through its remaining lifecycle`, async (t) => {
+    const id = '11111111-1111-4111-8111-111111111111'
+    const actions: string[] = []
+    const saved = { ...blankCreateDoc(), id, status, document_number: 'INV-00001', updated_at: '2026-09-17T12:00:01.000000Z' }
+    const transport = scriptFetch((url, init) => {
+      if (url === `/api/documents/${id}` && init?.method === 'PATCH') return Response.json({ doc: saved, lines: [] })
+      if (url === '/api/documents/actions') {
+        actions.push(JSON.parse(String(init?.body)).action)
+        return Response.json({ ok: true })
+      }
+      return null
+    })
+    t.after(transport.restore)
+    const { host, root } = await mountCreate({ persistedStatus: 'draft' })
+    t.after(async () => { await act(async () => root.unmount()); host.remove() })
+    const post = [...document.querySelectorAll('button')].find((button) => ['Post', 'Post & new'].includes(button.textContent?.trim() ?? ''))
+    assert.ok(post)
+    await act(async () => { post.click(); await tick(); await tick() })
+    assert.deepEqual(actions, ['post'])
+  })
+}
+
+test('save and post remains exclusive while the saved document is being posted', async (t) => {
+  const originalFetch = globalThis.fetch
+  const id = '11111111-1111-4111-8111-111111111111'
+  let release: ((response: Response) => void) | undefined
+  let creates = 0
+  const actions: string[] = []
+  globalThis.fetch = async (input, init) => {
+    const url = String(input)
+    if (url === '/api/documents' && init?.method === 'POST') {
+      creates += 1
+      return Response.json({ doc: { ...blankCreateDoc(), id, status: 'draft', document_number: 'INV-00001' }, lines: [] })
+    }
+    if (url === '/api/documents/actions') {
+      const action = JSON.parse(String(init?.body)).action as string
+      actions.push(action)
+      if (action === 'post') return new Promise<Response>((resolve) => { release = resolve })
+      return Response.json({ ok: true })
+    }
+    return Response.json({})
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+  const { host, root } = await mountCreate()
+  t.after(async () => { await act(async () => root.unmount()); host.remove() })
+  const post = [...document.querySelectorAll('button')].find((button) => ['Post', 'Post & new'].includes(button.textContent?.trim() ?? ''))
+  assert.ok(post)
+  await act(async () => { post.click(); await tick(); await tick() })
+  assert.ok(release)
+  await act(async () => { post.click(); await tick() })
+  assert.equal(creates, 1)
+  assert.deepEqual(actions, ['post'])
+  await act(async () => { release!(Response.json({ ok: true })); await tick(); await tick() })
+  assert.deepEqual(actions, ['post'])
+})

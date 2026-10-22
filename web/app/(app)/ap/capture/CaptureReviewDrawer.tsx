@@ -67,7 +67,7 @@ export type CaptureAutoPostState = {
   message: string | null
 }
 
-const SKIP_REASONS = new Set(['policy_off', 'not_a_bill', 'needs_review', 'duplicate', 'vendor_unmatched', 'vendor_not_trusted', 'amount_unreadable', 'over_limit', 'currency_differs', 'actor_not_permitted'])
+const SKIP_REASONS = new Set(['policy_off', 'unsigned_email', 'not_a_bill', 'needs_review', 'duplicate', 'vendor_unmatched', 'vendor_not_trusted', 'amount_unreadable', 'over_limit', 'currency_differs', 'actor_not_permitted'])
 
 /** A field's own control: its text, date or select input first, else its picker button (never the label's help button). */
 const FIELD_CONTROLS = [

@@ -5,7 +5,7 @@ import { useRef, useState, type RefObject } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { Copy, FileSearch, Loader2, Mail } from 'lucide-react'
+import { Copy, FileSearch, Loader2, Mail, UserCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, EmptyState } from '@openbooks/ui'
 import { mergeHref } from '../../../../lib/list-params'
@@ -15,6 +15,7 @@ import {
   readApiErrorMessage,
   reconcileBulkResults,
 } from '../../../../lib/api-error'
+import { promptDialog } from '../../../../lib/prompt'
 import { CaptureUploadButton } from './CaptureUploadButton'
 import { useShortcuts } from '../../../../components/shortcuts/shortcut-provider'
 
@@ -42,17 +43,26 @@ export type CaptureMailbox = {
   label: string
   entity: string
   emailAddress: string | null
-  webhookUrl: string
+  /** Carries the address token; present only for administrators who manage addresses. */
+  webhookUrl: string | null
+  ownerName: string | null
+  /** The owner can still receive bills (active, may create bills, can access the entity). */
+  ownerReady: boolean
+  canTakeOwnership: boolean
 }
 
 /**
- * The addresses bills can be emailed to, one line each, with copy buttons:
- * the forwarding address for vendors and the webhook URL for the email
- * provider. Shown above the queue so a clerk can hand an address out without
- * leaving the page.
+ * The addresses bills can be emailed to, one line each, with the owner bills
+ * are attributed to and copy buttons: the forwarding address for vendors
+ * and, for administrators, the webhook URL for the email provider. Shown
+ * above the queue so a clerk can hand an address out without leaving the
+ * page; an address whose owner can no longer receive bills is flagged, and
+ * an administrator can take ownership of it here.
  */
 function MailboxStrip({ mailboxes, manageHref }: { mailboxes: CaptureMailbox[]; manageHref: string | null }) {
   const t = useTranslations('apInbox.mailboxes')
+  const router = useRouter()
+  const [taking, setTaking] = useState<string | null>(null)
   if (mailboxes.length === 0 && !manageHref) return null
   async function copy(value: string) {
     try {
@@ -60,6 +70,34 @@ function MailboxStrip({ mailboxes, manageHref }: { mailboxes: CaptureMailbox[]; 
       toast.success(t('copied'))
     } catch {
       toast.error(t('copyFailed'))
+    }
+  }
+  async function takeOwnership(mailbox: CaptureMailbox) {
+    const reason = await promptDialog({
+      title: t('takeOwnershipTitle', { label: mailbox.label }),
+      message: t('takeOwnershipMessage'),
+      label: t('takeOwnershipReason'),
+      multiline: true,
+      confirmLabel: t('takeOwnership'),
+    })
+    if (!reason) return
+    setTaking(mailbox.id)
+    try {
+      const response = await fetch(`/api/ap-capture/mailboxes/${mailbox.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ takeOwnership: true, reason }),
+      })
+      if (!response.ok) {
+        toast.error(await readApiErrorMessage(response, t('takeOwnershipFailed')))
+        return
+      }
+      toast.success(t('ownershipTaken'))
+      router.refresh()
+    } catch {
+      toast.error(t('takeOwnershipFailed'))
+    } finally {
+      setTaking(null)
     }
   }
   return (
@@ -76,9 +114,20 @@ function MailboxStrip({ mailboxes, manageHref }: { mailboxes: CaptureMailbox[]; 
               </Button>
             </>
           ) : null}
-          <Button size="sm" variant="ghost" className="h-6 px-1.5 text-xs" aria-label={t('copyWebhook', { label: mailbox.label })} onClick={() => void copy(mailbox.webhookUrl)}>
-            <Copy size={12} />{t('webhook')}
-          </Button>
+          <span className="text-xs text-slate-500 dark:text-slate-400">{t('owner', { name: mailbox.ownerName ?? '—' })}</span>
+          {mailbox.ownerReady ? null : (
+            <Badge variant="warning" title={t('ownerProblemHint')}>{t('ownerProblem')}</Badge>
+          )}
+          {mailbox.webhookUrl ? (
+            <Button size="sm" variant="ghost" className="h-6 px-1.5 text-xs" aria-label={t('copyWebhook', { label: mailbox.label })} onClick={() => void copy(mailbox.webhookUrl!)}>
+              <Copy size={12} />{t('webhook')}
+            </Button>
+          ) : null}
+          {mailbox.canTakeOwnership ? (
+            <Button size="sm" variant="ghost" className="h-6 px-1.5 text-xs" disabled={taking !== null} aria-label={t('takeOwnershipAria', { label: mailbox.label })} onClick={() => void takeOwnership(mailbox)}>
+              {taking === mailbox.id ? <Loader2 size={12} className="animate-spin" /> : <UserCheck size={12} />}{t('takeOwnership')}
+            </Button>
+          ) : null}
         </span>
       ))}
       {mailboxes.length === 0 ? <span className="text-slate-500 dark:text-slate-400">{t('none')}</span> : null}

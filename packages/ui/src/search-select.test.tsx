@@ -165,3 +165,30 @@ test('? on a focused control is left for the keyboard help, never typed into a s
   assert.equal(trigger.getAttribute('aria-expanded'), 'false')
   assert.equal(event.defaultPrevented, false)
 })
+
+test('Tab never silently chooses a weak account-code substring', async (t) => {
+  const { trigger, done } = await mount({ options: [{ value: '16100', label: '16100 Accrued rent' }] })
+  t.after(done)
+  trigger.focus()
+  await key(trigger, { key: '6' })
+  await type('6100')
+  await key(search(), { key: 'Tab' })
+  assert.equal(state.value, '')
+})
+
+test('primary Enter reaches the enclosing form command once from an open picker', async (t) => {
+  const { host, trigger, done } = await mount()
+  t.after(done)
+  const { resolveShortcut } = await import('../../../web/components/shortcuts/shortcut-keys')
+  let posted = 0
+  const command = { id: 'post', label: 'Post', binding: { modifier: 'primary' as const, code: 'Enter' },
+    scope: 'form' as const, allowInEditable: true, container: () => host, run() { posted += 1 }, order: 1 }
+  const listener = (event: KeyboardEvent) => resolveShortcut([command], event, true)?.run()
+  document.addEventListener('keydown', listener)
+  t.after(() => document.removeEventListener('keydown', listener))
+  trigger.focus()
+  await key(trigger, { key: 'Enter' })
+  await key(search(), { key: 'Enter', code: 'Enter', metaKey: true })
+  assert.equal(posted, 1)
+  assert.equal(state.value, '')
+})

@@ -22,6 +22,9 @@ import {
   batchDraftKey,
   batchEntered,
   batchRowIssues,
+  batchRowTotal,
+  fetchBatchTaxProfiles,
+  type BatchTaxProfiles,
   blankBatchRow,
   clearFinishedRows,
   cloneBatchRow,
@@ -303,8 +306,26 @@ export function BatchBillEntry({
     return Array.isArray(entry) ? entry : []
   }
 
-  // -- totals ---------------------------------------------------------------
-  const entered = useMemo(() => batchEntered(rows, taxByProfile), [rows, taxByProfile])
+  // A backdated bill uses its own effective rates. Missing profiles remain
+  // unresolved and refuse saving rather than treating unknown tax as zero.
+  const [datedTaxes, setDatedTaxes] = useState<ReadonlyMap<string, BatchTaxProfiles>>(() => new Map([[today, taxByProfile]]))
+  const missingTaxes = useMemo(() => new Map<string, readonly TaxComponentConfig[]>(), [])
+  const rowTaxes = useCallback((row: BatchBillRow) => datedTaxes.get(row.documentDate) ?? missingTaxes, [datedTaxes, missingTaxes])
+  useEffect(() => {
+    const dates = [...new Set(rows.filter((row) => row.taxProfileId && row.documentDate && !datedTaxes.has(row.documentDate)).map((row) => row.documentDate))]
+    if (!dates.length) return
+    let live = true
+    void Promise.all(dates.map(async (date) => [date, await fetchBatchTaxProfiles(browserFetch, date)] as const)).then((answers) => {
+      if (live && answers.some(([, profiles]) => profiles !== null)) setDatedTaxes((current) => {
+        const next = new Map(current)
+        for (const [date, profiles] of answers) if (profiles) next.set(date, profiles)
+        return next
+      })
+    })
+    return () => { live = false }
+  }, [rows, datedTaxes])
+  const taxComplete = rows.every((row) => isBlankBatchRow(row) || !row.taxProfileId || batchRowTotal(row, rowTaxes) !== null)
+  const entered = useMemo(() => batchEntered(rows, rowTaxes), [rows, rowTaxes])
   const variance = controlVariance({ count: controlCount, total: controlTotal }, entered)
 
   // -- save and post ------------------------------------------------------------
@@ -352,7 +373,19 @@ export function BatchBillEntry({
         focusRow(first.index)
         return
       }
-      const enteredNow = batchEntered(current, taxByProfile)
+      const freshTaxes = new Map(datedTaxes)
+      for (const date of new Set(current.filter((row) => row.taxProfileId).map((row) => row.documentDate))) {
+        const profiles = await fetchBatchTaxProfiles(browserFetch, date)
+        if (!profiles) { refuse(t('refusals.taxUnresolved')); return }
+        freshTaxes.set(date, profiles)
+      }
+      setDatedTaxes(freshTaxes)
+      const saveTaxes = (row: BatchBillRow) => freshTaxes.get(row.documentDate) ?? missingTaxes
+      if (current.some((row) => row.taxProfileId && batchRowTotal(row, saveTaxes) === null)) {
+        refuse(t('refusals.taxUnresolved'))
+        return
+      }
+      const enteredNow = batchEntered(current, saveTaxes)
       const check = controlVariance({ count: controlCount, total: controlTotal }, enteredNow)
       if (check.countInvalid || check.totalInvalid) {
         refuse(t('refusals.controlInvalid'))
@@ -480,7 +513,7 @@ export function BatchBillEntry({
 
   const finishedCount = rows.filter(isFinishedBatchRow).length
   const clearFinished = () => {
-    const next = clearFinishedRows(rows, { count: controlCount, total: controlTotal }, taxByProfile, today)
+    const next = clearFinishedRows(rows, { count: controlCount, total: controlTotal }, rowTaxes, today)
     commitRows(next.rows)
     setControlCount(next.control.count)
     setControlTotal(next.control.total === controlTotal ? controlTotal : displayEnteredAmount(next.control.total, minorUnits))
@@ -693,7 +726,7 @@ export function BatchBillEntry({
           </label>
           <div className="min-w-0 flex-1 space-y-0.5 text-sm" aria-live="polite">
             <p className="font-medium text-slate-800 tabular-nums dark:text-slate-100">
-              {t('control.entered', { count: entered.count, total: money(entered.total) })}
+              {t('control.entered', { count: entered.count, total: taxComplete ? money(entered.total) : '—' })}
             </p>
             <p className="flex flex-wrap gap-x-4 text-xs tabular-nums">
               {variance.countInvalid ? (
@@ -707,7 +740,7 @@ export function BatchBillEntry({
               ) : null}
               {variance.totalInvalid ? (
                 <span className={controlTone(false)}>{t('control.totalInvalid')}</span>
-              ) : variance.totalDifference !== null ? (
+              ) : taxComplete && variance.totalDifference !== null ? (
                 <span className={controlTone(cmp(variance.totalDifference, '0') === 0)}>
                   {cmp(variance.totalDifference, '0') === 0
                     ? t('control.totalMatched')
@@ -728,6 +761,7 @@ export function BatchBillEntry({
           </div>
         </section>
 
+        {!taxComplete ? <p role="status" className="text-sm text-amber-700 dark:text-amber-300">{t('refusals.taxUnresolved')}</p> : null}
         <LineGrid<BatchBillRow>
           columns={columns}
           rows={rows}

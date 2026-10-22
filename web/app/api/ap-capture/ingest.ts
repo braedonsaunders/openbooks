@@ -42,7 +42,11 @@ export function safeCaptureFilename(value: string): string {
   return basename(value).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 240) || 'document'
 }
 
-/** Human-readable reason for a batch refusal, for logs that cannot render a response. */
+/**
+ * Detailed reason for a batch refusal, recorded where administrators read it
+ * (the inbound message outcome). It may carry configuration or decoder
+ * detail, so it is never sent to an unauthenticated caller.
+ */
 export function captureIntakeRefusalReason(refusal: CaptureIntakeRefusal): string {
   if ('body' in refusal) {
     const filename = typeof refusal.body.filename === 'string' ? ` (${refusal.body.filename})` : ''

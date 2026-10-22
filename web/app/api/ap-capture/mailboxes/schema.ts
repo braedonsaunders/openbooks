@@ -44,3 +44,12 @@ export const updateMailboxBody = z.strictObject({
   clearSigningSecret: z.boolean().nullable().optional(),
   rotateToken: z.boolean().nullable().optional(),
 })
+
+/** Make the caller the address owner, with the reason the audit trail records. */
+export const takeMailboxOwnershipBody = z.strictObject({
+  takeOwnership: z.literal(true),
+  reason: z.string().trim().min(5).max(2000),
+})
+
+/** A PATCH is either a configuration update or an ownership transfer, never both. */
+export const patchMailboxBody = z.union([takeMailboxOwnershipBody, updateMailboxBody])

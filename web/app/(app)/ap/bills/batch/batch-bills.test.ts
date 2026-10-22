@@ -6,6 +6,7 @@ import {
   applyVendorDefaults,
   batchDraftKey,
   batchEntered,
+  fetchBatchTaxProfiles,
   batchRowIssues,
   batchRowPayload,
   batchRowTotal,
@@ -341,7 +342,7 @@ test('concurrency never exceeds its bound', async () => {
   assert.equal(peak, 3)
 })
 
-test('posting submits, then posts the bill the create returned', async () => {
+test('posting uses the native atomic command on the bill the create returned', async () => {
   const row = bill()
   const { calls, transport } = scriptedTransport((call) => call.url === '/api/documents'
     ? created(row.idempotencyKey, 'BILL-00043')
@@ -350,7 +351,6 @@ test('posting submits, then posts the bill the create returned', async () => {
   assert.equal(result.outcome, 'posted')
   assert.deepEqual(calls.map((call) => [call.url, call.body.action ?? null, call.body.documentId ?? null]), [
     ['/api/documents', null, null],
-    ['/api/documents/actions', 'submit', row.idempotencyKey],
     ['/api/documents/actions', 'post', row.idempotencyKey],
   ])
 })
@@ -362,7 +362,7 @@ test('a bill held for approval stops at pending and is never posted around it', 
     : json({ ok: true, pendingApproval: true }, 202))
   const result = await saveBatchRow(row, { post: true, hasTax: false, transport, copy })
   assert.equal(result.outcome, 'pending')
-  assert.equal(calls.filter((call) => call.body.action === 'post').length, 0)
+  assert.equal(calls.filter((call) => call.body.action === 'post').length, 1)
 })
 
 test('a refused post keeps the saved bill, and the retry resumes without creating again', async () => {
@@ -400,4 +400,19 @@ test('a success that names no bill is never shown as saved', async () => {
   assert.equal(result.documentId, '')
   assert.equal(result.outcome, '')
   assert.equal(result.error, 'Could not save')
+})
+
+test('tax control totals resolve each bill at its own effective date and refuse missing rates', async () => {
+  const row = { ...bill(), amount: '100.0000', taxProfileId: `code:${TAX_CODE}`, documentDate: '2025-01-01' }
+  const older = new Map([[`code:${TAX_CODE}`, [{ ...hst[0]!, ratePercent: '5' }]]])
+  assert.equal(batchRowTotal(row, () => older), '105.0000')
+  assert.equal(batchRowTotal(row, new Map()), null)
+  assert.equal(batchRowTotal(row, new Map([[`code:${TAX_CODE}`, []]])), null)
+  const profiles = await fetchBatchTaxProfiles(async (url) => {
+    assert.equal(new URL(url, 'http://test').searchParams.get('documentDate'), '2025-01-01')
+    return Response.json({ taxes: { codes: { [TAX_CODE]: older.get(`code:${TAX_CODE}`) }, groups: {} } })
+  }, row.documentDate)
+  assert.ok(profiles)
+  assert.equal(batchRowTotal(row, profiles), '105.0000')
+  assert.equal(await fetchBatchTaxProfiles(async () => Response.json({}, { status: 403 }), row.documentDate), null)
 })

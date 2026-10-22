@@ -667,6 +667,7 @@
     "./qbd/qbxml": "./src/qbd/qbxml.ts",
     "./receivables/dunning": "./src/receivables/dunning.ts",
     "./receivables/statement-batches": "./src/receivables/statement-batches.ts",
+    "./records/document-reference-normalize": "./src/records/document-reference-normalize.ts",
     "./records/document-reference": "./src/records/document-reference.ts",
     "./records/account-groups": "./src/records/account-groups.ts",
     "./records/account-types": "./src/records/account-types.ts",

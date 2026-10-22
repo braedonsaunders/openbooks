@@ -85,7 +85,7 @@
     "gridMenu": "Menú de la línea",
     "gridPaste": "Pegar filas copiadas de una hoja de cálculo",
     "pickerType": "Escriba para buscar en una lista (nombres y códigos)",
-    "pickerTab": "Aceptar la coincidencia resaltada y continuar",
+    "pickerTab": "Aceptar un nombre o código con coincidencia clara y continuar",
     "pickerOpen": "Abrir la lista",
     "pickerClose": "Cerrar una lista y conservar el valor",
     "pickerCreate": "Crear el proveedor o cliente escrito",

@@ -123,6 +123,7 @@
     },
     "keyboardHintEnterAdvances": "Enter 下一字段 · Shift+Enter 上一行 · F8 复制上一行 · Alt+Enter 插入 · ⌘D 复制行 · ⌘⌫ 移除 · 可从电子表格粘贴行",
     "paste": {
+      "tooManyRows": "一次最多粘贴 {count} 行。未粘贴任何值。",
       "done": "{count, plural, one {已粘贴 # 行} other {已粘贴 # 行}}。",
       "unmatched": "{count, plural, one {# 个粘贴值} other {# 个粘贴值}}需要处理 — 已标记的单元格显示了粘贴的内容。",
       "unmatchedCell": "粘贴的“{value}”与此处的选项或金额不匹配"

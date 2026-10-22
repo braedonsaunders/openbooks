@@ -123,6 +123,7 @@
     },
     "keyboardHintEnterAdvances": "Enter campo siguiente · Shift+Enter línea anterior · F8 copia desde arriba · Alt+Enter inserta · ⌘D duplica · ⌘⌫ elimina · pegue filas desde una hoja de cálculo",
     "paste": {
+      "tooManyRows": "Pegue como máximo {count} filas a la vez. No se pegó ningún valor.",
       "done": "{count, plural, one {# fila pegada} other {# filas pegadas}}.",
       "unmatched": "{count, plural, one {# valor pegado requiere} other {# valores pegados requieren}} atención — las celdas marcadas muestran lo que se pegó.",
       "unmatchedCell": "El valor pegado «{value}» no coincide aquí con ninguna opción ni importe"

@@ -123,6 +123,7 @@
     },
     "keyboardHintEnterAdvances": "Enter champ suivant · Shift+Enter ligne précédente · F8 copie depuis le dessus · Alt+Enter insère · ⌘D duplique · ⌘⌫ retire · collez des lignes depuis un tableur",
     "paste": {
+      "tooManyRows": "Collez au maximum {count} lignes à la fois. Aucune valeur n’a été collée.",
       "done": "{count, plural, one {# ligne collée} other {# lignes collées}}.",
       "unmatched": "{count, plural, one {# valeur collée nécessite} other {# valeurs collées nécessitent}} votre attention — les cellules signalées indiquent ce qui a été collé.",
       "unmatchedCell": "La valeur collée « {value} » ne correspond ici à aucun choix ni montant"

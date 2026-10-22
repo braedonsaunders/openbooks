@@ -123,6 +123,7 @@
     },
     "keyboardHintEnterAdvances": "Enter で次の項目 · Shift+Enter で前の行 · F8 で上の行からコピー · Alt+Enter で挿入 · ⌘D で複製 · ⌘⌫ で削除 · スプレッドシートから行を貼り付け可能",
     "paste": {
+      "tooManyRows": "一度に貼り付けられるのは {count} 行までです。値は貼り付けられていません。",
       "done": "{count, plural, one {# 行を貼り付けました} other {# 行を貼り付けました}}。",
       "unmatched": "{count, plural, one {貼り付けた値 # 件} other {貼り付けた値 # 件}}の確認が必要です — マークされたセルに貼り付けた内容が表示されています。",
       "unmatchedCell": "貼り付けた「{value}」は、ここでの選択肢または金額と一致しませんでした"

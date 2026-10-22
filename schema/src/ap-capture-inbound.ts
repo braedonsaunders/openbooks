@@ -28,7 +28,8 @@ export const AP_CAPTURE_INBOUND_OUTCOMES = [
 /**
  * Inbound email address for AP capture. Each address belongs to one legal
  * entity; its unguessable token authenticates the provider webhook, and the
- * optional sender list narrows who may submit bills through it.
+ * optional sender list narrows who may submit bills through it. Captures are
+ * attributed to the owner, whose standing is re-checked on every delivery.
  */
 export const apCaptureMailboxes = pgTable(
   "ap_capture_mailboxes",
@@ -44,6 +45,7 @@ export const apCaptureMailboxes = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     rateWindowStart: timestamp("rate_window_start", { withTimezone: true }),
     rateWindowCount: integer("rate_window_count").notNull().default(0),
+    ownerUserId: uuid("owner_user_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     createdBy: uuid("created_by").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -78,7 +80,9 @@ export const apCaptureMailboxCredentials = pgTable(
 
 /**
  * One inbound AP email, idempotent on its address and message id. The
- * received facts are immutable; the outcome is written once.
+ * received facts (including signature evidence) are immutable; the outcome
+ * is written once, and an unfinished message may be re-claimed after its
+ * processing lease expires.
  */
 export const apCaptureInboundMessages = pgTable(
   "ap_capture_inbound_messages",
@@ -91,7 +95,12 @@ export const apCaptureInboundMessages = pgTable(
     fromAddress: text("from_address"),
     subject: text("subject"),
     attachmentCount: integer("attachment_count").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    signatureVerified: boolean("signature_verified").notNull().default(false),
+    providerNonce: text("provider_nonce"),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
+    claimAttempt: integer("claim_attempt").notNull().default(1),
     outcome: text("outcome", { enum: AP_CAPTURE_INBOUND_OUTCOMES }).notNull().default("received"),
     outcomeReason: text("outcome_reason"),
     captureItemIds: uuid("capture_item_ids").array().notNull().default(sql`'{}'::uuid[]`),
@@ -100,6 +109,9 @@ export const apCaptureInboundMessages = pgTable(
   (t) => [
     uniqueIndex("ap_capture_inbound_messages_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("ap_capture_inbound_messages_message_unique").on(t.orgId, t.mailboxId, t.messageId),
+    uniqueIndex("ap_capture_inbound_messages_nonce_unique")
+      .on(t.orgId, t.mailboxId, t.providerNonce)
+      .where(sql`${t.providerNonce} is not null`),
     index("ap_capture_inbound_messages_recent_idx").on(t.orgId, t.receivedAt),
   ],
 );
