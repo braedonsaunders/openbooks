@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { EventEmitter } from "node:events";
 import { test } from "node:test";
 import {
   db,
@@ -154,19 +155,22 @@ test("a nested db.transaction verifies the enclosing isolation and access mode i
  * issues, so pinning behaviour is observable without a database.
  */
 async function withFakePoolClient<T>(
-  fn: (stats: { connects: number; queries: string[] }) => Promise<T>,
+  fn: (stats: { connects: number; queries: string[]; releases: unknown[] }) => Promise<T>,
+  failures: Readonly<Record<string, Error>> = {},
 ): Promise<T> {
-  const stats = { connects: 0, queries: [] as string[] };
-  const fakeClient = {
+  const stats = { connects: 0, queries: [] as string[], releases: [] as unknown[] };
+  const fakeClient = Object.assign(new EventEmitter(), {
     query: async (input: unknown) => {
       const text = typeof input === "string"
         ? input
         : (input as { text?: string } | null)?.text ?? "";
       stats.queries.push(text);
+      const failure = failures[text.trim().toLowerCase()];
+      if (failure) throw failure;
       return { rows: [], fields: [], command: "", rowCount: 0, oid: 0 };
     },
-    release: () => undefined,
-  };
+    release: (error?: unknown) => { stats.releases.push(error); },
+  });
   const originalConnect = pool.connect;
   (pool as unknown as { connect: unknown }).connect = async () => {
     stats.connects += 1;
@@ -271,4 +275,30 @@ test("rollback effects run when db.transaction rejects and not when it resolves"
       assert.equal(pinnedTransactionExecutor(), undefined, "the pin outlived the failed transaction");
     });
   });
+});
+
+
+test("a refused transaction start releases its connection and never runs business work", async () => {
+  const failure = new Error("transaction start refused");
+  let called = false;
+  await withFakePoolClient(async (stats) => {
+    await assert.rejects(db.transaction(async () => { called = true; }),
+      (error: unknown) => error instanceof Error && error.cause === failure);
+    assert.equal(called, false);
+    assert.equal(stats.releases.length, 1);
+    assert.equal(stats.queries.filter(query => query.trim().toLowerCase() === "rollback").length, 0);
+  }, { begin: failure });
+});
+
+test("a rollback failure preserves the business refusal and discards the damaged connection", async () => {
+  const refusal = new Error("business operation refused");
+  const rollbackFailure = new Error("rollback failed");
+  await withFakePoolClient(async (stats) => {
+    await assert.rejects(db.transaction(async () => { throw refusal; }),
+      (error: unknown) => error === refusal);
+    assert.equal(stats.releases.length, 1);
+    const releasedWith = stats.releases[0];
+    assert.ok(releasedWith instanceof Error);
+    assert.equal(releasedWith.cause, rollbackFailure);
+  }, { rollback: rollbackFailure });
 });
